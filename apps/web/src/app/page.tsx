@@ -43,7 +43,7 @@ export default function OpportunityRadarPage() {
     setDiscovering(true);
     setDiscoverMsg("Scanning BLM LPAD + configured feeds, enriching with USDA/FEMA/NWI/USGS…");
     try {
-      const res = await landsignalApi.discover(24, 20);
+      const res = await landsignalApi.discover(30, 1);
       setDiscoverMsg(
         `Imported ${res.imported} · scored ${res.scored}. ${String(res.note || "")}`,
       );
@@ -64,7 +64,7 @@ export default function OpportunityRadarPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Opportunity Radar</h1>
           <p className="mt-1 max-w-3xl text-sm text-[var(--muted)]">
             Ranked by risk-adjusted mispricing / optionality — not novelty or acreage cosmetics.
-            Live public inventory via BLM LPAD; licensed MLS/Land.com require vendor keys.
+            Live inventory from free public feeds (BLM LPAD, county tax-sale & surplus GIS). Licensed MLS/Land.com/Crexi need vendor contracts Cursor Cloud does not provide.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-sm">

@@ -74,27 +74,30 @@ class NotConfiguredListingProvider(ListingProvider):
 
 def build_listing_providers(settings: Settings) -> dict[str, ListingProvider]:
     from landsignal.providers.blm_lpad import BlmLpadProvider
+    from landsignal.providers.public_markets import PublicSurplusProvider, PublicTaxSaleProvider
 
     providers: dict[str, ListingProvider] = {
         "manual": ManualListingProvider(),
         "csv": CsvListingProvider(),
+        # Free public approximations of commercial listing/parcel networks
         "blm_lpad": BlmLpadProvider(),
+        "public_tax_sale": PublicTaxSaleProvider(),
+        "public_surplus": PublicSurplusProvider(),
     }
+    # Licensed vendors — Cursor Cloud does not inject these keys; free adapters above are the live path
     providers["mls_reso"] = NotConfiguredListingProvider(
         "mls_reso",
-        "MLS / RESO",
-        "MLS_RESO_TOKEN"
-        if not settings.mls_reso_token
-        else "MLS_RESO_TOKEN present but licensed RESO client adapter pending board contract",
+        "MLS / RESO (licensed)",
+        "MLS_RESO_TOKEN — use public_tax_sale / blm_lpad free feeds until licensed",
     )
     providers["land_com"] = NotConfiguredListingProvider(
         "land_com",
-        "Land.com Family",
-        "LAND_COM_API_KEY"
-        if not settings.land_com_api_key
-        else "LAND_COM_API_KEY present but licensed adapter pending vendor access",
+        "Land.com Family (licensed)",
+        "LAND_COM_API_KEY — use blm_lpad + public_tax_sale free feeds until licensed",
     )
     providers["crexi"] = NotConfiguredListingProvider(
-        "crexi", "Crexi", "CREXI_API_KEY"
+        "crexi",
+        "Crexi (licensed)",
+        "CREXI_API_KEY — use public_surplus free feeds until licensed",
     )
     return providers

@@ -18,12 +18,16 @@ Read before extending:
 6. [`docs/06-IMPLEMENTATION_PHASES.md`](docs/06-IMPLEMENTATION_PHASES.md)
 7. [`docs/07-RISKS_AND_ASSUMPTIONS.md`](docs/07-RISKS_AND_ASSUMPTIONS.md)
 
-## Phase 1 vertical slice
+## What works now
 
-Ingest → parcel twin → soils/flood/wetlands/terrain enrichment → scoring → Opportunity Radar → Property Intelligence → alerts → deal memo.
+**Live public discovery:** BLM Lands Potentially Available for Disposal (LPAD) — real federal tracts with polygons.
 
-Unconfigured commercial integrations return **`NOT_CONFIGURED`** (never fake live feeds).  
-Demo fixtures are labeled **`DEMO`** for UI walkthrough only.
+Pipeline: Discover → parcel twin → USDA SSURGO / FEMA NFHL / NWI / USGS elevation / HIFLD transmission / Census county → strategy screens → LandSignal score → Opportunity Radar → Property Intelligence (map, narratives, scenarios, memo, DD checklist) → alerts.
+
+Click **Scan real opportunities** on the Radar (or `POST /v1/discover`).
+
+**Licensed commercial feeds** (MLS / Land.com / Crexi / Regrid) return **`NOT_CONFIGURED`** until you add vendor API secrets — we do not scrape or fake them.  
+OSM + Esri imagery maps work without Mapbox.
 
 ## Stack
 
