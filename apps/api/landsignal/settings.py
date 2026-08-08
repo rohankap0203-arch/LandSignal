@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     force_live_on_demo: bool = False
     auto_discover_on_startup: bool = True
     discover_limit: int = 12
+    # set False in tests; production default discovers BLM LPAD on boot
     discover_min_acres: float = 20
     http_timeout_seconds: float = 20.0
     mapbox_token: str | None = None
