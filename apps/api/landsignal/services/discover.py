@@ -21,9 +21,9 @@ async def discover_opportunities(
     store: MemoryStore,
     settings: Settings | None = None,
     *,
-    limit: int = 30,
-    min_acres: float = 10,
-    max_acres: float = 2500,
+    limit: int = 80,
+    min_acres: float = 1,
+    max_acres: float = 5000,
     states: list[str] | None = None,
     reset: bool = False,
 ) -> dict[str, Any]:
@@ -41,16 +41,22 @@ async def discover_opportunities(
 
     blm_res, tax_res, surplus_res = await asyncio.gather(
         blm.search_listings(
-            {"limit": max(8, limit // 2), "min_acres": min_acres, "max_acres": max_acres, "states": states}
+            {
+                "limit": max(40, limit),
+                "min_acres": min_acres,
+                "max_acres": max_acres,
+                "states": states,
+            }
         ),
-        tax.search_listings({"limit": max(10, limit)}),
-        surplus.search_listings({"limit": max(8, limit // 2)}),
+        tax.search_listings({"limit": max(40, limit)}),
+        surplus.search_listings({"limit": max(16, limit // 2)}),
     )
 
     listings: list[dict] = []
     source_counts: dict[str, int] = {}
     errors: list[str] = []
 
+    state_set = {s.upper() for s in states} if states else None
     for res, label in (
         (blm_res, "blm_lpad"),
         (tax_res, "public_tax_sale"),
@@ -59,6 +65,8 @@ async def discover_opportunities(
         if res.error:
             errors.append(f"{label}: {res.error}")
         for row in res.data or []:
+            if state_set and (row.get("state") or "").upper() not in state_set:
+                continue
             acres = row.get("acreage")
             if acres is not None and (acres < min_acres or acres > max_acres):
                 # allow tax-sale with prices even if smaller — opportunistic urban lots

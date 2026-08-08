@@ -27,12 +27,7 @@ type FormState = {
   holdCustom: string;
   targetRoi: string;
   roiCustom: string;
-  maxRisk: string;
-  riskCustom: string;
-  minConfidence: string;
-  confCustom: string;
   unpricedMode: string;
-  marketChannel: string;
   sort: string;
 };
 
@@ -53,12 +48,7 @@ const DEFAULT_FORM: FormState = {
   holdCustom: "",
   targetRoi: "Any",
   roiCustom: "",
-  maxRisk: "Any",
-  riskCustom: "",
-  minConfidence: "Any",
-  confCustom: "",
   unpricedMode: "include",
-  marketChannel: "Any",
   sort: "fit_desc",
 };
 
@@ -115,14 +105,6 @@ export default function SearchPage() {
       roi = n > 1 ? n / 100 : n;
     } else if (form.targetRoi !== "Any") roi = Number(form.targetRoi);
 
-    let maxRisk: number | undefined;
-    if (form.riskCustom.trim()) maxRisk = Number(form.riskCustom);
-    else if (form.maxRisk !== "Any") maxRisk = Number(form.maxRisk);
-
-    let minConf: number | undefined;
-    if (form.confCustom.trim()) minConf = Number(form.confCustom);
-    else if (form.minConfidence !== "Any") minConf = Number(form.minConfidence);
-
     const strategy =
       form.strategy === "CUSTOM" || form.strategyCustom.trim()
         ? form.strategyCustom.trim() || "CUSTOM"
@@ -139,11 +121,8 @@ export default function SearchPage() {
       strategy,
       hold_years: Number.isFinite(hold as number) ? hold : undefined,
       target_roi: Number.isFinite(roi as number) ? roi : undefined,
-      max_risk: Number.isFinite(maxRisk as number) ? maxRisk : undefined,
-      min_confidence: Number.isFinite(minConf as number) ? minConf : undefined,
       unpriced_mode: form.unpricedMode,
       include_unpriced: form.unpricedMode !== "priced",
-      market_channel: form.marketChannel,
       sort: form.sort,
     };
   }, [form, meta]);
@@ -184,7 +163,7 @@ export default function SearchPage() {
     try {
       const st = stateCode(form.state);
       // Background + no reset: do not wipe inventory or block the page for minutes
-      await landsignalApi.discover(36, 1, false, st !== "Any" ? st : undefined, true);
+      await landsignalApi.discover(80, 1, true, st !== "Any" ? st : undefined, true);
       await runSearch();
       // Light polling while background discover fills in
       for (let i = 0; i < 8; i++) {
@@ -204,6 +183,7 @@ export default function SearchPage() {
 
   const topFit = useMemo(() => rows[0], [rows]);
   const tips = meta?.tooltips || {};
+  const inventoryStates = meta?.inventory_states || [];
 
   return (
     <div>
@@ -389,63 +369,6 @@ export default function SearchPage() {
           </FilterField>
 
           <FilterField
-            label="Max risk"
-            tip={tips.max_risk || { title: "Max risk", body: "Lower = safer on paper. 0–100 scale." }}
-          >
-            <select
-              value={form.maxRisk}
-              onChange={(e) => setForm((f) => ({ ...f, maxRisk: e.target.value }))}
-            >
-              {(meta?.max_risk || ["Any", 30, 45, 60]).map((s) => (
-                <option key={String(s)} value={String(s)}>
-                  {s === "Any" ? "Any" : `≤ ${s}/100`}
-                </option>
-              ))}
-              <option value="__custom__">Type my own…</option>
-            </select>
-            {(form.maxRisk === "__custom__" || form.riskCustom) && (
-              <input
-                className="mt-1.5"
-                value={form.riskCustom}
-                placeholder="Max risk 0–100"
-                onChange={(e) => setForm((f) => ({ ...f, riskCustom: e.target.value, maxRisk: "__custom__" }))}
-              />
-            )}
-          </FilterField>
-
-          <FilterField
-            label="Min confidence"
-            tip={
-              tips.min_confidence || {
-                title: "Min confidence",
-                body: "How complete the evidence is. Missing data lowers confidence.",
-              }
-            }
-          >
-            <select
-              value={form.minConfidence}
-              onChange={(e) => setForm((f) => ({ ...f, minConfidence: e.target.value }))}
-            >
-              {(meta?.min_confidence || ["Any", 40, 55, 70]).map((s) => (
-                <option key={String(s)} value={String(s)}>
-                  {s === "Any" ? "Any" : `≥ ${s}/100`}
-                </option>
-              ))}
-              <option value="__custom__">Type my own…</option>
-            </select>
-            {(form.minConfidence === "__custom__" || form.confCustom) && (
-              <input
-                className="mt-1.5"
-                value={form.confCustom}
-                placeholder="Min confidence 0–100"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, confCustom: e.target.value, minConfidence: "__custom__" }))
-                }
-              />
-            )}
-          </FilterField>
-
-          <FilterField
             label="Unpriced federal / surplus"
             tip={
               tips.include_unpriced || {
@@ -463,35 +386,6 @@ export default function SearchPage() {
                   { value: "include", label: "Include unpriced federal / surplus" },
                   { value: "priced", label: "Priced / bids only" },
                   { value: "unpriced_only", label: "Unpriced process parcels only" },
-                ]
-              ).map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </FilterField>
-
-          <FilterField
-            label="Market channel"
-            tip={
-              tips.market_channel || {
-                title: "Market channel",
-                body: "Narrow by federal BLM, tax sale, surplus, or parcels you added.",
-              }
-            }
-          >
-            <select
-              value={form.marketChannel}
-              onChange={(e) => setForm((f) => ({ ...f, marketChannel: e.target.value }))}
-            >
-              {(
-                meta?.market_channels || [
-                  { value: "Any", label: "Any market channel" },
-                  { value: "blm_lpad", label: "Federal BLM disposal" },
-                  { value: "public_tax_sale", label: "County tax sale" },
-                  { value: "public_surplus", label: "Public surplus" },
-                  { value: "manual", label: "Manual / private entry" },
                 ]
               ).map((o) => (
                 <option key={o.value} value={o.value}>
@@ -522,7 +416,7 @@ export default function SearchPage() {
           {meta?.inventory_count != null && (
             <span className="self-center text-sm text-white/70">
               Live inventory: {meta.inventory_count} parcels
-              {meta.inventory_states?.length ? ` · ${meta.inventory_states.join(", ")}` : ""}
+              {inventoryStates.length ? ` across ${inventoryStates.length} states (${inventoryStates.join(", ")})` : ""}
             </span>
           )}
         </div>

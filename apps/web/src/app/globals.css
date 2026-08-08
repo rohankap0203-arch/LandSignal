@@ -301,8 +301,8 @@ select {
 
 .property-card {
   display: grid;
-  grid-template-columns: 210px 1fr;
-  overflow: hidden;
+  grid-template-columns: 220px 1fr;
+  overflow: visible;
   transition: transform 180ms ease, box-shadow 180ms ease;
   animation: rise 420ms ease both;
 }
@@ -389,7 +389,7 @@ select {
 
 .metric-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 12px;
 }
@@ -403,7 +403,7 @@ select {
 .metric {
   background: var(--bg-soft);
   border-radius: 12px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   min-width: 0;
 }
 
@@ -412,13 +412,28 @@ select {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
+  white-space: normal;
 }
 
 .metric .v {
-  margin-top: 2px;
+  margin-top: 4px;
   font-weight: 650;
   font-size: 0.95rem;
-  overflow-wrap: anywhere;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
+}
+
+.chip {
+  display: inline-block;
+  border-radius: 999px;
+  background: var(--bg-soft);
+  padding: 6px 10px;
+  line-height: 1.35;
+  white-space: normal;
+  max-width: 100%;
 }
 
 .reasons {
@@ -426,15 +441,18 @@ select {
   padding: 0;
   list-style: none;
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .reasons li {
   color: var(--muted);
   font-size: 0.92rem;
-  line-height: 1.35;
+  line-height: 1.45;
   padding-left: 14px;
   position: relative;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .reasons li::before {

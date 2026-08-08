@@ -216,6 +216,108 @@ def _norm_brunswick(raw: dict) -> dict | None:
     }
 
 
+def _norm_wyco(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    acreage = props.get("ACRE")
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    if acreage is None:
+        acreage = geom_acres
+    if acreage is not None and float(acreage) < 0.2:
+        return None
+    pid = props.get("PARCEL") or props.get("STATE_ID") or props.get("OBJECTID")
+    street = " ".join(
+        str(x) for x in [props.get("NUMB"), props.get("ST_NAME"), props.get("MISC")] if x
+    ).strip()
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"wyco:{pid}",
+        "title": f"Wyandotte KS tax-sale eligible · {street or pid}",
+        "description": (
+            f"Unified Government of Wyandotte County / KCK tax-sale eligible parcel. "
+            f"Land use={props.get('LAND_USE') or 'n/a'}. Vacant mark={props.get('VACANT') or 'n/a'}. "
+            "Public GIS — not MLS/Crexi."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage) if acreage is not None else None,
+        "state": "KS",
+        "county": "Wyandotte",
+        "apn": str(pid),
+        "address": f"{street}, {props.get('CITY') or 'Kansas City'}, KS {props.get('ZIP') or ''}".strip(),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.wycokck.org/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_mahoning(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = geom_acres
+    if acreage is not None and acreage < 0.2:
+        return None
+    pid = props.get("PARCEL_ID") or props.get("PARCEL_ID_1") or props.get("OBJECTID")
+    market = props.get("TOTALMARKET") or props.get("MARKETLAND")
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"mahoning:{pid}",
+        "title": f"Mahoning OH land-bank / delinquent · {pid}",
+        "description": (
+            f"Mahoning County, OH tax-delinquent / land-bank inventory (public GIS). "
+            f"Land use={props.get('LANDUSE') or 'n/a'}. "
+            f"Market mark=${market}. Distressed public inventory — not MLS."
+        ),
+        "asking_price_usd": float(market) if market is not None else None,
+        "acreage": acreage,
+        "state": "OH",
+        "county": "Mahoning",
+        "apn": str(pid),
+        "address": f"Mahoning County, OH · {pid}",
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.mahoningcountyoh.gov/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_cochise(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    acreage, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    if acreage is not None and acreage < 0.5:
+        return None
+    pid = props.get("apn") or props.get("accountno") or props.get("OBJECTID")
+    situs = props.get("situs_address") or ""
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"cochise:{pid}",
+        "title": f"Cochise AZ tax-lien parcel · {situs or pid}",
+        "description": (
+            f"Cochise County, AZ tax-lien parcel layer (public ArcGIS). "
+            f"Tax year={props.get('tax_year')}. Owner mark={props.get('owner_name1') or 'n/a'}. "
+            "Public distress inventory — not Land.com/MLS."
+        ),
+        "asking_price_usd": None,
+        "acreage": acreage,
+        "state": "AZ",
+        "county": "Cochise",
+        "apn": str(pid),
+        "address": f"{situs}, Cochise County, AZ".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.cochise.az.gov/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
 def _norm_ftl(raw: dict) -> dict | None:
     props = raw.get("properties") or {}
     sqft = props.get("CNTYGISSQFT")
@@ -291,6 +393,30 @@ SOURCES: list[ArcgisMarketSource] = [
         "Broward",
         _norm_ftl,
     ),
+    ArcgisMarketSource(
+        "wyco_ks_tax",
+        "Wyandotte County KS Tax Sale Eligible",
+        "https://gisweb.wycokck.org/arcgis/rest/services/GISPUB/UGMAPS_4_V02/MapServer/30/query",
+        "KS",
+        "Wyandotte",
+        _norm_wyco,
+    ),
+    ArcgisMarketSource(
+        "mahoning_oh_tax",
+        "Mahoning County OH Tax Delinquent / Land Bank",
+        "https://gisapp.mahoningcountyoh.gov/arcgis/rest/services/LANDBANK_DELINQUENT_PROPERTIES/MapServer/0/query",
+        "OH",
+        "Mahoning",
+        _norm_mahoning,
+    ),
+    ArcgisMarketSource(
+        "cochise_az_tax",
+        "Cochise County AZ Tax Lien Parcels",
+        "https://services6.arcgis.com/Yxem0VOcqSy8T6TE/arcgis/rest/services/Cad_Parcel_TaxLien2025/FeatureServer/0/query",
+        "AZ",
+        "Cochise",
+        _norm_cochise,
+    ),
 ]
 
 
@@ -307,7 +433,11 @@ class PublicTaxSaleProvider(ListingProvider):
         limit = int(query.get("limit") or 40)
         out: list[dict] = []
         errors: list[str] = []
-        tax_sources = [s for s in SOURCES if s.source_id.endswith("tax") or "sale" in s.source_id or s.source_id.startswith("sauk") or s.source_id.startswith("indy") or s.source_id.startswith("shasta")]
+        tax_sources = [
+            s
+            for s in SOURCES
+            if "tax" in s.source_id or "sale" in s.source_id or s.source_id.startswith(("sauk", "indy", "shasta", "wyco", "mahoning", "cochise"))
+        ]
         async with httpx.AsyncClient(timeout=35.0) as client:
             for src in tax_sources:
                 try:
@@ -316,7 +446,7 @@ class PublicTaxSaleProvider(ListingProvider):
                         "outFields": "*",
                         "returnGeometry": "true",
                         "outSR": 4326,
-                        "resultRecordCount": min(80, limit * 3),
+                        "resultRecordCount": min(100, max(40, limit)),
                         "f": "geojson",
                     }
                     resp = await client.get(src.url, params=params)
@@ -329,14 +459,32 @@ class PublicTaxSaleProvider(ListingProvider):
                 except Exception as exc:  # noqa: BLE001
                     errors.append(f"{src.source_id}: {exc}")
                     log.warning("public_tax_source_failed", source=src.source_id, error=str(exc))
-        # Prefer priced + larger acreage
-        out.sort(
-            key=lambda r: (
-                0 if r.get("asking_price_usd") is not None else 1,
-                -(r.get("acreage") or 0),
+        # Diversify by state, prefer priced + larger acreage within each state
+        by_state: dict[str, list[dict]] = {}
+        for row in out:
+            by_state.setdefault(row.get("state") or "??", []).append(row)
+        for st in by_state:
+            by_state[st].sort(
+                key=lambda r: (
+                    0 if r.get("asking_price_usd") is not None else 1,
+                    -(r.get("acreage") or 0),
+                )
             )
+        diversified: list[dict] = []
+        while len(diversified) < limit and any(by_state.values()):
+            for st in list(by_state.keys()):
+                if by_state.get(st):
+                    diversified.append(by_state[st].pop(0))
+                if len(diversified) >= limit:
+                    break
+                if st in by_state and not by_state[st]:
+                    by_state.pop(st, None)
+        return ProviderResult(
+            True,
+            ProviderStatus.CONFIGURED,
+            diversified,
+            error="; ".join(errors) if errors else None,
         )
-        return ProviderResult(True, ProviderStatus.CONFIGURED, out[:limit], error="; ".join(errors) if errors else None)
 
     async def get_listing(self, external_id: str) -> ProviderResult[dict]:
         res = await self.search_listings({"limit": 200})

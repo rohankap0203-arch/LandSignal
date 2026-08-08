@@ -33,7 +33,6 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
     row.links.find((l) => l !== primary && l.kind === "contact" && l.available !== false) ||
     row.links.find((l) => l !== primary && l.kind === "map") ||
     row.links.find((l) => l !== primary);
-  const tertiary = row.links.find((l) => l !== primary && l !== secondary);
 
   return (
     <article className="panel property-card" style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}>
@@ -41,25 +40,25 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
         <div>
           <SignalBadge signal={row.signal} />
           <div className="mt-3 text-xs uppercase tracking-[0.08em] text-white/75">{row.provider_label}</div>
-          <div className="display mt-1 text-2xl font-semibold leading-tight">{row.headline_metric}</div>
+          <div className="display mt-1 text-2xl font-semibold leading-snug break-words">{row.headline_metric}</div>
         </div>
         <div>
-          <div className="text-sm text-white/80">{row.location}</div>
-          <div className="mt-1 text-lg font-semibold">{row.acres_display}</div>
+          <div className="text-sm text-white/80 break-words">{row.location}</div>
+          <div className="mt-1 text-lg font-semibold break-words">{row.acres_display}</div>
         </div>
       </div>
 
       <div className="card-body">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h2 className="display text-xl font-semibold leading-snug">
+          <div className="min-w-0 flex-1">
+            <h2 className="display text-xl font-semibold leading-snug break-words">
               <Link href={`/parcels/${row.parcel_id}`} className="hover:text-[var(--brand-soft)]">
                 {row.property_name}
               </Link>
             </h2>
-            <p className="mt-1 text-sm text-[var(--muted)]">{row.summary}</p>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--muted)] break-words">{row.summary}</p>
           </div>
-          <div className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-sm font-semibold text-[var(--brand)]">
+          <div className="shrink-0 rounded-full bg-[var(--bg-soft)] px-3 py-1 text-sm font-semibold text-[var(--brand)] whitespace-nowrap">
             Fit {Math.round(row.fit_score ?? row.opportunity)}
           </div>
         </div>
@@ -75,21 +74,26 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           </div>
           <div className="metric">
             <div className="k">LandSignal</div>
-            <div className="v">{row.opportunity.toFixed(0)}/100</div>
+            <div className="v">{Math.round(row.opportunity)} / 100</div>
           </div>
           <div className="metric">
-            <div className="k">Risk · Confidence</div>
-            <div className="v">
-              {row.risk.toFixed(0)} · {row.confidence.toFixed(0)}
-            </div>
+            <div className="k">Risk</div>
+            <div className="v">{Math.round(row.risk)} / 100</div>
+          </div>
+          <div className="metric">
+            <div className="k">Confidence</div>
+            <div className="v">{Math.round(row.confidence)} / 100</div>
+          </div>
+          <div className="metric">
+            <div className="k">Strategy</div>
+            <div className="v">{row.best_strategy_label}</div>
           </div>
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2 text-xs">
-          <span className="rounded-full bg-[var(--bg-soft)] px-2.5 py-1">{row.best_strategy_label}</span>
-          <span className="rounded-full bg-[var(--bg-soft)] px-2.5 py-1">{row.discount_display}</span>
-          <span className="rounded-full bg-[var(--bg-soft)] px-2.5 py-1">{row.risk_label}</span>
-          <span className="rounded-full bg-[var(--bg-soft)] px-2.5 py-1">{row.confidence_label}</span>
+          <span className="chip">{row.discount_display}</span>
+          <span className="chip">{row.risk_label}</span>
+          <span className="chip">{row.confidence_label}</span>
         </div>
 
         <ul className="reasons">
@@ -101,7 +105,6 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
         <div className="card-actions">
           {primary && <ActionAnchor link={primary} primary />}
           {secondary && <ActionAnchor link={secondary} />}
-          {tertiary && tertiary.kind !== "map" && <ActionAnchor link={tertiary} />}
           <Link href={`/parcels/${row.parcel_id}`}>Full intelligence</Link>
         </div>
       </div>

@@ -162,11 +162,11 @@ export const landsignalApi = {
   ingestManual: (body: Record<string, unknown>) =>
     api("/ingest/manual", { method: "POST", body: JSON.stringify(body) }),
   analyze: (id: string) => api(`/parcels/${id}/analyze`, { method: "POST" }),
-  discover: (limit = 48, minAcres = 1, reset = false, states?: string, background = true) => {
+  discover: (limit = 80, minAcres = 1, reset = false, states?: string, background = true) => {
     const qs = new URLSearchParams({
       limit: String(limit),
       min_acres: String(minAcres),
-      max_acres: "2500",
+      max_acres: "5000",
       reset: String(reset),
       background: String(background),
     });

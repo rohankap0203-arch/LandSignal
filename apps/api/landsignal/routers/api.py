@@ -254,9 +254,12 @@ async def radar(
     market_channel: str | None = None,
     sort: str | None = "fit_desc",
     q: str | None = None,
-    broaden: bool = True,
+    broaden: bool = False,
 ) -> list[RadarRow]:
-    """Search results with investor filters. Pass nothing / omit for Any."""
+    """Search results with investor filters. Pass nothing / omit for Any.
+
+    broaden=False by default so selected state/region/price filters are honored exactly.
+    """
     from landsignal.geo_meta import region_matches
     from landsignal.scoring.engine import personalized_score
     from landsignal.services.presentation import (
@@ -506,19 +509,12 @@ async def radar(
         return out
 
     rows = await build_rows(apply_region=True, apply_strict_channel=True)
-    # Never return a blank wall — broaden region/channel, then price/acres soft fallback note via reasons
-    if broaden and not rows:
+    # Optional soft broaden: only within the same state filter (never leak other states)
+    if broaden and not rows and region:
         rows = await build_rows(apply_region=False, apply_strict_channel=True)
         for r in rows:
             r.match_reasons = [
-                "Exact region had no inventory — showing best matches in your selected state/filters.",
-                *r.match_reasons,
-            ][:5]
-    if broaden and not rows:
-        rows = await build_rows(apply_region=False, apply_strict_channel=False)
-        for r in rows:
-            r.match_reasons = [
-                "No exact channel matches — showing closest live public opportunities.",
+                "Exact city/region had no inventory — showing matches that still satisfy your other filters.",
                 *r.match_reasons,
             ][:5]
 

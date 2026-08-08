@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -9,13 +10,18 @@ from shapely.ops import unary_union
 
 from landsignal.models import ProviderStatus
 from landsignal.providers.base import ListingProvider, ProviderResult
-from landsignal.scoring.geospatial import acres_from_square_meters
+from landsignal.scoring.geospatial import acres_from_square_meters, ring_area_square_meters
 
 log = structlog.get_logger()
 
 BLM_QUERY = (
     "https://gis.blm.gov/arcgis/rest/services/lands/BLM_Natl_LPAD/MapServer/0/query"
 )
+
+# States known to publish LPAD Sale/SaleExchange tracts (queried individually for nationwide mix)
+BLM_STATES = [
+    "AK", "AZ", "CA", "CO", "ID", "MT", "NM", "NV", "OR", "UT", "WY",
+]
 
 
 class BlmLpadProvider(ListingProvider):
@@ -32,61 +38,89 @@ class BlmLpadProvider(ListingProvider):
         return ProviderStatus.CONFIGURED
 
     async def search_listings(self, query: dict[str, Any]) -> ProviderResult[list[dict]]:
-        limit = int(query.get("limit") or 40)
-        min_acres = float(query.get("min_acres") or 20)
-        max_acres = float(query.get("max_acres") or 2500)
-        states = query.get("states")  # optional list of ADMIN_ST codes e.g. ["NM","AZ"]
-        where = "IDENT_DSPSL_TYPE IN ('Sale','SaleExchange')"
-        if states:
-            quoted = ",".join(f"'{s}'" for s in states)
-            where += f" AND ADMIN_ST IN ({quoted})"
-        # Pull a wider page then filter to investable tract sizes (many LPAD rows are huge plan units)
+        limit = int(query.get("limit") or 100)
+        min_acres = float(query.get("min_acres") or 5)
+        max_acres = float(query.get("max_acres") or 5000)
+        states = query.get("states") or BLM_STATES
+        per_state = max(4, min(14, (limit // max(1, len(states))) + 3))
+
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            results = await asyncio.gather(
+                *[
+                    self._fetch_state(client, st, per_state, min_acres, max_acres)
+                    for st in states
+                ],
+                return_exceptions=True,
+            )
+
+        out: list[dict] = []
+        errors: list[str] = []
+        for st, res in zip(states, results):
+            if isinstance(res, Exception):
+                errors.append(f"{st}: {res}")
+                log.warning("blm_state_failed", state=st, error=str(res))
+                continue
+            out.extend(res)
+
+        by_state: dict[str, list[dict]] = {}
+        for row in out:
+            by_state.setdefault(row.get("state") or "??", []).append(row)
+        diversified: list[dict] = []
+        while len(diversified) < limit and any(by_state.values()):
+            for st in list(by_state.keys()):
+                if by_state.get(st):
+                    diversified.append(by_state[st].pop(0))
+                if len(diversified) >= limit:
+                    break
+                if st in by_state and not by_state[st]:
+                    by_state.pop(st, None)
+
+        return ProviderResult(
+            True,
+            ProviderStatus.CONFIGURED if diversified else ProviderStatus.DEGRADED,
+            diversified,
+            error="; ".join(errors) if errors else None,
+        )
+
+    async def _fetch_state(
+        self,
+        client: httpx.AsyncClient,
+        state: str,
+        per_state: int,
+        min_acres: float,
+        max_acres: float,
+    ) -> list[dict]:
+        where = (
+            "IDENT_DSPSL_TYPE IN ('Sale','SaleExchange') "
+            f"AND ADMIN_ST='{state}'"
+        )
         params = {
             "where": where,
             "outFields": "*",
             "returnGeometry": "true",
             "outSR": 4326,
-            "resultRecordCount": 200,
-            "resultOffset": int(query.get("offset") or 0),
+            "resultRecordCount": max(per_state * 4, 24),
             "orderByFields": "OBJECTID DESC",
             "f": "geojson",
         }
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                resp = await client.get(BLM_QUERY, params=params)
-                resp.raise_for_status()
-                data = resp.json()
-            features = data.get("features") or []
-            out = [self.normalize_listing(f) for f in features]
-            out = [
-                x
-                for x in out
-                if x.get("acreage")
-                and min_acres <= float(x["acreage"]) <= max_acres
-                and x.get("latitude") is not None
-            ]
-            # Diversify by state
-            by_state: dict[str, list[dict]] = {}
-            for row in out:
-                by_state.setdefault(row.get("state") or "??", []).append(row)
-            diversified: list[dict] = []
-            while len(diversified) < limit and any(by_state.values()):
-                for st in list(by_state.keys()):
-                    if by_state[st]:
-                        diversified.append(by_state[st].pop(0))
-                    if len(diversified) >= limit:
-                        break
-                    if not by_state[st]:
-                        by_state.pop(st, None)
-            return ProviderResult(True, ProviderStatus.CONFIGURED, diversified)
-        except Exception as exc:  # noqa: BLE001
-            log.warning("blm_lpad_search_failed", error=str(exc))
-            return ProviderResult(False, ProviderStatus.DEGRADED, error=str(exc))
+        resp = await client.get(BLM_QUERY, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        features = data.get("features") or []
+        out = [self.normalize_listing(f) for f in features]
+        out = [
+            x
+            for x in out
+            if x.get("acreage")
+            and min_acres <= float(x["acreage"]) <= max_acres
+            and x.get("latitude") is not None
+        ]
+        return out[:per_state]
 
     async def get_listing(self, external_id: str) -> ProviderResult[dict]:
         params = {
             "where": f"LUPA_ID='{external_id}' OR OBJECTID={external_id}"
-            if external_id.isdigit()
+            if str(external_id).isdigit()
             else f"LUPA_ID='{external_id}'",
             "outFields": "*",
             "returnGeometry": "true",
@@ -116,22 +150,14 @@ class BlmLpadProvider(ListingProvider):
                 g = shape(geom)
                 if not g.is_empty:
                     g = unary_union(g)
-                    acreage = acres_from_square_meters(g.area) if g.area else None
-                    # shapely area is in deg² for geographic CRS — inaccurate.
-                    # Recompute with projected equirectangular using centroid.
                     c = g.centroid
                     lat, lon = c.y, c.x
-                    # Better acreage via our ring helper when polygon available
                     if geom.get("type") == "Polygon":
-                        from landsignal.scoring.geospatial import ring_area_square_meters
-
                         acreage = acres_from_square_meters(
                             ring_area_square_meters(geom["coordinates"][0])
                         )
                         polygon = geom["coordinates"]
                     elif geom.get("type") == "MultiPolygon":
-                        from landsignal.scoring.geospatial import ring_area_square_meters
-
                         total = 0.0
                         rings = []
                         for poly in geom["coordinates"]:
@@ -142,9 +168,15 @@ class BlmLpadProvider(ListingProvider):
             except Exception as exc:  # noqa: BLE001
                 log.warning("blm_geom_parse_failed", error=str(exc))
 
+        # Prefer published GIS acres when present
+        if props.get("GIS_ACRES") is not None:
+            try:
+                acreage = float(props["GIS_ACRES"])
+            except Exception:
+                pass
+
         object_id = props.get("OBJECTID")
         lupa_id = props.get("LUPA_ID")
-        # OBJECTID is unique per geometry; LUPA_ID can repeat across tracts in a plan
         external_id = str(object_id or lupa_id)
         state = props.get("ADMIN_ST")
         name = props.get("LUPA_NM") or props.get("AUTH_NM") or f"BLM LPAD {external_id}"
@@ -162,7 +194,7 @@ class BlmLpadProvider(ListingProvider):
                 "Federal disposal process applies — not a private MLS listing. "
                 "Asking price is typically established through the disposal process, not a retail ask."
             ),
-            "asking_price_usd": None,  # federal disposal; no retail ask
+            "asking_price_usd": None,
             "acreage": acreage,
             "price_per_acre_usd": None,
             "state": state,

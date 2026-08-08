@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     demo_seed: bool = False
     force_live_on_demo: bool = False
     auto_discover_on_startup: bool = True
-    discover_limit: int = 40
+    discover_limit: int = 80
     discover_min_acres: float = 1
     http_timeout_seconds: float = 20.0
     mapbox_token: str | None = None
