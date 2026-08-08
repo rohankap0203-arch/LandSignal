@@ -130,12 +130,15 @@ export type SearchFilters = {
   market_channel?: string;
   sort?: string;
   q?: string;
+  broaden?: boolean;
 };
 
 function toQuery(filters: SearchFilters): string {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([k, v]) => {
     if (v === undefined || v === null || v === "" || v === "Any") return;
+    if (typeof v === "number" && !Number.isFinite(v)) return;
+    if (typeof v === "string" && (v === "__custom__" || v === "CUSTOM" || v === "NaN")) return;
     params.set(k, String(v));
   });
   const s = params.toString();
@@ -162,13 +165,20 @@ export const landsignalApi = {
   ingestManual: (body: Record<string, unknown>) =>
     api("/ingest/manual", { method: "POST", body: JSON.stringify(body) }),
   analyze: (id: string) => api(`/parcels/${id}/analyze`, { method: "POST" }),
-  discover: (limit = 80, minAcres = 1, reset = false, states?: string, background = true) => {
+  discover: (
+    limit = 10000,
+    minAcres = 0.1,
+    reset = false,
+    states?: string,
+    background = true,
+  ) => {
     const qs = new URLSearchParams({
       limit: String(limit),
       min_acres: String(minAcres),
-      max_acres: "5000",
+      max_acres: "50000",
       reset: String(reset),
       background: String(background),
+      fast: "true",
     });
     if (states) qs.set("states", states);
     return api<Record<string, unknown>>(`/discover?${qs}`, { method: "POST" });

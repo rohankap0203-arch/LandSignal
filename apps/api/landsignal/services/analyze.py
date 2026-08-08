@@ -168,7 +168,13 @@ def _estimate_value(parcel, soil_n, flood_n, wet_n, growth_n, listing=None) -> d
     }
 
 
-async def analyze_parcel(store: MemoryStore, parcel_id: UUID, settings: Settings | None = None) -> ScoreRecord:
+async def analyze_parcel(
+    store: MemoryStore,
+    parcel_id: UUID,
+    settings: Settings | None = None,
+    *,
+    fast: bool = False,
+) -> ScoreRecord:
     settings = settings or get_settings()
     parcel = store.parcels[parcel_id]
     listing = store.listing_for_parcel(parcel_id)
@@ -176,9 +182,12 @@ async def analyze_parcel(store: MemoryStore, parcel_id: UUID, settings: Settings
     parcel_dict = parcel.model_dump()
     existing = store.enrichments.get(parcel_id) or EnrichmentBundle()
 
-    # Always attempt live government enrichment for non-demo; demo keeps fixtures unless forced
-    run_live = settings.enable_live_gov_enrichment and (
-        not parcel.is_demo or settings.force_live_on_demo
+    # Fast path skips live gov calls so bulk discover can index thousands of parcels quickly.
+    # Detail pages re-run with fast=False for full soils/flood/wetlands enrichment.
+    run_live = (
+        (not fast)
+        and settings.enable_live_gov_enrichment
+        and (not parcel.is_demo or settings.force_live_on_demo)
     )
     if run_live:
         soil_res, flood_res, wet_res, terrain_res, tx_res, growth_res = await asyncio.gather(

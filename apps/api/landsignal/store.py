@@ -345,13 +345,75 @@ def _square_polygon(lon: float, lat: float, acres: float) -> list[list[list[floa
 
 
 _STORE: MemoryStore | None = None
+_PERSIST_PATH = "/tmp/landsignal_inventory.json"
+
+
+def persist_store(store: MemoryStore | None = None) -> None:
+    """Best-effort disk snapshot so API reloads don't wipe live inventory."""
+    import json
+    from pathlib import Path
+
+    store = store or _STORE
+    if store is None:
+        return
+    payload = {
+        "parcels": [p.model_dump(mode="json") for p in store.parcels.values() if not p.is_demo],
+        "listings": [L.model_dump(mode="json") for L in store.listings.values() if not L.is_demo],
+        "scores": {
+            str(pid): [s.model_dump(mode="json") for s in scores]
+            for pid, scores in store.scores.items()
+        },
+        "investor_profile": store.investor_profile,
+    }
+    Path(_PERSIST_PATH).write_text(json.dumps(payload), encoding="utf-8")
+
+
+def load_persisted_store(store: MemoryStore) -> int:
+    import json
+    from pathlib import Path
+
+    path = Path(_PERSIST_PATH)
+    if not path.exists():
+        return 0
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return 0
+    n = 0
+    for raw in payload.get("parcels") or []:
+        try:
+            p = ParcelRecord.model_validate(raw)
+            store.parcels[p.id] = p
+            n += 1
+        except Exception:
+            continue
+    for raw in payload.get("listings") or []:
+        try:
+            L = ListingRecord.model_validate(raw)
+            store.listings[L.id] = L
+        except Exception:
+            continue
+    for pid_s, scores in (payload.get("scores") or {}).items():
+        try:
+            pid = UUID(pid_s)
+            store.scores[pid] = [ScoreRecord.model_validate(s) for s in scores]
+        except Exception:
+            continue
+    if payload.get("investor_profile"):
+        store.investor_profile.update(payload["investor_profile"])
+    return n
 
 
 def get_store(seed_demo: bool = False) -> MemoryStore:
     global _STORE
     if _STORE is None:
         _STORE = MemoryStore()
-        if seed_demo:
+        loaded = load_persisted_store(_STORE)
+        if loaded:
+            import structlog
+
+            structlog.get_logger().info("store_restored_from_disk", parcels=loaded)
+        elif seed_demo:
             _STORE.seed_demo()
     return _STORE
 

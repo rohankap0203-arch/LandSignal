@@ -42,7 +42,7 @@ class BlmLpadProvider(ListingProvider):
         min_acres = float(query.get("min_acres") or 5)
         max_acres = float(query.get("max_acres") or 5000)
         states = query.get("states") or BLM_STATES
-        per_state = max(4, min(14, (limit // max(1, len(states))) + 3))
+        per_state = max(8, min(250, (limit // max(1, len(states))) + 5))
 
         async with httpx.AsyncClient(timeout=45.0) as client:
             results = await asyncio.gather(
@@ -99,23 +99,35 @@ class BlmLpadProvider(ListingProvider):
             "outFields": "*",
             "returnGeometry": "true",
             "outSR": 4326,
-            "resultRecordCount": max(per_state * 4, 24),
+            "resultRecordCount": min(1000, max(per_state * 2, 50)),
             "orderByFields": "OBJECTID DESC",
             "f": "geojson",
         }
-        resp = await client.get(BLM_QUERY, params=params)
-        resp.raise_for_status()
-        data = resp.json()
-        features = data.get("features") or []
-        out = [self.normalize_listing(f) for f in features]
-        out = [
-            x
-            for x in out
-            if x.get("acreage")
-            and min_acres <= float(x["acreage"]) <= max_acres
-            and x.get("latitude") is not None
-        ]
-        return out[:per_state]
+        # Page within a state when we need a deep haul
+        collected: list[dict] = []
+        offset = 0
+        while len(collected) < per_state:
+            params["resultOffset"] = offset
+            resp = await client.get(BLM_QUERY, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            features = data.get("features") or []
+            if not features:
+                break
+            for f in features:
+                row = self.normalize_listing(f)
+                if (
+                    row.get("acreage")
+                    and min_acres <= float(row["acreage"]) <= max_acres
+                    and row.get("latitude") is not None
+                ):
+                    collected.append(row)
+                    if len(collected) >= per_state:
+                        break
+            if len(features) < params["resultRecordCount"]:
+                break
+            offset += len(features)
+        return collected[:per_state]
 
     async def get_listing(self, external_id: str) -> ProviderResult[dict]:
         params = {

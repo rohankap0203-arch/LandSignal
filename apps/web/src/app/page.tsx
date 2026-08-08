@@ -85,65 +85,82 @@ export default function SearchPage() {
     return merged;
   }, [form.state, meta]);
 
-  const buildFilters = useCallback((): SearchFilters => {
-    const price = meta?.price_presets.find((p) => p.label === form.pricePreset);
-    const acres = meta?.acre_presets.find((p) => p.label === form.acrePreset);
-    const customPrice = form.pricePreset.toLowerCase().includes("custom");
-    const customAcres = form.acrePreset.toLowerCase().includes("custom");
-    const region =
-      form.regionCustom.trim() ||
-      (form.region.startsWith("Type a") || form.region === "Any" ? undefined : form.region);
+  const filtersFromForm = useCallback(
+    (f: FormState): SearchFilters => {
+      const price = meta?.price_presets.find((p) => p.label === f.pricePreset);
+      const acres = meta?.acre_presets.find((p) => p.label === f.acrePreset);
+      const customPrice = f.pricePreset.toLowerCase().includes("custom");
+      const customAcres = f.acrePreset.toLowerCase().includes("custom");
+      const region =
+        f.regionCustom.trim() ||
+        (f.region.startsWith("Type a") || f.region === "Any" ? undefined : f.region);
 
-    let hold: number | undefined;
-    if (form.holdCustom.trim()) hold = Number(form.holdCustom);
-    else if (form.holdYears !== "Any") hold = Number(form.holdYears);
+      let hold: number | undefined;
+      if (f.holdCustom.trim()) hold = Number(f.holdCustom);
+      else if (f.holdYears !== "Any" && f.holdYears !== "__custom__") hold = Number(f.holdYears);
 
-    let roi: number | undefined;
-    if (form.roiCustom.trim()) {
-      const raw = form.roiCustom.trim().replace("%", "");
-      const n = Number(raw);
-      roi = n > 1 ? n / 100 : n;
-    } else if (form.targetRoi !== "Any") roi = Number(form.targetRoi);
+      let roi: number | undefined;
+      if (f.roiCustom.trim()) {
+        const raw = f.roiCustom.trim().replace("%", "");
+        const n = Number(raw);
+        roi = n > 1 ? n / 100 : n;
+      } else if (f.targetRoi !== "Any" && f.targetRoi !== "__custom__") roi = Number(f.targetRoi);
 
-    const strategy =
-      form.strategy === "CUSTOM" || form.strategyCustom.trim()
-        ? form.strategyCustom.trim() || "CUSTOM"
-        : form.strategy;
+      const strategy =
+        f.strategy === "CUSTOM"
+          ? f.strategyCustom.trim() || undefined
+          : f.strategy === "Any"
+            ? undefined
+            : f.strategy;
 
-    return {
-      q: form.q || undefined,
-      state: stateCode(form.state),
-      region,
-      min_price: customPrice ? parseMoney(form.priceMin) : price?.min ?? undefined,
-      max_price: customPrice ? parseMoney(form.priceMax) : price?.max ?? undefined,
-      min_acres: customAcres ? parseMoney(form.acreMin) : acres?.min ?? undefined,
-      max_acres: customAcres ? parseMoney(form.acreMax) : acres?.max ?? undefined,
-      strategy,
-      hold_years: Number.isFinite(hold as number) ? hold : undefined,
-      target_roi: Number.isFinite(roi as number) ? roi : undefined,
-      unpriced_mode: form.unpricedMode,
-      include_unpriced: form.unpricedMode !== "priced",
-      sort: form.sort,
-    };
-  }, [form, meta]);
+      return {
+        q: f.q || undefined,
+        state: stateCode(f.state),
+        region,
+        min_price: customPrice ? parseMoney(f.priceMin) : price?.min ?? undefined,
+        max_price: customPrice ? parseMoney(f.priceMax) : price?.max ?? undefined,
+        min_acres: customAcres ? parseMoney(f.acreMin) : acres?.min ?? undefined,
+        max_acres: customAcres ? parseMoney(f.acreMax) : acres?.max ?? undefined,
+        strategy,
+        hold_years: Number.isFinite(hold as number) ? hold : undefined,
+        target_roi: Number.isFinite(roi as number) ? roi : undefined,
+        unpriced_mode: f.unpricedMode,
+        include_unpriced: f.unpricedMode !== "priced",
+        sort: f.sort,
+        broaden: true,
+      };
+    },
+    [meta],
+  );
 
-  const runSearch = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await landsignalApi.radar(buildFilters());
-      setRows(data);
-      setStatus(
-        data.length
-          ? `${data.length} opportunities ranked for your criteria`
-          : "No live inventory yet — refresh public markets below",
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Search failed");
-    } finally {
-      setLoading(false);
-    }
-  }, [buildFilters]);
+  const runSearch = useCallback(
+    async (override?: FormState) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const active = override ?? form;
+        const data = await landsignalApi.radar(filtersFromForm(active));
+        setRows(data);
+        const metaNow = await landsignalApi.searchMeta().catch(() => null);
+        if (metaNow) setMeta(metaNow);
+        const total = metaNow?.inventory_count ?? data.length;
+        setStatus(
+          data.length
+            ? `Showing top ${data.length.toLocaleString()} matches · ${total.toLocaleString()} live parcels indexed`
+            : "No matches yet — starting a nationwide live scan…",
+        );
+        // Auto-heal empty inventory without wiping filters
+        if (!data.length) {
+          landsignalApi.discover(10000, 0.1, false, undefined, true).catch(() => undefined);
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Search failed");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [filtersFromForm, form],
+  );
 
   useEffect(() => {
     landsignalApi
@@ -154,26 +171,23 @@ export default function SearchPage() {
 
   useEffect(() => {
     if (!meta) return;
-    runSearch();
-  }, [meta]); // initial
+    runSearch(DEFAULT_FORM);
+  }, [meta]); // initial open = Any filters
 
   async function scanFresh() {
     setScanning(true);
-    setStatus("Scan started — new parcels will show up as they finish scoring…");
+    setStatus("Nationwide scan started — indexing thousands of public parcels…");
     try {
-      const st = stateCode(form.state);
-      // Background + no reset: do not wipe inventory or block the page for minutes
-      await landsignalApi.discover(80, 1, true, st !== "Any" ? st : undefined, true);
-      await runSearch();
-      // Light polling while background discover fills in
-      for (let i = 0; i < 8; i++) {
-        await new Promise((r) => setTimeout(r, 2500));
+      // Never wipe on refresh — that was causing “no live matches”
+      await landsignalApi.discover(10000, 0.1, false, undefined, true);
+      for (let i = 0; i < 20; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
         const nextMeta = await landsignalApi.searchMeta();
         setMeta(nextMeta);
         await runSearch();
-        if ((nextMeta.inventory_count || 0) >= 20) break;
+        if ((nextMeta.inventory_count || 0) >= 500) break;
       }
-      setStatus("Live inventory updated");
+      setStatus("Live inventory updated — keep filtering; more parcels may still be indexing");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Scan failed");
     } finally {
@@ -408,7 +422,8 @@ export default function SearchPage() {
             className="btn btn-secondary"
             onClick={() => {
               setForm(DEFAULT_FORM);
-              setTimeout(() => runSearch(), 0);
+              // Pass DEFAULT explicitly — React state is async and was re-searching old filters
+              void runSearch(DEFAULT_FORM);
             }}
           >
             Reset to Any
@@ -437,8 +452,9 @@ export default function SearchPage() {
               className="mt-1 block min-w-[220px] rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] px-3 py-2 text-sm normal-case text-[var(--ink)]"
               value={form.sort}
               onChange={(e) => {
-                setForm((f) => ({ ...f, sort: e.target.value }));
-                setTimeout(() => runSearch(), 0);
+                const next = { ...form, sort: e.target.value };
+                setForm(next);
+                void runSearch(next);
               }}
             >
               {(

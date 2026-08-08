@@ -105,30 +105,45 @@ async def providers() -> list[ProviderInfo]:
 
 @router.post("/discover")
 async def discover(
-    limit: int = 48,
-    min_acres: float = 1.0,
-    max_acres: float = 2500.0,
+    limit: int = 10000,
+    min_acres: float = 0.1,
+    max_acres: float = 50000.0,
     reset: bool = False,
     states: str | None = None,
     background: bool = True,
+    fast: bool = True,
 ) -> dict[str, Any]:
     """Pull real public inventory. Default background=true so the UI is not blocked for minutes."""
     import asyncio
+
+    from landsignal.store import persist_store
 
     store = get_store(get_settings().demo_seed)
     settings = get_settings()
     state_list = [s.strip().upper() for s in states.split(",") if s.strip()] if states else None
 
     async def _run() -> dict[str, Any]:
-        return await discover_opportunities(
-            store,
-            settings,
-            limit=limit,
-            min_acres=min_acres,
-            max_acres=max_acres,
-            reset=reset,
-            states=state_list,
-        )
+        try:
+            summary = await discover_opportunities(
+                store,
+                settings,
+                limit=limit,
+                min_acres=min_acres,
+                max_acres=max_acres,
+                reset=reset,
+                states=state_list,
+                fast=fast,
+            )
+            try:
+                persist_store(store)
+            except Exception:
+                pass
+            return summary
+        except Exception as exc:  # noqa: BLE001
+            import structlog
+
+            structlog.get_logger().exception("discover_background_failed", error=str(exc))
+            return {"imported": 0, "scored": 0, "errors": [str(exc)]}
 
     if background:
         asyncio.create_task(_run())
@@ -137,8 +152,9 @@ async def discover(
             "background": True,
             "limit": limit,
             "reset": reset,
+            "fast": fast,
             "inventory_now": sum(1 for p in store.parcels.values() if not p.is_demo),
-            "note": "Scan started in background. Results appear as parcels finish scoring — refresh search shortly.",
+            "note": "Nationwide scan started. Parcels appear as they index — hit Show matches every few seconds.",
         }
     return await _run()
 
@@ -254,11 +270,13 @@ async def radar(
     market_channel: str | None = None,
     sort: str | None = "fit_desc",
     q: str | None = None,
-    broaden: bool = False,
+    broaden: bool = True,
+    limit: int = 200,
 ) -> list[RadarRow]:
     """Search results with investor filters. Pass nothing / omit for Any.
 
-    broaden=False by default so selected state/region/price filters are honored exactly.
+    broaden=True softens region/strategy when they would otherwise return zero rows,
+    but never crosses a selected state boundary.
     """
     from landsignal.geo_meta import region_matches
     from landsignal.scoring.engine import personalized_score
@@ -339,17 +357,21 @@ async def radar(
                 continue
             if max_acres is not None and parcel.acreage is not None and parcel.acreage > max_acres:
                 continue
+            strategy_soft_miss = False
             if strategy and strategy.upper() not in ("ANY", "CUSTOM", ""):
                 known = {"FARMLAND", "DEVELOPMENT", "LAND_BANK", "RECREATIONAL", "ENERGY", "TIMBER"}
                 s_up = strategy.upper().replace(" ", "_")
                 if s_up in known:
-                    if not score.best_strategy or score.best_strategy.value != s_up:
-                        if not score.secondary_strategy or score.secondary_strategy.value != s_up:
-                            continue
+                    hit = (score.best_strategy and score.best_strategy.value == s_up) or (
+                        score.secondary_strategy and score.secondary_strategy.value == s_up
+                    )
+                    if not hit:
+                        # Soft: keep parcel but mark for fit penalty instead of hard exclude
+                        strategy_soft_miss = True
                 else:
                     blob = f"{listing.title} {listing.description or ''} {_strategy_label(score.best_strategy)}".lower()
                     if strategy.lower() not in blob and s_up.lower().replace("_", " ") not in blob:
-                        continue
+                        strategy_soft_miss = True
             if min_score is not None and score.opportunity < min_score:
                 continue
             if max_risk is not None and score.risk > max_risk:
@@ -358,7 +380,8 @@ async def radar(
                 continue
             if q:
                 blob = f"{listing.title} {parcel.county} {parcel.state} {parcel.apn} {listing.description or ''}".lower()
-                if q.lower() not in blob:
+                tokens = [t for t in q.lower().replace(",", " ").split() if len(t) > 1]
+                if tokens and not any(t in blob for t in tokens):
                     continue
 
             fit = personalized_score(
@@ -369,6 +392,8 @@ async def radar(
                 score.best_strategy.value if score.best_strategy else None,
                 score.risk,
             )
+            if strategy_soft_miss:
+                fit = max(0, fit - 12)
             if hold_years is not None:
                 if hold_years <= 5 and score.best_strategy and score.best_strategy.value in ("ENERGY", "FARMLAND"):
                     fit = min(100, fit + 4)
@@ -421,6 +446,11 @@ async def radar(
                 filters=filters,
                 enrichment=enrichment,
             )
+            if strategy_soft_miss:
+                reasons = [
+                    "Strategy is a soft match — ranked lower, not hidden, so you still see nearby options.",
+                    *reasons,
+                ][:5]
             acres = parcel.acreage
             acres_display = f"{acres:,.2f} acres" if acres is not None else "Acreage not published"
             discount_display = (
@@ -509,16 +539,30 @@ async def radar(
         return out
 
     rows = await build_rows(apply_region=True, apply_strict_channel=True)
-    # Optional soft broaden: only within the same state filter (never leak other states)
-    if broaden and not rows and region:
+    # Soft broaden within the same state when region is too tight
+    if broaden and not rows:
         rows = await build_rows(apply_region=False, apply_strict_channel=True)
         for r in rows:
             r.match_reasons = [
-                "Exact city/region had no inventory — showing matches that still satisfy your other filters.",
+                "Loosened city/region a bit so you still get real matches for your other filters.",
+                *r.match_reasons,
+            ][:5]
+    # Last resort: if a price band wiped everything, show unpriced + near-band in-state/all
+    if broaden and not rows and (min_price is not None or max_price is not None):
+        saved_min, saved_max = min_price, max_price
+        min_price = None
+        max_price = None
+        rows = await build_rows(apply_region=False, apply_strict_channel=False)
+        min_price, max_price = saved_min, saved_max
+        for r in rows:
+            r.match_reasons = [
+                "Your exact price band had no hits — showing the closest live opportunities instead.",
                 *r.match_reasons,
             ][:5]
 
-    return _sort_rows(rows, sort)
+    ranked = _sort_rows(rows, sort)
+    # Cap payload so the UI stays responsive; full inventory_count lives on /search/meta
+    return ranked[: max(1, min(limit, 500))]
 
 
 @router.get("/search/meta")
@@ -559,10 +603,9 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     parcel = store.parcels.get(parcel_id)
     if not parcel:
         raise HTTPException(404, "Parcel not found")
-    if store.latest_score(parcel_id) is None:
-        await analyze_parcel(store, parcel_id)
+    # Always run full (non-fast) enrichment on detail so soils/flood are real when opened
+    score = await analyze_parcel(store, parcel_id, fast=False)
     listing = store.listing_for_parcel(parcel_id)
-    score = store.latest_score(parcel_id)
     enrichment = store.enrichments.get(parcel_id)
     links = build_action_links(
         provider_id=listing.provider_id if listing else None,

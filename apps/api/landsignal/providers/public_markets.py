@@ -16,6 +16,8 @@ from typing import Any, Callable
 
 import httpx
 import structlog
+
+# NOTE: asyncio used via gather helper below
 from shapely.geometry import shape
 from shapely.ops import unary_union
 
@@ -116,8 +118,8 @@ def _norm_sauk(raw: dict) -> dict | None:
     geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
     if acreage is None:
         acreage = geom_acres
-    if acreage is not None and float(acreage) < 0.5:
-        return None  # skip tiny lots for land strategy focus
+    if acreage is not None and float(acreage) < 0.1:
+        return None
     pid = props.get("PARCELID") or props.get("OBJECTID")
     return {
         "provider_id": "public_tax_sale",
@@ -149,8 +151,7 @@ def _norm_indy(raw: dict) -> dict | None:
     sqft = props.get("ESTSQFT")
     if acreage is None and sqft:
         acreage = float(sqft) / 43560.0
-    # Focus on larger / vacant-ish for land engine; keep >= 0.25 ac
-    if acreage is not None and acreage < 0.25:
+    if acreage is not None and acreage < 0.05:
         return None
     ask = props.get("TAXSALECOST")
     if ask is None:
@@ -164,7 +165,7 @@ def _norm_indy(raw: dict) -> dict | None:
     return {
         "provider_id": "public_tax_sale",
         "external_id": f"indy:{pid}",
-        "title": f"Indianapolis tax sale · {num} {street}".strip(),
+        "title": f"Indianapolis tax sale · {num} {street}".strip() or f"Indianapolis tax sale · {pid}",
         "description": (
             "Marion County / Indianapolis tax-sale parcel (public GIS). "
             "Distressed inventory approximating auction channels — not Crexi/MLS."
@@ -420,6 +421,49 @@ SOURCES: list[ArcgisMarketSource] = [
 ]
 
 
+async def _fetch_arcgis_pages(
+    client: httpx.AsyncClient,
+    src: ArcgisMarketSource,
+    *,
+    target: int,
+    page_size: int = 200,
+    start_offset: int = 0,
+) -> list[dict]:
+    """Page through an ArcGIS layer until we have `target` normalized rows."""
+    out: list[dict] = []
+    offset = max(0, start_offset)
+    # Cap pages so a single county can't hang the whole discover
+    max_pages = max(1, (target // page_size) + 3)
+    for _ in range(max_pages):
+        if len(out) >= target:
+            break
+        params = {
+            "where": src.where,
+            "outFields": "*",
+            "returnGeometry": "true",
+            "outSR": 4326,
+            "resultRecordCount": page_size,
+            "resultOffset": offset,
+            "f": "geojson",
+        }
+        resp = await client.get(src.url, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        feats = data.get("features") or []
+        if not feats:
+            break
+        for feat in feats:
+            row = src.normalize(feat)
+            if row:
+                out.append(row)
+                if len(out) >= target:
+                    break
+        if len(feats) < page_size:
+            break
+        offset += len(feats)
+    return out
+
+
 class PublicTaxSaleProvider(ListingProvider):
     """Free county tax-sale / for-sale GIS feeds ≈ opportunistic MLS/auction inventory."""
 
@@ -430,36 +474,25 @@ class PublicTaxSaleProvider(ListingProvider):
         return ProviderStatus.CONFIGURED
 
     async def search_listings(self, query: dict[str, Any]) -> ProviderResult[list[dict]]:
-        limit = int(query.get("limit") or 40)
+        limit = int(query.get("limit") or 2000)
         out: list[dict] = []
         errors: list[str] = []
         tax_sources = [
             s
             for s in SOURCES
-            if "tax" in s.source_id or "sale" in s.source_id or s.source_id.startswith(("sauk", "indy", "shasta", "wyco", "mahoning", "cochise"))
+            if "tax" in s.source_id
+            or "sale" in s.source_id
+            or s.source_id.startswith(("sauk", "indy", "shasta", "wyco", "mahoning", "cochise"))
         ]
-        async with httpx.AsyncClient(timeout=35.0) as client:
-            for src in tax_sources:
-                try:
-                    params = {
-                        "where": src.where,
-                        "outFields": "*",
-                        "returnGeometry": "true",
-                        "outSR": 4326,
-                        "resultRecordCount": min(100, max(40, limit)),
-                        "f": "geojson",
-                    }
-                    resp = await client.get(src.url, params=params)
-                    resp.raise_for_status()
-                    data = resp.json()
-                    for feat in data.get("features") or []:
-                        row = src.normalize(feat)
-                        if row:
-                            out.append(row)
-                except Exception as exc:  # noqa: BLE001
-                    errors.append(f"{src.source_id}: {exc}")
-                    log.warning("public_tax_source_failed", source=src.source_id, error=str(exc))
-        # Diversify by state, prefer priced + larger acreage within each state
+        # Split the budget across counties so one mega-layer doesn't dominate
+        per_source = max(300, limit // max(1, len(tax_sources)))
+        start_offset = int(query.get("offset") or 0)
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            results = await asyncio_gather_sources(
+                client, tax_sources, per_source, errors, start_offset=start_offset
+            )
+            for batch in results:
+                out.extend(batch)
         by_state: dict[str, list[dict]] = {}
         for row in out:
             by_state.setdefault(row.get("state") or "??", []).append(row)
@@ -499,6 +532,28 @@ class PublicTaxSaleProvider(ListingProvider):
         return raw
 
 
+async def asyncio_gather_sources(
+    client: httpx.AsyncClient,
+    sources: list[ArcgisMarketSource],
+    per_source: int,
+    errors: list[str],
+    start_offset: int = 0,
+) -> list[list[dict]]:
+    import asyncio
+
+    async def one(src: ArcgisMarketSource) -> list[dict]:
+        try:
+            return await _fetch_arcgis_pages(
+                client, src, target=per_source, start_offset=start_offset
+            )
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{src.source_id}: {exc}")
+            log.warning("public_tax_source_failed", source=src.source_id, error=str(exc))
+            return []
+
+    return list(await asyncio.gather(*[one(s) for s in sources]))
+
+
 class PublicSurplusProvider(ListingProvider):
     """Municipal/county surplus property ≈ CRE disposal / land-bank inventory."""
 
@@ -509,31 +564,17 @@ class PublicSurplusProvider(ListingProvider):
         return ProviderStatus.CONFIGURED
 
     async def search_listings(self, query: dict[str, Any]) -> ProviderResult[list[dict]]:
-        limit = int(query.get("limit") or 40)
+        limit = int(query.get("limit") or 200)
         out: list[dict] = []
         surplus_sources = [s for s in SOURCES if "surplus" in s.source_id]
-        async with httpx.AsyncClient(timeout=35.0) as client:
-            for src in surplus_sources:
-                try:
-                    params = {
-                        "where": src.where,
-                        "outFields": "*",
-                        "returnGeometry": "true",
-                        "outSR": 4326,
-                        "resultRecordCount": min(80, limit * 3),
-                        "f": "geojson",
-                    }
-                    resp = await client.get(src.url, params=params)
-                    resp.raise_for_status()
-                    data = resp.json()
-                    for feat in data.get("features") or []:
-                        row = src.normalize(feat)
-                        if row:
-                            out.append(row)
-                except Exception as exc:  # noqa: BLE001
-                    log.warning("public_surplus_source_failed", source=src.source_id, error=str(exc))
+        errors: list[str] = []
+        per_source = max(50, limit // max(1, len(surplus_sources)))
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            batches = await asyncio_gather_sources(client, surplus_sources, per_source, errors)
+            for batch in batches:
+                out.extend(batch)
         out.sort(key=lambda r: -(r.get("acreage") or 0))
-        return ProviderResult(True, ProviderStatus.CONFIGURED, out[:limit])
+        return ProviderResult(True, ProviderStatus.CONFIGURED, out[:limit], error="; ".join(errors) if errors else None)
 
     async def get_listing(self, external_id: str) -> ProviderResult[dict]:
         res = await self.search_listings({"limit": 200})
