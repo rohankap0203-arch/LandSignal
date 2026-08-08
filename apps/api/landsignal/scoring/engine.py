@@ -1,0 +1,477 @@
+from __future__ import annotations
+
+import hashlib
+import json
+from typing import Any
+
+from landsignal.scoring.financial import asking_discount_pct, clamp, margin_of_safety
+
+ALGORITHM_VERSION = "landsignal_score_v1"
+WEIGHT_VERSION = "weights_default_v1"
+
+DEFAULT_WEIGHTS = {
+    "valuation_mispricing": 0.20,
+    "intrinsic_land_quality": 0.10,
+    "hbu_optionality": 0.15,
+    "growth_appreciation": 0.15,
+    "infrastructure": 0.10,
+    "liquidity": 0.08,
+    "scarcity": 0.07,
+    "catalysts": 0.05,
+    "seller_dynamics": 0.05,
+    "risk": 0.05,
+}
+
+STRATEGIES = [
+    "FARMLAND",
+    "DEVELOPMENT",
+    "LAND_BANK",
+    "RECREATIONAL",
+    "ENERGY",
+    "TIMBER",
+]
+
+
+def _round1(n: float) -> float:
+    return round(n * 10) / 10.0
+
+
+def _stable_hash(payload: Any) -> str:
+    blob = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _v(d: dict, key: str) -> float | None:
+    item = d.get(key) or {}
+    state = item.get("knowledge_state", "UNKNOWN")
+    if state in ("UNKNOWN", "TEMPORARILY_UNAVAILABLE"):
+        return None
+    return item.get("value")
+
+
+def screen_strategies(inp: dict) -> dict[str, str]:
+    wetland = _v(inp, "wetland_pct")
+    flood = _v(inp, "flood_zone_pct")
+    max_slope = _v(inp, "max_slope_pct")
+    access = _v(inp, "legal_access_confidence")
+    contamination = _v(inp, "environmental_contamination")
+    acreage = inp.get("acreage")
+
+    if access is not None and access < 15:
+        landlocked = "FAIL"
+    elif access is not None and access < 40:
+        landlocked = "MANUAL_REVIEW"
+    else:
+        landlocked = "PASS"
+
+    farmland = "PASS"
+    if wetland is not None and wetland > 60:
+        farmland = "FAIL"
+    elif max_slope is not None and max_slope > 25:
+        farmland = "FAIL"
+    elif landlocked == "FAIL":
+        farmland = "MANUAL_REVIEW"
+
+    if landlocked == "FAIL":
+        development = "FAIL"
+    elif wetland is not None and wetland > 40:
+        development = "FAIL"
+    elif flood is not None and flood > 50:
+        development = "FAIL"
+    elif contamination is not None and contamination >= 70:
+        development = "FAIL"
+    elif acreage is not None and acreage < 2:
+        development = "FAIL"
+    elif wetland is not None and wetland > 20:
+        development = "MANUAL_REVIEW"
+    elif landlocked == "MANUAL_REVIEW":
+        development = "MANUAL_REVIEW"
+    else:
+        development = "PASS"
+
+    recreational = "PASS"
+    if landlocked == "FAIL":
+        recreational = "MANUAL_REVIEW"
+    if contamination is not None and contamination >= 80:
+        recreational = "FAIL"
+
+    if acreage is not None and acreage < 10:
+        energy = "FAIL"
+    elif max_slope is not None and max_slope > 20:
+        energy = "FAIL"
+    elif wetland is not None and wetland > 35:
+        energy = "FAIL"
+    elif flood is not None and flood > 40:
+        energy = "MANUAL_REVIEW"
+    else:
+        energy = "PASS"
+
+    timber = "PASS"
+    if max_slope is not None and max_slope > 45:
+        timber = "MANUAL_REVIEW"
+    if contamination is not None and contamination >= 80:
+        timber = "FAIL"
+
+    if landlocked == "FAIL":
+        land_bank = "FAIL"
+    elif contamination is not None and contamination >= 85:
+        land_bank = "FAIL"
+    elif landlocked == "MANUAL_REVIEW":
+        land_bank = "MANUAL_REVIEW"
+    else:
+        land_bank = "PASS"
+
+    return {
+        "FARMLAND": farmland,
+        "DEVELOPMENT": development,
+        "LAND_BANK": land_bank,
+        "RECREATIONAL": recreational,
+        "ENERGY": energy,
+        "TIMBER": timber,
+    }
+
+
+def compute_risk(inp: dict) -> tuple[float, list[str]]:
+    evidence: list[str] = []
+    parts: list[float] = []
+    wetland = _v(inp, "wetland_pct")
+    if wetland is not None:
+        parts.append(clamp(wetland, 0, 100))
+        if wetland > 25:
+            evidence.append(f"Wetlands {wetland:.1f}% of parcel")
+    flood = _v(inp, "flood_zone_pct")
+    if flood is not None:
+        parts.append(clamp(flood * 1.1, 0, 100))
+        if flood > 20:
+            evidence.append(f"Flood exposure {flood:.1f}%")
+    access = _v(inp, "legal_access_confidence")
+    if access is not None:
+        parts.append(clamp(100 - access, 0, 100))
+        if access < 50:
+            evidence.append(f"Legal access confidence only {access}")
+    contamination = _v(inp, "environmental_contamination")
+    if contamination is not None:
+        parts.append(clamp(contamination, 0, 100))
+    slope = _v(inp, "max_slope_pct")
+    if slope is not None:
+        parts.append(clamp(slope * 2, 0, 100))
+    liq = _v(inp, "liquidity_score")
+    if liq is not None:
+        parts.append(clamp(100 - liq, 0, 100) * 0.7)
+    if not parts:
+        return 50.0, ["Insufficient risk inputs — neutral risk pending data"]
+    return _round1(sum(parts) / len(parts)), evidence
+
+
+def compute_confidence(inp: dict) -> float:
+    parts = [clamp(float(inp.get("known_attribute_ratio") or 0) * 100, 0, 100)]
+    if inp.get("geometry_confidence") is not None:
+        parts.append(float(inp["geometry_confidence"]))
+    parts.append(clamp(float(inp.get("comps_count") or 0) * 15, 0, 100))
+    confs = []
+    for key in (
+        "estimated_value_base_usd",
+        "prime_farmland_pct",
+        "wetland_pct",
+        "flood_zone_pct",
+        "avg_slope_pct",
+    ):
+        c = (inp.get(key) or {}).get("confidence")
+        if c is not None:
+            confs.append(float(c))
+    if confs:
+        parts.append(sum(confs) / len(confs))
+    unavailable = sum(
+        1
+        for key in ("wetland_pct", "flood_zone_pct", "prime_farmland_pct", "estimated_value_base_usd")
+        if (inp.get(key) or {}).get("knowledge_state") == "TEMPORARILY_UNAVAILABLE"
+    )
+    return _round1(clamp(sum(parts) / len(parts) - unavailable * 8, 0, 100))
+
+
+def deal_readiness(inp: dict) -> float:
+    score = 20.0
+    access = _v(inp, "legal_access_confidence")
+    if access is not None and access >= 70:
+        score += 15
+    if (inp.get("geometry_confidence") or 0) >= 80:
+        score += 15
+    if _v(inp, "flood_zone_pct") is not None:
+        score += 10
+    if _v(inp, "wetland_pct") is not None:
+        score += 10
+    if (inp.get("comps_count") or 0) >= 3:
+        score += 10
+    if _v(inp, "zoning_development_friendly") is not None:
+        score += 10
+    return _round1(clamp(score, 0, 100))
+
+
+def _signal(opportunity: float, risk: float, confidence: float) -> str:
+    if opportunity < 40 or (risk > 75 and opportunity < 70):
+        return "REJECT"
+    if opportunity >= 90 and risk <= 35 and confidence >= 70:
+        return "EXCEPTIONAL"
+    if opportunity >= 75 and risk <= 50:
+        return "STRONG"
+    return "WATCH"
+
+
+def compute_score(inp: dict, weights: dict | None = None, weight_version: str = WEIGHT_VERSION) -> dict:
+    weights = weights or DEFAULT_WEIGHTS
+    screens = screen_strategies(inp)
+    risk, risk_evidence = compute_risk(inp)
+    ask = inp.get("asking_price_usd")
+    base = _v(inp, "estimated_value_base_usd")
+    discount = asking_discount_pct(ask, base)
+    if base is None or ask is None:
+        valuation_value = 50.0
+        valuation_evidence = ["Valuation incomplete — neutral until comps/model value available"]
+        valuation_ks = (inp.get("estimated_value_base_usd") or {}).get("knowledge_state", "UNKNOWN")
+    else:
+        valuation_value = _round1(clamp(55 - discount * 1.2, 0, 100))
+        valuation_evidence = [f"Ask {ask} vs base value {base} → discount/premium {discount:.1f}%"]
+        valuation_ks = "KNOWN"
+
+    prime = _v(inp, "prime_farmland_pct")
+    slope = _v(inp, "avg_slope_pct")
+    q_parts = []
+    q_evidence = []
+    if prime is not None:
+        q_parts.append(prime)
+        q_evidence.append(f"Prime farmland {prime:.1f}%")
+    if slope is not None:
+        q_parts.append(clamp(100 - slope * 3, 0, 100))
+        q_evidence.append(f"Avg slope {slope:.1f}%")
+    quality_value = _round1(sum(q_parts) / len(q_parts)) if q_parts else 50.0
+    quality_ks = "KNOWN" if q_parts else "UNKNOWN"
+    if not q_parts:
+        q_evidence = ["Intrinsic quality unknown — not penalized"]
+
+    zoning = _v(inp, "zoning_development_friendly") or 40
+    growth = _v(inp, "path_of_growth_score") or 40
+    solar = _v(inp, "solar_irradiance_score") or 40
+    timber = _v(inp, "timber_suitability") or 40
+    wetland = _v(inp, "wetland_pct") or 20
+    access = _v(inp, "legal_access_confidence") or 50
+    prime_f = prime or 40
+
+    strategy_scores = {
+        "FARMLAND": 0.0
+        if screens["FARMLAND"] == "FAIL"
+        else _round1(clamp(prime_f * 0.7 + (100 - wetland) * 0.3, 0, 100)),
+        "DEVELOPMENT": 0.0
+        if screens["DEVELOPMENT"] == "FAIL"
+        else _round1(clamp(zoning * 0.45 + growth * 0.35 + access * 0.2, 0, 100)),
+        "LAND_BANK": 0.0
+        if screens["LAND_BANK"] == "FAIL"
+        else _round1(clamp(growth * 0.5 + zoning * 0.2 + access * 0.3, 0, 100)),
+        "RECREATIONAL": 0.0
+        if screens["RECREATIONAL"] == "FAIL"
+        else _round1(clamp(40 + wetland * 0.2 + (100 - zoning) * 0.2, 0, 100)),
+        "ENERGY": 0.0
+        if screens["ENERGY"] == "FAIL"
+        else _round1(clamp(solar * 0.6 + (40 if _v(inp, "nearest_transmission_m") is not None else 20), 0, 100)),
+        "TIMBER": 0.0 if screens["TIMBER"] == "FAIL" else _round1(clamp(timber, 0, 100)),
+    }
+    pass_scores = [v for k, v in strategy_scores.items() if screens[k] != "FAIL"]
+    top = sorted(pass_scores, reverse=True)[:3]
+    optionality_value = _round1(sum(top) / len(top)) if top else 0.0
+
+    # Asymmetry
+    downside = _v(inp, "downside_value_usd")
+    upside = _v(inp, "development_upside_usd")
+    liq = _v(inp, "liquidity_score")
+    if ask is None or base is None:
+        asymmetry = 50.0
+        asym_evidence = ["Asymmetry requires ask + base value"]
+    else:
+        mos = margin_of_safety(ask, base)
+        upside_ratio = ((upside - ask) / ask) if upside is not None and ask > 0 else 0.0
+        downside_gap = max(0.0, (ask - downside) / ask) if downside is not None and ask > 0 else 0.0
+        asymmetry = 50 + mos * 80 + upside_ratio * 25 - downside_gap * 40
+        if liq is not None and liq < 40:
+            asymmetry -= (40 - liq) * 0.4
+        asymmetry = _round1(clamp(asymmetry, 0, 100))
+        asym_evidence = [
+            f"MoS {mos*100:.1f}%, upsideRatio {upside_ratio*100:.1f}%, downsideGap {downside_gap*100:.1f}%"
+        ]
+
+    growth_v = _v(inp, "path_of_growth_score")
+    frontage = _v(inp, "road_frontage_m")
+    tx = _v(inp, "nearest_transmission_m")
+    infra_parts = [access if _v(inp, "legal_access_confidence") is not None else None]
+    if frontage is not None:
+        infra_parts.append(clamp(frontage / 5, 0, 100))
+    if tx is not None:
+        infra_parts.append(clamp(100 - (tx / 5000) * 100, 0, 100))
+    infra_parts = [p for p in infra_parts if p is not None]
+    infra = _round1(sum(infra_parts) / len(infra_parts)) if infra_parts else 50.0
+
+    category_values = {
+        "valuation_mispricing": (valuation_value, valuation_ks, valuation_evidence),
+        "intrinsic_land_quality": (quality_value, quality_ks, q_evidence),
+        "hbu_optionality": (
+            optionality_value,
+            "ESTIMATED"
+            if _v(inp, "zoning_development_friendly") is None and prime is None
+            else "KNOWN",
+            [f"Top strategy scores: " + ", ".join(f"{k}={v}" for k, v in sorted(strategy_scores.items(), key=lambda x: -x[1])[:3])],
+        ),
+        "growth_appreciation": (
+            growth_v if growth_v is not None else 50.0,
+            "UNKNOWN" if growth_v is None else "KNOWN",
+            ["Growth score unknown — neutral"] if growth_v is None else [f"Path-of-growth {growth_v}"],
+        ),
+        "infrastructure": (
+            infra,
+            "UNKNOWN" if not infra_parts else "ESTIMATED",
+            ["Infrastructure unknown — neutral"] if not infra_parts else [f"Infrastructure composite {infra}"],
+        ),
+        "liquidity": (
+            liq if liq is not None else 50.0,
+            "UNKNOWN" if liq is None else "KNOWN",
+            ["Liquidity unknown — neutral"] if liq is None else [f"Liquidity {liq}"],
+        ),
+        "scarcity": (
+            _v(inp, "scarcity_score") if _v(inp, "scarcity_score") is not None else 50.0,
+            "UNKNOWN" if _v(inp, "scarcity_score") is None else "KNOWN",
+            ["Scarcity unknown — neutral"]
+            if _v(inp, "scarcity_score") is None
+            else [f"Scarcity {_v(inp, 'scarcity_score')}"],
+        ),
+        "catalysts": (
+            _v(inp, "catalyst_score") if _v(inp, "catalyst_score") is not None else 40.0,
+            "UNKNOWN" if _v(inp, "catalyst_score") is None else "KNOWN",
+            ["No structured catalysts"]
+            if _v(inp, "catalyst_score") is None
+            else [f"Catalyst score {_v(inp, 'catalyst_score')}"],
+        ),
+        "seller_dynamics": (
+            _v(inp, "seller_pressure_score") if _v(inp, "seller_pressure_score") is not None else 40.0,
+            "UNKNOWN" if _v(inp, "seller_pressure_score") is None else "KNOWN",
+            ["Seller dynamics unknown"]
+            if _v(inp, "seller_pressure_score") is None
+            else [f"Seller pressure {_v(inp, 'seller_pressure_score')}"],
+        ),
+        "risk": (100 - risk, "ESTIMATED", risk_evidence),
+    }
+
+    components = []
+    opportunity = 0.0
+    for category, weight in weights.items():
+        value, ks, evidence = category_values[category]
+        contribution = value * weight
+        opportunity += contribution
+        components.append(
+            {
+                "category": category,
+                "label": category,
+                "value": _round1(value),
+                "weight": weight,
+                "contribution": _round1(contribution),
+                "knowledge_state": ks,
+                "evidence": evidence,
+            }
+        )
+    opportunity = _round1(clamp(opportunity, 0, 100))
+    confidence = compute_confidence(inp)
+
+    ranked = sorted(
+        [(k, v) for k, v in strategy_scores.items() if screens[k] != "FAIL"],
+        key=lambda x: -x[1],
+    )
+
+    why_interesting = []
+    if discount is not None and discount < -10:
+        why_interesting.append(
+            f"Asking price appears {abs(discount):.1f}% below model base value"
+        )
+    if optionality_value >= 70:
+        why_interesting.append("Multiple non-failed strategies show material optionality")
+    if (growth_v or 0) >= 70:
+        why_interesting.append("Path-of-growth score is elevated versus distance-only heuristics")
+
+    why_mispriced = []
+    if inp.get("price_reduction_pct") is not None and inp["price_reduction_pct"] >= 10:
+        why_mispriced.append(
+            f"Recent price reduction of {inp['price_reduction_pct']}% may have reset economics"
+        )
+    if discount is not None and discount < -15 and confidence >= 60:
+        why_mispriced.append("Model value / ask gap is wide with moderate-or-better confidence")
+
+    what_could_kill = list(risk_evidence)
+    if screens["DEVELOPMENT"] == "FAIL":
+        what_could_kill.append("Development thesis fails stage-1 screens")
+    if (access or 100) < 40:
+        what_could_kill.append("Access may be legally insufficient — survey/title required")
+
+    why_still_available = []
+    if inp.get("days_on_market") is not None and inp["days_on_market"] > 120:
+        why_still_available.append(
+            "Extended DOM — investigate defects, marketing, or prior overpricing"
+        )
+    if (liq or 100) < 40:
+        why_still_available.append("Thin buyer pool / low liquidity may deter institutions")
+    if confidence < 55:
+        why_still_available.append("Incomplete public data may be deterring underwritten bids")
+
+    return {
+        "algorithm_version": ALGORITHM_VERSION,
+        "weight_version": weight_version,
+        "opportunity": opportunity,
+        "risk": risk,
+        "confidence": confidence,
+        "asymmetry": asymmetry,
+        "signal": _signal(opportunity, risk, confidence),
+        "best_strategy": ranked[0][0] if ranked else None,
+        "secondary_strategy": ranked[1][0] if len(ranked) > 1 else None,
+        "strategy_scores": strategy_scores,
+        "strategy_screens": screens,
+        "estimated_value_usd": base,
+        "asking_discount_pct": discount,
+        "deal_readiness": deal_readiness(inp),
+        "components": components,
+        "explanations": [f"[{c['category']}] {e}" for c in components for e in c["evidence"]],
+        "why_interesting": why_interesting,
+        "why_mispriced": why_mispriced,
+        "what_could_kill": what_could_kill,
+        "why_still_available": why_still_available,
+        "manual_verification": [
+            "Confirm title and legal access with recorded documents",
+            "Verify parcel geometry / acreage against survey or assessor polygon",
+            "Confirm zoning and future land use with county staff",
+            "Validate flood/wetland screening with site diligence if material",
+        ],
+        "asymmetry_evidence": asym_evidence,
+        "input_hash": _stable_hash(
+            {"input": inp, "weights": weights, "algorithm": ALGORITHM_VERSION, "weightVersion": weight_version}
+        ),
+    }
+
+
+def personalized_score(
+    global_opportunity: float,
+    profile: dict,
+    asking_price_usd: float | None,
+    acreage: float | None,
+    best_strategy: str | None,
+    risk: float,
+) -> float:
+    score = global_opportunity
+    max_price = profile.get("max_price_usd")
+    min_acres = profile.get("min_acres")
+    preferred = profile.get("preferred_strategies") or []
+    if asking_price_usd is not None and max_price is not None and asking_price_usd > max_price:
+        score -= 25
+    if acreage is not None and min_acres is not None and acreage < min_acres:
+        score -= 20
+    if best_strategy and preferred and best_strategy not in preferred:
+        score -= 10
+    elif best_strategy and best_strategy in preferred:
+        score += 5
+    if profile.get("risk_tolerance") == "LOW" and risk > 40:
+        score -= 10
+    if profile.get("risk_tolerance") == "HIGH" and risk < 60:
+        score += 3
+    return _round1(clamp(score, 0, 100))

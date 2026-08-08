@@ -1,0 +1,57 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: landsignal
+      POSTGRES_PASSWORD: landsignal
+      POSTGRES_DB: landsignal
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    environment:
+      STORE_BACKEND: memory
+      DEMO_SEED: "true"
+      DATABASE_URL: postgresql+asyncpg://landsignal:landsignal@db:5432/landsignal
+      REDIS_URL: redis://redis:6379/0
+      ENABLE_LIVE_GOV_ENRICHMENT: "true"
+      MAPBOX_TOKEN: ${MAPBOX_TOKEN:-}
+      MLS_RESO_TOKEN: ${MLS_RESO_TOKEN:-}
+      LAND_COM_API_KEY: ${LAND_COM_API_KEY:-}
+      CREXI_API_KEY: ${CREXI_API_KEY:-}
+      REGRID_API_KEY: ${REGRID_API_KEY:-}
+      SMTP_URL: ${SMTP_URL:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000/v1
+      NEXT_PUBLIC_MAPBOX_TOKEN: ${NEXT_PUBLIC_MAPBOX_TOKEN:-}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

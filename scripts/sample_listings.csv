@@ -1,0 +1,3 @@
+title,state,county,apn,acreage,asking_price_usd,latitude,longitude,source_url,description
+CSV Import — Story County Tract,IA,Story,CSV-IA-100,65.2,410000,42.036,-93.62,https://example.invalid/listing/1,Authorized CSV import example
+CSV Import — Ellis County Pasture,TX,Ellis,CSV-TX-220,88.0,704000,32.35,-96.79,https://example.invalid/listing/2,Authorized CSV import example

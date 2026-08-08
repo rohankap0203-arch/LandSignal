@@ -1,0 +1,12 @@
+{
+  "name": "landsignal",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Institutional land acquisition intelligence platform",
+  "scripts": {
+    "test:scoring": "npm --prefix packages/scoring test",
+    "test:api": "cd apps/api && .venv/bin/pytest -q",
+    "dev:api": "cd apps/api && .venv/bin/uvicorn landsignal.main:app --reload --port 8000",
+    "dev:web": "npm --prefix apps/web run dev"
+  }
+}

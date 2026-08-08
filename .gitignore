@@ -1,0 +1,16 @@
+node_modules/
+.next/
+dist/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.DS_Store
+coverage/
+*.egg-info/
+.turbo/
+pgdata/
+.idea/
+.vscode/
+apps/web/public/mapbox*
