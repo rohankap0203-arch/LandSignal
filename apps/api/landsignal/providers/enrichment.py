@@ -384,10 +384,17 @@ class RegridParcelProvider(EnrichmentProvider[Provenanced]):
 
 
 def build_enrichment_providers(settings: Settings) -> dict[str, EnrichmentProvider]:
+    from landsignal.providers.infrastructure_enrichment import (
+        CensusGrowthProvider,
+        TransmissionProximityProvider,
+    )
+
     return {
         "ssurgo": SsurgoSoilProvider(),
         "fema_nfhl": FemaFloodProvider(),
         "nwi": NwiWetlandsProvider(),
         "usgs_3dep": UsgsElevationProvider(),
+        "hifld_transmission": TransmissionProximityProvider(),
+        "census_acs": CensusGrowthProvider(),
         "regrid": RegridParcelProvider(settings.regrid_api_key),
     }

@@ -1,11 +1,16 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { KnowledgeStateBadge, ProvenanceHint } from "@/components/knowledge-state";
 import { ScoreStrip } from "@/components/score-strip";
 import { SignalBadge } from "@/components/signal-badge";
 import { landsignalApi, money, num, pct } from "@/lib/api";
+
+const ParcelMap = dynamic(() => import("@/components/parcel-map").then((m) => m.ParcelMap), {
+  ssr: false,
+});
 
 type AnyRec = Record<string, unknown>;
 
@@ -23,19 +28,20 @@ export default function ParcelIntelligencePage() {
       .catch((e: Error) => setError(e.message));
   }, [params.id]);
 
-  if (error) {
-    return <div className="panel p-4 text-[var(--danger)]">{error}</div>;
-  }
-  if (!data) {
-    return <div className="text-[var(--muted)]">Loading intelligence…</div>;
-  }
+  if (error) return <div className="panel p-4 text-[var(--danger)]">{error}</div>;
+  if (!data) return <div className="text-[var(--muted)]">Loading intelligence…</div>;
 
   const parcel = data.parcel as AnyRec;
   const listing = data.listing as AnyRec | null;
   const score = data.score as AnyRec | null;
   const enrichment = data.enrichment as AnyRec | null;
   const dd = (data.due_diligence as AnyRec[]) || [];
-  const mapboxStatus = data.mapbox_status as string;
+  const narratives = (enrichment?.narratives as AnyRec) || {};
+  const whyUnsold = (narratives.why_unsold as AnyRec) || {};
+  const hidden = (narratives.hidden_value as AnyRec) || {};
+  const scenarios = (enrichment?.scenarios as AnyRec[]) || [];
+  const screens = (score?.strategy_screens as AnyRec) || {};
+  const strategyScores = (score?.strategy_scores as AnyRec) || {};
 
   return (
     <div className="space-y-5">
@@ -46,18 +52,31 @@ export default function ParcelIntelligencePage() {
               {(listing?.title as string) || (parcel.apn as string) || "Parcel"}
             </h1>
             {score && <SignalBadge signal={score.signal as string} />}
-            {parcel.is_demo ? <span className="ks">DEMO</span> : null}
+            {parcel.is_demo ? <span className="ks">DEMO</span> : <span className="ks">LIVE</span>}
           </div>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            {parcel.county as string}, {parcel.state as string} · APN {String(parcel.apn || "—")} ·{" "}
+            {parcel.county as string}, {parcel.state as string} · {String(parcel.apn || "—")} ·{" "}
             {num(parcel.acreage as number, 2)} acres
+            {listing?.source_url ? (
+              <>
+                {" · "}
+                <a className="text-[var(--info)]" href={String(listing.source_url)} target="_blank" rel="noreferrer">
+                  Source document
+                </a>
+              </>
+            ) : null}
+          </p>
+          <p className="mt-2 max-w-3xl text-sm text-[var(--muted)]">
+            {String(listing?.description || "").slice(0, 420)}
           </p>
         </div>
         <div className="flex gap-2">
           <button
             type="button"
             className="panel px-3 py-2 text-sm"
-            onClick={() => landsignalApi.analyze(params.id).then(() => landsignalApi.parcel(params.id).then(setData))}
+            onClick={() =>
+              landsignalApi.analyze(params.id).then(() => landsignalApi.parcel(params.id).then(setData))
+            }
           >
             Re-run analysis
           </button>
@@ -84,13 +103,14 @@ export default function ParcelIntelligencePage() {
         dealReadiness={score?.deal_readiness as number}
       />
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <Fact label="Best strategy" value={String(score?.best_strategy || "—")} />
+      <div className="grid gap-3 md:grid-cols-4">
+        <Fact label="Best / secondary" value={`${score?.best_strategy || "—"} / ${score?.secondary_strategy || "—"}`} />
         <Fact label="Current ask" value={money(listing?.asking_price_usd as number)} />
         <Fact
-          label="Model value / mispricing"
+          label="Model value / gap"
           value={`${money(score?.estimated_value_usd as number)} · ${pct(score?.asking_discount_pct as number)}`}
         />
+        <Fact label="Hidden value" value={num(hidden.hidden_value_score as number, 1)} />
       </div>
 
       <section className="grid gap-3 lg:grid-cols-2">
@@ -101,35 +121,88 @@ export default function ParcelIntelligencePage() {
       </section>
 
       <section className="panel p-4">
-        <h2 className="text-sm uppercase tracking-wide text-[var(--muted)]">What needs manual verification</h2>
-        <ul className="mt-2 space-y-1 text-sm">
-          {((score?.manual_verification as string[]) || []).map((x) => (
-            <li key={x}>[ ] {x}</li>
+        <h2 className="text-sm uppercase tracking-wide text-[var(--muted)]">
+          Why hasn’t someone bought this?
+        </h2>
+        <p className="mt-2 text-sm">
+          <strong>Most likely:</strong>{" "}
+          {String((whyUnsold.most_likely as AnyRec)?.reason || "—")}
+        </p>
+        <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
+          {(((whyUnsold.most_likely as AnyRec)?.evidence as string[]) || []).map((e) => (
+            <li key={e}>· {e}</li>
           ))}
         </ul>
       </section>
 
       <section className="panel p-4">
-        <h2 className="text-sm uppercase tracking-wide text-[var(--muted)]">Map</h2>
-        {mapboxStatus === "NOT_CONFIGURED" ? (
-          <p className="mt-2 text-sm text-[var(--muted)]">
-            Mapbox: <strong>NOT_CONFIGURED</strong>. Set <span className="mono">NEXT_PUBLIC_MAPBOX_TOKEN</span>{" "}
-            / <span className="mono">MAPBOX_TOKEN</span> for interactive overlays. Centroid:{" "}
-            <span className="mono">
-              {String(parcel.latitude)}, {String(parcel.longitude)}
-            </span>
-          </p>
-        ) : (
-          <p className="mt-2 text-sm">Mapbox token detected — wire Mapbox GL overlays in Phase 1.5.</p>
-        )}
+        <h2 className="mb-3 text-sm uppercase tracking-wide text-[var(--muted)]">Map</h2>
+        <ParcelMap
+          latitude={parcel.latitude as number}
+          longitude={parcel.longitude as number}
+          polygon={parcel.polygon as number[][][]}
+          title={listing?.title as string}
+        />
       </section>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <EnrichCard title="Soils" prov={enrichment?.soil as AnyRec} />
-        <EnrichCard title="Flood" prov={enrichment?.flood as AnyRec} />
-        <EnrichCard title="Wetlands" prov={enrichment?.wetlands as AnyRec} />
-        <EnrichCard title="Terrain" prov={enrichment?.terrain as AnyRec} />
+        <EnrichCard title="Soils (USDA SSURGO)" prov={enrichment?.soil as AnyRec} />
+        <EnrichCard title="Flood (FEMA NFHL)" prov={enrichment?.flood as AnyRec} />
+        <EnrichCard title="Wetlands (NWI)" prov={enrichment?.wetlands as AnyRec} />
+        <EnrichCard title="Terrain (USGS)" prov={enrichment?.terrain as AnyRec} />
+        <EnrichCard title="Transmission (HIFLD)" prov={enrichment?.infrastructure as AnyRec} />
+        <EnrichCard title="Growth / county" prov={enrichment?.growth as AnyRec} />
+        <EnrichCard title="Access (heuristic)" prov={enrichment?.access as AnyRec} />
+        <EnrichCard title="Valuation inputs" prov={enrichment?.comps as AnyRec} />
       </section>
+
+      <section className="panel p-4">
+        <h2 className="text-sm uppercase tracking-wide text-[var(--muted)]">Strategy screens & scores</h2>
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          {Object.keys({ ...screens, ...strategyScores }).map((k) => (
+            <div key={k} className="border border-[var(--border)] p-2 text-sm">
+              <div className="text-[var(--muted)]">{k}</div>
+              <div className="mono">
+                {String(screens[k] || "—")} · {num(strategyScores[k] as number, 1)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {!!scenarios.length && (
+        <section className="panel p-4">
+          <h2 className="text-sm uppercase tracking-wide text-[var(--muted)]">
+            Farmland scenarios (ESTIMATED)
+          </h2>
+          <div className="mt-3 table-wrap">
+            <table className="radar">
+              <thead>
+                <tr>
+                  <th>Case</th>
+                  <th>NOI</th>
+                  <th>Cap</th>
+                  <th>IRR</th>
+                  <th>NPV</th>
+                  <th>Breakeven land</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scenarios.map((s) => (
+                  <tr key={String(s.case_type)}>
+                    <td>{String(s.case_type)}</td>
+                    <td className="mono">{money(s.noi as number)}</td>
+                    <td className="mono">{s.cap_rate != null ? pct((s.cap_rate as number) * 100) : "—"}</td>
+                    <td className="mono">{s.irr != null ? pct((s.irr as number) * 100) : "—"}</td>
+                    <td className="mono">{money(s.npv as number)}</td>
+                    <td className="mono">{money(s.breakeven_land_value as number)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <section className="panel p-4">
         <h2 className="text-sm uppercase tracking-wide text-[var(--muted)]">Score components</h2>
@@ -170,12 +243,15 @@ export default function ParcelIntelligencePage() {
 
       <section className="panel p-4">
         <h2 className="text-sm uppercase tracking-wide text-[var(--muted)]">
-          Manual due diligence checklist
+          Manual due diligence · Deal readiness {num(score?.deal_readiness as number, 0)}
         </h2>
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          Screening ≠ professional/legal diligence. Software never executes purchases.
+        </p>
         <ul className="mt-2 columns-1 gap-2 text-sm md:columns-2">
           {dd.map((item) => (
             <li key={String(item.label)} className="mb-1">
-              [{item.completed ? "x" : " "}] {String(item.label)}
+              [ ] {String(item.label)}
             </li>
           ))}
         </ul>
@@ -187,7 +263,7 @@ export default function ParcelIntelligencePage() {
             <h2 className="text-sm uppercase tracking-wide text-[var(--muted)]">Deal memo</h2>
             <span className="badge exceptional">{verdict}</span>
           </div>
-          <pre className="mt-3 overflow-auto whitespace-pre-wrap text-sm text-[var(--text)]">{memo}</pre>
+          <pre className="mt-3 overflow-auto whitespace-pre-wrap text-sm">{memo}</pre>
         </section>
       )}
     </div>

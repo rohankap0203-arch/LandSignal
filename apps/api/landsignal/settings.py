@@ -13,7 +13,11 @@ class Settings(BaseSettings):
     database_url: str | None = None
     redis_url: str | None = None
     store_backend: Literal["memory", "postgres"] = "memory"
-    demo_seed: bool = True
+    demo_seed: bool = False
+    force_live_on_demo: bool = False
+    auto_discover_on_startup: bool = True
+    discover_limit: int = 12
+    discover_min_acres: float = 20
     http_timeout_seconds: float = 20.0
     mapbox_token: str | None = None
     smtp_url: str | None = None

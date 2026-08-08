@@ -229,6 +229,7 @@ class MemoryStore:
         if acreage is None and poly:
             acreage = acres_from_square_meters(ring_area_square_meters(poly[0]))
         geom_conf = 80.0 if poly else (50.0 if payload.get("latitude") else 20.0)
+        is_demo = bool(payload.get("is_demo", False))
         parcel = ParcelRecord(
             parcel_id=payload.get("apn"),
             apn=payload.get("apn"),
@@ -239,7 +240,8 @@ class MemoryStore:
             longitude=payload.get("longitude"),
             polygon=poly,
             acreage=acreage,
-            geometry_confidence=geom_conf,
+            geometry_confidence=geom_conf if poly else (55.0 if payload.get("latitude") else 20.0),
+            is_demo=is_demo,
         )
         ask = payload.get("asking_price_usd")
         listing = ListingRecord(
@@ -254,7 +256,8 @@ class MemoryStore:
             title=payload.get("title"),
             description=payload.get("description"),
             source_url=payload.get("source_url"),
-            raw=payload,
+            raw={k: v for k, v in payload.items() if k != "polygon"},
+            is_demo=is_demo,
         )
         self.parcels[parcel.id] = parcel
         self.listings[listing.id] = listing
@@ -344,10 +347,15 @@ def _square_polygon(lon: float, lat: float, acres: float) -> list[list[list[floa
 _STORE: MemoryStore | None = None
 
 
-def get_store(seed_demo: bool = True) -> MemoryStore:
+def get_store(seed_demo: bool = False) -> MemoryStore:
     global _STORE
     if _STORE is None:
         _STORE = MemoryStore()
         if seed_demo:
             _STORE.seed_demo()
     return _STORE
+
+
+def reset_store() -> None:
+    global _STORE
+    _STORE = None

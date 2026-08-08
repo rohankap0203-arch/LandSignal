@@ -69,6 +69,11 @@ export const landsignalApi = {
   ingestManual: (body: Record<string, unknown>) =>
     api("/ingest/manual", { method: "POST", body: JSON.stringify(body) }),
   analyze: (id: string) => api(`/parcels/${id}/analyze`, { method: "POST" }),
+  discover: (limit = 24, minAcres = 20, reset = true) =>
+    api<Record<string, unknown>>(
+      `/discover?limit=${limit}&min_acres=${minAcres}&max_acres=2500&reset=${reset}`,
+      { method: "POST" },
+    ),
   health: () => api<Record<string, unknown>>("/health"),
 };
 

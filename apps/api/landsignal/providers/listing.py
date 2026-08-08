@@ -73,9 +73,12 @@ class NotConfiguredListingProvider(ListingProvider):
 
 
 def build_listing_providers(settings: Settings) -> dict[str, ListingProvider]:
+    from landsignal.providers.blm_lpad import BlmLpadProvider
+
     providers: dict[str, ListingProvider] = {
         "manual": ManualListingProvider(),
         "csv": CsvListingProvider(),
+        "blm_lpad": BlmLpadProvider(),
     }
     providers["mls_reso"] = NotConfiguredListingProvider(
         "mls_reso",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -8,19 +9,126 @@ import structlog
 from landsignal.models import EnrichmentBundle, KnowledgeState, Provenanced, ScoreRecord, Signal, Strategy
 from landsignal.providers.enrichment import build_enrichment_providers
 from landsignal.scoring.engine import compute_score, personalized_score
+from landsignal.scoring.financial import farmland_scenario
+from landsignal.services.narratives import hidden_value_score, why_still_unsold
 from landsignal.settings import Settings, get_settings
 from landsignal.store import MemoryStore
 
 log = structlog.get_logger()
 
+# Coarse regional land value priors ($/acre) — ESTIMATED only, for screening when no comps vendor.
+STATE_PPA_PRIOR = {
+    "IA": 9500,
+    "IL": 10000,
+    "IN": 9000,
+    "MN": 7000,
+    "TX": 4500,
+    "NM": 1200,
+    "AZ": 2500,
+    "NV": 900,
+    "UT": 1800,
+    "CO": 3500,
+    "WY": 1100,
+    "MT": 1400,
+    "ID": 2800,
+    "OR": 3200,
+    "CA": 12000,
+    "FL": 8000,
+    "GA": 5500,
+    "NC": 6000,
+    "SC": 5000,
+    "TN": 5500,
+    "AL": 4000,
+    "MS": 3500,
+    "MO": 4500,
+    "KS": 2800,
+    "NE": 4500,
+    "OK": 2500,
+    "SD": 3000,
+    "ND": 2500,
+    "WI": 6500,
+    "MI": 5000,
+    "OH": 7000,
+    "PA": 6000,
+    "NY": 4500,
+    "WA": 5500,
+}
 
-def _prov_num(bundle_value: dict | None, key: str, default_state: KnowledgeState = KnowledgeState.UNKNOWN) -> dict:
-    if not bundle_value or key not in bundle_value or bundle_value[key] is None:
-        return {"value": None, "knowledge_state": default_state.value, "confidence": None}
+
+def _wrap(value, source_prov: Provenanced | None):
+    if source_prov is None:
+        return {"value": None, "knowledge_state": KnowledgeState.UNKNOWN.value, "confidence": None}
+    if source_prov.knowledge_state in (
+        KnowledgeState.TEMPORARILY_UNAVAILABLE,
+        KnowledgeState.UNKNOWN,
+    ):
+        return {
+            "value": None,
+            "knowledge_state": source_prov.knowledge_state.value,
+            "confidence": source_prov.confidence,
+            "source": source_prov.source,
+        }
     return {
-        "value": bundle_value[key],
-        "knowledge_state": KnowledgeState.ESTIMATED.value,
-        "confidence": 50,
+        "value": value,
+        "knowledge_state": source_prov.knowledge_state.value,
+        "confidence": source_prov.confidence,
+        "source": source_prov.source,
+    }
+
+
+def _known_ratio(values: list) -> float:
+    if not values:
+        return 0.0
+    return sum(1 for v in values if v is not None) / len(values)
+
+
+def _estimate_value(parcel, soil_n, flood_n, wet_n, growth_n) -> dict:
+    state = (parcel.state or "").upper()
+    base_ppa = STATE_PPA_PRIOR.get(state, 3000)
+    prime = soil_n.get("prime_farmland_pct")
+    wetland = wet_n.get("wetland_pct") or 0
+    flood = flood_n.get("flood_zone_pct") or 0
+    mult = 1.0
+    if prime is not None:
+        mult *= 0.75 + (prime / 100) * 0.5
+    mult *= max(0.35, 1 - (wetland / 100) * 0.6)
+    mult *= max(0.4, 1 - (flood / 100) * 0.4)
+    growth = growth_n.get("path_of_growth_score")
+    if growth is not None:
+        mult *= 0.9 + (growth / 100) * 0.25
+    acres = parcel.acreage or 0
+    base = base_ppa * mult * acres if acres else None
+    if base is None:
+        return {
+            "estimated_value_low_usd": None,
+            "estimated_value_base_usd": None,
+            "estimated_value_high_usd": None,
+            "downside_value_usd": None,
+            "development_upside_usd": None,
+            "comps_count": 0,
+            "knowledge_state": KnowledgeState.UNKNOWN,
+            "confidence": 0,
+            "note": "No acreage for value prior",
+        }
+    return {
+        "estimated_value_low_usd": base * 0.75,
+        "estimated_value_base_usd": base,
+        "estimated_value_high_usd": base * 1.35,
+        "downside_value_usd": base * 0.65,
+        "development_upside_usd": base * 2.2,
+        "comps_count": 0,
+        "liquidity_score": 35 if state in ("NM", "NV", "WY", "MT") else 50,
+        "scarcity_score": 55,
+        "catalyst_score": 25,
+        "seller_pressure_score": 40,
+        "solar_irradiance_score": 80 if state in ("AZ", "NM", "NV", "CA", "TX", "UT") else 55,
+        "timber_suitability": 60 if state in ("OR", "WA", "ID", "MT", "ME") else 25,
+        "zoning_development_friendly": 35,
+        "path_of_growth_score": growth if growth is not None else 45,
+        "knowledge_state": KnowledgeState.ESTIMATED,
+        "confidence": 35,
+        "note": f"Screening prior from state PPA ${base_ppa}/ac adjusted for soil/wetland/flood — not a closed-comp appraisal",
+        "ppa_prior": base_ppa,
     }
 
 
@@ -29,141 +137,134 @@ async def analyze_parcel(store: MemoryStore, parcel_id: UUID, settings: Settings
     parcel = store.parcels[parcel_id]
     listing = store.listing_for_parcel(parcel_id)
     providers = build_enrichment_providers(settings)
-
     parcel_dict = parcel.model_dump()
-    existing = store.enrichments.get(parcel_id)
+    existing = store.enrichments.get(parcel_id) or EnrichmentBundle()
 
-    # Live enrichment when enabled; demo fixtures retain estimates if live unavailable
-    soil = flood = wetlands = terrain = None
-    if settings.enable_live_gov_enrichment and not parcel.is_demo:
-        soil_res = await providers["ssurgo"].enrich(parcel_dict)
-        flood_res = await providers["fema_nfhl"].enrich(parcel_dict)
-        wet_res = await providers["nwi"].enrich(parcel_dict)
-        terrain_res = await providers["usgs_3dep"].enrich(parcel_dict)
-        soil, flood, wetlands, terrain = soil_res.data, flood_res.data, wet_res.data, terrain_res.data
-    elif settings.enable_live_gov_enrichment and parcel.is_demo:
-        # Still attempt live calls for demo parcels but fall back to fixture provenance
-        try:
-            soil_res = await providers["ssurgo"].enrich(parcel_dict)
-            if soil_res.data and soil_res.data.knowledge_state not in (
-                KnowledgeState.TEMPORARILY_UNAVAILABLE,
-                KnowledgeState.UNKNOWN,
-            ):
-                soil = soil_res.data
-        except Exception as exc:  # noqa: BLE001
-            log.warning("demo_live_soil_failed", error=str(exc))
-
-    if existing is None:
-        existing = EnrichmentBundle()
-    if soil:
-        existing.soil = soil
-    if flood:
-        existing.flood = flood
-    if wetlands:
-        existing.wetlands = wetlands
-    if terrain:
-        existing.terrain = terrain
-    if existing.access.knowledge_state == KnowledgeState.UNKNOWN:
-        # Heuristic only — never "legally verified"
-        frontage_guess = 50.0 if parcel.polygon else None
-        existing.access = Provenanced(
-            value={"legal_access_confidence": frontage_guess},
-            knowledge_state=KnowledgeState.ESTIMATED if frontage_guess else KnowledgeState.UNKNOWN,
-            source="access_heuristic",
-            confidence=25 if frontage_guess else 0,
-            retrieved_at=datetime.now(timezone.utc),
-            normalized={
-                "legal_access_confidence": frontage_guess,
-                "note": "Heuristic from geometry presence — not legal verification",
-            },
+    # Always attempt live government enrichment for non-demo; demo keeps fixtures unless forced
+    run_live = settings.enable_live_gov_enrichment and (
+        not parcel.is_demo or settings.force_live_on_demo
+    )
+    if run_live:
+        soil_res, flood_res, wet_res, terrain_res, tx_res, growth_res = await asyncio.gather(
+            providers["ssurgo"].enrich(parcel_dict),
+            providers["fema_nfhl"].enrich(parcel_dict),
+            providers["nwi"].enrich(parcel_dict),
+            providers["usgs_3dep"].enrich(parcel_dict),
+            providers["hifld_transmission"].enrich(parcel_dict),
+            providers["census_acs"].enrich(parcel_dict),
         )
-    store.enrichments[parcel_id] = existing
+        if soil_res.data:
+            existing.soil = soil_res.data
+        if flood_res.data:
+            existing.flood = flood_res.data
+        if wet_res.data:
+            existing.wetlands = wet_res.data
+        if terrain_res.data:
+            existing.terrain = terrain_res.data
+        if tx_res.data:
+            existing.infrastructure = tx_res.data
+        if growth_res.data:
+            existing.growth = growth_res.data
+            gn = growth_res.data.normalized or {}
+            if gn.get("county_name") and not parcel.county:
+                parcel.county = str(gn["county_name"]).replace(" County", "")
+                store.parcels[parcel_id] = parcel
 
     soil_n = (existing.soil.normalized or existing.soil.value or {}) if existing.soil else {}
     flood_n = (existing.flood.normalized or existing.flood.value or {}) if existing.flood else {}
     wet_n = (existing.wetlands.normalized or existing.wetlands.value or {}) if existing.wetlands else {}
     terr_n = (existing.terrain.normalized or existing.terrain.value or {}) if existing.terrain else {}
-    access_n = (existing.access.normalized or existing.access.value or {}) if existing.access else {}
-    comps_n = (existing.comps.normalized or existing.comps.value or {}) if existing.comps else {}
+    infra_n = (
+        (existing.infrastructure.normalized or existing.infrastructure.value or {})
+        if existing.infrastructure
+        else {}
+    )
+    growth_n = (existing.growth.normalized or existing.growth.value or {}) if existing.growth else {}
 
-    def wrap(value, source_prov: Provenanced | None, key: str | None = None):
-        if source_prov is None:
-            return {"value": None, "knowledge_state": KnowledgeState.UNKNOWN.value, "confidence": None}
-        if source_prov.knowledge_state in (
-            KnowledgeState.TEMPORARILY_UNAVAILABLE,
-            KnowledgeState.UNKNOWN,
-        ):
-            return {
-                "value": None,
-                "knowledge_state": source_prov.knowledge_state.value,
-                "confidence": source_prov.confidence,
-                "source": source_prov.source,
-            }
-        return {
-            "value": value,
-            "knowledge_state": source_prov.knowledge_state.value,
-            "confidence": source_prov.confidence,
-            "source": source_prov.source,
-        }
+    # Valuation: prefer existing comps; else screening prior
+    if not existing.comps or existing.comps.knowledge_state == KnowledgeState.UNKNOWN or not (
+        (existing.comps.normalized or {}).get("estimated_value_base_usd")
+    ):
+        est = _estimate_value(parcel, soil_n, flood_n, wet_n, growth_n)
+        existing.comps = Provenanced(
+            value=est,
+            knowledge_state=est["knowledge_state"],
+            source="state_ppa_screening_prior",
+            confidence=est["confidence"],
+            retrieved_at=datetime.now(timezone.utc),
+            normalized=est,
+            geographic_resolution="state_prior",
+        )
 
+    # Access heuristic — never legally verified
+    if existing.access.knowledge_state == KnowledgeState.UNKNOWN:
+        conf = 45.0 if parcel.polygon else (30.0 if parcel.latitude else None)
+        existing.access = Provenanced(
+            value={"legal_access_confidence": conf},
+            knowledge_state=KnowledgeState.ESTIMATED if conf is not None else KnowledgeState.UNKNOWN,
+            source="access_heuristic",
+            confidence=20,
+            retrieved_at=datetime.now(timezone.utc),
+            normalized={
+                "legal_access_confidence": conf,
+                "note": "NOT legally verified — deed/easement review required",
+            },
+        )
+
+    comps_n = existing.comps.normalized or existing.comps.value or {}
+    access_n = existing.access.normalized or existing.access.value or {}
     ask = listing.asking_price_usd if listing else None
-    # Valuation: use comps fixture/model if present; else UNKNOWN (do not invent)
-    est_base = comps_n.get("estimated_value_base_usd")
+
+    # Merge growth into comps path score if present
+    if growth_n.get("path_of_growth_score") is not None:
+        comps_n = {**comps_n, "path_of_growth_score": growth_n["path_of_growth_score"]}
+
     score_input = {
         "asking_price_usd": ask,
         "acreage": parcel.acreage,
-        "estimated_value_low_usd": wrap(comps_n.get("estimated_value_low_usd"), existing.comps),
-        "estimated_value_base_usd": wrap(est_base, existing.comps),
-        "estimated_value_high_usd": wrap(comps_n.get("estimated_value_high_usd"), existing.comps),
-        "downside_value_usd": wrap(comps_n.get("downside_value_usd"), existing.comps),
-        "development_upside_usd": wrap(comps_n.get("development_upside_usd"), existing.comps),
-        "prime_farmland_pct": wrap(soil_n.get("prime_farmland_pct"), existing.soil),
-        "wetland_pct": wrap(wet_n.get("wetland_pct"), existing.wetlands),
-        "flood_zone_pct": wrap(flood_n.get("flood_zone_pct"), existing.flood),
-        "avg_slope_pct": wrap(terr_n.get("avg_slope_pct"), existing.terrain)
+        "estimated_value_low_usd": _wrap(comps_n.get("estimated_value_low_usd"), existing.comps),
+        "estimated_value_base_usd": _wrap(comps_n.get("estimated_value_base_usd"), existing.comps),
+        "estimated_value_high_usd": _wrap(comps_n.get("estimated_value_high_usd"), existing.comps),
+        "downside_value_usd": _wrap(comps_n.get("downside_value_usd"), existing.comps),
+        "development_upside_usd": _wrap(comps_n.get("development_upside_usd"), existing.comps),
+        "prime_farmland_pct": _wrap(soil_n.get("prime_farmland_pct"), existing.soil),
+        "wetland_pct": _wrap(wet_n.get("wetland_pct"), existing.wetlands),
+        "flood_zone_pct": _wrap(flood_n.get("flood_zone_pct"), existing.flood),
+        "avg_slope_pct": _wrap(terr_n.get("avg_slope_pct"), existing.terrain)
         if terr_n.get("avg_slope_pct") is not None
         else {
             "value": None,
-            "knowledge_state": (
-                existing.terrain.knowledge_state.value
-                if existing.terrain.knowledge_state != KnowledgeState.KNOWN
-                else KnowledgeState.UNKNOWN.value
-            ),
-            "confidence": existing.terrain.confidence,
-            "source": existing.terrain.source,
+            "knowledge_state": KnowledgeState.UNKNOWN.value,
+            "confidence": None,
+            "source": existing.terrain.source if existing.terrain else None,
         },
-        "max_slope_pct": wrap(terr_n.get("max_slope_pct"), existing.terrain)
+        "max_slope_pct": _wrap(terr_n.get("max_slope_pct"), existing.terrain)
         if terr_n.get("max_slope_pct") is not None
+        else {"value": None, "knowledge_state": KnowledgeState.UNKNOWN.value, "confidence": None},
+        "legal_access_confidence": _wrap(access_n.get("legal_access_confidence"), existing.access),
+        "road_frontage_m": {"value": None, "knowledge_state": KnowledgeState.UNKNOWN.value, "confidence": None},
+        "nearest_transmission_m": _wrap(infra_n.get("nearest_transmission_m"), existing.infrastructure)
+        if infra_n.get("nearest_transmission_m") is not None
         else {
             "value": None,
-            "knowledge_state": KnowledgeState.UNKNOWN.value,
-            "confidence": None,
-            "source": existing.terrain.source,
-        },
-        "legal_access_confidence": wrap(access_n.get("legal_access_confidence"), existing.access),
-        "road_frontage_m": {
-            "value": None,
-            "knowledge_state": KnowledgeState.UNKNOWN.value,
+            "knowledge_state": existing.infrastructure.knowledge_state.value
+            if existing.infrastructure
+            else KnowledgeState.UNKNOWN.value,
             "confidence": None,
         },
-        "nearest_transmission_m": {
-            "value": None,
-            "knowledge_state": KnowledgeState.UNKNOWN.value,
-            "confidence": None,
-        },
-        "liquidity_score": wrap(comps_n.get("liquidity_score"), existing.comps)
+        "liquidity_score": _wrap(comps_n.get("liquidity_score"), existing.comps)
         if comps_n.get("liquidity_score") is not None
         else {"value": None, "knowledge_state": KnowledgeState.UNKNOWN.value, "confidence": None},
-        "scarcity_score": wrap(comps_n.get("scarcity_score"), existing.comps)
+        "scarcity_score": _wrap(comps_n.get("scarcity_score"), existing.comps)
         if comps_n.get("scarcity_score") is not None
         else {"value": None, "knowledge_state": KnowledgeState.UNKNOWN.value, "confidence": None},
-        "path_of_growth_score": wrap(comps_n.get("path_of_growth_score"), existing.comps)
+        "path_of_growth_score": _wrap(comps_n.get("path_of_growth_score"), existing.growth or existing.comps)
         if comps_n.get("path_of_growth_score") is not None
         else {"value": None, "knowledge_state": KnowledgeState.UNKNOWN.value, "confidence": None},
-        "catalyst_score": wrap(comps_n.get("catalyst_score"), existing.comps)
+        "catalyst_score": _wrap(comps_n.get("catalyst_score"), existing.comps)
         if comps_n.get("catalyst_score") is not None
         else {"value": None, "knowledge_state": KnowledgeState.UNKNOWN.value, "confidence": None},
-        "seller_pressure_score": wrap(comps_n.get("seller_pressure_score"), existing.comps)
+        "seller_pressure_score": _wrap(comps_n.get("seller_pressure_score"), existing.comps)
         if comps_n.get("seller_pressure_score") is not None
         else {"value": None, "knowledge_state": KnowledgeState.UNKNOWN.value, "confidence": None},
         "days_on_market": listing.days_on_market if listing else None,
@@ -173,25 +274,26 @@ async def analyze_parcel(store: MemoryStore, parcel_id: UUID, settings: Settings
             "knowledge_state": KnowledgeState.UNKNOWN.value,
             "confidence": None,
         },
-        "zoning_development_friendly": wrap(comps_n.get("zoning_development_friendly"), existing.comps)
+        "zoning_development_friendly": _wrap(comps_n.get("zoning_development_friendly"), existing.comps)
         if comps_n.get("zoning_development_friendly") is not None
         else {"value": None, "knowledge_state": KnowledgeState.UNKNOWN.value, "confidence": None},
-        "timber_suitability": wrap(comps_n.get("timber_suitability"), existing.comps)
+        "timber_suitability": _wrap(comps_n.get("timber_suitability"), existing.comps)
         if comps_n.get("timber_suitability") is not None
         else {"value": None, "knowledge_state": KnowledgeState.UNKNOWN.value, "confidence": None},
-        "solar_irradiance_score": wrap(comps_n.get("solar_irradiance_score"), existing.comps)
+        "solar_irradiance_score": _wrap(comps_n.get("solar_irradiance_score"), existing.comps)
         if comps_n.get("solar_irradiance_score") is not None
         else {"value": None, "knowledge_state": KnowledgeState.UNKNOWN.value, "confidence": None},
         "geometry_confidence": parcel.geometry_confidence,
         "comps_count": int(comps_n.get("comps_count") or 0),
         "known_attribute_ratio": _known_ratio(
             [
-                soil_n.get("prime_farmland_pct"),
+                soil_n.get("prime_farmland_pct") or soil_n.get("farmland_classification"),
                 wet_n.get("wetland_pct"),
                 flood_n.get("flood_zone_pct"),
                 terr_n.get("elevation_m"),
                 access_n.get("legal_access_confidence"),
-                est_base,
+                comps_n.get("estimated_value_base_usd"),
+                infra_n.get("nearest_transmission_m"),
             ]
         ),
         "listing_freshness_hours": 1.0,
@@ -206,6 +308,58 @@ async def analyze_parcel(store: MemoryStore, parcel_id: UUID, settings: Settings
         result["best_strategy"],
         result["risk"],
     )
+
+    narrative_ctx = {
+        "days_on_market": listing.days_on_market if listing else None,
+        "wetland_pct": wet_n.get("wetland_pct"),
+        "flood_zone_pct": flood_n.get("flood_zone_pct"),
+        "legal_access_confidence": access_n.get("legal_access_confidence"),
+        "asking_discount_pct": result["asking_discount_pct"],
+        "liquidity_score": comps_n.get("liquidity_score"),
+        "asking_price_usd": ask,
+        "provider_id": listing.provider_id if listing else None,
+        "path_of_growth_score": comps_n.get("path_of_growth_score"),
+        "zoning_development_friendly": comps_n.get("zoning_development_friendly"),
+        "nearest_transmission_m": infra_n.get("nearest_transmission_m"),
+        "solar_irradiance_score": comps_n.get("solar_irradiance_score"),
+        "prime_farmland_pct": soil_n.get("prime_farmland_pct"),
+    }
+    unsold = why_still_unsold(narrative_ctx)
+    hidden = hidden_value_score(narrative_ctx)
+    existing.narratives = {"why_unsold": unsold, "hidden_value": hidden}
+
+    # Farmland scenarios when acreage + ask or estimated value exist
+    purchase = ask or comps_n.get("estimated_value_base_usd")
+    scenarios = []
+    if purchase and parcel.acreage:
+        for case, rent, appr in (
+            ("BEAR", 140, 0.01),
+            ("BASE", 200, 0.03),
+            ("BULL", 280, 0.05),
+        ):
+            sc = farmland_scenario(
+                cash_rent_per_acre=rent,
+                acres=float(parcel.acreage),
+                vacancy_rate=0.05,
+                opex_per_acre=25,
+                taxes=purchase * 0.01,
+                insurance=1200,
+                management=purchase * 0.005,
+                purchase_price=float(purchase),
+                hold_years=10,
+                exit_cap_rate=0.05,
+                annual_appreciation=appr,
+                discount_rate=0.1,
+            )
+            scenarios.append({"strategy": "FARMLAND", "case_type": case, **sc, "knowledge_state": "ESTIMATED"})
+    existing.scenarios = scenarios
+    store.enrichments[parcel_id] = existing
+
+    # Augment explanations with narratives
+    why_still = list(result["why_still_available"])
+    if unsold.get("most_likely"):
+        why_still.insert(0, f"Most likely: {unsold['most_likely']['reason']}")
+
     record = ScoreRecord(
         parcel_id=parcel_id,
         listing_id=listing.id if listing else None,
@@ -227,11 +381,13 @@ async def analyze_parcel(store: MemoryStore, parcel_id: UUID, settings: Settings
         strategy_scores=result["strategy_scores"],
         strategy_screens=result["strategy_screens"],
         components=result["components"],
-        explanations=result["explanations"],
-        why_interesting=result["why_interesting"],
+        explanations=result["explanations"]
+        + [f"[hidden_value] {e}" for e in hidden.get("evidence", [])],
+        why_interesting=result["why_interesting"]
+        + ([f"Hidden value score {hidden['hidden_value_score']}"] if hidden else []),
         why_mispriced=result["why_mispriced"],
         what_could_kill=result["what_could_kill"],
-        why_still_available=result["why_still_available"],
+        why_still_available=why_still,
         manual_verification=result["manual_verification"],
         input_hash=result["input_hash"],
         input_snapshot=score_input,
@@ -243,14 +399,7 @@ async def analyze_parcel(store: MemoryStore, parcel_id: UUID, settings: Settings
         opportunity=record.opportunity,
         risk=record.risk,
         confidence=record.confidence,
+        signal=record.signal.value,
         input_hash=record.input_hash,
-        algorithm_version=record.algorithm_version,
     )
     return record
-
-
-def _known_ratio(values: list) -> float:
-    if not values:
-        return 0.0
-    known = sum(1 for v in values if v is not None)
-    return known / len(values)

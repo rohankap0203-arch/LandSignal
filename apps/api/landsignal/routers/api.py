@@ -19,6 +19,7 @@ from landsignal.providers.enrichment import build_enrichment_providers
 from landsignal.providers.listing import build_listing_providers
 from landsignal.services.alerts import create_rule, evaluate_rules
 from landsignal.services.analyze import analyze_parcel
+from landsignal.services.discover import discover_opportunities
 from landsignal.services.memo import generate_memo, verdict_from_score
 from landsignal.settings import get_settings
 from landsignal.store import get_store
@@ -100,6 +101,25 @@ async def health() -> dict[str, Any]:
 @router.get("/providers", response_model=list[ProviderInfo])
 async def providers() -> list[ProviderInfo]:
     return _provider_infos()
+
+
+@router.post("/discover")
+async def discover(
+    limit: int = 24,
+    min_acres: float = 20.0,
+    max_acres: float = 2500.0,
+    reset: bool = False,
+) -> dict[str, Any]:
+    """Pull real public inventory (BLM LPAD + any configured licensed feeds), enrich, score."""
+    store = get_store(get_settings().demo_seed)
+    return await discover_opportunities(
+        store,
+        get_settings(),
+        limit=limit,
+        min_acres=min_acres,
+        max_acres=max_acres,
+        reset=reset,
+    )
 
 
 @router.post("/ingest/manual")

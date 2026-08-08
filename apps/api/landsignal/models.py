@@ -144,6 +144,10 @@ class EnrichmentBundle(BaseModel):
     terrain: Provenanced = Field(default_factory=Provenanced)
     access: Provenanced = Field(default_factory=Provenanced)
     comps: Provenanced = Field(default_factory=Provenanced)
+    infrastructure: Provenanced = Field(default_factory=Provenanced)
+    growth: Provenanced = Field(default_factory=Provenanced)
+    narratives: dict = Field(default_factory=dict)
+    scenarios: list[dict] = Field(default_factory=list)
 
 
 class ScoreRecord(BaseModel):

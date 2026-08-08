@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProviderStrip } from "@/components/provider-strip";
 import { SignalBadge } from "@/components/signal-badge";
 import { landsignalApi, money, num, pct, type ProviderInfo, type RadarRow } from "@/lib/api";
@@ -11,21 +11,51 @@ export default function OpportunityRadarPage() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [minScore, setMinScore] = useState(0);
-  const [showPersonalized, setShowPersonalized] = useState(false);
+  const [showPersonalized, setShowPersonalized] = useState(true);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoverMsg, setDiscoverMsg] = useState<string | null>(null);
+  const [hideDemo, setHideDemo] = useState(true);
 
-  useEffect(() => {
-    Promise.all([landsignalApi.radar(), landsignalApi.providers()])
-      .then(([r, p]) => {
-        setRows(r);
-        setProviders(p);
-      })
-      .catch((e: Error) => setError(e.message));
+  const refresh = useCallback(async () => {
+    const [r, p] = await Promise.all([landsignalApi.radar(), landsignalApi.providers()]);
+    setRows(r);
+    setProviders(p);
   }, []);
 
+  useEffect(() => {
+    refresh()
+      .catch((e: Error) => setError(e.message));
+    const t = setInterval(() => {
+      refresh().catch(() => undefined);
+    }, 15000);
+    return () => clearInterval(t);
+  }, [refresh]);
+
   const filtered = useMemo(
-    () => rows.filter((r) => r.opportunity >= minScore),
-    [rows, minScore],
+    () =>
+      rows
+        .filter((r) => r.opportunity >= minScore)
+        .filter((r) => (hideDemo ? !r.is_demo : true)),
+    [rows, minScore, hideDemo],
   );
+
+  async function runDiscover() {
+    setDiscovering(true);
+    setDiscoverMsg("Scanning BLM LPAD + configured feeds, enriching with USDA/FEMA/NWI/USGS…");
+    try {
+      const res = await landsignalApi.discover(24, 20);
+      setDiscoverMsg(
+        `Imported ${res.imported} · scored ${res.scored}. ${String(res.note || "")}`,
+      );
+      await refresh();
+    } catch (e) {
+      setDiscoverMsg(e instanceof Error ? e.message : "Discover failed");
+    } finally {
+      setDiscovering(false);
+    }
+  }
+
+  const top = filtered[0];
 
   return (
     <div className="space-y-4">
@@ -33,11 +63,19 @@ export default function OpportunityRadarPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Opportunity Radar</h1>
           <p className="mt-1 max-w-3xl text-sm text-[var(--muted)]">
-            Nationwide candidates ranked by risk-adjusted mispricing signal — not by novelty, acreage, or
-            farm cosmetics. Global score and personalized score are never conflated.
+            Ranked by risk-adjusted mispricing / optionality — not novelty or acreage cosmetics.
+            Live public inventory via BLM LPAD; licensed MLS/Land.com require vendor keys.
           </p>
         </div>
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <button
+            type="button"
+            className="panel px-3 py-2 text-[var(--accent)] disabled:opacity-50"
+            disabled={discovering}
+            onClick={runDiscover}
+          >
+            {discovering ? "Scanning…" : "Scan real opportunities"}
+          </button>
           <label className="text-[var(--muted)]">
             Min score{" "}
             <input
@@ -48,21 +86,46 @@ export default function OpportunityRadarPage() {
             />
           </label>
           <label className="flex items-center gap-2 text-[var(--muted)]">
-            <input
-              type="checkbox"
-              checked={showPersonalized}
-              onChange={(e) => setShowPersonalized(e.target.checked)}
-            />
-            Show personalized
+            <input type="checkbox" checked={showPersonalized} onChange={(e) => setShowPersonalized(e.target.checked)} />
+            Personalized
+          </label>
+          <label className="flex items-center gap-2 text-[var(--muted)]">
+            <input type="checkbox" checked={hideDemo} onChange={(e) => setHideDemo(e.target.checked)} />
+            Hide DEMO
           </label>
         </div>
       </div>
 
       <ProviderStrip providers={providers} />
 
+      {discoverMsg && <div className="panel p-3 text-sm text-[var(--muted)]">{discoverMsg}</div>}
+
+      {top && (
+        <div className="panel p-4">
+          <div className="text-[11px] uppercase tracking-wide text-[var(--muted)]">Top signal</div>
+          <div className="mt-1 flex flex-wrap items-center gap-3">
+            <SignalBadge signal={top.signal} />
+            <Link href={`/parcels/${top.parcel_id}`} className="text-lg font-medium hover:text-[var(--accent)]">
+              {top.property_name}
+            </Link>
+            <span className="mono text-[var(--muted)]">
+              LS {num(top.opportunity, 1)} · Risk {num(top.risk, 1)} · Asym {num(top.asymmetry, 1)} ·{" "}
+              {top.best_strategy}
+            </span>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="panel border-[var(--danger)] p-3 text-sm text-[var(--danger)]">
-          API unavailable: {error}. Start the API (`uvicorn landsignal.main:app --reload --port 8000`).
+          API unavailable: {error}
+        </div>
+      )}
+
+      {!filtered.length && !error && (
+        <div className="panel p-4 text-sm text-[var(--muted)]">
+          No scored real parcels yet. Click <strong>Scan real opportunities</strong> to pull BLM disposal
+          lands and run due diligence. Auto-scan also runs on API startup.
         </div>
       )}
 
@@ -84,7 +147,6 @@ export default function OpportunityRadarPage() {
               <th>Risk</th>
               <th>Confidence</th>
               <th>Best Strategy</th>
-              <th>Freshness</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -99,11 +161,7 @@ export default function OpportunityRadarPage() {
                 <td>
                   <Link href={`/parcels/${r.parcel_id}`} className="hover:text-[var(--accent)]">
                     {r.property_name}
-                    {r.is_demo && (
-                      <span className="ml-2 ks" title="Demo fixture — not a live listing feed">
-                        DEMO
-                      </span>
-                    )}
+                    {r.is_demo && <span className="ml-2 ks">DEMO</span>}
                   </Link>
                 </td>
                 <td>{r.location}</td>
@@ -114,35 +172,20 @@ export default function OpportunityRadarPage() {
                 <td
                   className="mono"
                   style={{
-                    color:
-                      r.discount_pct != null && r.discount_pct < 0
-                        ? "var(--positive)"
-                        : "var(--muted)",
+                    color: r.discount_pct != null && r.discount_pct < 0 ? "var(--positive)" : "var(--muted)",
                   }}
                 >
                   {pct(r.discount_pct)}
                 </td>
                 <td className="mono font-medium">{num(r.opportunity, 1)}</td>
-                {showPersonalized && (
-                  <td className="mono">{num(r.personalized_opportunity, 1)}</td>
-                )}
+                {showPersonalized && <td className="mono">{num(r.personalized_opportunity, 1)}</td>}
                 <td className="mono">{num(r.asymmetry, 1)}</td>
                 <td className="mono">{num(r.risk, 1)}</td>
                 <td className="mono">{num(r.confidence, 1)}</td>
                 <td>{r.best_strategy || "—"}</td>
-                <td className="mono">
-                  {r.freshness_hours == null ? "—" : `${num(r.freshness_hours, 1)}h`}
-                </td>
                 <td>{r.status}</td>
               </tr>
             ))}
-            {!filtered.length && !error && (
-              <tr>
-                <td colSpan={16} className="text-[var(--muted)]">
-                  No scored parcels yet.
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>

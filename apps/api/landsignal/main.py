@@ -28,7 +28,43 @@ app.include_router(router, prefix=settings.api_prefix)
 
 @app.on_event("startup")
 async def startup() -> None:
-    get_store(settings.demo_seed)
+    store = get_store(settings.demo_seed)
+    # Default high-conviction alert rule
+    if not store.alert_rules:
+        from landsignal.services.alerts import create_rule
+
+        create_rule(
+            store,
+            "High-conviction land signal",
+            {
+                "opportunity_gt": 70,
+                "risk_lt": 45,
+                "confidence_gt": 40,
+                "asymmetry_gt": 60,
+            },
+            ["IN_APP", "EMAIL", "SMS"],
+        )
+    if settings.auto_discover_on_startup:
+        import asyncio
+
+        from landsignal.services.discover import discover_opportunities
+
+        async def _bg_discover() -> None:
+            import structlog
+
+            log = structlog.get_logger()
+            try:
+                summary = await discover_opportunities(
+                    store,
+                    settings,
+                    limit=settings.discover_limit,
+                    min_acres=settings.discover_min_acres,
+                )
+                log.info("startup_discover", **summary)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("startup_discover_failed", error=str(exc))
+
+        asyncio.create_task(_bg_discover())
 
 
 @app.get("/")
