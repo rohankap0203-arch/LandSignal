@@ -72,13 +72,23 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             <div className="k">Model value</div>
             <div className="v">{row.estimated_value_display}</div>
           </div>
-          <div className="metric">
-            <div className="k">LandSignal</div>
-            <div className="v">{Math.round(row.opportunity)} / 100</div>
+          <div className="metric metric-span">
+            <div className="k">LandSignal {Math.round(row.opportunity)} / 100</div>
+            <div
+              className="mini-bar"
+              style={{
+                background: `linear-gradient(90deg, hsl(${row.opportunity * 1.2} 65% 42%) ${row.opportunity}%, var(--bg-elevated) ${row.opportunity}%)`,
+              }}
+            />
           </div>
-          <div className="metric">
-            <div className="k">Risk</div>
-            <div className="v">{Math.round(row.risk)} / 100</div>
+          <div className="metric metric-span">
+            <div className="k">Risk {Math.round(row.risk)} / 100</div>
+            <div
+              className="mini-bar"
+              style={{
+                background: `linear-gradient(90deg, hsl(${120 - row.risk * 1.2} 65% 42%) ${row.risk}%, var(--bg-elevated) ${row.risk}%)`,
+              }}
+            />
           </div>
           <div className="metric">
             <div className="k">Confidence</div>

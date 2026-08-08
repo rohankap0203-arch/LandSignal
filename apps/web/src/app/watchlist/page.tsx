@@ -1,0 +1,144 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { ScoreBar } from "@/components/score-bar";
+import { landsignalApi } from "@/lib/api";
+
+type WatchItem = {
+  parcel_id: string;
+  title: string;
+  location: string;
+  current: {
+    opportunity?: number | null;
+    risk?: number | null;
+    confidence?: number | null;
+    ask?: number | null;
+    status?: string | null;
+  };
+  baseline: Record<string, unknown>;
+  changes: Array<{ metric: string; from: unknown; to: unknown }>;
+};
+
+export default function WatchlistPage() {
+  const [items, setItems] = useState<WatchItem[]>([]);
+  const [email, setEmail] = useState("");
+  const [emailOn, setEmailOn] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await landsignalApi.watchlist();
+      setItems((data.items as WatchItem[]) || []);
+      setEmail(data.notify_email || "");
+      setEmailOn(Boolean(data.watchlist_email_updates));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load watchlist");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="display text-3xl font-semibold">Watchlist</h1>
+          <p className="mt-1 max-w-2xl text-sm text-[var(--muted)]">
+            Properties you pinned for metric tracking. LandSignal, risk, confidence, price, and status
+            update here. Sync an email under My criteria to get change notices.
+          </p>
+        </div>
+        <button type="button" className="btn btn-ghost" onClick={() => void load()}>
+          Refresh metrics
+        </button>
+      </div>
+
+      <section className="panel p-4 text-sm">
+        <div className="font-semibold">Email sync</div>
+        <p className="mt-1 text-[var(--muted)]">
+          {emailOn && email
+            ? `Updates queued for ${email} when major metrics move (requires server SMTP).`
+            : "No notification email on yet — open My criteria → Watchlist email sync."}
+        </p>
+        <Link href="/profile" className="mt-2 inline-block text-[var(--brand)]">
+          Open My criteria →
+        </Link>
+      </section>
+
+      {error && <div className="panel p-4 text-[var(--danger)]">{error}</div>}
+      {loading && <div className="text-[var(--muted)]">Loading watchlist…</div>}
+
+      {!loading && !items.length && (
+        <div className="panel empty-state">
+          <div className="display text-2xl">Nothing watched yet</div>
+          <p className="mx-auto mt-2 max-w-lg">
+            Open any result → tap <strong>Add to watchlist</strong> at the top. We’ll keep the major
+            metrics and listing status here.
+          </p>
+          <Link href="/" className="btn btn-dark mt-4 inline-flex">
+            Back to search
+          </Link>
+        </div>
+      )}
+
+      <div className="grid gap-4">
+        {items.map((item) => (
+          <article key={item.parcel_id} className="panel p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <Link
+                  href={`/parcels/${item.parcel_id}`}
+                  className="display text-xl font-semibold hover:text-[var(--brand)]"
+                >
+                  {item.title}
+                </Link>
+                <div className="mt-1 text-sm text-[var(--muted)]">{item.location}</div>
+                <div className="mt-1 text-xs text-[var(--muted)]">
+                  Status: {String(item.current.status || "—")}
+                  {item.current.ask != null ? ` · Ask $${Number(item.current.ask).toLocaleString()}` : ""}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={async () => {
+                  await landsignalApi.unwatch(item.parcel_id);
+                  void load();
+                }}
+              >
+                Remove
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <ScoreBar label="LandSignal" value={Number(item.current.opportunity || 0)} />
+              <ScoreBar label="Risk" value={Number(item.current.risk || 0)} invert />
+            </div>
+            <div className="mt-2 text-sm text-[var(--muted)]">
+              Confidence {Math.round(Number(item.current.confidence || 0))}/100
+            </div>
+            {!!item.changes?.length && (
+              <ul className="mt-3 space-y-1 text-sm">
+                {item.changes.map((c) => (
+                  <li key={`${c.metric}-${String(c.to)}`}>
+                    <strong>{c.metric}</strong> moved {String(c.from)} → {String(c.to)}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {!item.changes?.length && (
+              <p className="mt-3 text-sm text-[var(--muted)]">No metric changes since you watched this.</p>
+            )}
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}

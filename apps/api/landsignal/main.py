@@ -28,6 +28,8 @@ app.include_router(router, prefix=settings.api_prefix)
 
 @app.on_event("startup")
 async def startup() -> None:
+    import asyncio
+
     store = get_store(settings.demo_seed)
     # Default high-conviction alert rule
     if not store.alert_rules:
@@ -44,9 +46,22 @@ async def startup() -> None:
             },
             ["IN_APP", "EMAIL", "SMS"],
         )
-    if settings.auto_discover_on_startup:
-        import asyncio
 
+    async def _bg_rescore() -> None:
+        import structlog
+
+        from landsignal.services.rescore import rescore_stale
+
+        log = structlog.get_logger()
+        try:
+            summary = await rescore_stale(store)
+            log.info("startup_rescore", **summary)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("startup_rescore_failed", error=str(exc))
+
+    asyncio.create_task(_bg_rescore())
+
+    if settings.auto_discover_on_startup:
         from landsignal.services.discover import discover_opportunities
 
         async def _bg_discover() -> None:

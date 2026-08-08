@@ -319,6 +319,378 @@ def _norm_cochise(raw: dict) -> dict | None:
     }
 
 
+def _norm_dekalb(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    acreage, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    stated = props.get("STATEDAREA")
+    if acreage is None and stated:
+        try:
+            acreage = float(str(stated).replace(",", "").split()[0])
+        except Exception:
+            pass
+    if acreage is not None and acreage < 0.05:
+        return None
+    pid = props.get("PARCELID") or props.get("LOWPARCELID") or props.get("OBJECTID")
+    use = props.get("USEDSCRP") or props.get("USECD") or "Unknown use"
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"dekalb:{pid}",
+        "title": f"DeKalb GA delinquent · {use} · {pid}",
+        "description": (
+            f"DeKalb County, GA delinquent tax parcel (public GIS). "
+            f"Use={use}. Tax district={props.get('CVTTXDSCRP') or 'n/a'}. "
+            "Public distress inventory — not MLS/Crexi."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage) if acreage is not None else None,
+        "state": "GA",
+        "county": "DeKalb",
+        "apn": str(pid),
+        "address": f"DeKalb County, GA · {pid}",
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.dekalbcountyga.gov/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_allegheny(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    acreage = props.get("CALCACREAGE")
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    if acreage is None:
+        acreage = geom_acres
+    # Focus on larger vacant-ish parcels from the county layer
+    if acreage is None or float(acreage) < 2.0:
+        return None
+    if float(acreage) > 500:
+        return None
+    pid = props.get("PIN") or props.get("MAPBLOCKLOT") or props.get("OBJECTID")
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"allegheny:{pid}",
+        "title": f"Allegheny PA parcel · {float(acreage):.2f} ac · {pid}",
+        "description": (
+            "Allegheny County, PA public parcel GIS (≥2 ac screen for land thesis). "
+            "Not a dedicated tax-sale feed — treat as public land inventory for screening only."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage),
+        "state": "PA",
+        "county": "Allegheny",
+        "apn": str(pid),
+        "address": f"Allegheny County, PA · {pid}",
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.alleghenycounty.us/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_dallas_vacant(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    area_ft = props.get("AREA_FEET") or props.get("Shape__Area")
+    acreage, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    if acreage is None and area_ft:
+        acreage = float(area_ft) / 43560.0
+    if acreage is None or acreage < 0.5:
+        return None
+    pid = props.get("ACCT") or props.get("GIS_ACCT") or props.get("OBJECTID")
+    use = props.get("PROP_CL") or "Vacant tract"
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"dallas:{pid}",
+        "title": f"Dallas CAD vacant · {acreage:.2f} ac · {use}",
+        "description": (
+            f"Dallas County, TX appraisal vacant/land tract (public CAD GIS). "
+            f"Class={use}. SPTB={props.get('SPTBCODE')}. "
+            "Vacant land screen — not MLS/Crexi; confirm sale status with DCAD / broker."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage),
+        "state": "TX",
+        "county": "Dallas",
+        "apn": str(pid),
+        "address": f"{props.get('ST_NUM') or ''} {props.get('ST_NAME') or ''} {props.get('ST_TYPE') or ''}, Dallas County, TX".strip(),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.dallascad.org/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_bexar_vacant(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    acreage = props.get("Acres") or props.get("LglAcres")
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    if acreage is None:
+        acreage = geom_acres
+    if acreage is None or float(acreage) < 2.0:
+        return None
+    # Prefer unimproved / low improvement marks when present
+    houses = props.get("Houses")
+    if houses not in (None, "0", 0, "0.0"):
+        return None
+    pid = props.get("PropID") or props.get("AcctNumb") or props.get("OBJECTID")
+    land_val = props.get("LandVal")
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"bexar:{pid}",
+        "title": f"Bexar TX vacant land · {float(acreage):.2f} ac · {props.get('Situs') or pid}",
+        "description": (
+            f"Bexar County, TX (San Antonio) vacant/unimproved parcel from public CAD GIS. "
+            f"Land value mark=${land_val}. Owner mark={props.get('Owner') or 'n/a'}. "
+            "Not a dedicated tax-sale feed — screen for land thesis only."
+        ),
+        "asking_price_usd": float(land_val) * 0.55 if land_val else None,
+        "acreage": float(acreage),
+        "state": "TX",
+        "county": "Bexar",
+        "apn": str(pid),
+        "address": f"{props.get('Situs') or ''}, {props.get('AddrCity') or 'San Antonio'}, TX".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.bcad.org/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_king_vacant(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    acreage = props.get("KCA_ACRES")
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    if acreage is None:
+        acreage = geom_acres
+    if acreage is None or float(acreage) < 1.0:
+        return None
+    pid = props.get("PIN") or props.get("MAJOR") or props.get("OBJECTID")
+    use = (props.get("PREUSE_DESC") or "Vacant").strip()
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"kingwa:{pid}",
+        "title": f"King County WA vacant · {float(acreage):.2f} ac · {use}",
+        "description": (
+            f"King County, WA vacant land (public property info GIS). Use={use}. "
+            "Not MLS — confirm marketing status with a local broker / assessor."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage),
+        "state": "WA",
+        "county": "King",
+        "apn": str(pid),
+        "address": f"King County, WA · PIN {pid}",
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://gismaps.kingcounty.gov/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_nashville_vacant(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    acreage = props.get("Acres") or props.get("DeededAcreage")
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    if acreage is None:
+        acreage = geom_acres
+    if acreage is None or float(acreage) < 1.0:
+        return None
+    pid = props.get("APN") or props.get("ParID") or props.get("OBJECTID")
+    land = props.get("LandAppr")
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"nash:{pid}",
+        "title": f"Davidson TN vacant · {float(acreage):.2f} ac · {props.get('PropAddr') or pid}",
+        "description": (
+            f"Davidson County / Nashville vacant rural or vacant land (public cadastral GIS). "
+            f"Use={props.get('LUDesc')}. Land appraisal mark=${land}. "
+            "Public land inventory screen — not MLS."
+        ),
+        "asking_price_usd": float(land) * 0.65 if land else None,
+        "acreage": float(acreage),
+        "state": "TN",
+        "county": "Davidson",
+        "apn": str(pid),
+        "address": f"{props.get('PropAddr') or ''}, Nashville, TN".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.nashville.gov/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_dlba(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    status = (props.get("inventory_status_socrata") or "").lower()
+    if "for sale" not in status and "auction" not in status and "side lot" not in status:
+        return None
+    lat = props.get("latitude")
+    lon = props.get("longitude")
+    acreage, glat, glon, polygon = _acres_from_geom(raw.get("geometry"))
+    if lat is None:
+        lat = glat
+    if lon is None:
+        lon = glon
+    # Typical Detroit side lot ~0.1 ac if geometry thin
+    if acreage is None:
+        acreage = 0.1
+    pid = props.get("parcel_id") or props.get("ObjectId")
+    street = " ".join(
+        str(x)
+        for x in [
+            props.get("street_number"),
+            props.get("street_direction"),
+            props.get("street_name"),
+            props.get("street_type"),
+        ]
+        if x
+    ).strip()
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"dlba:{pid}",
+        "title": f"Detroit Land Bank · {props.get('name') or street or pid}",
+        "description": (
+            f"Detroit Land Bank Authority owned inventory ({props.get('inventory_status_socrata')}). "
+            f"Neighborhood={props.get('neighborhood')}. Public land-bank sales channel — not MLS."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage) if acreage else 0.1,
+        "state": "MI",
+        "county": "Wayne",
+        "apn": str(pid),
+        "address": f"{street or props.get('name')}, Detroit, MI",
+        "latitude": float(lat) if lat is not None else None,
+        "longitude": float(lon) if lon is not None else None,
+        "polygon": polygon,
+        "source_url": "https://buildingdetroit.org/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_utah_taxsale(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    status = str(props.get("Status") or "").lower()
+    if status and status not in ("active", "available"):
+        return None
+    acreage = props.get("Deeded_Acr")
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    try:
+        acreage = float(acreage) if acreage is not None else geom_acres
+    except Exception:
+        acreage = geom_acres
+    if acreage is not None and acreage < 0.05:
+        return None
+    due = props.get("TotalDue")
+    pid = props.get("Parcel_Num") or props.get("Account_Nu") or props.get("FID")
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"uttax:{pid}",
+        "title": f"Utah tax sale · {acreage or '?'} ac · {pid}",
+        "description": (
+            f"Active tax-sale parcel layer (Utah public GIS). "
+            f"Taxes due mark=${due}. Owner mark={props.get('Owner_Name')}. "
+            "Distressed auction inventory — not MLS."
+        ),
+        "asking_price_usd": float(due) if due is not None else None,
+        "acreage": float(acreage) if acreage is not None else None,
+        "state": "UT",
+        "county": props.get("Town") or "Beaver",
+        "apn": str(pid),
+        "address": f"{props.get('Situs_Addr') or ''}, UT".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": None,
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_whiteside_fc(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    acreage, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    if acreage is not None and acreage < 0.08:
+        return None
+    pid = props.get("PARCELID") or props.get("OBJECTID")
+    sale = props.get("SALEAMNT")
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"whiteside:{pid}",
+        "title": f"Whiteside IL foreclosure · {props.get('SITEADDRESS') or pid}",
+        "description": (
+            f"Whiteside County, IL tax-parcel foreclosure record (public GIS). "
+            f"Sale amount mark=${sale}. Public distress inventory — not MLS."
+        ),
+        "asking_price_usd": float(sale) if sale is not None else None,
+        "acreage": acreage,
+        "state": "IL",
+        "county": "Whiteside",
+        "apn": str(pid),
+        "address": f"{props.get('SITEADDRESS') or ''}, Whiteside County, IL".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.whiteside.org/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_fairfax_large(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    acreage, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    area = props.get("SHAPE.STArea()") or props.get("SHAPE.STArea")
+    if acreage is None and area:
+        # Fairfax published area often in sq ft
+        acreage = float(area) / 43560.0
+    if acreage is None or acreage < 3.0:
+        return None
+    pid = props.get("PIN") or props.get("PARCEL_KEY") or props.get("OBJECTID")
+    return {
+        "provider_id": "public_surplus",
+        "external_id": f"fairfax:{pid}",
+        "title": f"Fairfax VA large parcel · {float(acreage):.2f} ac · {pid}",
+        "description": (
+            "Fairfax County, VA public parcel GIS (≥3 ac screen). "
+            "Not a dedicated surplus feed — use as Northern Virginia land inventory for screening."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage),
+        "state": "VA",
+        "county": "Fairfax",
+        "apn": str(pid),
+        "address": f"Fairfax County, VA · {pid}",
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.fairfaxcounty.gov/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
 def _norm_ftl(raw: dict) -> dict | None:
     props = raw.get("properties") or {}
     sqft = props.get("CNTYGISSQFT")
@@ -418,6 +790,91 @@ SOURCES: list[ArcgisMarketSource] = [
         "Cochise",
         _norm_cochise,
     ),
+    ArcgisMarketSource(
+        "dekalb_ga_tax",
+        "DeKalb County GA Delinquent Parcels",
+        "https://dcgis.dekalbcountyga.gov/hosted/rest/services/Delinquent_Parcels/MapServer/0/query",
+        "GA",
+        "DeKalb",
+        _norm_dekalb,
+    ),
+    ArcgisMarketSource(
+        "allegheny_pa_parcels",
+        "Allegheny County PA Parcels (2ac+)",
+        "https://gisdata.alleghenycounty.us/arcgis/rest/services/EGIS/Web_Parcels/MapServer/0/query",
+        "PA",
+        "Allegheny",
+        _norm_allegheny,
+    ),
+    ArcgisMarketSource(
+        "dallas_tx_vacant",
+        "Dallas CAD Vacant Tracts",
+        "https://services2.arcgis.com/rwnOSbfKSwyTBcwN/arcgis/rest/services/DallasTaxParcels/FeatureServer/0/query",
+        "TX",
+        "Dallas",
+        _norm_dallas_vacant,
+        where="SPTBCODE LIKE 'C%' AND AREA_FEET > 20000",
+    ),
+    ArcgisMarketSource(
+        "bexar_tx_vacant",
+        "Bexar County TX Vacant Land (2ac+)",
+        "https://maps.bexar.org/arcgis/rest/services/Parcels/MapServer/0/query",
+        "TX",
+        "Bexar",
+        _norm_bexar_vacant,
+        where="Houses='0' AND Acres>=2",
+    ),
+    ArcgisMarketSource(
+        "king_wa_vacant",
+        "King County WA Vacant Land",
+        "https://gismaps.kingcounty.gov/arcgis/rest/services/Property/KingCo_PropertyInfo/MapServer/0/query",
+        "WA",
+        "King",
+        _norm_king_vacant,
+        where="PREUSE_DESC LIKE '%Vacant%' AND KCA_ACRES >= 1",
+    ),
+    ArcgisMarketSource(
+        "nashville_tn_vacant",
+        "Davidson County TN Vacant Land",
+        "https://maps.nashville.gov/arcgis/rest/services/Cadastral/Parcels/MapServer/0/query",
+        "TN",
+        "Davidson",
+        _norm_nashville_vacant,
+        where="LUDesc LIKE '%Vacant%' AND Acres>=1",
+    ),
+    ArcgisMarketSource(
+        "detroit_mi_dlba",
+        "Detroit Land Bank For-Sale Inventory",
+        "https://services2.arcgis.com/qvkbeam7Wirps6zC/arcgis/rest/services/DLBA_Owned_Properties/FeatureServer/0/query",
+        "MI",
+        "Wayne",
+        _norm_dlba,
+    ),
+    ArcgisMarketSource(
+        "utah_tax_sale",
+        "Utah Tax Sale Parcels",
+        "https://services6.arcgis.com/yVGfJlcJzFU5V5RT/arcgis/rest/services/TaxSaleParcels2025/FeatureServer/0/query",
+        "UT",
+        "Beaver",
+        _norm_utah_taxsale,
+    ),
+    ArcgisMarketSource(
+        "whiteside_il_foreclosure",
+        "Whiteside County IL Tax Foreclosures",
+        "https://services.arcgis.com/l0M0OC6J9QAHCiGx/arcgis/rest/services/Tax_Parcel_Foreclosures_Only/FeatureServer/0/query",
+        "IL",
+        "Whiteside",
+        _norm_whiteside_fc,
+    ),
+    ArcgisMarketSource(
+        "fairfax_va_large",
+        "Fairfax County VA Large Parcels (3ac+)",
+        "https://www.fairfaxcounty.gov/mercator/rest/services/OpenData/OpenData_A9/MapServer/0/query",
+        "VA",
+        "Fairfax",
+        _norm_fairfax_large,
+        where="SHAPE.STArea() >= 130680",
+    ),
 ]
 
 
@@ -480,9 +937,7 @@ class PublicTaxSaleProvider(ListingProvider):
         tax_sources = [
             s
             for s in SOURCES
-            if "tax" in s.source_id
-            or "sale" in s.source_id
-            or s.source_id.startswith(("sauk", "indy", "shasta", "wyco", "mahoning", "cochise"))
+            if "surplus" not in s.source_id and "fairfax" not in s.source_id
         ]
         # Split the budget across counties so one mega-layer doesn't dominate
         per_source = max(300, limit // max(1, len(tax_sources)))
@@ -566,7 +1021,7 @@ class PublicSurplusProvider(ListingProvider):
     async def search_listings(self, query: dict[str, Any]) -> ProviderResult[list[dict]]:
         limit = int(query.get("limit") or 200)
         out: list[dict] = []
-        surplus_sources = [s for s in SOURCES if "surplus" in s.source_id]
+        surplus_sources = [s for s in SOURCES if "surplus" in s.source_id or "fairfax" in s.source_id]
         errors: list[str] = []
         per_source = max(50, limit // max(1, len(surplus_sources)))
         async with httpx.AsyncClient(timeout=60.0) as client:

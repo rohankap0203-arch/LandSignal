@@ -44,8 +44,12 @@ class MemoryStore:
             "min_target_irr": 0.12,
             "preferred_strategies": ["FARMLAND", "LAND_BANK", "DEVELOPMENT"],
             "risk_tolerance": "MODERATE",
+            "notify_email": "",
+            "watchlist_email_updates": True,
         }
         self.dd_items: dict[UUID, list[dict[str, Any]]] = {}
+        # parcel_id -> snapshot of key metrics for change detection
+        self.watch_snapshots: dict[UUID, dict[str, Any]] = {}
 
     def seed_demo(self) -> None:
         """Deterministic DEMO fixtures for UI walkthrough — never labeled as live feeds."""
@@ -300,7 +304,10 @@ class MemoryStore:
 
     def update_profile(self, payload: InvestorProfileUpdate) -> dict[str, Any]:
         data = payload.model_dump()
-        data["preferred_strategies"] = [s.value for s in payload.preferred_strategies]
+        prefs = []
+        for s in payload.preferred_strategies or []:
+            prefs.append(s.value if hasattr(s, "value") else str(s))
+        data["preferred_strategies"] = prefs
         self.investor_profile.update(data)
         return self.investor_profile
 

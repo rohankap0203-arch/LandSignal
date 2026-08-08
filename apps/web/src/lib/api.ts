@@ -165,6 +165,14 @@ export const landsignalApi = {
   ingestManual: (body: Record<string, unknown>) =>
     api("/ingest/manual", { method: "POST", body: JSON.stringify(body) }),
   analyze: (id: string) => api(`/parcels/${id}/analyze`, { method: "POST" }),
+  watch: (id: string) => api<Record<string, unknown>>(`/parcels/${id}/watch`, { method: "POST" }),
+  unwatch: (id: string) => api<Record<string, unknown>>(`/parcels/${id}/watch`, { method: "DELETE" }),
+  watchlist: () =>
+    api<{
+      items: Array<Record<string, unknown>>;
+      notify_email: string;
+      watchlist_email_updates: boolean;
+    }>("/watchlist"),
   discover: (
     limit = 10000,
     minAcres = 0.1,

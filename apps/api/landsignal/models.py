@@ -96,6 +96,8 @@ class InvestorProfileUpdate(BaseModel):
     min_target_irr: float | None = None
     preferred_strategies: list[Strategy] | list[str] = Field(default_factory=list)
     risk_tolerance: str | float | int = "MODERATE"
+    notify_email: str | None = None
+    watchlist_email_updates: bool = True
 
 
 class ParcelRecord(BaseModel):

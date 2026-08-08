@@ -565,6 +565,15 @@ async def radar(
     return ranked[: max(1, min(limit, 500))]
 
 
+@router.post("/rescore")
+async def rescore(limit: int = 8000) -> dict[str, Any]:
+    """Re-score parcels still on an older algorithm version (fast / cached enrichment)."""
+    from landsignal.services.rescore import rescore_stale
+
+    store = get_store(get_settings().demo_seed)
+    return await rescore_stale(store, limit=limit)
+
+
 @router.get("/search/meta")
 async def search_meta() -> dict[str, Any]:
     """Nationwide filter catalog + live inventory hints."""
@@ -643,31 +652,28 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         "transmission": human_transmission(enrichment.infrastructure if enrichment else None),
     }
     scenarios_human = []
-    case_names = {
-        "BASE": "Typical",
-        "DOWNSIDE": "Cautious",
-        "UPSIDE": "Optimistic",
-        "STRESS": "Stress",
+    case_labels = {
+        "BASE": "Base case (typical rents)",
+        "BEAR": "Cautious case (low rents / slow appreciation)",
+        "BULL": "Optimistic case (strong rents / faster appreciation)",
+        "DOWNSIDE": "Cautious case",
+        "UPSIDE": "Optimistic case",
+        "STRESS": "Stress case",
     }
     for s in (enrichment.scenarios if enrichment else []) or []:
         case_key = str(s.get("case_type") or "Scenario")
-        case_name = case_names.get(case_key, case_key)
+        case_name = case_labels.get(case_key, case_key)
         if s.get("irr") is not None:
             plain = (
-                f"{case_name} farmland screen: about {float(s['irr']) * 100:.1f}% IRR "
-                "if the assumptions hold."
+                f"{case_name}: about {float(s['irr']) * 100:.1f}% IRR on the farmland screen "
+                f"if cash-rent and exit assumptions hold for this parcel."
             )
         else:
             plain = "This case needs more crop/rent inputs before an IRR can be shown."
         scenarios_human.append(
             {
                 **s,
-                "case_label": {
-                    "BASE": "Base case (typical)",
-                    "DOWNSIDE": "Cautious case",
-                    "UPSIDE": "Optimistic case",
-                    "STRESS": "Stress case",
-                }.get(case_key, case_key),
+                "case_label": case_name,
                 "irr_display": f"{float(s['irr']) * 100:.1f}% per year" if s.get("irr") is not None else "Not enough data",
                 "noi_display": f"${float(s.get('noi') or 0):,.0f} / year",
                 "npv_display": f"${float(s.get('npv') or 0):,.0f}",
@@ -680,6 +686,25 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
             }
         )
 
+    from landsignal.services.briefing import build_intelligence_brief
+
+    price = price_display(
+        listing.asking_price_usd if listing else None,
+        listing.provider_id if listing else None,
+    )
+    brief = build_intelligence_brief(
+        parcel=parcel,
+        listing=listing,
+        score=score,
+        enrichment=enrichment,
+        price=price,
+        land_readouts=land_readouts,
+        scenarios_human=scenarios_human,
+        dd_guided=dd_guided,
+    )
+    user = UUID("00000000-0000-4000-8000-000000000002")
+    watched = parcel_id in store.watchlists.get(user, set())
+
     return {
         "parcel": parcel,
         "listing": listing,
@@ -689,16 +714,17 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         "due_diligence_guided": dd_guided,
         "land_readouts": land_readouts,
         "scenarios_human": scenarios_human,
+        "brief": brief,
         "links": annotated,
-        "price": price_display(listing.asking_price_usd if listing else None, listing.provider_id if listing else None),
+        "price": price,
         "rating_breakdown": rating_breakdown(score) if score else [],
-        "score_explained": {
+        "score_explained": brief.get("score_story")
+        or {
             "landsignal": "Overall opportunity score from 0–100 after weighing price, quality, options, and risk.",
             "risk": "Higher means more things that can go wrong on a desktop screen (flood, wetlands, thin data).",
             "confidence": "How complete the evidence file is. Thin files get lower confidence, not fake quality.",
-            "fit": "How well this parcel matches the criteria you set on Search / My criteria.",
-            "deal_readiness": "How much manual homework remains before a human could responsibly bid.",
         },
+        "watched": watched,
         "disclaimer": "Screening intelligence only — not an appraisal, legal opinion, or purchase authorization.",
         "mapbox_status": "CONFIGURED" if get_settings().mapbox_token else "NOT_CONFIGURED",
     }
@@ -758,6 +784,81 @@ async def watch(parcel_id: UUID) -> dict[str, Any]:
     store = get_store(get_settings().demo_seed)
     if parcel_id not in store.parcels:
         raise HTTPException(404, "Parcel not found")
+    if store.latest_score(parcel_id) is None:
+        await analyze_parcel(store, parcel_id, fast=True)
     user = UUID("00000000-0000-4000-8000-000000000002")
     store.watchlists.setdefault(user, set()).add(parcel_id)
-    return {"watched": True, "parcel_id": parcel_id}
+    score = store.latest_score(parcel_id)
+    listing = store.listing_for_parcel(parcel_id)
+    snap = {
+        "opportunity": score.opportunity if score else None,
+        "risk": score.risk if score else None,
+        "confidence": score.confidence if score else None,
+        "ask": listing.asking_price_usd if listing else None,
+        "status": listing.status if listing else None,
+        "watched_at": datetime.now(timezone.utc).isoformat(),
+    }
+    store.watch_snapshots[parcel_id] = snap
+    email = (store.investor_profile.get("notify_email") or "").strip()
+    email_on = bool(store.investor_profile.get("watchlist_email_updates"))
+    return {
+        "watched": True,
+        "parcel_id": parcel_id,
+        "snapshot": snap,
+        "email_updates": bool(email and email_on),
+        "notify_email": email or None,
+        "note": (
+            f"Watching. Metric changes will notify {email}."
+            if email and email_on
+            else "Watching in-app. Add your email under My criteria to sync updates."
+        ),
+    }
+
+
+@router.delete("/parcels/{parcel_id}/watch")
+async def unwatch(parcel_id: UUID) -> dict[str, Any]:
+    store = get_store(get_settings().demo_seed)
+    user = UUID("00000000-0000-4000-8000-000000000002")
+    store.watchlists.setdefault(user, set()).discard(parcel_id)
+    store.watch_snapshots.pop(parcel_id, None)
+    return {"watched": False, "parcel_id": parcel_id}
+
+
+@router.get("/watchlist")
+async def watchlist() -> dict[str, Any]:
+    store = get_store(get_settings().demo_seed)
+    user = UUID("00000000-0000-4000-8000-000000000002")
+    items = []
+    for pid in sorted(store.watchlists.get(user, set()), key=str):
+        parcel = store.parcels.get(pid)
+        listing = store.listing_for_parcel(pid)
+        score = store.latest_score(pid)
+        prev = store.watch_snapshots.get(pid) or {}
+        cur = {
+            "opportunity": score.opportunity if score else None,
+            "risk": score.risk if score else None,
+            "confidence": score.confidence if score else None,
+            "ask": listing.asking_price_usd if listing else None,
+            "status": listing.status if listing else None,
+        }
+        changes = []
+        for key in ("opportunity", "risk", "confidence", "ask", "status"):
+            if prev.get(key) != cur.get(key) and prev.get(key) is not None:
+                changes.append({"metric": key, "from": prev.get(key), "to": cur.get(key)})
+        # Keep snapshot current so the next refresh only shows new moves
+        store.watch_snapshots[pid] = {**cur, "watched_at": prev.get("watched_at")}
+        items.append(
+            {
+                "parcel_id": pid,
+                "title": (listing.title if listing else None) or (parcel.apn if parcel else str(pid)),
+                "location": f"{getattr(parcel, 'county', None) or '—'}, {getattr(parcel, 'state', None) or '—'}",
+                "current": cur,
+                "baseline": prev,
+                "changes": changes,
+            }
+        )
+    return {
+        "items": items,
+        "notify_email": store.investor_profile.get("notify_email") or "",
+        "watchlist_email_updates": bool(store.investor_profile.get("watchlist_email_updates")),
+    }

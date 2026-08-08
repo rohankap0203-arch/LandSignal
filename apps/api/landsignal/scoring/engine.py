@@ -6,18 +6,18 @@ from typing import Any
 
 from landsignal.scoring.financial import asking_discount_pct, clamp, margin_of_safety
 
-ALGORITHM_VERSION = "landsignal_score_v1"
-WEIGHT_VERSION = "weights_default_v1"
+ALGORITHM_VERSION = "landsignal_score_v2"
+WEIGHT_VERSION = "weights_default_v2"
 
 DEFAULT_WEIGHTS = {
-    "valuation_mispricing": 0.20,
+    "valuation_mispricing": 0.24,
     "intrinsic_land_quality": 0.10,
-    "hbu_optionality": 0.15,
-    "growth_appreciation": 0.15,
-    "infrastructure": 0.10,
-    "liquidity": 0.08,
+    "hbu_optionality": 0.14,
+    "growth_appreciation": 0.13,
+    "infrastructure": 0.09,
+    "liquidity": 0.07,
     "scarcity": 0.07,
-    "catalysts": 0.05,
+    "catalysts": 0.06,
     "seller_dynamics": 0.05,
     "risk": 0.05,
 }
@@ -81,7 +81,8 @@ def screen_strategies(inp: dict) -> dict[str, str]:
     elif contamination is not None and contamination >= 70:
         development = "FAIL"
     elif acreage is not None and acreage < 2:
-        development = "FAIL"
+        # Small lots can still be assemble / infill — don't hard-kill the thesis
+        development = "MANUAL_REVIEW"
     elif wetland is not None and wetland > 20:
         development = "MANUAL_REVIEW"
     elif landlocked == "MANUAL_REVIEW":
@@ -223,13 +224,28 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
     risk, risk_evidence = compute_risk(inp)
     ask = inp.get("asking_price_usd")
     base = _v(inp, "estimated_value_base_usd")
+    acres = inp.get("acreage") or 0
     discount = asking_discount_pct(ask, base)
-    if base is None or ask is None:
-        valuation_value = 50.0
-        valuation_evidence = ["Valuation incomplete — neutral until comps/model value available"]
+    if base is None and ask is None:
+        valuation_value = 45.0
+        valuation_evidence = ["No ask and no model value yet — neutral-low until priced"]
         valuation_ks = (inp.get("estimated_value_base_usd") or {}).get("knowledge_state", "UNKNOWN")
+    elif ask is None and base is not None:
+        # Unpriced process parcels: score entry optionality from scale + scarcity, not fake mispricing
+        scar = _v(inp, "scarcity_score") or 50.0
+        valuation_value = _round1(clamp(48 + min(float(acres), 640.0) / 640.0 * 22 + (scar - 50) * 0.25, 40, 82))
+        valuation_evidence = [
+            f"No retail ask — process pricing. Screening value ~${base:,.0f}; "
+            f"scale/scarcity entry score {valuation_value:.0f}/100"
+        ]
+        valuation_ks = "ESTIMATED"
+    elif base is None and ask is not None:
+        valuation_value = 48.0
+        valuation_evidence = ["Ask present but model value incomplete — near-neutral pending comps"]
+        valuation_ks = "UNKNOWN"
     else:
-        valuation_value = _round1(clamp(55 - discount * 1.2, 0, 100))
+        # Stronger response to deep discounts so real bargains can clear the 50s/60s
+        valuation_value = _round1(clamp(58 - discount * 1.35, 0, 100))
         valuation_evidence = [f"Ask {ask} vs base value {base} → discount/premium {discount:.1f}%"]
         valuation_ks = "KNOWN"
 
@@ -375,6 +391,39 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
             }
         )
     opportunity = _round1(clamp(opportunity, 0, 100))
+
+    # Evidence-backed lifts so thin “everything ~50” fast scores can separate real edges
+    lift = 0.0
+    lift_notes: list[str] = []
+    if discount is not None:
+        if discount <= -50:
+            lift += 16
+            lift_notes.append(f"Deep discount lift (+16) for {discount:.0f}% vs model")
+        elif discount <= -30:
+            lift += 11
+            lift_notes.append(f"Strong discount lift (+11) for {discount:.0f}% vs model")
+        elif discount <= -15:
+            lift += 6
+            lift_notes.append(f"Discount lift (+6) for {discount:.0f}% vs model")
+    sp = _v(inp, "seller_pressure_score")
+    if sp is not None and sp >= 72:
+        lift += 5
+        lift_notes.append("Distressed / high seller-pressure channel (+5)")
+    if ask is None and acres >= 40:
+        lift += 7
+        lift_notes.append("Unpriced large-tract process edge (+7)")
+        if (_v(inp, "scarcity_score") or 0) >= 65:
+            lift += 4
+            lift_notes.append("Scarcity on large unpriced tract (+4)")
+    if risk > 70:
+        lift *= 0.35
+        lift_notes.append("Lift cut — elevated risk")
+    elif risk > 55:
+        lift *= 0.7
+        lift_notes.append("Lift tempered — moderate-high risk")
+    if lift:
+        opportunity = _round1(clamp(opportunity + lift, 0, 100))
+
     confidence = compute_confidence(inp)
 
     ranked = sorted(
@@ -433,10 +482,12 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
         "deal_readiness": deal_readiness(inp),
         "components": components,
         "explanations": [f"[{c['category']}] {e}" for c in components for e in c["evidence"]],
-        "why_interesting": why_interesting,
+        "why_interesting": why_interesting + lift_notes,
         "why_mispriced": why_mispriced,
         "what_could_kill": what_could_kill,
         "why_still_available": why_still_available,
+        "score_lift": _round1(lift),
+        "score_lift_notes": lift_notes,
         "manual_verification": [
             "Confirm title and legal access with recorded documents",
             "Verify parcel geometry / acreage against survey or assessor polygon",

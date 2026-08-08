@@ -250,6 +250,49 @@ async def analyze_parcel(
             geographic_resolution="state_prior",
         )
 
+    # Listing-derived ESTIMATED signals so bulk/fast scores don't all collapse to ~50
+    comps_n = dict(existing.comps.normalized or existing.comps.value or {}) if existing.comps else {}
+    acres = parcel.acreage or 0
+    ask = listing.asking_price_usd if listing else None
+    provider = listing.provider_id if listing else None
+    state = (parcel.state or "").upper()
+    if comps_n.get("seller_pressure_score") is None:
+        if provider == "public_tax_sale":
+            comps_n["seller_pressure_score"] = 78.0
+        elif provider == "public_surplus":
+            comps_n["seller_pressure_score"] = 65.0
+        elif provider == "blm_lpad":
+            comps_n["seller_pressure_score"] = 55.0
+        elif ask is not None:
+            comps_n["seller_pressure_score"] = 48.0
+    if comps_n.get("liquidity_score") is None:
+        if acres and acres < 2:
+            comps_n["liquidity_score"] = 62.0 if state in ("CA", "FL", "IN", "OH", "GA", "PA") else 50.0
+        elif acres and acres >= 80:
+            comps_n["liquidity_score"] = 38.0
+        else:
+            comps_n["liquidity_score"] = 48.0
+    if comps_n.get("scarcity_score") is None:
+        if provider == "blm_lpad" and acres and acres >= 40:
+            comps_n["scarcity_score"] = 72.0
+        elif acres and acres >= 100:
+            comps_n["scarcity_score"] = 68.0
+        elif acres and acres < 1:
+            comps_n["scarcity_score"] = 35.0
+        else:
+            comps_n["scarcity_score"] = 52.0
+    if comps_n.get("catalyst_score") is None:
+        comps_n["catalyst_score"] = 58.0 if provider in ("public_tax_sale", "blm_lpad") else 42.0
+    if comps_n.get("path_of_growth_score") is None and not growth_n.get("path_of_growth_score"):
+        # Coarse Sun Belt / metro-adjacent prior — ESTIMATED only
+        sun = {"FL", "TX", "AZ", "GA", "NC", "SC", "TN", "NV"}
+        comps_n["path_of_growth_score"] = 63.0 if state in sun else 48.0
+    if comps_n.get("zoning_development_friendly") is None and acres and acres < 5:
+        comps_n["zoning_development_friendly"] = 55.0
+    if existing.comps:
+        existing.comps.normalized = {**(existing.comps.normalized or {}), **comps_n}
+        existing.comps.value = {**(existing.comps.value or {}), **comps_n}
+
     # Access heuristic — never legally verified
     if existing.access.knowledge_state == KnowledgeState.UNKNOWN:
         conf = 45.0 if parcel.polygon else (30.0 if parcel.latitude else None)
@@ -265,7 +308,7 @@ async def analyze_parcel(
             },
         )
 
-    comps_n = existing.comps.normalized or existing.comps.value or {}
+    comps_n = dict(existing.comps.normalized or existing.comps.value or {}) if existing.comps else comps_n
     access_n = existing.access.normalized or existing.access.value or {}
     ask = listing.asking_price_usd if listing else None
 

@@ -66,10 +66,11 @@ export default function SearchPage() {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [meta, setMeta] = useState<SearchMeta | null>(null);
   const [rows, setRows] = useState<RadarRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>("Set filters, then click Show matches — search only runs when you ask.");
+  const [hasSearched, setHasSearched] = useState(false);
 
   const regionOptions = useMemo(() => {
     const code = stateCode(form.state);
@@ -137,6 +138,7 @@ export default function SearchPage() {
     async (override?: FormState) => {
       setLoading(true);
       setError(null);
+      setHasSearched(true);
       try {
         const active = override ?? form;
         const data = await landsignalApi.radar(filtersFromForm(active));
@@ -147,12 +149,8 @@ export default function SearchPage() {
         setStatus(
           data.length
             ? `Showing top ${data.length.toLocaleString()} matches · ${total.toLocaleString()} live parcels indexed`
-            : "No matches yet — starting a nationwide live scan…",
+            : "No matches for these filters. Try Reset to Any, then Show matches again.",
         );
-        // Auto-heal empty inventory without wiping filters
-        if (!data.length) {
-          landsignalApi.discover(10000, 0.1, false, undefined, true).catch(() => undefined);
-        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "Search failed");
       } finally {
@@ -163,31 +161,23 @@ export default function SearchPage() {
   );
 
   useEffect(() => {
+    // Load filter catalogs only — do NOT auto-search
     landsignalApi
       .searchMeta()
       .then(setMeta)
       .catch(() => setMeta(null));
   }, []);
 
-  useEffect(() => {
-    if (!meta) return;
-    runSearch(DEFAULT_FORM);
-  }, [meta]); // initial open = Any filters
-
   async function scanFresh() {
     setScanning(true);
-    setStatus("Nationwide scan started — indexing thousands of public parcels…");
+    setStatus("Inventory refresh started in the background. Click Show matches when you want results.");
     try {
-      // Never wipe on refresh — that was causing “no live matches”
       await landsignalApi.discover(10000, 0.1, false, undefined, true);
-      for (let i = 0; i < 20; i++) {
-        await new Promise((r) => setTimeout(r, 3000));
-        const nextMeta = await landsignalApi.searchMeta();
-        setMeta(nextMeta);
-        await runSearch();
-        if ((nextMeta.inventory_count || 0) >= 500) break;
-      }
-      setStatus("Live inventory updated — keep filtering; more parcels may still be indexing");
+      const nextMeta = await landsignalApi.searchMeta();
+      setMeta(nextMeta);
+      setStatus(
+        `Inventory refresh running · ${nextMeta.inventory_count?.toLocaleString() ?? 0} parcels indexed so far. Click Show matches to search.`,
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Scan failed");
     } finally {
@@ -195,7 +185,33 @@ export default function SearchPage() {
     }
   }
 
-  const topFit = useMemo(() => rows[0], [rows]);
+  const sortedRows = useMemo(() => {
+    const list = [...rows];
+    const key = form.sort;
+    const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    list.sort((a, b) => {
+      switch (key) {
+        case "score_desc":
+          return num(b.opportunity) - num(a.opportunity);
+        case "risk_asc":
+          return num(a.risk) - num(b.risk);
+        case "confidence_desc":
+          return num(b.confidence) - num(a.confidence);
+        case "price_asc":
+          return (a.ask ?? Number.POSITIVE_INFINITY) - (b.ask ?? Number.POSITIVE_INFINITY);
+        case "acres_desc":
+          return num(b.acres) - num(a.acres);
+        case "discount_asc":
+          return num(a.discount_pct ?? 0) - num(b.discount_pct ?? 0);
+        case "fit_desc":
+        default:
+          return num(b.fit_score ?? b.opportunity) - num(a.fit_score ?? a.opportunity);
+      }
+    });
+    return list;
+  }, [rows, form.sort]);
+
+  const topFit = useMemo(() => sortedRows[0], [sortedRows]);
   const tips = meta?.tooltips || {};
   const inventoryStates = meta?.inventory_states || [];
 
@@ -411,19 +427,23 @@ export default function SearchPage() {
         </div>
 
         <div className="filter-actions">
-          <button type="button" className="btn btn-primary" onClick={runSearch} disabled={loading}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => void runSearch()}
+            disabled={loading}
+          >
             {loading ? "Searching…" : "Show matches"}
           </button>
           <button type="button" className="btn btn-secondary" onClick={scanFresh} disabled={scanning}>
-            {scanning ? "Scanning markets…" : "Refresh live inventory"}
+            {scanning ? "Starting refresh…" : "Refresh live inventory"}
           </button>
           <button
             type="button"
             className="btn btn-secondary"
             onClick={() => {
               setForm(DEFAULT_FORM);
-              // Pass DEFAULT explicitly — React state is async and was re-searching old filters
-              void runSearch(DEFAULT_FORM);
+              setStatus("Filters reset to Any. Click Show matches when you want results.");
             }}
           >
             Reset to Any
@@ -451,11 +471,8 @@ export default function SearchPage() {
             <select
               className="mt-1 block min-w-[220px] rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] px-3 py-2 text-sm normal-case text-[var(--ink)]"
               value={form.sort}
-              onChange={(e) => {
-                const next = { ...form, sort: e.target.value };
-                setForm(next);
-                void runSearch(next);
-              }}
+              onChange={(e) => setForm((f) => ({ ...f, sort: e.target.value }))}
+              title="Re-orders the results you already loaded — does not hit the API again"
             >
               {(
                 meta?.sort_options || [
@@ -488,21 +505,28 @@ export default function SearchPage() {
 
       {error && <div className="panel mb-4 p-4 text-[var(--danger)]">{error}</div>}
 
-      {!loading && !rows.length && (
+      {!loading && !hasSearched && (
         <div className="panel empty-state">
-          <div className="display text-2xl text-[var(--ink)]">No live matches yet</div>
+          <div className="display text-2xl text-[var(--ink)]">Ready when you are</div>
           <p className="mx-auto mt-2 max-w-lg">
-            Refresh public markets (BLM, tax sales, surplus). If you picked a state with thin coverage,
-            leave region on Any or include unpriced federal parcels.
+            Choose any filters you want, then click <strong>Show matches</strong>. Nothing searches until
+            you do — and it won’t keep re-searching on its own.
           </p>
-          <button type="button" className="btn btn-dark mt-4" onClick={scanFresh}>
-            Refresh live inventory
-          </button>
+        </div>
+      )}
+
+      {!loading && hasSearched && !rows.length && (
+        <div className="panel empty-state">
+          <div className="display text-2xl text-[var(--ink)]">No matches for this search</div>
+          <p className="mx-auto mt-2 max-w-lg">
+            Try Reset to Any, widen price/acres, or include unpriced federal / surplus parcels — then click
+            Show matches again.
+          </p>
         </div>
       )}
 
       <div className="results-grid">
-        {rows.map((row, i) => (
+        {sortedRows.map((row, i) => (
           <PropertyCard key={row.parcel_id} row={row} index={i} />
         ))}
       </div>

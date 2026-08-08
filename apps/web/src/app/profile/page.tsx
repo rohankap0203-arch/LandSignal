@@ -62,6 +62,37 @@ export default function ProfilePage() {
         ))}
       </section>
 
+      <section className="panel grid gap-4 p-5">
+        <h2 className="display text-xl font-semibold">Watchlist email sync</h2>
+        <p className="text-sm text-[var(--muted)]">
+          When you tap Add to watchlist on a property, we track LandSignal, risk, confidence, price, and
+          status. Enter an email to receive change notices (requires SMTP configured on the server).
+        </p>
+        <label className="text-xs uppercase tracking-wide text-[var(--muted)]">
+          Notification email
+          <input
+            className="field"
+            type="email"
+            placeholder="you@example.com"
+            value={String(profile.notify_email ?? "")}
+            onChange={(e) => setProfile({ ...profile, notify_email: e.target.value })}
+          />
+        </label>
+        <button
+          type="button"
+          className={`rounded-full px-3 py-1.5 text-sm border w-fit ${
+            profile.watchlist_email_updates
+              ? "bg-[var(--brand)] text-white border-[var(--brand)]"
+              : "border-[var(--line)]"
+          }`}
+          onClick={() =>
+            setProfile({ ...profile, watchlist_email_updates: !profile.watchlist_email_updates })
+          }
+        >
+          {profile.watchlist_email_updates ? "Email updates ON" : "Email updates OFF"}
+        </button>
+      </section>
+
       <section className="panel p-5">
         <h2 className="display text-xl font-semibold">Preferred strategies</h2>
         <p className="mt-1 text-sm text-[var(--muted)]">Tap to toggle. Leave all off for “any strategy.”</p>
@@ -100,6 +131,8 @@ export default function ProfilePage() {
                 target_hold_years_min: Number(profile.target_hold_years_min || 0) || undefined,
                 target_hold_years_max: Number(profile.target_hold_years_max || 0) || undefined,
                 risk_tolerance: String(profile.risk_tolerance ?? "MODERATE"),
+                notify_email: String(profile.notify_email || ""),
+                watchlist_email_updates: Boolean(profile.watchlist_email_updates),
               };
               await landsignalApi.updateProfile(body);
               setSaved(true);

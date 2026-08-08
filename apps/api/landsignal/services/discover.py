@@ -40,8 +40,9 @@ async def discover_opportunities(
     tax = PublicTaxSaleProvider()
     surplus = PublicSurplusProvider()
 
-    existing_tax = sum(1 for L in store.listings.values() if L.provider_id == "public_tax_sale")
-    # Ask each source for a large page — tax/surplus GIS layers have tens of thousands of rows
+    # Ask each source for a large page — tax/surplus GIS layers have tens of thousands of rows.
+    # Always start county layers at offset 0: a global offset skips brand-new sources that have
+    # fewer rows than already-indexed inventory. Dedup happens below via external_id.
     blm_res, tax_res, surplus_res = await asyncio.gather(
         blm.search_listings(
             {
@@ -55,11 +56,10 @@ async def discover_opportunities(
             {
                 "limit": min(8000, max(500, limit)),
                 "min_acres": min_acres,
-                # Continue past already-indexed rows so refresh grows toward 10k+
-                "offset": 0 if reset else existing_tax,
+                "offset": 0,
             }
         ),
-        surplus.search_listings({"limit": min(500, max(50, limit // 10))}),
+        surplus.search_listings({"limit": min(800, max(50, limit // 8))}),
     )
 
     listings: list[dict] = []
