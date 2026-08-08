@@ -62,7 +62,6 @@ async def validate_url(url: str, timeout: float = 3.5) -> dict[str, Any]:
                         "page not found",
                         "document not found",
                         "document is not currently available",
-                        "access denied",
                         "no longer available",
                         "this page isn't available",
                         "we can't find that page",

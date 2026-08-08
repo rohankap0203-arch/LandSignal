@@ -693,15 +693,20 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         raw=listing.raw if listing else None,
     )
     links = source.get("links") or []
-    # Only validate http(s) links; tel: and maps stay available
-    http_links = [l for l in links if str(l.get("url") or "").startswith("http")]
-    other_links = [
-        {**l, "available": True, "availability_reason": "ok", "status_code": None}
-        for l in links
-        if not str(l.get("url") or "").startswith("http")
-    ]
-    checked = await annotate_links(http_links)
-    annotated = checked + other_links
+    # Curated office / assessor URLs are shown as available — many agency sites block HEAD/bots
+    curated = {source.get("website"), source.get("parcel_lookup")}
+    annotated = []
+    to_check = []
+    for l in links:
+        url = str(l.get("url") or "")
+        if url.startswith("tel:") or l.get("kind") == "map" or url in curated:
+            annotated.append({**l, "available": True, "availability_reason": "ok", "status_code": None})
+        elif url.startswith("http"):
+            to_check.append(l)
+        else:
+            annotated.append({**l, "available": True, "availability_reason": "ok", "status_code": None})
+    if to_check:
+        annotated.extend(await annotate_links(to_check))
     # Keep "Open source posting" first when available
     annotated.sort(key=lambda l: 0 if l.get("kind") == "primary" and l.get("available") else 1)
 
