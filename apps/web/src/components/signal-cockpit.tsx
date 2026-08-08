@@ -50,9 +50,9 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
     <div className="signal-cockpit">
       <div>
         <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
-          Price (X) × buyers still in (Y)
+          Price (X) × % buyers still competing (Y)
         </div>
-        <h3 className="display text-lg font-semibold">{String(cockpit.title || "Bid clearing chart")}</h3>
+        <h3 className="display text-lg font-semibold">Clearing curve</h3>
         <p className="mt-0.5 text-xs text-[var(--muted)]">{String(cockpit.subtitle || "")}</p>
       </div>
 

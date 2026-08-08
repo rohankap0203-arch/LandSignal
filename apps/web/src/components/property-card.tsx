@@ -41,10 +41,17 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           available: true,
         }
       : null);
+  const findParcel =
+    row.links.find((l) => l.kind === "lookup" && l.available !== false) || null;
   const secondary =
-    row.links.find((l) => l !== posting && l.kind === "lookup" && l.available !== false) ||
-    row.links.find((l) => l !== posting && l.kind === "contact_web" && l.available !== false) ||
-    row.links.find((l) => l !== posting && l !== call && l.kind === "map");
+    row.links.find(
+      (l) =>
+        l !== posting &&
+        l !== findParcel &&
+        l.kind === "contact_web" &&
+        l.available !== false,
+    ) ||
+    row.links.find((l) => l !== posting && l !== findParcel && l !== call && l.kind === "map");
 
   return (
     <article className="panel property-card" style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}>
@@ -136,9 +143,14 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
               Open posting
             </a>
           )}
+          {findParcel && (
+            <a className="btn-find" href={findParcel.url} target="_blank" rel="noreferrer">
+              {findParcel.label.replace(/^Find parcel /, "Parcel ")}
+            </a>
+          )}
           {call && (
             <a className="btn-call" href={call.url}>
-              {call.label}
+              {String(call.label).match(/^\d/) ? `Call ${call.label}` : call.label}
             </a>
           )}
           {secondary && <ActionAnchor link={secondary} />}

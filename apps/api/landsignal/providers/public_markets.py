@@ -531,7 +531,7 @@ def _norm_nashville_vacant(raw: dict) -> dict | None:
         "latitude": lat,
         "longitude": lon,
         "polygon": polygon,
-        "source_url": "https://www.nashville.gov/",
+        "source_url": "https://www.padctn.org/",
         "status": "ACTIVE",
         "raw": props,
         "is_demo": False,

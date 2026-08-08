@@ -191,7 +191,9 @@ export default function ParcelIntelligencePage() {
               )}
               {phoneLink && (
                 <a className="btn-call" href={phoneLink.url}>
-                  Call {phoneLink.label}
+                  {String(phoneLink.label).startsWith("Call ")
+                    ? phoneLink.label
+                    : `Call ${phoneLink.label}`}
                 </a>
               )}
               {links

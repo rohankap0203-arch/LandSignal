@@ -157,10 +157,11 @@ OFFICES: list[dict[str, Any]] = [
         "county": "",
         "source_name": "Utah tax sale parcels (public ArcGIS)",
         "office": "County Treasurer (Utah tax sale)",
-        "website": "https://tax.utah.gov/",
+        "website": "https://tax.utah.gov/real-property",
         "phone": "801-297-2200",
-        "parcel_lookup": "https://tax.utah.gov/",
-        "how": "Active tax-sale layer — contact the county Treasurer listed on the parcel for auction rules.",
+        "parcel_lookup": "https://www.utahcounty.gov/Dept/Assess/Index.asp",
+        "posting_url": "https://tax.utah.gov/real-property",
+        "how": "Active tax-sale layer — call the county Treasurer on the parcel record for auction rules and deposit.",
     },
     {
         "provider_id": "public_tax_sale",
@@ -288,6 +289,32 @@ def resolve_office(
     return best
 
 
+def _url_path_depth(url: str | None) -> int:
+    if not url:
+        return -1
+    try:
+        from urllib.parse import urlparse
+
+        path = (urlparse(url).path or "").strip("/")
+        if not path:
+            return 0
+        return path.count("/") + 1
+    except Exception:
+        return 0
+
+
+def _pick_posting_url(source_url: str | None, office: dict[str, Any]) -> str | None:
+    """Prefer a concrete sale/office page over a bare county homepage."""
+    site = office.get("website")
+    curated = office.get("posting_url") or site
+    src = (source_url or "").strip() or None
+    if not src:
+        return curated
+    if curated and _url_path_depth(src) <= 1 and _url_path_depth(curated) > _url_path_depth(src):
+        return curated
+    return src
+
+
 def build_sourcing_bundle(
     *,
     provider_id: str | None,
@@ -305,44 +332,58 @@ def build_sourcing_bundle(
     raw = raw or {}
     links: list[dict[str, Any]] = []
 
-    # 1) Direct posting / source record
-    posting = source_url or office.get("website")
+    # 1) Direct posting / source record (tax sale page, surplus desk, CAD, BLM)
+    posting = _pick_posting_url(source_url, office)
     if posting:
         links.append(
             {
-                "label": "Open source posting",
+                "label": "Open posting",
                 "url": posting,
                 "kind": "primary",
             }
         )
 
-    # 2) Parcel lookup (assessor / PIN)
+    # 2) Find this exact parcel (APN search is more useful than a bare GIS homepage)
     lookup = office.get("parcel_lookup")
-    if apn and lookup:
-        # Prefer searchable assessor when we have APN
-        if "google.com/search" in lookup:
-            lookup = f"https://www.google.com/search?q={quote_plus(str(apn) + ' ' + (county or '') + ' ' + (state or '') + ' parcel')}"
-        links.append({"label": f"Parcel lookup · {apn}", "url": lookup, "kind": "lookup"})
-    elif lookup:
+    if apn:
+        apn_q = (
+            "https://www.google.com/search?q="
+            + quote_plus(f"{apn} {county or ''} {state or ''} parcel assessor".strip())
+        )
+        links.append({"label": f"Find parcel {apn}", "url": apn_q, "kind": "lookup"})
+        if lookup and lookup not in {posting, apn_q}:
+            links.append({"label": "County parcel viewer", "url": lookup, "kind": "lookup"})
+    elif lookup and lookup != posting:
         links.append({"label": "Parcel / assessor lookup", "url": lookup, "kind": "lookup"})
 
-    # 3) Contact office
-    contact_url = office.get("website") or f"https://www.google.com/search?q={quote_plus(office.get('office') or title)}"
-    phone = office.get("phone")
-    links.append(
-        {
-            "label": f"Call {phone}" if phone else f"Contact {office.get('office')}",
-            "url": f"tel:{phone.replace('-', '')}" if phone else contact_url,
-            "kind": "contact",
-            "phone": phone,
-        }
+    # 3) Contact office (phone first — most useful)
+    contact_url = office.get("website") or (
+        f"https://www.google.com/search?q={quote_plus(office.get('office') or title)}"
     )
+    phone = office.get("phone")
     if phone:
         links.append(
             {
-                "label": "Office website",
+                "label": phone,
+                "url": f"tel:{phone.replace('-', '').replace(' ', '').replace('(', '').replace(')', '')}",
+                "kind": "contact",
+                "phone": phone,
+            }
+        )
+    if contact_url and contact_url != posting:
+        links.append(
+            {
+                "label": f"Office site · {office.get('office')}",
                 "url": contact_url,
                 "kind": "contact_web",
+            }
+        )
+    elif not phone:
+        links.append(
+            {
+                "label": f"Office site · {office.get('office')}",
+                "url": contact_url,
+                "kind": "contact",
             }
         )
 
@@ -356,7 +397,7 @@ def build_sourcing_bundle(
             }
         )
 
-    # Dedupe by URL, keep order, allow up to 5
+    # Dedupe by URL, keep order, allow up to 6
     seen: set[str] = set()
     out_links = []
     for link in links:
@@ -369,9 +410,9 @@ def build_sourcing_bundle(
     return {
         "source_name": office.get("source_name"),
         "office": office.get("office"),
-        "website": office.get("website"),
+        "website": office.get("website") or posting,
         "phone": phone,
         "how_to_buy": office.get("how"),
         "provider_id": provider_id,
-        "links": out_links[:5],
+        "links": out_links[:6],
     }
