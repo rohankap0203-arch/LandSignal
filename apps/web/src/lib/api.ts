@@ -16,13 +16,29 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export type ActionLink = { label: string; url: string; kind: string };
+export function num(v: unknown, fallback = 0): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+export type ActionLink = {
+  label: string;
+  url: string;
+  kind: string;
+  available?: boolean;
+  availability_reason?: string;
+  status_code?: number | null;
+};
 
 export type RatingPart = {
   key: string;
   label: string;
+  simple?: string;
+  plain_english?: string;
   score: number;
+  score_display?: string;
   weight_pct: number;
+  weight_display?: string;
   evidence: string[];
   knowledge_state: string;
 };
@@ -77,12 +93,23 @@ export type RadarRow = {
 
 export type SearchMeta = {
   states: string[];
+  state_codes?: string[];
   regions: string[];
+  regions_by_state?: Record<string, string[]>;
   strategies: string[];
   hold_years: Array<string | number>;
   target_roi: Array<string | number>;
+  max_risk?: Array<string | number>;
+  min_confidence?: Array<string | number>;
   price_presets: Array<{ label: string; min: number | null; max: number | null }>;
   acre_presets: Array<{ label: string; min: number | null; max: number | null }>;
+  market_channels?: Array<{ value: string; label: string }>;
+  unpriced_options?: Array<{ value: string; label: string }>;
+  sort_options?: Array<{ value: string; label: string }>;
+  tooltips?: Record<string, { title: string; body: string }>;
+  inventory_states?: string[];
+  inventory_count?: number;
+  allows_custom?: string[];
 };
 
 export type SearchFilters = {
@@ -99,6 +126,9 @@ export type SearchFilters = {
   hold_years?: number | null;
   target_roi?: number | null;
   include_unpriced?: boolean;
+  unpriced_mode?: string;
+  market_channel?: string;
+  sort?: string;
   q?: string;
 };
 
@@ -115,7 +145,8 @@ function toQuery(filters: SearchFilters): string {
 export const landsignalApi = {
   radar: (filters: SearchFilters = {}) => api<RadarRow[]>(`/radar${toQuery(filters)}`),
   searchMeta: () => api<SearchMeta>("/search/meta"),
-  providers: () => api<Array<{ id: string; kind: string; name: string; status: string; detail?: string }>>("/providers"),
+  providers: () =>
+    api<Array<{ id: string; kind: string; name: string; status: string; detail?: string }>>("/providers"),
   parcel: (id: string) => api<Record<string, unknown>>(`/parcels/${id}`),
   memo: (id: string) =>
     api<{ markdown: string; verdict: string }>(`/parcels/${id}/memo`, { method: "POST" }),
@@ -131,10 +162,16 @@ export const landsignalApi = {
   ingestManual: (body: Record<string, unknown>) =>
     api("/ingest/manual", { method: "POST", body: JSON.stringify(body) }),
   analyze: (id: string) => api(`/parcels/${id}/analyze`, { method: "POST" }),
-  discover: (limit = 30, minAcres = 1, reset = true) =>
-    api<Record<string, unknown>>(
-      `/discover?limit=${limit}&min_acres=${minAcres}&max_acres=2500&reset=${reset}`,
-      { method: "POST" },
-    ),
+  discover: (limit = 48, minAcres = 1, reset = false, states?: string, background = true) => {
+    const qs = new URLSearchParams({
+      limit: String(limit),
+      min_acres: String(minAcres),
+      max_acres: "2500",
+      reset: String(reset),
+      background: String(background),
+    });
+    if (states) qs.set("states", states);
+    return api<Record<string, unknown>>(`/discover?${qs}`, { method: "POST" });
+  },
   health: () => api<Record<string, unknown>>("/health"),
 };

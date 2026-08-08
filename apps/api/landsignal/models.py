@@ -94,8 +94,8 @@ class InvestorProfileUpdate(BaseModel):
     target_hold_years_min: int | None = None
     target_hold_years_max: int | None = None
     min_target_irr: float | None = None
-    preferred_strategies: list[Strategy] = Field(default_factory=list)
-    risk_tolerance: str = "MODERATE"
+    preferred_strategies: list[Strategy] | list[str] = Field(default_factory=list)
+    risk_tolerance: str | float | int = "MODERATE"
 
 
 class ParcelRecord(BaseModel):
@@ -239,7 +239,7 @@ class RadarRow(BaseModel):
     summary: str
     match_reasons: list[str] = Field(default_factory=list)
     rating_breakdown: list[dict[str, Any]] = Field(default_factory=list)
-    links: list[dict[str, str]] = Field(default_factory=list)
+    links: list[dict[str, Any]] = Field(default_factory=list)
     latitude: float | None = None
     longitude: float | None = None
     provider_id: str | None = None

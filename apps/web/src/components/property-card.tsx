@@ -2,11 +2,38 @@
 
 import Link from "next/link";
 import { SignalBadge } from "@/components/signal-badge";
-import type { RadarRow } from "@/lib/api";
+import type { ActionLink, RadarRow } from "@/lib/api";
+
+function ActionAnchor({ link, primary }: { link: ActionLink; primary?: boolean }) {
+  const available = link.available !== false;
+  if (!available) {
+    return (
+      <span
+        className={`link-disabled ${primary ? "primary" : ""}`}
+        title={link.availability_reason || "This document is not currently available"}
+      >
+        {link.label} (unavailable)
+      </span>
+    );
+  }
+  return (
+    <a className={primary ? "primary" : undefined} href={link.url} target="_blank" rel="noreferrer">
+      {link.label}
+    </a>
+  );
+}
 
 export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
-  const primary = row.links.find((l) => l.kind === "primary") || row.links[0];
-  const secondary = row.links.find((l) => l.kind === "map") || row.links[1];
+  const primary =
+    row.links.find((l) => l.kind === "primary" && l.available !== false) ||
+    row.links.find((l) => l.available !== false && l.kind !== "map") ||
+    row.links.find((l) => l.kind === "primary") ||
+    row.links[0];
+  const secondary =
+    row.links.find((l) => l !== primary && l.kind === "contact" && l.available !== false) ||
+    row.links.find((l) => l !== primary && l.kind === "map") ||
+    row.links.find((l) => l !== primary);
+  const tertiary = row.links.find((l) => l !== primary && l !== secondary);
 
   return (
     <article className="panel property-card" style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}>
@@ -72,16 +99,9 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
         </ul>
 
         <div className="card-actions">
-          {primary && (
-            <a className="primary" href={primary.url} target="_blank" rel="noreferrer">
-              {primary.label}
-            </a>
-          )}
-          {secondary && (
-            <a href={secondary.url} target="_blank" rel="noreferrer">
-              {secondary.label}
-            </a>
-          )}
+          {primary && <ActionAnchor link={primary} primary />}
+          {secondary && <ActionAnchor link={secondary} />}
+          {tertiary && tertiary.kind !== "map" && <ActionAnchor link={tertiary} />}
           <Link href={`/parcels/${row.parcel_id}`}>Full intelligence</Link>
         </div>
       </div>

@@ -75,8 +75,8 @@ export default function MapPage() {
                   <Link href={`/parcels/${r.parcel_id}`}>{r.property_name}</Link>
                 </td>
                 <td>{r.location}</td>
-                <td className="mono">{num(r.opportunity, 1)}</td>
-                <td>{r.best_strategy}</td>
+                <td className="mono">{num(r.opportunity).toFixed(1)}</td>
+                <td>{r.best_strategy_label || r.best_strategy}</td>
               </tr>
             ))}
           </tbody>

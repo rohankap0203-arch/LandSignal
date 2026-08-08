@@ -106,7 +106,7 @@ async def discover_opportunities(
                 by_provider.pop(prov, None)
 
     parcel_ids: list[UUID] = []
-    scored = 0
+    to_score: list[UUID] = []
     for raw in diversified:
         existing = next(
             (
@@ -119,6 +119,8 @@ async def discover_opportunities(
         )
         if existing:
             parcel_ids.append(existing.parcel_id)
+            if store.latest_score(existing.parcel_id) is None:
+                to_score.append(existing.parcel_id)
             continue
         parcel, listing = store.upsert_manual({**raw, "provider_id": raw.get("provider_id") or "manual"})
         parcel.is_demo = False
@@ -128,13 +130,25 @@ async def discover_opportunities(
             parcel.geometry_confidence = max(parcel.geometry_confidence or 0, 75.0)
         store.parcels[parcel.id] = parcel
         store.listings[listing.id] = listing
-        try:
-            score = await analyze_parcel(store, parcel.id, settings)
-            evaluate_rules(store, score, settings)
-            scored += 1
-        except Exception as exc:  # noqa: BLE001
-            log.warning("discover_analyze_failed", parcel_id=str(parcel.id), error=str(exc))
         parcel_ids.append(parcel.id)
+        to_score.append(parcel.id)
+
+    # Score in parallel — sequential enrichment was making the UI feel stuck for minutes
+    sem = asyncio.Semaphore(6)
+    scored = 0
+
+    async def _score_one(pid: UUID) -> None:
+        nonlocal scored
+        async with sem:
+            try:
+                score = await analyze_parcel(store, pid, settings)
+                evaluate_rules(store, score, settings)
+                scored += 1
+            except Exception as exc:  # noqa: BLE001
+                log.warning("discover_analyze_failed", parcel_id=str(pid), error=str(exc))
+
+    if to_score:
+        await asyncio.gather(*[_score_one(pid) for pid in to_score])
 
     return {
         "imported": len(set(parcel_ids)),

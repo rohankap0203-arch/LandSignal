@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SignalBadge } from "@/components/signal-badge";
-import { landsignalApi } from "@/lib/api";
+import { landsignalApi, type ActionLink } from "@/lib/api";
 
 const ParcelMap = dynamic(() => import("@/components/parcel-map").then((m) => m.ParcelMap), {
   ssr: false,
@@ -13,12 +13,29 @@ const ParcelMap = dynamic(() => import("@/components/parcel-map").then((m) => m.
 
 type AnyRec = Record<string, unknown>;
 
+function LinkButton({ link, dark }: { link: ActionLink; dark?: boolean }) {
+  const available = link.available !== false;
+  if (!available) {
+    return (
+      <span className="btn btn-ghost opacity-45 cursor-not-allowed" title="Document not currently available">
+        {link.label} (unavailable)
+      </span>
+    );
+  }
+  return (
+    <a href={link.url} target="_blank" rel="noreferrer" className={`btn ${dark ? "btn-dark" : "btn-ghost"}`}>
+      {link.label}
+    </a>
+  );
+}
+
 export default function ParcelIntelligencePage() {
   const params = useParams<{ id: string }>();
   const [data, setData] = useState<AnyRec | null>(null);
   const [memo, setMemo] = useState<string | null>(null);
   const [verdict, setVerdict] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ddOpen, setDdOpen] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     landsignalApi
@@ -34,13 +51,15 @@ export default function ParcelIntelligencePage() {
   const listing = data.listing as AnyRec | null;
   const score = data.score as AnyRec | null;
   const enrichment = data.enrichment as AnyRec | null;
-  const links = (data.links as Array<{ label: string; url: string }>) || [];
+  const links = (data.links as ActionLink[]) || [];
   const price = data.price as AnyRec;
   const ratings = (data.rating_breakdown as AnyRec[]) || [];
-  const dd = (data.due_diligence as AnyRec[]) || [];
+  const dd = (data.due_diligence_guided as AnyRec[]) || [];
+  const land = (data.land_readouts as Record<string, AnyRec>) || {};
+  const scenarios = (data.scenarios_human as AnyRec[]) || [];
+  const explained = (data.score_explained as Record<string, string>) || {};
   const narratives = (enrichment?.narratives as AnyRec) || {};
   const whyUnsold = (narratives.why_unsold as AnyRec) || {};
-  const scenarios = (enrichment?.scenarios as AnyRec[]) || [];
 
   return (
     <div className="space-y-5">
@@ -71,22 +90,22 @@ export default function ParcelIntelligencePage() {
 
             <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
               <Stat label={String(price?.label || "Price")} value={String(price?.display || "Contact source")} />
-              <Stat label="LandSignal" value={`${Number(score?.opportunity || 0).toFixed(0)}/100`} />
-              <Stat label="Risk" value={`${Number(score?.risk || 0).toFixed(0)}/100`} />
-              <Stat label="Confidence" value={`${Number(score?.confidence || 0).toFixed(0)}/100`} />
+              <Stat
+                label="LandSignal"
+                value={`${Number(score?.opportunity || 0).toFixed(0)}/100`}
+                hint={explained.landsignal}
+              />
+              <Stat label="Risk" value={`${Number(score?.risk || 0).toFixed(0)}/100`} hint={explained.risk} />
+              <Stat
+                label="Confidence"
+                value={`${Number(score?.confidence || 0).toFixed(0)}/100`}
+                hint={explained.confidence}
+              />
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
               {links.map((link, i) => (
-                <a
-                  key={link.url}
-                  href={link.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={`btn ${i === 0 ? "btn-dark" : "btn-ghost"}`}
-                >
-                  {link.label}
-                </a>
+                <LinkButton key={`${link.url}-${i}`} link={link} dark={i === 0 && link.available !== false} />
               ))}
               <button
                 type="button"
@@ -129,7 +148,8 @@ export default function ParcelIntelligencePage() {
             {String((whyUnsold.most_likely as AnyRec)?.reason || "See evidence below")}
           </p>
           <ul className="reasons">
-            {(((whyUnsold.most_likely as AnyRec)?.evidence as string[]) ||
+            {(
+              ((whyUnsold.most_likely as AnyRec)?.evidence as string[]) ||
               (score?.why_still_available as string[]) ||
               []
             ).map((x) => (
@@ -142,69 +162,76 @@ export default function ParcelIntelligencePage() {
       <section className="panel p-5">
         <h2 className="display text-xl font-semibold">Backed rating breakdown</h2>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          Each category contributes to LandSignal with explicit evidence — missing data lowers confidence, not
-          invents quality.
+          Each bar is a piece of the LandSignal score. Read the plain-English line first, then the evidence.
         </p>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {ratings.map((r) => (
-            <div key={String(r.key)} className="rounded-2xl bg-[var(--bg-soft)] p-4">
-              <div className="flex items-center justify-between gap-2">
-                <div className="font-semibold">{String(r.label)}</div>
-                <div className="text-sm font-semibold">
-                  {Number(r.score).toFixed(0)} · wt {Number(r.weight_pct)}%
+          {ratings.map((r) => {
+            const scoreN = Number(r.score || 0);
+            return (
+              <div key={String(r.key)} className="rounded-2xl bg-[var(--bg-soft)] p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-semibold">{String(r.label)}</div>
+                  <div className="text-sm font-semibold">{String(r.score_display || `${scoreN.toFixed(0)}/100`)}</div>
                 </div>
+                <p className="mt-1 text-sm text-[var(--muted)]">{String(r.simple || "")}</p>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
+                  <div
+                    className="h-full rounded-full bg-[var(--brand-soft)] transition-all"
+                    style={{ width: `${Math.max(4, Math.min(100, scoreN))}%` }}
+                  />
+                </div>
+                <div className="mt-2 text-xs text-[var(--muted)]">
+                  {String(r.weight_display || `${r.weight_pct}% of score`)} · {String(r.knowledge_state)}
+                </div>
+                <p className="mt-2 text-sm font-medium">{String(r.plain_english || "")}</p>
+                <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
+                  {((r.evidence as string[]) || []).map((e) => (
+                    <li key={e}>• {e}</li>
+                  ))}
+                </ul>
               </div>
-              <div className="mt-1 text-xs uppercase tracking-wide text-[var(--muted)]">
-                {String(r.knowledge_state)}
-              </div>
-              <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
-                {((r.evidence as string[]) || []).map((e) => (
-                  <li key={e}>• {e}</li>
-                ))}
-              </ul>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <EnrichCard title="Soils" prov={enrichment?.soil as AnyRec} />
-        <EnrichCard title="Flood" prov={enrichment?.flood as AnyRec} />
-        <EnrichCard title="Wetlands" prov={enrichment?.wetlands as AnyRec} />
-        <EnrichCard title="Transmission" prov={enrichment?.infrastructure as AnyRec} />
+        {(["soil", "flood", "wetlands", "transmission"] as const).map((key) => (
+          <HumanCard key={key} data={land[key]} />
+        ))}
       </section>
 
       {!!scenarios.length && (
         <section className="panel p-5">
           <h2 className="display text-xl font-semibold">Hold-period farmland scenarios</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">Estimated — for screening, not a commitment.</p>
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead>
-                <tr className="text-[var(--muted)]">
-                  <th className="py-2">Case</th>
-                  <th>NOI</th>
-                  <th>IRR</th>
-                  <th>NPV</th>
-                  <th>Breakeven land</th>
-                </tr>
-              </thead>
-              <tbody>
-                {scenarios.map((s) => (
-                  <tr key={String(s.case_type)} className="border-t border-[var(--line)]">
-                    <td className="py-2 font-semibold">{String(s.case_type)}</td>
-                    <td>${Number(s.noi || 0).toLocaleString()}</td>
-                    <td>{s.irr != null ? `${(Number(s.irr) * 100).toFixed(1)}%` : "n/a"}</td>
-                    <td>${Number(s.npv || 0).toLocaleString()}</td>
-                    <td>
-                      {s.breakeven_land_value != null
-                        ? `$${Number(s.breakeven_land_value).toLocaleString()}`
-                        : "n/a"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Simple what-if screens for farming income. These are estimates for sorting deals — not a promise.
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {scenarios.map((s) => (
+              <div key={String(s.case_type)} className="rounded-2xl bg-[var(--bg-soft)] p-4">
+                <div className="font-semibold">{String(s.case_label || s.case_type)}</div>
+                <p className="mt-2 text-sm text-[var(--muted)]">{String(s.plain_english || "")}</p>
+                <dl className="mt-3 grid gap-2 text-sm">
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-[var(--muted)]">Yearly income (NOI)</dt>
+                    <dd className="font-semibold">{String(s.noi_display)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-[var(--muted)]">Return (IRR)</dt>
+                    <dd className="font-semibold">{String(s.irr_display)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-[var(--muted)]">Value today (NPV)</dt>
+                    <dd className="font-semibold">{String(s.npv_display)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-[var(--muted)]">Breakeven land price</dt>
+                    <dd className="font-semibold">{String(s.breakeven_display)}</dd>
+                  </div>
+                </dl>
+              </div>
+            ))}
           </div>
         </section>
       )}
@@ -213,13 +240,47 @@ export default function ParcelIntelligencePage() {
         <h2 className="display text-xl font-semibold">
           Manual due diligence · readiness {Number(score?.deal_readiness || 0).toFixed(0)}/100
         </h2>
-        <ul className="mt-3 columns-1 gap-3 text-sm md:columns-2">
-          {dd.map((item) => (
-            <li key={String(item.label)} className="mb-2">
-              ☐ {String(item.label)}
-            </li>
-          ))}
-        </ul>
+        <p className="mt-1 text-sm text-[var(--muted)]">
+          {explained.deal_readiness ||
+            "A checklist of real next steps. Tap a row to see why it matters and how to start."}
+        </p>
+        <div className="mt-4 grid gap-2">
+          {dd.map((item) => {
+            const label = String(item.label);
+            const open = ddOpen[label];
+            return (
+              <button
+                key={label}
+                type="button"
+                className="rounded-2xl border border-[var(--line)] bg-[var(--bg-soft)] p-3 text-left transition hover:border-[var(--brand-soft)]"
+                onClick={() => setDdOpen((s) => ({ ...s, [label]: !s[label] }))}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-semibold">
+                    {item.completed ? "☑" : "☐"} {label}
+                  </div>
+                  <span className="rounded-full bg-[var(--bg-elevated)] px-2 py-0.5 text-xs font-semibold">
+                    {String(item.priority || "Soon")}
+                  </span>
+                </div>
+                {open && (
+                  <div className="mt-2 space-y-1 text-sm text-[var(--muted)]">
+                    <p>
+                      <strong className="text-[var(--ink)]">Why it matters:</strong>{" "}
+                      {String(item.why_it_matters)}
+                    </p>
+                    <p>
+                      <strong className="text-[var(--ink)]">How to start:</strong> {String(item.how_to_start)}
+                    </p>
+                  </div>
+                )}
+              </button>
+            );
+          })}
+          {!dd.length && (
+            <p className="text-sm text-[var(--muted)]">Due diligence checklist will appear after analysis.</p>
+          )}
+        </div>
       </section>
 
       {memo && (
@@ -235,30 +296,41 @@ export default function ParcelIntelligencePage() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-2xl bg-[var(--bg-soft)] p-3">
+    <div className="rounded-2xl bg-[var(--bg-soft)] p-3" title={hint}>
       <div className="text-[10px] uppercase tracking-wide text-[var(--muted)]">{label}</div>
       <div className="mt-1 font-semibold overflow-wrap-anywhere">{value}</div>
     </div>
   );
 }
 
-function EnrichCard({ title, prov }: { title: string; prov?: AnyRec }) {
-  const state = String(prov?.knowledge_state || "UNKNOWN");
-  const payload = prov?.normalized || prov?.value;
+function HumanCard({ data }: { data?: AnyRec }) {
+  if (!data) {
+    return (
+      <div className="panel p-4">
+        <h3 className="font-semibold">Land screen</h3>
+        <p className="mt-2 text-sm text-[var(--muted)]">No reading yet — confidence reduced.</p>
+      </div>
+    );
+  }
   return (
     <div className="panel p-4">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="font-semibold">{title}</h3>
-        <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">{state}</span>
+        <h3 className="font-semibold">{String(data.title)}</h3>
+        <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+          {String(data.level || data.knowledge_state || "")}
+        </span>
       </div>
-      <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs text-[var(--muted)]">
-        {payload ? JSON.stringify(payload, null, 2) : "No reading from source yet — confidence reduced."}
-      </pre>
+      <p className="mt-2 text-sm leading-relaxed">{String(data.plain_english)}</p>
+      <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
+        {((data.bullets as string[]) || []).map((b) => (
+          <li key={b}>• {b}</li>
+        ))}
+      </ul>
       <div className="mt-2 text-[11px] text-[var(--muted)]">
-        Source: {String(prov?.source || "n/a")}
-        {prov?.confidence != null ? ` · confidence ${String(prov.confidence)}` : ""}
+        Source: {String(data.source || "n/a")}
+        {data.confidence != null ? ` · evidence strength ${String(data.confidence)}` : ""}
       </div>
     </div>
   );

@@ -105,21 +105,42 @@ async def providers() -> list[ProviderInfo]:
 
 @router.post("/discover")
 async def discover(
-    limit: int = 24,
-    min_acres: float = 20.0,
+    limit: int = 48,
+    min_acres: float = 1.0,
     max_acres: float = 2500.0,
     reset: bool = False,
+    states: str | None = None,
+    background: bool = True,
 ) -> dict[str, Any]:
-    """Pull real public inventory (BLM LPAD + any configured licensed feeds), enrich, score."""
+    """Pull real public inventory. Default background=true so the UI is not blocked for minutes."""
+    import asyncio
+
     store = get_store(get_settings().demo_seed)
-    return await discover_opportunities(
-        store,
-        get_settings(),
-        limit=limit,
-        min_acres=min_acres,
-        max_acres=max_acres,
-        reset=reset,
-    )
+    settings = get_settings()
+    state_list = [s.strip().upper() for s in states.split(",") if s.strip()] if states else None
+
+    async def _run() -> dict[str, Any]:
+        return await discover_opportunities(
+            store,
+            settings,
+            limit=limit,
+            min_acres=min_acres,
+            max_acres=max_acres,
+            reset=reset,
+            states=state_list,
+        )
+
+    if background:
+        asyncio.create_task(_run())
+        return {
+            "started": True,
+            "background": True,
+            "limit": limit,
+            "reset": reset,
+            "inventory_now": sum(1 for p in store.parcels.values() if not p.is_demo),
+            "note": "Scan started in background. Results appear as parcels finish scoring — refresh search shortly.",
+        }
+    return await _run()
 
 
 @router.post("/ingest/manual")
@@ -174,6 +195,46 @@ def _strategy_label(s) -> str:
     return s.value.replace("_", " ").title()
 
 
+def _normalize_state(state: str | None) -> str | None:
+    if not state or state.upper() in ("ANY", ""):
+        return None
+    raw = state.strip()
+    if "—" in raw:
+        raw = raw.split("—", 1)[0].strip()
+    if "-" in raw and len(raw) > 2:
+        # tolerate "CA - California"
+        left = raw.split("-", 1)[0].strip()
+        if len(left) == 2:
+            raw = left
+    return raw.upper()[:2] if len(raw) >= 2 else raw.upper()
+
+
+def _sort_rows(rows: list[RadarRow], sort: str | None) -> list[RadarRow]:
+    key = (sort or "fit_desc").lower()
+
+    def discount_key(r: RadarRow) -> float:
+        # more negative discount = bigger bargain
+        return r.discount_pct if r.discount_pct is not None else 999.0
+
+    if key == "score_desc":
+        rows.sort(key=lambda r: (r.opportunity, r.fit_score or 0), reverse=True)
+    elif key == "risk_asc":
+        rows.sort(key=lambda r: (r.risk, -(r.fit_score or 0)))
+    elif key == "confidence_desc":
+        rows.sort(key=lambda r: (r.confidence, r.opportunity), reverse=True)
+    elif key == "price_asc":
+        rows.sort(key=lambda r: (r.ask is None, r.ask if r.ask is not None else 0))
+    elif key == "price_desc":
+        rows.sort(key=lambda r: (r.ask is None, -(r.ask or 0)))
+    elif key == "acres_desc":
+        rows.sort(key=lambda r: (r.acres is None, -(r.acres or 0)))
+    elif key == "discount_asc":
+        rows.sort(key=discount_key)
+    else:
+        rows.sort(key=lambda r: (r.fit_score or 0, r.opportunity), reverse=True)
+    return rows
+
+
 @router.get("/radar", response_model=list[RadarRow])
 async def radar(
     state: str | None = None,
@@ -189,9 +250,14 @@ async def radar(
     hold_years: int | None = None,
     target_roi: float | None = None,
     include_unpriced: bool = True,
+    unpriced_mode: str | None = None,
+    market_channel: str | None = None,
+    sort: str | None = "fit_desc",
     q: str | None = None,
+    broaden: bool = True,
 ) -> list[RadarRow]:
     """Search results with investor filters. Pass nothing / omit for Any."""
+    from landsignal.geo_meta import region_matches
     from landsignal.scoring.engine import personalized_score
     from landsignal.services.presentation import (
         build_action_links,
@@ -202,15 +268,15 @@ async def radar(
     )
 
     store = get_store(get_settings().demo_seed)
-    for pid in list(store.parcels.keys()):
-        if store.latest_score(pid) is None:
-            await analyze_parcel(store, pid)
+    # Never block search on enrichment — unscored parcels are omitted until discover finishes them
 
+    state_code = _normalize_state(state)
     filters = {
-        "state": state,
+        "state": state_code,
         "region": region,
         "hold_years": hold_years,
         "target_roi": target_roi,
+        "market_channel": market_channel,
     }
 
     profile = dict(store.investor_profile)
@@ -223,240 +289,274 @@ async def radar(
         profile["max_price_usd"] = max_price
     if min_acres is not None:
         profile["min_acres"] = min_acres
-    if strategy and strategy.upper() != "ANY":
+    if strategy and strategy.upper() not in ("ANY", "CUSTOM", ""):
         profile["preferred_strategies"] = [strategy.upper()]
 
-    rows: list[RadarRow] = []
-    for parcel in store.parcels.values():
-        score = store.latest_score(parcel.id)
-        listing = store.listing_for_parcel(parcel.id)
-        if not score or not listing:
-            continue
-        if parcel.is_demo:
-            continue
+    mode = (unpriced_mode or ("include" if include_unpriced else "priced")).lower()
+    channel = (market_channel or "Any").strip()
 
-        # Filters (None / missing = Any)
-        if state and state.upper() not in ("ANY", "") and (parcel.state or "").upper() != state.upper():
-            continue
-        region_hay = f"{parcel.county or ''} {parcel.state or ''} {listing.title or ''}".lower()
-        if region and region.lower() not in ("any", ""):
-            token = region.lower().replace(" county", "").strip()
-            if token not in region_hay and region.lower() not in region_hay:
-                continue
-        ask = listing.asking_price_usd
-        if not include_unpriced and (ask is None or ask <= 0):
-            continue
-        if min_price is not None and (ask is None or ask < min_price):
-            continue
-        if max_price is not None and ask is not None and ask > max_price:
-            continue
-        if min_acres is not None and (parcel.acreage is None or parcel.acreage < min_acres):
-            continue
-        if max_acres is not None and parcel.acreage is not None and parcel.acreage > max_acres:
-            continue
-        if strategy and strategy.upper() not in ("ANY", ""):
-            if not score.best_strategy or score.best_strategy.value != strategy.upper():
-                # allow secondary
-                if not score.secondary_strategy or score.secondary_strategy.value != strategy.upper():
-                    continue
-        if min_score is not None and score.opportunity < min_score:
-            continue
-        if max_risk is not None and score.risk > max_risk:
-            continue
-        if min_confidence is not None and score.confidence < min_confidence:
-            continue
-        if q:
-            blob = f"{listing.title} {parcel.county} {parcel.state} {parcel.apn} {listing.description or ''}".lower()
-            if q.lower() not in blob:
+    async def build_rows(*, apply_region: bool, apply_strict_channel: bool) -> list[RadarRow]:
+        out: list[RadarRow] = []
+        for parcel in store.parcels.values():
+            score = store.latest_score(parcel.id)
+            listing = store.listing_for_parcel(parcel.id)
+            if not score or not listing or parcel.is_demo:
                 continue
 
-        fit = personalized_score(
-            score.opportunity,
-            profile,
-            ask,
-            parcel.acreage,
-            score.best_strategy.value if score.best_strategy else None,
-            score.risk,
-        )
-        # Hold / ROI soft fit adjustments
-        if hold_years is not None:
-            if hold_years <= 5 and score.best_strategy and score.best_strategy.value in ("ENERGY", "FARMLAND"):
-                fit = min(100, fit + 4)
-            if hold_years >= 10 and score.best_strategy and score.best_strategy.value in ("LAND_BANK", "DEVELOPMENT", "TIMBER"):
-                fit = min(100, fit + 5)
-        if target_roi is not None:
-            enrichment = store.enrichments.get(parcel.id)
-            base_sc = None
-            if enrichment and enrichment.scenarios:
-                base_sc = next((s for s in enrichment.scenarios if s.get("case_type") == "BASE"), None)
-            if base_sc and base_sc.get("irr") is not None:
-                if base_sc["irr"] + 1e-9 >= target_roi:
-                    fit = min(100, fit + 6)
-                else:
-                    fit = max(0, fit - 8)
-
-        enrichment = store.enrichments.get(parcel.id)
-        pd = price_display(ask, listing.provider_id)
-        vd = value_display(
-            score.estimated_value_usd,
-            (enrichment.comps.knowledge_state.value if enrichment and enrichment.comps else "ESTIMATED"),
-        )
-        ppa = listing.price_per_acre_usd
-        if ppa is None and ask and parcel.acreage:
-            ppa = ask / parcel.acreage
-        links = build_action_links(
-            provider_id=listing.provider_id,
-            source_url=listing.source_url,
-            title=listing.title or "",
-            apn=parcel.apn,
-            state=parcel.state,
-            county=parcel.county,
-            latitude=parcel.latitude,
-            longitude=parcel.longitude,
-            raw=listing.raw,
-        )
-        reasons = match_reasons(
-            score=score,
-            parcel=parcel,
-            listing=listing,
-            filters=filters,
-            enrichment=enrichment,
-        )
-        acres = parcel.acreage
-        acres_display = f"{acres:,.2f} acres" if acres is not None else "Acreage not published"
-        discount_display = (
-            f"{score.asking_discount_pct:+.1f}% vs model"
-            if score.asking_discount_pct is not None
-            else "No retail ask to compare"
-        )
-        risk_label = (
-            "Lower screened risk"
-            if score.risk < 30
-            else "Moderate screened risk"
-            if score.risk < 55
-            else "Elevated screened risk"
-        )
-        conf_label = (
-            "Strong evidence base"
-            if score.confidence >= 70
-            else "Moderate evidence base"
-            if score.confidence >= 45
-            else "Thin evidence — verify manually"
-        )
-        summary = (
-            f"{_strategy_label(score.best_strategy)} thesis · "
-            f"LandSignal {score.opportunity:.0f}/100 · Risk {score.risk:.0f}/100 · "
-            f"{pd['display']}"
-        )
-        headline = (
-            f"{abs(score.asking_discount_pct):.0f}% below model"
-            if score.asking_discount_pct is not None and score.asking_discount_pct < -8
-            else f"Asymmetry {score.asymmetry:.0f}/100"
-        )
-
-        rows.append(
-            RadarRow(
-                parcel_id=parcel.id,
-                listing_id=listing.id,
-                signal=score.signal,
-                property_name=listing.title or parcel.apn or str(parcel.id),
-                location=f"{parcel.county or 'County TBD'}, {parcel.state or 'US'}",
+            if state_code and (parcel.state or "").upper() != state_code:
+                continue
+            if apply_region and not region_matches(
+                region=region,
                 state=parcel.state,
                 county=parcel.county,
-                region=f"{parcel.county or ''}, {parcel.state or ''}".strip(", "),
-                acres=acres,
-                acres_display=acres_display,
-                ask=ask,
-                price_display=pd["display"],
-                price_label=pd["label"],
-                price_per_acre=ppa,
-                price_per_acre_display=f"${ppa:,.0f}/ac" if ppa else "n/a — no priced ask",
-                estimated_value=score.estimated_value_usd,
-                estimated_value_display=vd["display"],
-                value_knowledge=vd["knowledge_state"],
-                discount_pct=score.asking_discount_pct,
-                discount_display=discount_display,
-                opportunity=score.opportunity,
-                asymmetry=score.asymmetry,
-                risk=score.risk,
-                confidence=score.confidence,
-                deal_readiness=score.deal_readiness,
-                best_strategy=score.best_strategy,
-                best_strategy_label=_strategy_label(score.best_strategy),
-                secondary_strategy_label=_strategy_label(score.secondary_strategy),
-                freshness_hours=(
-                    (datetime.now(timezone.utc) - listing.last_seen_at).total_seconds() / 3600
-                    if listing.last_seen_at
-                    else None
-                ),
-                status=listing.status,
-                status_label="Available" if listing.status == "ACTIVE" else listing.status.title(),
-                is_demo=False,
-                personalized_opportunity=fit,
-                fit_score=fit,
-                summary=summary,
-                match_reasons=reasons,
-                rating_breakdown=rating_breakdown(score),
-                links=links,
+                title=listing.title,
+            ):
+                continue
+
+            ask = listing.asking_price_usd
+            priced = ask is not None and ask > 0
+            if mode == "priced" and not priced:
+                continue
+            if mode == "unpriced_only" and priced:
+                continue
+            if channel and channel.upper() not in ("ANY", ""):
+                if channel == "priced_only":
+                    if not priced:
+                        continue
+                elif apply_strict_channel and listing.provider_id != channel and not (
+                    channel == "manual" and listing.provider_id in ("manual", "csv")
+                ):
+                    continue
+
+            if min_price is not None and (ask is None or ask < min_price):
+                continue
+            if max_price is not None and ask is not None and ask > max_price:
+                continue
+            if min_acres is not None and (parcel.acreage is None or parcel.acreage < min_acres):
+                continue
+            if max_acres is not None and parcel.acreage is not None and parcel.acreage > max_acres:
+                continue
+            if strategy and strategy.upper() not in ("ANY", "CUSTOM", ""):
+                known = {"FARMLAND", "DEVELOPMENT", "LAND_BANK", "RECREATIONAL", "ENERGY", "TIMBER"}
+                s_up = strategy.upper().replace(" ", "_")
+                if s_up in known:
+                    if not score.best_strategy or score.best_strategy.value != s_up:
+                        if not score.secondary_strategy or score.secondary_strategy.value != s_up:
+                            continue
+                else:
+                    blob = f"{listing.title} {listing.description or ''} {_strategy_label(score.best_strategy)}".lower()
+                    if strategy.lower() not in blob and s_up.lower().replace("_", " ") not in blob:
+                        continue
+            if min_score is not None and score.opportunity < min_score:
+                continue
+            if max_risk is not None and score.risk > max_risk:
+                continue
+            if min_confidence is not None and score.confidence < min_confidence:
+                continue
+            if q:
+                blob = f"{listing.title} {parcel.county} {parcel.state} {parcel.apn} {listing.description or ''}".lower()
+                if q.lower() not in blob:
+                    continue
+
+            fit = personalized_score(
+                score.opportunity,
+                profile,
+                ask,
+                parcel.acreage,
+                score.best_strategy.value if score.best_strategy else None,
+                score.risk,
+            )
+            if hold_years is not None:
+                if hold_years <= 5 and score.best_strategy and score.best_strategy.value in ("ENERGY", "FARMLAND"):
+                    fit = min(100, fit + 4)
+                if hold_years >= 10 and score.best_strategy and score.best_strategy.value in (
+                    "LAND_BANK",
+                    "DEVELOPMENT",
+                    "TIMBER",
+                ):
+                    fit = min(100, fit + 5)
+            enrichment = store.enrichments.get(parcel.id)
+            if target_roi is not None:
+                base_sc = None
+                if enrichment and enrichment.scenarios:
+                    base_sc = next((s for s in enrichment.scenarios if s.get("case_type") == "BASE"), None)
+                if base_sc and base_sc.get("irr") is not None:
+                    if base_sc["irr"] + 1e-9 >= target_roi:
+                        fit = min(100, fit + 6)
+                    else:
+                        fit = max(0, fit - 8)
+
+            pd = price_display(ask, listing.provider_id)
+            vd = value_display(
+                score.estimated_value_usd,
+                (enrichment.comps.knowledge_state.value if enrichment and enrichment.comps else "ESTIMATED"),
+            )
+            ppa = listing.price_per_acre_usd
+            if ppa is None and ask and parcel.acreage:
+                ppa = ask / parcel.acreage
+            links = build_action_links(
+                provider_id=listing.provider_id,
+                source_url=listing.source_url,
+                title=listing.title or "",
+                apn=parcel.apn,
+                state=parcel.state,
+                county=parcel.county,
                 latitude=parcel.latitude,
                 longitude=parcel.longitude,
-                provider_id=listing.provider_id,
-                provider_label=PROVIDER_LABELS.get(listing.provider_id, listing.provider_id or "Public source"),
-                headline_metric=headline,
-                risk_label=risk_label,
-                confidence_label=conf_label,
+                raw=listing.raw,
             )
-        )
+            # Fast path for search cards: assume links work; detail page validates & grays dead ones.
+            annotated = [
+                {**l, "available": True, "availability_reason": "deferred", "status_code": None}
+                for l in links
+            ]
 
-    rows.sort(key=lambda r: (r.fit_score or 0, r.opportunity), reverse=True)
-    return rows
+            reasons = match_reasons(
+                score=score,
+                parcel=parcel,
+                listing=listing,
+                filters=filters,
+                enrichment=enrichment,
+            )
+            acres = parcel.acreage
+            acres_display = f"{acres:,.2f} acres" if acres is not None else "Acreage not published"
+            discount_display = (
+                f"{score.asking_discount_pct:+.1f}% vs model"
+                if score.asking_discount_pct is not None
+                else "No retail ask to compare"
+            )
+            risk_label = (
+                "Lower screened risk"
+                if score.risk < 30
+                else "Moderate screened risk"
+                if score.risk < 55
+                else "Elevated screened risk"
+            )
+            conf_label = (
+                "Strong evidence base"
+                if score.confidence >= 70
+                else "Moderate evidence base"
+                if score.confidence >= 45
+                else "Thin evidence — verify manually"
+            )
+            summary = (
+                f"{_strategy_label(score.best_strategy)} thesis · "
+                f"LandSignal {score.opportunity:.0f}/100 · Risk {score.risk:.0f}/100 · "
+                f"{pd['display']}"
+            )
+            headline = (
+                f"{abs(score.asking_discount_pct):.0f}% below model"
+                if score.asking_discount_pct is not None and score.asking_discount_pct < -8
+                else f"Asymmetry {score.asymmetry:.0f}/100"
+            )
+
+            out.append(
+                RadarRow(
+                    parcel_id=parcel.id,
+                    listing_id=listing.id,
+                    signal=score.signal,
+                    property_name=listing.title or parcel.apn or str(parcel.id),
+                    location=f"{parcel.county or 'County TBD'}, {parcel.state or 'US'}",
+                    state=parcel.state,
+                    county=parcel.county,
+                    region=f"{parcel.county or ''}, {parcel.state or ''}".strip(", "),
+                    acres=acres,
+                    acres_display=acres_display,
+                    ask=ask,
+                    price_display=pd["display"],
+                    price_label=pd["label"],
+                    price_per_acre=ppa,
+                    price_per_acre_display=f"${ppa:,.0f}/ac" if ppa else "n/a — no priced ask",
+                    estimated_value=score.estimated_value_usd,
+                    estimated_value_display=vd["display"],
+                    value_knowledge=vd["knowledge_state"],
+                    discount_pct=score.asking_discount_pct,
+                    discount_display=discount_display,
+                    opportunity=score.opportunity,
+                    asymmetry=score.asymmetry,
+                    risk=score.risk,
+                    confidence=score.confidence,
+                    deal_readiness=score.deal_readiness,
+                    best_strategy=score.best_strategy,
+                    best_strategy_label=_strategy_label(score.best_strategy),
+                    secondary_strategy_label=_strategy_label(score.secondary_strategy),
+                    freshness_hours=(
+                        (datetime.now(timezone.utc) - listing.last_seen_at).total_seconds() / 3600
+                        if listing.last_seen_at
+                        else None
+                    ),
+                    status=listing.status,
+                    status_label="Available" if listing.status == "ACTIVE" else listing.status.title(),
+                    is_demo=False,
+                    personalized_opportunity=fit,
+                    fit_score=fit,
+                    summary=summary,
+                    match_reasons=reasons,
+                    rating_breakdown=rating_breakdown(score),
+                    links=annotated,
+                    latitude=parcel.latitude,
+                    longitude=parcel.longitude,
+                    provider_id=listing.provider_id,
+                    provider_label=PROVIDER_LABELS.get(listing.provider_id, listing.provider_id or "Public source"),
+                    headline_metric=headline,
+                    risk_label=risk_label,
+                    confidence_label=conf_label,
+                )
+            )
+        return out
+
+    rows = await build_rows(apply_region=True, apply_strict_channel=True)
+    # Never return a blank wall — broaden region/channel, then price/acres soft fallback note via reasons
+    if broaden and not rows:
+        rows = await build_rows(apply_region=False, apply_strict_channel=True)
+        for r in rows:
+            r.match_reasons = [
+                "Exact region had no inventory — showing best matches in your selected state/filters.",
+                *r.match_reasons,
+            ][:5]
+    if broaden and not rows:
+        rows = await build_rows(apply_region=False, apply_strict_channel=False)
+        for r in rows:
+            r.match_reasons = [
+                "No exact channel matches — showing closest live public opportunities.",
+                *r.match_reasons,
+            ][:5]
+
+    return _sort_rows(rows, sort)
 
 
 @router.get("/search/meta")
 async def search_meta() -> dict[str, Any]:
-    """Filter option lists derived from live inventory."""
+    """Nationwide filter catalog + live inventory hints."""
+    from landsignal.geo_meta import search_meta_payload
+
     store = get_store(get_settings().demo_seed)
-    states = sorted({(p.state or "").upper() for p in store.parcels.values() if p.state and not p.is_demo})
-    regions = sorted(
+    inventory_regions = sorted(
         {
             f"{p.county}, {p.state}"
             for p in store.parcels.values()
             if p.county and p.state and not p.is_demo
         }
     )
-    return {
-        "states": ["Any", *states],
-        "regions": ["Any", *regions],
-        "strategies": [
-            "Any",
-            "FARMLAND",
-            "DEVELOPMENT",
-            "LAND_BANK",
-            "RECREATIONAL",
-            "ENERGY",
-            "TIMBER",
-        ],
-        "hold_years": ["Any", 3, 5, 7, 10, 15, 20],
-        "target_roi": ["Any", 0.08, 0.10, 0.12, 0.15, 0.20],
-        "price_presets": [
-            {"label": "Any", "min": None, "max": None},
-            {"label": "Under $50k", "min": None, "max": 50000},
-            {"label": "$50k–$250k", "min": 50000, "max": 250000},
-            {"label": "$250k–$1M", "min": 250000, "max": 1000000},
-            {"label": "$1M+", "min": 1000000, "max": None},
-        ],
-        "acre_presets": [
-            {"label": "Any", "min": None, "max": None},
-            {"label": "1–20 ac", "min": 1, "max": 20},
-            {"label": "20–100 ac", "min": 20, "max": 100},
-            {"label": "100–500 ac", "min": 100, "max": 500},
-            {"label": "500+ ac", "min": 500, "max": None},
-        ],
-    }
+    inventory_states = sorted(
+        {(p.state or "").upper() for p in store.parcels.values() if p.state and not p.is_demo}
+    )
+    payload = search_meta_payload(inventory_regions)
+    payload["inventory_states"] = inventory_states
+    payload["inventory_count"] = sum(1 for p in store.parcels.values() if not p.is_demo)
+    return payload
 
 
 @router.get("/parcels/{parcel_id}")
 async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
+    from landsignal.services.humanize import (
+        human_dd_items,
+        human_flood,
+        human_soil,
+        human_transmission,
+        human_wetlands,
+    )
+    from landsignal.services.links import annotate_links
     from landsignal.services.presentation import build_action_links, price_display, rating_breakdown
 
     store = get_store(get_settings().demo_seed)
@@ -479,15 +579,87 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         longitude=parcel.longitude,
         raw=listing.raw if listing else None,
     )
+    # Only validate non-map links; maps/search are assumed reachable (keeps page snappy)
+    non_map = [l for l in links if l.get("kind") != "map"]
+    maps = [{**l, "available": True, "availability_reason": "ok", "status_code": 200} for l in links if l.get("kind") == "map"]
+    checked = await annotate_links(non_map)
+    annotated = checked + maps
+    # Promote first available non-map link if primary is dead
+    if annotated and not annotated[0].get("available"):
+        for i, link in enumerate(annotated):
+            if link.get("available") and link.get("kind") != "map":
+                annotated[0], annotated[i] = annotated[i], annotated[0]
+                break
+
+    dd_raw = store.dd_items.get(parcel_id, [])
+    dd_guided = human_dd_items(
+        [d if isinstance(d, dict) else d.model_dump() for d in dd_raw],
+        score,
+        enrichment,
+    )
+    land_readouts = {
+        "soil": human_soil(enrichment.soil if enrichment else None),
+        "flood": human_flood(enrichment.flood if enrichment else None),
+        "wetlands": human_wetlands(enrichment.wetlands if enrichment else None),
+        "transmission": human_transmission(enrichment.infrastructure if enrichment else None),
+    }
+    scenarios_human = []
+    case_names = {
+        "BASE": "Typical",
+        "DOWNSIDE": "Cautious",
+        "UPSIDE": "Optimistic",
+        "STRESS": "Stress",
+    }
+    for s in (enrichment.scenarios if enrichment else []) or []:
+        case_key = str(s.get("case_type") or "Scenario")
+        case_name = case_names.get(case_key, case_key)
+        if s.get("irr") is not None:
+            plain = (
+                f"{case_name} farmland screen: about {float(s['irr']) * 100:.1f}% IRR "
+                "if the assumptions hold."
+            )
+        else:
+            plain = "This case needs more crop/rent inputs before an IRR can be shown."
+        scenarios_human.append(
+            {
+                **s,
+                "case_label": {
+                    "BASE": "Base case (typical)",
+                    "DOWNSIDE": "Cautious case",
+                    "UPSIDE": "Optimistic case",
+                    "STRESS": "Stress case",
+                }.get(case_key, case_key),
+                "irr_display": f"{float(s['irr']) * 100:.1f}% per year" if s.get("irr") is not None else "Not enough data",
+                "noi_display": f"${float(s.get('noi') or 0):,.0f} / year",
+                "npv_display": f"${float(s.get('npv') or 0):,.0f}",
+                "breakeven_display": (
+                    f"${float(s['breakeven_land_value']):,.0f}"
+                    if s.get("breakeven_land_value") is not None
+                    else "Not enough data"
+                ),
+                "plain_english": plain,
+            }
+        )
+
     return {
         "parcel": parcel,
         "listing": listing,
         "score": score,
         "enrichment": enrichment,
-        "due_diligence": store.dd_items.get(parcel_id, []),
-        "links": links,
+        "due_diligence": dd_raw,
+        "due_diligence_guided": dd_guided,
+        "land_readouts": land_readouts,
+        "scenarios_human": scenarios_human,
+        "links": annotated,
         "price": price_display(listing.asking_price_usd if listing else None, listing.provider_id if listing else None),
         "rating_breakdown": rating_breakdown(score) if score else [],
+        "score_explained": {
+            "landsignal": "Overall opportunity score from 0–100 after weighing price, quality, options, and risk.",
+            "risk": "Higher means more things that can go wrong on a desktop screen (flood, wetlands, thin data).",
+            "confidence": "How complete the evidence file is. Thin files get lower confidence, not fake quality.",
+            "fit": "How well this parcel matches the criteria you set on Search / My criteria.",
+            "deal_readiness": "How much manual homework remains before a human could responsibly bid.",
+        },
         "disclaimer": "Screening intelligence only — not an appraisal, legal opinion, or purchase authorization.",
         "mapbox_status": "CONFIGURED" if get_settings().mapbox_token else "NOT_CONFIGURED",
     }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ComboFilter, FilterField } from "@/components/filter-field";
 import { PropertyCard } from "@/components/property-card";
 import {
   landsignalApi,
@@ -13,29 +14,63 @@ type FormState = {
   q: string;
   state: string;
   region: string;
+  regionCustom: string;
   pricePreset: string;
+  priceMin: string;
+  priceMax: string;
   acrePreset: string;
+  acreMin: string;
+  acreMax: string;
   strategy: string;
+  strategyCustom: string;
   holdYears: string;
+  holdCustom: string;
   targetRoi: string;
+  roiCustom: string;
   maxRisk: string;
+  riskCustom: string;
   minConfidence: string;
-  includeUnpriced: boolean;
+  confCustom: string;
+  unpricedMode: string;
+  marketChannel: string;
+  sort: string;
 };
 
 const DEFAULT_FORM: FormState = {
   q: "",
   state: "Any",
   region: "Any",
+  regionCustom: "",
   pricePreset: "Any",
+  priceMin: "",
+  priceMax: "",
   acrePreset: "Any",
+  acreMin: "",
+  acreMax: "",
   strategy: "Any",
+  strategyCustom: "",
   holdYears: "Any",
+  holdCustom: "",
   targetRoi: "Any",
+  roiCustom: "",
   maxRisk: "Any",
+  riskCustom: "",
   minConfidence: "Any",
-  includeUnpriced: true,
+  confCustom: "",
+  unpricedMode: "include",
+  marketChannel: "Any",
+  sort: "fit_desc",
 };
+
+function stateCode(label: string): string {
+  if (!label || label === "Any") return "Any";
+  return label.split("—")[0]?.trim().toUpperCase() || label;
+}
+
+function parseMoney(v: string): number | undefined {
+  const n = Number(String(v).replace(/[$,\s]/g, ""));
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
 
 export default function SearchPage() {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
@@ -46,23 +81,70 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
+  const regionOptions = useMemo(() => {
+    const code = stateCode(form.state);
+    const byState = meta?.regions_by_state?.[code] || meta?.regions_by_state?.Any || ["Any"];
+    const live = (meta?.regions || []).filter((r) => r !== "Any");
+    const merged = ["Any", ...byState.filter((r) => r !== "Any")];
+    for (const r of live) {
+      if (code === "Any" || r.endsWith(`, ${code}`) || r.includes(` ${code}`)) {
+        if (!merged.includes(r)) merged.push(r);
+      }
+    }
+    if (!merged.includes("Type a city / county…")) merged.push("Type a city / county…");
+    return merged;
+  }, [form.state, meta]);
+
   const buildFilters = useCallback((): SearchFilters => {
     const price = meta?.price_presets.find((p) => p.label === form.pricePreset);
     const acres = meta?.acre_presets.find((p) => p.label === form.acrePreset);
+    const customPrice = form.pricePreset.toLowerCase().includes("custom");
+    const customAcres = form.acrePreset.toLowerCase().includes("custom");
+    const region =
+      form.regionCustom.trim() ||
+      (form.region.startsWith("Type a") || form.region === "Any" ? undefined : form.region);
+
+    let hold: number | undefined;
+    if (form.holdCustom.trim()) hold = Number(form.holdCustom);
+    else if (form.holdYears !== "Any") hold = Number(form.holdYears);
+
+    let roi: number | undefined;
+    if (form.roiCustom.trim()) {
+      const raw = form.roiCustom.trim().replace("%", "");
+      const n = Number(raw);
+      roi = n > 1 ? n / 100 : n;
+    } else if (form.targetRoi !== "Any") roi = Number(form.targetRoi);
+
+    let maxRisk: number | undefined;
+    if (form.riskCustom.trim()) maxRisk = Number(form.riskCustom);
+    else if (form.maxRisk !== "Any") maxRisk = Number(form.maxRisk);
+
+    let minConf: number | undefined;
+    if (form.confCustom.trim()) minConf = Number(form.confCustom);
+    else if (form.minConfidence !== "Any") minConf = Number(form.minConfidence);
+
+    const strategy =
+      form.strategy === "CUSTOM" || form.strategyCustom.trim()
+        ? form.strategyCustom.trim() || "CUSTOM"
+        : form.strategy;
+
     return {
       q: form.q || undefined,
-      state: form.state,
-      region: form.region === "Any" ? undefined : form.region.split(",")[0]?.trim(),
-      min_price: price?.min ?? undefined,
-      max_price: price?.max ?? undefined,
-      min_acres: acres?.min ?? undefined,
-      max_acres: acres?.max ?? undefined,
-      strategy: form.strategy,
-      hold_years: form.holdYears === "Any" ? undefined : Number(form.holdYears),
-      target_roi: form.targetRoi === "Any" ? undefined : Number(form.targetRoi),
-      max_risk: form.maxRisk === "Any" ? undefined : Number(form.maxRisk),
-      min_confidence: form.minConfidence === "Any" ? undefined : Number(form.minConfidence),
-      include_unpriced: form.includeUnpriced,
+      state: stateCode(form.state),
+      region,
+      min_price: customPrice ? parseMoney(form.priceMin) : price?.min ?? undefined,
+      max_price: customPrice ? parseMoney(form.priceMax) : price?.max ?? undefined,
+      min_acres: customAcres ? parseMoney(form.acreMin) : acres?.min ?? undefined,
+      max_acres: customAcres ? parseMoney(form.acreMax) : acres?.max ?? undefined,
+      strategy,
+      hold_years: Number.isFinite(hold as number) ? hold : undefined,
+      target_roi: Number.isFinite(roi as number) ? roi : undefined,
+      max_risk: Number.isFinite(maxRisk as number) ? maxRisk : undefined,
+      min_confidence: Number.isFinite(minConf as number) ? minConf : undefined,
+      unpriced_mode: form.unpricedMode,
+      include_unpriced: form.unpricedMode !== "priced",
+      market_channel: form.marketChannel,
+      sort: form.sort,
     };
   }, [form, meta]);
 
@@ -72,7 +154,11 @@ export default function SearchPage() {
     try {
       const data = await landsignalApi.radar(buildFilters());
       setRows(data);
-      setStatus(`${data.length} opportunities matched your criteria`);
+      setStatus(
+        data.length
+          ? `${data.length} opportunities ranked for your criteria`
+          : "No live inventory yet — refresh public markets below",
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Search failed");
     } finally {
@@ -84,43 +170,31 @@ export default function SearchPage() {
     landsignalApi
       .searchMeta()
       .then(setMeta)
-      .catch(() =>
-        setMeta({
-          states: ["Any"],
-          regions: ["Any"],
-          strategies: ["Any", "FARMLAND", "LAND_BANK", "ENERGY", "DEVELOPMENT", "RECREATIONAL", "TIMBER"],
-          hold_years: ["Any", 5, 10, 15],
-          target_roi: ["Any", 0.1, 0.12, 0.15],
-          price_presets: [
-            { label: "Any", min: null, max: null },
-            { label: "Under $50k", min: null, max: 50000 },
-            { label: "$50k–$250k", min: 50000, max: 250000 },
-            { label: "$250k–$1M", min: 250000, max: 1000000 },
-            { label: "$1M+", min: 1000000, max: null },
-          ],
-          acre_presets: [
-            { label: "Any", min: null, max: null },
-            { label: "1–20 ac", min: 1, max: 20 },
-            { label: "20–100 ac", min: 20, max: 100 },
-            { label: "100–500 ac", min: 100, max: 500 },
-            { label: "500+ ac", min: 500, max: null },
-          ],
-        }),
-      );
+      .catch(() => setMeta(null));
   }, []);
 
   useEffect(() => {
     if (!meta) return;
     runSearch();
-  }, [meta]); // initial load
+  }, [meta]); // initial
 
   async function scanFresh() {
     setScanning(true);
-    setStatus("Scanning public land markets and running due diligence…");
+    setStatus("Scan started — new parcels will show up as they finish scoring…");
     try {
-      const res = await landsignalApi.discover(30, 1, true);
-      setStatus(`Refreshed inventory: ${res.imported} imported, ${res.scored} scored`);
+      const st = stateCode(form.state);
+      // Background + no reset: do not wipe inventory or block the page for minutes
+      await landsignalApi.discover(36, 1, false, st !== "Any" ? st : undefined, true);
       await runSearch();
+      // Light polling while background discover fills in
+      for (let i = 0; i < 8; i++) {
+        await new Promise((r) => setTimeout(r, 2500));
+        const nextMeta = await landsignalApi.searchMeta();
+        setMeta(nextMeta);
+        await runSearch();
+        if ((nextMeta.inventory_count || 0) >= 20) break;
+      }
+      setStatus("Live inventory updated");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Scan failed");
     } finally {
@@ -129,6 +203,7 @@ export default function SearchPage() {
   }
 
   const topFit = useMemo(() => rows[0], [rows]);
+  const tips = meta?.tooltips || {};
 
   return (
     <div>
@@ -136,77 +211,140 @@ export default function SearchPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="text-xs uppercase tracking-[0.14em] text-white/70">LandSignal</div>
-            <h1>Find land the market may be mispricing</h1>
+            <h1>Target the land that fits you</h1>
             <p>
-              Not a generic listing site. Rank parcels by risk-adjusted optionality across farmland,
-              energy, land banking, and development — with every score backed by evidence.
+              Set your range, hone the filters, and the engine ranks live public opportunities with
+              plain-English scores — so you can see the best fit first.
             </p>
           </div>
         </div>
 
-        <div className="filter-grid">
-          <Field label="Keywords">
+        <div className="filter-grid filter-grid-12">
+          <FilterField label="Keywords">
             <input
               value={form.q}
               placeholder="County, APN, keywords"
               onChange={(e) => setForm((f) => ({ ...f, q: e.target.value }))}
             />
-          </Field>
-          <Field label="State">
-            <select value={form.state} onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}>
+          </FilterField>
+
+          <FilterField label="State">
+            <select
+              value={form.state}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, state: e.target.value, region: "Any", regionCustom: "" }))
+              }
+            >
               {(meta?.states || ["Any"]).map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
               ))}
             </select>
-          </Field>
-          <Field label="City / region">
-            <select value={form.region} onChange={(e) => setForm((f) => ({ ...f, region: e.target.value }))}>
-              {(meta?.regions || ["Any"]).map((s) => (
+          </FilterField>
+
+          <FilterField label="City / region">
+            <select
+              value={form.region}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  region: e.target.value,
+                  regionCustom: e.target.value.startsWith("Type a") ? f.regionCustom : "",
+                }))
+              }
+            >
+              {regionOptions.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
               ))}
             </select>
-          </Field>
-          <Field label="Price range">
-            <select
-              value={form.pricePreset}
-              onChange={(e) => setForm((f) => ({ ...f, pricePreset: e.target.value }))}
-            >
-              {(meta?.price_presets || []).map((p) => (
-                <option key={p.label} value={p.label}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Acreage">
-            <select
-              value={form.acrePreset}
-              onChange={(e) => setForm((f) => ({ ...f, acrePreset: e.target.value }))}
-            >
-              {(meta?.acre_presets || []).map((p) => (
-                <option key={p.label} value={p.label}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Strategy">
+            {(form.region.startsWith("Type a") || form.regionCustom) && (
+              <input
+                className="mt-1.5"
+                value={form.regionCustom}
+                placeholder="Type city, county, or corridor…"
+                onChange={(e) => setForm((f) => ({ ...f, regionCustom: e.target.value }))}
+              />
+            )}
+          </FilterField>
+
+          <ComboFilter
+            label="Price range"
+            preset={form.pricePreset}
+            presets={(meta?.price_presets || [{ label: "Any" }]).map((p) => p.label)}
+            onPreset={(v) => setForm((f) => ({ ...f, pricePreset: v }))}
+            custom={form.priceMin || form.priceMax ? `${form.priceMin}-${form.priceMax}` : ""}
+            onCustom={() => undefined}
+            showCustom={form.pricePreset.toLowerCase().includes("custom")}
+            customPlaceholder="Use min/max below"
+          />
+          {form.pricePreset.toLowerCase().includes("custom") && (
+            <FilterField label="Custom price min / max">
+              <div className="flex gap-2">
+                <input
+                  value={form.priceMin}
+                  placeholder="Min $"
+                  onChange={(e) => setForm((f) => ({ ...f, priceMin: e.target.value }))}
+                />
+                <input
+                  value={form.priceMax}
+                  placeholder="Max $"
+                  onChange={(e) => setForm((f) => ({ ...f, priceMax: e.target.value }))}
+                />
+              </div>
+            </FilterField>
+          )}
+
+          <ComboFilter
+            label="Acreage"
+            preset={form.acrePreset}
+            presets={(meta?.acre_presets || [{ label: "Any" }]).map((p) => p.label)}
+            onPreset={(v) => setForm((f) => ({ ...f, acrePreset: v }))}
+            custom=""
+            onCustom={() => undefined}
+            showCustom={form.acrePreset.toLowerCase().includes("custom")}
+          />
+          {form.acrePreset.toLowerCase().includes("custom") && (
+            <FilterField label="Custom acres min / max">
+              <div className="flex gap-2">
+                <input
+                  value={form.acreMin}
+                  placeholder="Min ac"
+                  onChange={(e) => setForm((f) => ({ ...f, acreMin: e.target.value }))}
+                />
+                <input
+                  value={form.acreMax}
+                  placeholder="Max ac"
+                  onChange={(e) => setForm((f) => ({ ...f, acreMax: e.target.value }))}
+                />
+              </div>
+            </FilterField>
+          )}
+
+          <FilterField label="Strategy">
             <select
               value={form.strategy}
               onChange={(e) => setForm((f) => ({ ...f, strategy: e.target.value }))}
             >
               {(meta?.strategies || ["Any"]).map((s) => (
                 <option key={s} value={s}>
-                  {s === "Any" ? "Any" : s.replaceAll("_", " ")}
+                  {s === "Any" ? "Any" : s === "CUSTOM" ? "Type my own…" : s.replaceAll("_", " ")}
                 </option>
               ))}
             </select>
-          </Field>
-          <Field label="Hold period">
+            {(form.strategy === "CUSTOM" || form.strategyCustom) && (
+              <input
+                className="mt-1.5"
+                value={form.strategyCustom}
+                placeholder="e.g. solar lease, hunting lease…"
+                onChange={(e) => setForm((f) => ({ ...f, strategyCustom: e.target.value }))}
+              />
+            )}
+          </FilterField>
+
+          <FilterField label="Hold period">
             <select
               value={form.holdYears}
               onChange={(e) => setForm((f) => ({ ...f, holdYears: e.target.value }))}
@@ -216,9 +354,19 @@ export default function SearchPage() {
                   {s === "Any" ? "Any" : `${s} years`}
                 </option>
               ))}
+              <option value="__custom__">Type my own…</option>
             </select>
-          </Field>
-          <Field label="Desired ROI / IRR">
+            {(form.holdYears === "__custom__" || form.holdCustom) && (
+              <input
+                className="mt-1.5"
+                value={form.holdCustom}
+                placeholder="Years (e.g. 8)"
+                onChange={(e) => setForm((f) => ({ ...f, holdCustom: e.target.value, holdYears: "__custom__" }))}
+              />
+            )}
+          </FilterField>
+
+          <FilterField label="Desired ROI / IRR">
             <select
               value={form.targetRoi}
               onChange={(e) => setForm((f) => ({ ...f, targetRoi: e.target.value }))}
@@ -228,43 +376,130 @@ export default function SearchPage() {
                   {s === "Any" ? "Any" : `${Math.round(Number(s) * 100)}%+`}
                 </option>
               ))}
+              <option value="__custom__">Type my own…</option>
             </select>
-          </Field>
-          <Field label="Max risk">
+            {(form.targetRoi === "__custom__" || form.roiCustom) && (
+              <input
+                className="mt-1.5"
+                value={form.roiCustom}
+                placeholder="e.g. 14 or 14%"
+                onChange={(e) => setForm((f) => ({ ...f, roiCustom: e.target.value, targetRoi: "__custom__" }))}
+              />
+            )}
+          </FilterField>
+
+          <FilterField
+            label="Max risk"
+            tip={tips.max_risk || { title: "Max risk", body: "Lower = safer on paper. 0–100 scale." }}
+          >
             <select
               value={form.maxRisk}
               onChange={(e) => setForm((f) => ({ ...f, maxRisk: e.target.value }))}
             >
-              {["Any", "30", "45", "60"].map((s) => (
-                <option key={s} value={s}>
+              {(meta?.max_risk || ["Any", 30, 45, 60]).map((s) => (
+                <option key={String(s)} value={String(s)}>
                   {s === "Any" ? "Any" : `≤ ${s}/100`}
                 </option>
               ))}
+              <option value="__custom__">Type my own…</option>
             </select>
-          </Field>
-          <Field label="Min confidence">
+            {(form.maxRisk === "__custom__" || form.riskCustom) && (
+              <input
+                className="mt-1.5"
+                value={form.riskCustom}
+                placeholder="Max risk 0–100"
+                onChange={(e) => setForm((f) => ({ ...f, riskCustom: e.target.value, maxRisk: "__custom__" }))}
+              />
+            )}
+          </FilterField>
+
+          <FilterField
+            label="Min confidence"
+            tip={
+              tips.min_confidence || {
+                title: "Min confidence",
+                body: "How complete the evidence is. Missing data lowers confidence.",
+              }
+            }
+          >
             <select
               value={form.minConfidence}
               onChange={(e) => setForm((f) => ({ ...f, minConfidence: e.target.value }))}
             >
-              {["Any", "40", "55", "70"].map((s) => (
-                <option key={s} value={s}>
+              {(meta?.min_confidence || ["Any", 40, 55, 70]).map((s) => (
+                <option key={String(s)} value={String(s)}>
                   {s === "Any" ? "Any" : `≥ ${s}/100`}
                 </option>
               ))}
+              <option value="__custom__">Type my own…</option>
             </select>
-          </Field>
-          <Field label="Unpriced federal / surplus">
-            <select
-              value={form.includeUnpriced ? "include" : "priced"}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, includeUnpriced: e.target.value === "include" }))
+            {(form.minConfidence === "__custom__" || form.confCustom) && (
+              <input
+                className="mt-1.5"
+                value={form.confCustom}
+                placeholder="Min confidence 0–100"
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, confCustom: e.target.value, minConfidence: "__custom__" }))
+                }
+              />
+            )}
+          </FilterField>
+
+          <FilterField
+            label="Unpriced federal / surplus"
+            tip={
+              tips.include_unpriced || {
+                title: "Unpriced parcels",
+                body: "Federal/surplus deals may have no retail ask. Include them for process opportunities.",
               }
+            }
+          >
+            <select
+              value={form.unpricedMode}
+              onChange={(e) => setForm((f) => ({ ...f, unpricedMode: e.target.value }))}
             >
-              <option value="include">Include (Any pricing type)</option>
-              <option value="priced">Priced / bids only</option>
+              {(
+                meta?.unpriced_options || [
+                  { value: "include", label: "Include unpriced federal / surplus" },
+                  { value: "priced", label: "Priced / bids only" },
+                  { value: "unpriced_only", label: "Unpriced process parcels only" },
+                ]
+              ).map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </select>
-          </Field>
+          </FilterField>
+
+          <FilterField
+            label="Market channel"
+            tip={
+              tips.market_channel || {
+                title: "Market channel",
+                body: "Narrow by federal BLM, tax sale, surplus, or parcels you added.",
+              }
+            }
+          >
+            <select
+              value={form.marketChannel}
+              onChange={(e) => setForm((f) => ({ ...f, marketChannel: e.target.value }))}
+            >
+              {(
+                meta?.market_channels || [
+                  { value: "Any", label: "Any market channel" },
+                  { value: "blm_lpad", label: "Federal BLM disposal" },
+                  { value: "public_tax_sale", label: "County tax sale" },
+                  { value: "public_surplus", label: "Public surplus" },
+                  { value: "manual", label: "Manual / private entry" },
+                ]
+              ).map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </FilterField>
         </div>
 
         <div className="filter-actions">
@@ -284,6 +519,12 @@ export default function SearchPage() {
           >
             Reset to Any
           </button>
+          {meta?.inventory_count != null && (
+            <span className="self-center text-sm text-white/70">
+              Live inventory: {meta.inventory_count} parcels
+              {meta.inventory_states?.length ? ` · ${meta.inventory_states.join(", ")}` : ""}
+            </span>
+          )}
         </div>
       </section>
 
@@ -291,24 +532,58 @@ export default function SearchPage() {
         <div>
           <h2 className="display text-2xl font-semibold">Opportunity results</h2>
           <p className="mt-1 text-[var(--muted)]">
-            {status || "Set your criteria above. Fit score personalizes ranking without hiding the global LandSignal score."}
+            {status ||
+              "Set your criteria above. Fit score personalizes ranking without hiding the global LandSignal score."}
           </p>
         </div>
-        {topFit && (
-          <div className="panel px-4 py-3 text-sm">
-            <div className="text-[var(--muted)]">Top fit right now</div>
-            <div className="font-semibold">{topFit.property_name}</div>
-          </div>
-        )}
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="text-xs uppercase tracking-wide text-[var(--muted)]">
+            Sort results
+            <select
+              className="mt-1 block min-w-[220px] rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] px-3 py-2 text-sm normal-case text-[var(--ink)]"
+              value={form.sort}
+              onChange={(e) => {
+                setForm((f) => ({ ...f, sort: e.target.value }));
+                setTimeout(() => runSearch(), 0);
+              }}
+            >
+              {(
+                meta?.sort_options || [
+                  { value: "fit_desc", label: "Best fit for my criteria" },
+                  { value: "score_desc", label: "Highest LandSignal score" },
+                  { value: "risk_asc", label: "Lowest screened risk" },
+                  { value: "confidence_desc", label: "Highest confidence" },
+                  { value: "price_asc", label: "Lowest price / bid" },
+                  { value: "acres_desc", label: "Largest acreage" },
+                  { value: "discount_asc", label: "Biggest discount vs model" },
+                ]
+              ).map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {topFit && (
+            <div className="panel px-4 py-3 text-sm">
+              <div className="text-[var(--muted)]">Top fit right now</div>
+              <div className="font-semibold">{topFit.property_name}</div>
+              <div className="text-xs text-[var(--muted)]">
+                Fit {Math.round(topFit.fit_score ?? 0)} · LandSignal {Math.round(topFit.opportunity)}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {error && <div className="panel mb-4 p-4 text-[var(--danger)]">{error}</div>}
 
       {!loading && !rows.length && (
         <div className="panel empty-state">
-          <div className="display text-2xl text-[var(--ink)]">No matches for these filters</div>
+          <div className="display text-2xl text-[var(--ink)]">No live matches yet</div>
           <p className="mx-auto mt-2 max-w-lg">
-            Try setting more fields to Any, include unpriced federal/surplus land, or refresh live inventory.
+            Refresh public markets (BLM, tax sales, surplus). If you picked a state with thin coverage,
+            leave region on Any or include unpriced federal parcels.
           </p>
           <button type="button" className="btn btn-dark mt-4" onClick={scanFresh}>
             Refresh live inventory
@@ -321,15 +596,6 @@ export default function SearchPage() {
           <PropertyCard key={row.parcel_id} row={row} index={i} />
         ))}
       </div>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="filter-field">
-      <label>{label}</label>
-      {children}
     </div>
   );
 }

@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import quote_plus
 
+from landsignal.services.humanize import CATEGORY_HELP
+
 
 def build_action_links(
     *,
@@ -16,9 +18,13 @@ def build_action_links(
     longitude: float | None,
     raw: dict | None = None,
 ) -> list[dict[str, str]]:
-    """Always return 1–2 actionable links for inquire / buy / contact pathways."""
+    """Return actionable links: source, contact/learn path, and map."""
     links: list[dict[str, str]] = []
     raw = raw or {}
+    contact_q = " ".join(
+        x for x in [title, apn or "", county or "", state or "", "land parcel contact seller"] if x
+    )
+    contact_url = f"https://www.google.com/search?q={quote_plus(contact_q)}"
 
     if source_url:
         label = "Official listing / source documents"
@@ -30,59 +36,54 @@ def build_action_links(
             label = "Surplus property record"
         links.append({"label": label, "url": source_url, "kind": "primary"})
 
-    # Provider-specific fallbacks when source_url missing
-    if not links:
-        if provider_id == "blm_lpad":
-            links.append(
-                {
-                    "label": "BLM National Land Disposal map",
-                    "url": "https://www.blm.gov/programs/lands-and-realty/land-tenure",
-                    "kind": "primary",
-                }
-            )
-        elif provider_id == "public_tax_sale" and state == "CA" and (county or "").lower().startswith("shasta"):
-            links.append(
-                {
-                    "label": "Shasta County tax auction GIS",
-                    "url": "https://www.shastacounty.gov/treasurer-tax-collector",
-                    "kind": "primary",
-                }
-            )
-        elif provider_id == "public_tax_sale" and state == "WI":
-            links.append(
-                {
-                    "label": "Sauk County land records",
-                    "url": "https://lrs.co.sauk.wi.us/AscentLandRecords/",
-                    "kind": "primary",
-                }
-            )
-        elif provider_id == "public_tax_sale" and state == "IN":
-            links.append(
-                {
-                    "label": "Marion County / Indy tax sale info",
-                    "url": "https://www.indy.gov/activity/property-tax-sale",
-                    "kind": "primary",
-                }
-            )
-        elif provider_id == "public_surplus":
-            links.append(
-                {
-                    "label": "Contact county/city surplus office",
-                    "url": f"https://www.google.com/search?q={quote_plus((county or '') + ' ' + (state or '') + ' surplus property sale')}",
-                    "kind": "primary",
-                }
-            )
-        else:
-            q = " ".join(x for x in [title, apn or "", county or "", state or "", "land for sale"] if x)
-            links.append(
-                {
-                    "label": "Search listing / seller contacts",
-                    "url": f"https://www.google.com/search?q={quote_plus(q)}",
-                    "kind": "primary",
-                }
-            )
+    # Always provide a learn/contact path (survives if primary docs are offline)
+    if provider_id == "blm_lpad":
+        links.append(
+            {
+                "label": "Learn / contact BLM land tenure",
+                "url": "https://www.blm.gov/programs/lands-and-realty/land-tenure",
+                "kind": "contact",
+            }
+        )
+    elif provider_id == "public_tax_sale" and state == "CA" and (county or "").lower().startswith("shasta"):
+        links.append(
+            {
+                "label": "Shasta Treasurer / tax sale office",
+                "url": "https://www.shastacounty.gov/treasurer-tax-collector",
+                "kind": "contact",
+            }
+        )
+    elif provider_id == "public_tax_sale" and state == "WI":
+        links.append(
+            {
+                "label": "Sauk County land records",
+                "url": "https://lrs.co.sauk.wi.us/AscentLandRecords/",
+                "kind": "contact",
+            }
+        )
+    elif provider_id == "public_tax_sale" and state == "IN":
+        links.append(
+            {
+                "label": "Indy tax sale info / contact",
+                "url": "https://www.indy.gov/activity/property-tax-sale",
+                "kind": "contact",
+            }
+        )
+    elif provider_id == "public_surplus":
+        links.append(
+            {
+                "label": "Find surplus office / how to buy",
+                "url": f"https://www.google.com/search?q={quote_plus((county or '') + ' ' + (state or '') + ' surplus property sale contact')}",
+                "kind": "contact",
+            }
+        )
+    else:
+        links.append({"label": "Search seller / listing contacts", "url": contact_url, "kind": "contact"})
 
-    # Always add map / location link when coordinates exist
+    if not any(l["kind"] == "primary" for l in links):
+        # Promote contact to primary when no official source URL
+        links[0]["kind"] = "primary"
+
     if latitude is not None and longitude is not None:
         links.append(
             {
@@ -101,7 +102,6 @@ def build_action_links(
             }
         )
 
-    # Deduplicate by URL, keep max 2 for cards (primary + map)
     seen = set()
     out = []
     for link in links:
@@ -109,7 +109,7 @@ def build_action_links(
             continue
         seen.add(link["url"])
         out.append(link)
-        if len(out) >= 2:
+        if len(out) >= 3:
             break
     return out
 
@@ -199,13 +199,26 @@ def rating_breakdown(score) -> list[dict[str, Any]]:
     """Human-readable backed ratings from score components."""
     out = []
     for c in score.components or []:
+        key = c.get("category")
+        help_meta = CATEGORY_HELP.get(str(key or ""), {})
+        val = float(c.get("value") or 0)
+        if val >= 70:
+            plain = "Looks helpful for this deal on the data we have."
+        elif val >= 45:
+            plain = "Mixed — worth a closer look, not a green light by itself."
+        else:
+            plain = "Weak on this factor — dig in before you rely on it."
         out.append(
             {
-                "key": c.get("category"),
-                "label": str(c.get("category", "")).replace("_", " ").title(),
-                "score": c.get("value"),
+                "key": key,
+                "label": help_meta.get("title") or str(key or "").replace("_", " ").title(),
+                "simple": help_meta.get("simple") or "Part of the overall LandSignal screening score.",
+                "plain_english": plain,
+                "score": val,
+                "score_display": f"{val:.0f} out of 100",
                 "weight_pct": round(float(c.get("weight") or 0) * 100),
-                "evidence": (c.get("evidence") or [])[:2],
+                "weight_display": f"{round(float(c.get('weight') or 0) * 100)}% of the score",
+                "evidence": (c.get("evidence") or [])[:4],
                 "knowledge_state": c.get("knowledge_state"),
             }
         )
