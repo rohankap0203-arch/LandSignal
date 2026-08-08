@@ -480,9 +480,84 @@ def build_intelligence_brief(
             "url": f"https://www.google.com/search?q={county}+{state}+tax+sale+treasurer+{apn}".replace(" ", "+"),
         }
 
+    # ---- Institutional return case (acquisition desk style) ----
+    entry = settle if settle and settle > 0 else (ask if ask and ask > 0 else None)
+    if entry is None and est:
+        # Unpriced public inventory: underwrite a process entry below screening mark
+        entry = est * (0.62 if provider in ("public_tax_sale", "public_surplus") else 0.85)
+    gap_usd = (est - entry) if est and entry else None
+    gap_pct = ((gap_usd / entry) * 100.0) if gap_usd is not None and entry else None
+    irr_best = None
+    for s in scenarios_human[:4]:
+        try:
+            irr_v = s.get("irr")
+            if irr_v is not None:
+                irr_best = max(irr_best or -999, float(irr_v))
+        except Exception:
+            pass
+    conviction = (
+        "HIGH"
+        if opp >= 68 and risk <= 42 and conf >= 40 and (gap_pct is None or gap_pct >= 12)
+        else "MEDIUM"
+        if opp >= 52 and risk <= 58
+        else "WATCH"
+    )
+    thesis_bullets: list[str] = []
+    if entry and est:
+        thesis_bullets.append(
+            f"Underwrite entry ~{_money(entry)} against screening mark {_money(est)}"
+            + (f" ({gap_pct:+.0f}% equity gap)" if gap_pct is not None else "")
+            + "."
+        )
+    if auction and settle:
+        thesis_bullets.append(
+            f"Do not underwrite the {_money(ask)} opener — expected clear ~{_money(settle)} "
+            f"after ~{auction.get('bid_inflation_mult_base', 0):.1f}× bid-up."
+        )
+    if strategy != "UNDETERMINED":
+        strat = strategy.replace("_", " ").title()
+        sec = f" · secondary {secondary.replace('_', ' ').title()}" if secondary else ""
+        size = f" on {acres:,.1f} ac in {county}, {state}" if acres is not None else f" in {county}, {state}"
+        thesis_bullets.append(f"Primary use screen: {strat}{sec}{size}.")
+    if irr_best is not None and irr_best > -900:
+        thesis_bullets.append(
+            f"Hold-case screen IRR ≈ {irr_best * 100:.1f}%/yr if rent/exit assumptions survive local comps."
+        )
+    if prime is not None and prime >= 35 and acres and acres >= 10:
+        thesis_bullets.append(f"Soil screen ~{prime:.0f}% prime — supports cash-rent and ag-buyer exit.")
+    if flood_pct is not None and flood_pct >= 25:
+        thesis_bullets.append(
+            f"Flood overlap ~{flood_pct:.0f}% — price insurance/fill; many desks will pass, creating access."
+        )
+    if not thesis_bullets:
+        thesis_bullets.append(
+            f"Stage-1 flag only: {apn} in {county}, {state} clears automated gates for desk review."
+        )
+    return_case = {
+        "conviction": conviction,
+        "headline": (
+            f"{conviction} conviction · entry ~{_money(entry)} → mark {_money(est)}"
+            if entry and est
+            else f"{conviction} conviction · {strategy.replace('_', ' ').title()} screen"
+        ),
+        "entry_usd": entry,
+        "mark_usd": est,
+        "equity_gap_usd": gap_usd,
+        "equity_gap_pct": gap_pct,
+        "strategy": strategy,
+        "irr_screen": irr_best if irr_best is not None and irr_best > -900 else None,
+        "bullets": thesis_bullets[:5],
+        "desk_note": (
+            f"Acquisition-style screen for {apn}: fit LandSignal {opp:.0f}, risk {risk:.0f}, "
+            f"confidence {conf:.0f}, readiness {readiness:.0f}. "
+            f"This is desktop triage for capital allocation — not a purchase order."
+        ),
+    }
+
     return {
         "why_opportunity": why,
         "why_still_available": still,
+        "return_case": return_case,
         "soil_addendum": soil_extra,
         "flood_addendum": flood_extra,
         "wetlands_addendum": wet_extra,

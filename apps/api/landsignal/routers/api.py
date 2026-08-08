@@ -282,6 +282,7 @@ async def radar(
     from landsignal.scoring.engine import personalized_score
     from landsignal.services.presentation import (
         build_action_links,
+        build_return_thesis,
         match_reasons,
         price_display,
         rating_breakdown,
@@ -487,14 +488,16 @@ async def radar(
                     *reasons,
                 ][:5]
             if isinstance(auction_path, dict) and auction_path.get("expected_settle_usd"):
-                reasons = [
-                    (
-                        f"Opening bid ${auction_path['opening_bid_usd']:,.0f} — expected settle "
-                        f"~${auction_path['expected_settle_usd']:,.0f} after typical bid-up "
-                        f"(~{auction_path.get('bid_inflation_mult_base', 0):.1f}×)"
-                    ),
-                    *reasons,
-                ][:5]
+                # Prefer underwrite-gap bullet from match_reasons; only add opener math if missing
+                if not any("underwrite gap" in r.lower() or "clear ~$" in r.lower() for r in reasons):
+                    reasons = [
+                        (
+                            f"Opening bid ${auction_path['opening_bid_usd']:,.0f} — expected settle "
+                            f"~${auction_path['expected_settle_usd']:,.0f} after typical bid-up "
+                            f"(~{auction_path.get('bid_inflation_mult_base', 0):.1f}×)"
+                        ),
+                        *reasons,
+                    ][:5]
             acres = parcel.acreage
             acres_display = f"{acres:,.2f} acres" if acres is not None else "Acreage not published"
             settle_disc = None
@@ -523,25 +526,29 @@ async def radar(
                 if score.confidence >= 45
                 else "Thin evidence — verify manually"
             )
-            summary = (
-                f"{_strategy_label(score.best_strategy)} thesis · "
-                f"LandSignal {score.opportunity:.0f}/100 · Risk {score.risk:.0f}/100 · "
-                f"{pd['display']}"
+            thesis, conviction = build_return_thesis(
+                score=score,
+                listing=listing,
+                auction_path=auction_path if isinstance(auction_path, dict) else None,
+            )
+            summary = thesis or (
+                f"{_strategy_label(score.best_strategy)} · "
+                f"LandSignal {score.opportunity:.0f} · Risk {score.risk:.0f} · {pd['display']}"
             )
             headline_disc = settle_disc if settle_disc is not None else score.asking_discount_pct
             if headline_disc is not None and headline_disc < -8:
                 headline = (
-                    f"Settle ~{abs(headline_disc):.0f}% under model"
+                    f"Settle ~{abs(headline_disc):.0f}% under mark"
                     if isinstance(auction_path, dict)
-                    else f"{abs(headline_disc):.0f}% below model"
+                    else f"{abs(headline_disc):.0f}% below mark"
                 )
             elif isinstance(auction_path, dict):
                 headline = (
-                    f"Opener ${auction_path.get('opening_bid_usd', 0):,.0f} → "
+                    f"Open ${auction_path.get('opening_bid_usd', 0):,.0f} → "
                     f"~${auction_path.get('expected_settle_usd', 0):,.0f}"
                 )
             else:
-                headline = f"Asymmetry {score.asymmetry:.0f}/100"
+                headline = f"{conviction or 'WATCH'} · asym {score.asymmetry:.0f}"
 
             out.append(
                 RadarRow(
@@ -599,6 +606,8 @@ async def radar(
                     contact_phone=source.get("phone"),
                     contact_website=source.get("website"),
                     how_to_buy=source.get("how_to_buy"),
+                    return_thesis=thesis,
+                    conviction=conviction,
                 )
             )
         return out
@@ -794,18 +803,18 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     settle_lo = float((auction_path or {}).get("settle_low_usd") or settle_v)
     settle_hi = float((auction_path or {}).get("settle_high_usd") or settle_v)
     if auction_path and opener_v > 0 and model_v > 0:
-        chart_points = [
-            {"x": opener_v, "y": 100, "label": "Opener", "note": "Published floor — almost everyone still in"},
-            {"x": settle_lo, "y": 72, "label": "Low clear", "note": "Thin auction / weak day"},
-            {"x": settle_v, "y": 48, "label": "Expected settle", "note": "Typical contested clear"},
-            {"x": settle_hi, "y": 28, "label": "High clear", "note": "Hot room / retail spillover"},
-            {"x": model_v, "y": 12, "label": "Model value", "note": "Screening retail — few tax-sale buyers pay here"},
+            chart_points = [
+            {"x": opener_v, "y": 100, "label": "Open", "note": "Published floor — almost everyone still in"},
+            {"x": settle_lo, "y": 72, "label": "Low", "note": "Thin auction / weak day"},
+            {"x": settle_v, "y": 48, "label": "Settle", "note": "Typical contested clear"},
+            {"x": settle_hi, "y": 28, "label": "High", "note": "Hot room / retail spillover"},
+            {"x": model_v, "y": 12, "label": "Mark", "note": "Screening retail — few tax-sale buyers pay here"},
         ]
     elif model_v > 0:
         chart_points = [
-            {"x": model_v * 0.55, "y": 80, "label": "Distressed band", "note": "Where process buyers often land"},
-            {"x": model_v * 0.75, "y": 45, "label": "Negotiate band", "note": "Brokered / surplus outcomes"},
-            {"x": model_v, "y": 18, "label": "Model value", "note": "Screening retail mark"},
+            {"x": model_v * 0.55, "y": 80, "label": "Distress", "note": "Where process buyers often land"},
+            {"x": model_v * 0.75, "y": 45, "label": "Negotiate", "note": "Brokered / surplus outcomes"},
+            {"x": model_v, "y": 18, "label": "Mark", "note": "Screening retail mark"},
         ]
     else:
         chart_points = []

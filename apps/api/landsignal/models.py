@@ -254,3 +254,5 @@ class RadarRow(BaseModel):
     contact_phone: str | None = None
     contact_website: str | None = None
     how_to_buy: str | None = None
+    return_thesis: str | None = None
+    conviction: str | None = None

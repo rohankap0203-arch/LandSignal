@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -15,6 +16,43 @@ from landsignal.settings import Settings, get_settings
 from landsignal.store import MemoryStore
 
 log = structlog.get_logger()
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _refresh_listing(store: MemoryStore, listing, raw: dict[str, Any]) -> bool:
+    """Push live feed fields onto an existing listing. Returns True if price moved."""
+    price_moved = False
+    new_ask = raw.get("asking_price_usd")
+    if new_ask is not None and new_ask != listing.asking_price_usd:
+        listing.asking_price_usd = new_ask
+        acres = store.parcels.get(listing.parcel_id)
+        ac = acres.acreage if acres else None
+        listing.price_per_acre_usd = (new_ask / ac) if new_ask and ac else listing.price_per_acre_usd
+        price_moved = True
+    if raw.get("source_url"):
+        listing.source_url = raw["source_url"]
+    if raw.get("title"):
+        listing.title = raw["title"]
+    if raw.get("description"):
+        listing.description = raw["description"]
+    listing.last_seen_at = _utcnow()
+    listing.raw = {**(listing.raw or {}), **{k: v for k, v in raw.items() if k != "polygon"}}
+    store.listings[listing.id] = listing
+    parcel = store.parcels.get(listing.parcel_id)
+    if parcel:
+        if raw.get("latitude") is not None:
+            parcel.latitude = raw["latitude"]
+        if raw.get("longitude") is not None:
+            parcel.longitude = raw["longitude"]
+        if raw.get("acreage") is not None:
+            parcel.acreage = raw["acreage"]
+        if raw.get("polygon"):
+            parcel.polygon = raw["polygon"]
+        store.parcels[parcel.id] = parcel
+    return price_moved
 
 
 async def discover_opportunities(
@@ -124,6 +162,7 @@ async def discover_opportunities(
 
     parcel_ids: list[UUID] = []
     to_score: list[UUID] = []
+    refreshed = 0
     for raw in diversified:
         existing = next(
             (
@@ -135,8 +174,10 @@ async def discover_opportunities(
             None,
         )
         if existing:
+            price_moved = _refresh_listing(store, existing, raw)
+            refreshed += 1
             parcel_ids.append(existing.parcel_id)
-            if store.latest_score(existing.parcel_id) is None:
+            if store.latest_score(existing.parcel_id) is None or price_moved:
                 to_score.append(existing.parcel_id)
             continue
         parcel, listing = store.upsert_manual({**raw, "provider_id": raw.get("provider_id") or "manual"})
@@ -171,6 +212,7 @@ async def discover_opportunities(
 
     return {
         "imported": len(set(parcel_ids)),
+        "refreshed": refreshed,
         "scored": scored,
         "source_counts": source_counts,
         "providers_used": list(source_counts.keys()),
@@ -180,7 +222,7 @@ async def discover_opportunities(
         "inventory_total": sum(1 for p in store.parcels.values() if not p.is_demo),
         "note": (
             "Live free public feeds at scale: BLM LPAD + county tax-sale/surplus GIS "
-            f"({sum(source_counts.values())} raw rows considered). "
+            f"({sum(source_counts.values())} raw rows considered; {refreshed} existing rows refreshed). "
             "Fast index scores first; open a parcel for full soils/flood enrichment. "
             "Licensed MLS/Land.com/Crexi/Regrid remain unavailable without API keys."
         ),

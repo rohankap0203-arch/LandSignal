@@ -94,6 +94,8 @@ export type RadarRow = {
   contact_phone?: string | null;
   contact_website?: string | null;
   how_to_buy?: string | null;
+  return_thesis?: string | null;
+  conviction?: string | null;
 };
 
 export type SearchMeta = {

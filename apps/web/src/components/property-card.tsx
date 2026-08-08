@@ -2,56 +2,23 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { AcquireRail } from "@/components/acquire-rail";
 import { SignalBadge } from "@/components/signal-badge";
-import type { ActionLink, RadarRow } from "@/lib/api";
-
-function ActionAnchor({ link, primary }: { link: ActionLink; primary?: boolean }) {
-  const available = link.available !== false;
-  if (!available) {
-    return (
-      <span
-        className={`link-disabled ${primary ? "primary" : ""}`}
-        title={link.availability_reason || "This document is not currently available"}
-      >
-        {link.label} (unavailable)
-      </span>
-    );
-  }
-  return (
-    <a className={primary ? "primary" : undefined} href={link.url} target="_blank" rel="noreferrer">
-      {link.label}
-    </a>
-  );
-}
+import type { RadarRow } from "@/lib/api";
 
 export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
   const [intelPending, setIntelPending] = useState(false);
   const posting =
     row.links.find((l) => l.kind === "primary" && l.available !== false) ||
     (row.contact_website
-      ? { label: "Open source posting", url: row.contact_website, kind: "primary", available: true }
+      ? { label: "Open posting", url: row.contact_website, kind: "primary", available: true }
       : null);
-  const call =
-    row.links.find((l) => l.kind === "contact" && String(l.url).startsWith("tel:")) ||
-    (row.contact_phone
-      ? {
-          label: row.contact_phone,
-          url: `tel:${row.contact_phone.replace(/-/g, "")}`,
-          kind: "contact",
-          available: true,
-        }
-      : null);
-  const findParcel =
-    row.links.find((l) => l.kind === "lookup" && l.available !== false) || null;
-  const secondary =
-    row.links.find(
-      (l) =>
-        l !== posting &&
-        l !== findParcel &&
-        l.kind === "contact_web" &&
-        l.available !== false,
-    ) ||
-    row.links.find((l) => l !== posting && l !== findParcel && l !== call && l.kind === "map");
+  const findParcel = row.links.find((l) => l.kind === "lookup" && l.available !== false) || null;
+  const phone =
+    row.contact_phone ||
+    row.links.find((l) => l.kind === "contact" && String(l.url).startsWith("tel:"))?.label ||
+    null;
+  const conviction = row.conviction || "WATCH";
 
   return (
     <article className="panel property-card" style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}>
@@ -75,7 +42,9 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
                 {row.property_name}
               </Link>
             </h2>
-            <p className="mt-1 text-sm leading-relaxed text-[var(--muted)] break-words">{row.summary}</p>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--ink)] break-words">
+              {row.return_thesis || row.summary}
+            </p>
             {row.source_name && (
               <p className="mt-1 text-xs text-[var(--muted)] break-words">
                 Source: {row.source_name}
@@ -83,8 +52,16 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
               </p>
             )}
           </div>
-          <div className="shrink-0 rounded-full bg-[var(--bg-soft)] px-3 py-1 text-sm font-semibold text-[var(--brand)] whitespace-nowrap">
-            Fit {Math.round(row.fit_score ?? row.opportunity)}
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <div
+              className={`conviction-pill ${conviction.toLowerCase()}`}
+              title="Acquisition desk conviction from LandSignal screen"
+            >
+              {conviction}
+            </div>
+            <div className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-sm font-semibold text-[var(--brand)] whitespace-nowrap">
+              Fit {Math.round(row.fit_score ?? row.opportunity)}
+            </div>
           </div>
         </div>
 
@@ -137,23 +114,16 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           ))}
         </ul>
 
-        <div className="card-actions">
-          {posting && (
-            <a className="btn-posting" href={posting.url} target="_blank" rel="noreferrer">
-              Open posting
-            </a>
-          )}
-          {findParcel && (
-            <a className="btn-find" href={findParcel.url} target="_blank" rel="noreferrer">
-              {findParcel.label.replace(/^Find parcel /, "Parcel ")}
-            </a>
-          )}
-          {call && (
-            <a className="btn-call" href={call.url}>
-              {String(call.label).match(/^\d/) ? `Call ${call.label}` : call.label}
-            </a>
-          )}
-          {secondary && <ActionAnchor link={secondary} />}
+        <AcquireRail
+          className="mt-3"
+          postingUrl={posting?.url}
+          phone={phone}
+          office={row.contact_office}
+          findUrl={findParcel?.url}
+          findLabel={findParcel?.label?.replace(/^Find parcel /, "APN ")}
+        />
+
+        <div className="card-actions mt-3">
           <Link
             href={`/parcels/${row.parcel_id}`}
             className={`btn-intel ${intelPending ? "pending" : ""}`}

@@ -153,22 +153,90 @@ def match_reasons(
     filters: dict[str, Any],
     enrichment=None,
 ) -> list[str]:
+    """Acquisition-desk bullets — concrete, not filler."""
     reasons: list[str] = []
-    if score.asking_discount_pct is not None and score.asking_discount_pct < -10:
-        reasons.append(f"Settle/ask sits {abs(score.asking_discount_pct):.0f}% under screening model")
+    est = getattr(score, "estimated_value_usd", None)
+    ask = listing.asking_price_usd if listing else None
+    auction = None
+    if enrichment and enrichment.comps:
+        auction = (enrichment.comps.normalized or {}).get("auction_path")
+    if isinstance(auction, dict) and auction.get("expected_settle_usd") and est:
+        settle = float(auction["expected_settle_usd"])
+        gap = ((est - settle) / settle) * 100 if settle else 0
+        reasons.append(
+            f"Clear ~${settle:,.0f} vs mark ${est:,.0f} → {gap:+.0f}% underwrite gap"
+        )
+    elif score.asking_discount_pct is not None and score.asking_discount_pct < -10:
+        reasons.append(
+            f"Ask/settle sits {abs(score.asking_discount_pct):.0f}% under screening mark"
+        )
+    elif ask is None and est:
+        reasons.append(f"Unpriced process channel · screen mark ${est:,.0f}")
     if score.best_strategy:
-        reasons.append(f"Best strategy fit: {score.best_strategy.value.replace('_', ' ').title()}")
-    if score.confidence >= 60:
-        reasons.append(f"Evidence confidence {score.confidence:.0f}/100")
+        reasons.append(
+            f"Use fit: {score.best_strategy.value.replace('_', ' ').title()} "
+            f"(LandSignal {score.opportunity:.0f}/100)"
+        )
     if score.risk <= 35:
-        reasons.append(f"Lower screened risk ({score.risk:.0f}/100)")
+        reasons.append(f"Risk contained at {score.risk:.0f}/100 on desktop screens")
+    elif score.risk >= 55:
+        reasons.append(f"Risk {score.risk:.0f}/100 — price the friction, don’t ignore it")
+    if score.confidence >= 55:
+        reasons.append(f"Evidence file {score.confidence:.0f}/100 — usable for desk triage")
     if listing and listing.provider_id == "blm_lpad":
-        reasons.append("Federal disposal channel — fewer retail bidders")
+        reasons.append("BLM disposal — thin retail competition, process timeline risk")
     if listing and listing.provider_id == "public_tax_sale":
-        reasons.append("Public tax-sale / county inventory channel")
+        reasons.append("Tax-sale / land-bank channel — diligence-heavy, less MLS noise")
+    acres = getattr(parcel, "acreage", None)
+    if acres and acres >= 40:
+        reasons.append(f"Institutional scale ({acres:,.0f} ac) — hold without assembling neighbors")
     if not reasons:
-        reasons.append("Passes stage-1 strategy screens")
+        reasons.append("Clears stage-1 gates for acquisition review")
     return reasons[:5]
+
+
+def build_return_thesis(
+    *,
+    score,
+    listing,
+    auction_path: dict[str, Any] | None = None,
+) -> tuple[str | None, str | None]:
+    """One-line institutional thesis + conviction for radar cards."""
+    est = getattr(score, "estimated_value_usd", None)
+    ask = listing.asking_price_usd if listing else None
+    settle = None
+    if isinstance(auction_path, dict):
+        settle = auction_path.get("expected_settle_usd")
+    entry = settle or (ask if ask and ask > 0 else None)
+    provider = listing.provider_id if listing else None
+    if entry is None and est:
+        entry = est * (0.62 if provider in ("public_tax_sale", "public_surplus") else 0.85)
+    opp = float(getattr(score, "opportunity", 0) or 0)
+    risk = float(getattr(score, "risk", 0) or 0)
+    conf = float(getattr(score, "confidence", 0) or 0)
+    gap_pct = ((est - entry) / entry * 100) if est and entry else None
+    conviction = (
+        "HIGH"
+        if opp >= 68 and risk <= 42 and conf >= 40 and (gap_pct is None or gap_pct >= 12)
+        else "MEDIUM"
+        if opp >= 52 and risk <= 58
+        else "WATCH"
+    )
+    strat = (
+        score.best_strategy.value.replace("_", " ").title()
+        if score.best_strategy
+        else "Land"
+    )
+    if entry and est and gap_pct is not None:
+        thesis = (
+            f"{conviction}: underwrite ~${entry:,.0f} vs mark ${est:,.0f} "
+            f"({gap_pct:+.0f}%) · {strat}"
+        )
+    elif est:
+        thesis = f"{conviction}: screen mark ${est:,.0f} · {strat} desk fit"
+    else:
+        thesis = f"{conviction}: {strat} screen — confirm local comps"
+    return thesis, conviction
 
 
 def rating_breakdown(score) -> list[dict[str, Any]]:

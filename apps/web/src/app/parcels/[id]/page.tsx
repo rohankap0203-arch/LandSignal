@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AcquireRail } from "@/components/acquire-rail";
 import { LandLoader } from "@/components/land-loader";
 import { ScoreBar } from "@/components/score-bar";
 import { SignalBadge } from "@/components/signal-badge";
@@ -87,16 +88,12 @@ export default function ParcelIntelligencePage() {
     (sourcing.website
       ? { label: "Open source posting", url: String(sourcing.website), kind: "primary", available: true }
       : null);
-  const phoneLink =
-    liveLinks.find((l) => l.kind === "contact" && String(l.url).startsWith("tel:")) ||
-    (sourcing.phone
-      ? {
-          label: String(sourcing.phone),
-          url: `tel:${String(sourcing.phone).replace(/-/g, "")}`,
-          kind: "contact",
-          available: true,
-        }
-      : null);
+  const phone =
+    (sourcing.phone ? String(sourcing.phone) : null) ||
+    liveLinks.find((l) => l.kind === "contact" && String(l.url).startsWith("tel:"))?.label ||
+    null;
+  const findLink = liveLinks.find((l) => l.kind === "lookup") || null;
+  const returnCase = (brief.return_case as AnyRec) || {};
 
   async function toggleWatch() {
     try {
@@ -171,37 +168,57 @@ export default function ParcelIntelligencePage() {
               <Stat label="Deal readiness" value={`${Number(score?.deal_readiness || 0).toFixed(0)}/100`} />
             </div>
 
+            {returnCase.headline ? (
+              <div className="return-case mt-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+                    Acquisition return case
+                  </div>
+                  <span className={`conviction-pill ${String(returnCase.conviction || "watch").toLowerCase()}`}>
+                    {String(returnCase.conviction || "WATCH")}
+                  </span>
+                </div>
+                <div className="mt-1 font-semibold leading-snug break-words">{String(returnCase.headline)}</div>
+                <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
+                  {((returnCase.bullets as string[]) || []).slice(0, 4).map((b) => (
+                    <li key={b}>• {b}</li>
+                  ))}
+                </ul>
+                {returnCase.desk_note ? (
+                  <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{String(returnCase.desk_note)}</p>
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="source-card mt-5">
               <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Where this came from</div>
               <div className="font-semibold break-words">{String(sourcing.source_name || "Public GIS feed")}</div>
               <div className="mt-1 text-sm text-[var(--muted)] break-words">
                 Seller / office: {String(sourcing.office || "See source site")}
-                {sourcing.phone ? ` · ${String(sourcing.phone)}` : ""}
               </div>
+              <AcquireRail
+                className="mt-3"
+                postingUrl={sellerLink?.url}
+                phone={phone}
+                office={sourcing.office ? String(sourcing.office) : null}
+                findUrl={findLink?.url}
+                findLabel={findLink?.label}
+              />
               {sourcing.how_to_buy ? (
                 <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{String(sourcing.how_to_buy)}</p>
               ) : null}
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
-              {sellerLink && (
-                <a className="btn-posting" href={sellerLink.url} target="_blank" rel="noreferrer">
-                  Open posting
-                </a>
-              )}
-              {phoneLink && (
-                <a className="btn-call" href={phoneLink.url}>
-                  {String(phoneLink.label).startsWith("Call ")
-                    ? phoneLink.label
-                    : `Call ${phoneLink.label}`}
-                </a>
-              )}
               {links
                 .filter(
                   (l) =>
                     l.url !== sellerLink?.url &&
-                    l.url !== phoneLink?.url &&
-                    l.kind !== "map",
+                    l.url !== findLink?.url &&
+                    !String(l.url).startsWith("tel:") &&
+                    l.kind !== "map" &&
+                    l.kind !== "primary" &&
+                    l.kind !== "contact",
                 )
                 .map((link, i) => (
                   <LinkButton key={`${link.url}-${i}`} link={link} />
