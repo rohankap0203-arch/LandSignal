@@ -82,9 +82,46 @@ def _known_ratio(values: list) -> float:
     return sum(1 for v in values if v is not None) / len(values)
 
 
-def _estimate_value(parcel, soil_n, flood_n, wet_n, growth_n) -> dict:
+def _estimate_value(parcel, soil_n, flood_n, wet_n, growth_n, listing=None) -> dict:
     state = (parcel.state or "").upper()
+    acres = parcel.acreage or 0
+    ask = listing.asking_price_usd if listing else None
+    provider = listing.provider_id if listing else None
+
+    # Small urban / tax-sale lots: do NOT apply farmland $/acre priors (creates nonsense discounts)
+    if acres and acres < 2.0 and provider in ("public_tax_sale", "public_surplus"):
+        if ask and ask > 0:
+            # Distressed auction clearing often below retail; screen retail band from bid
+            base = ask * 4.0 if ask < 5000 else ask * 1.8
+        else:
+            # Urban land residual prior ~$2–8/sqft depending on state
+            psf = 4.0 if state in ("CA", "FL", "NY", "WA") else 2.0
+            base = acres * 43560 * psf
+        return {
+            "estimated_value_low_usd": base * 0.6,
+            "estimated_value_base_usd": base,
+            "estimated_value_high_usd": base * 1.5,
+            "downside_value_usd": max(ask or 0, base * 0.4),
+            "development_upside_usd": base * 2.5,
+            "comps_count": 0,
+            "liquidity_score": 45,
+            "scarcity_score": 40,
+            "catalyst_score": 30,
+            "seller_pressure_score": 70,
+            "solar_irradiance_score": 40,
+            "timber_suitability": 5,
+            "zoning_development_friendly": 55,
+            "path_of_growth_score": growth_n.get("path_of_growth_score") or 50,
+            "knowledge_state": KnowledgeState.ESTIMATED,
+            "confidence": 40,
+            "note": "Small-lot / tax-sale screening value (not ag $/acre prior). Verify with local comps.",
+            "ppa_prior": (base / acres) if acres else None,
+        }
+
     base_ppa = STATE_PPA_PRIOR.get(state, 3000)
+    # Desert BLM tracts: lower productive ag prior
+    if provider == "blm_lpad" and state in ("AZ", "NV", "NM", "UT"):
+        base_ppa = min(base_ppa, 1500)
     prime = soil_n.get("prime_farmland_pct")
     wetland = wet_n.get("wetland_pct") or 0
     flood = flood_n.get("flood_zone_pct") or 0
@@ -96,7 +133,6 @@ def _estimate_value(parcel, soil_n, flood_n, wet_n, growth_n) -> dict:
     growth = growth_n.get("path_of_growth_score")
     if growth is not None:
         mult *= 0.9 + (growth / 100) * 0.25
-    acres = parcel.acreage or 0
     base = base_ppa * mult * acres if acres else None
     if base is None:
         return {
@@ -181,15 +217,24 @@ async def analyze_parcel(store: MemoryStore, parcel_id: UUID, settings: Settings
     )
     growth_n = (existing.growth.normalized or existing.growth.value or {}) if existing.growth else {}
 
-    # Valuation: prefer existing comps; else screening prior
-    if not existing.comps or existing.comps.knowledge_state == KnowledgeState.UNKNOWN or not (
-        (existing.comps.normalized or {}).get("estimated_value_base_usd")
-    ):
-        est = _estimate_value(parcel, soil_n, flood_n, wet_n, growth_n)
+    # Valuation: refresh screening prior when missing or when small-lot tax-sale needs specialized model
+    needs_value = (
+        not existing.comps
+        or existing.comps.knowledge_state == KnowledgeState.UNKNOWN
+        or not ((existing.comps.normalized or {}).get("estimated_value_base_usd"))
+        or (
+            listing
+            and listing.provider_id in ("public_tax_sale", "public_surplus")
+            and (parcel.acreage or 0) < 2.0
+            and (existing.comps.source or "").startswith("state_ppa")
+        )
+    )
+    if needs_value:
+        est = _estimate_value(parcel, soil_n, flood_n, wet_n, growth_n, listing)
         existing.comps = Provenanced(
             value=est,
             knowledge_state=est["knowledge_state"],
-            source="state_ppa_screening_prior",
+            source=est.get("note", "screening_prior")[:80],
             confidence=est["confidence"],
             retrieved_at=datetime.now(timezone.utc),
             normalized=est,

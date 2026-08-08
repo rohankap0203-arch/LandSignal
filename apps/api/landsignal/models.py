@@ -207,17 +207,43 @@ class RadarRow(BaseModel):
     signal: Signal
     property_name: str
     location: str
+    state: str | None = None
+    county: str | None = None
+    region: str | None = None
     acres: float | None
+    acres_display: str
     ask: float | None
+    price_display: str
+    price_label: str
     price_per_acre: float | None
+    price_per_acre_display: str
     estimated_value: float | None
+    estimated_value_display: str
+    value_knowledge: str
     discount_pct: float | None
+    discount_display: str
     opportunity: float
     asymmetry: float
     risk: float
     confidence: float
+    deal_readiness: float
     best_strategy: Strategy | None
+    best_strategy_label: str
+    secondary_strategy_label: str
     freshness_hours: float | None
     status: str
+    status_label: str
     is_demo: bool = False
     personalized_opportunity: float | None = None
+    fit_score: float | None = None
+    summary: str
+    match_reasons: list[str] = Field(default_factory=list)
+    rating_breakdown: list[dict[str, Any]] = Field(default_factory=list)
+    links: list[dict[str, str]] = Field(default_factory=list)
+    latitude: float | None = None
+    longitude: float | None = None
+    provider_id: str | None = None
+    provider_label: str
+    headline_metric: str
+    risk_label: str
+    confidence_label: str

@@ -7,18 +7,5 @@ export function SignalBadge({ signal }: { signal: string }) {
         : signal === "REJECT"
           ? "reject"
           : "watch";
-  const mark =
-    signal === "EXCEPTIONAL"
-      ? "◆"
-      : signal === "STRONG"
-        ? "●"
-        : signal === "REJECT"
-          ? "■"
-          : "○";
-  return (
-    <span className={`badge ${cls}`}>
-      <span aria-hidden>{mark}</span>
-      {signal}
-    </span>
-  );
+  return <span className={`badge ${cls}`}>{signal}</span>;
 }
