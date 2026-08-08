@@ -249,3 +249,8 @@ class RadarRow(BaseModel):
     headline_metric: str
     risk_label: str
     confidence_label: str
+    source_name: str | None = None
+    contact_office: str | None = None
+    contact_phone: str | None = None
+    contact_website: str | None = None
+    how_to_buy: str | None = None

@@ -26,15 +26,25 @@ function ActionAnchor({ link, primary }: { link: ActionLink; primary?: boolean }
 
 export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
   const [intelPending, setIntelPending] = useState(false);
-  const primary =
+  const posting =
     row.links.find((l) => l.kind === "primary" && l.available !== false) ||
-    row.links.find((l) => l.available !== false && l.kind !== "map") ||
-    row.links.find((l) => l.kind === "primary") ||
-    row.links[0];
+    (row.contact_website
+      ? { label: "Open source posting", url: row.contact_website, kind: "primary", available: true }
+      : null);
+  const call =
+    row.links.find((l) => l.kind === "contact" && String(l.url).startsWith("tel:")) ||
+    (row.contact_phone
+      ? {
+          label: row.contact_phone,
+          url: `tel:${row.contact_phone.replace(/-/g, "")}`,
+          kind: "contact",
+          available: true,
+        }
+      : null);
   const secondary =
-    row.links.find((l) => l !== primary && l.kind === "contact" && l.available !== false) ||
-    row.links.find((l) => l !== primary && l.kind === "map") ||
-    row.links.find((l) => l !== primary);
+    row.links.find((l) => l !== posting && l.kind === "lookup" && l.available !== false) ||
+    row.links.find((l) => l !== posting && l.kind === "contact_web" && l.available !== false) ||
+    row.links.find((l) => l !== posting && l !== call && l.kind === "map");
 
   return (
     <article className="panel property-card" style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}>
@@ -59,6 +69,12 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
               </Link>
             </h2>
             <p className="mt-1 text-sm leading-relaxed text-[var(--muted)] break-words">{row.summary}</p>
+            {row.source_name && (
+              <p className="mt-1 text-xs text-[var(--muted)] break-words">
+                Source: {row.source_name}
+                {row.contact_office ? ` · ${row.contact_office}` : ""}
+              </p>
+            )}
           </div>
           <div className="shrink-0 rounded-full bg-[var(--bg-soft)] px-3 py-1 text-sm font-semibold text-[var(--brand)] whitespace-nowrap">
             Fit {Math.round(row.fit_score ?? row.opportunity)}
@@ -115,7 +131,16 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
         </ul>
 
         <div className="card-actions">
-          {primary && <ActionAnchor link={primary} primary />}
+          {posting && (
+            <a className="btn-posting" href={posting.url} target="_blank" rel="noreferrer">
+              Open posting
+            </a>
+          )}
+          {call && (
+            <a className="btn-call" href={call.url}>
+              {call.label}
+            </a>
+          )}
           {secondary && <ActionAnchor link={secondary} />}
           <Link
             href={`/parcels/${row.parcel_id}`}

@@ -89,6 +89,11 @@ export type RadarRow = {
   headline_metric: string;
   risk_label: string;
   confidence_label: string;
+  source_name?: string | null;
+  contact_office?: string | null;
+  contact_phone?: string | null;
+  contact_website?: string | null;
+  how_to_buy?: string | null;
 };
 
 export type SearchMeta = {

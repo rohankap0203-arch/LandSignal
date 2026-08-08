@@ -285,6 +285,7 @@ async def radar(
         match_reasons,
         price_display,
         rating_breakdown,
+        sourcing_card,
         value_display,
     )
 
@@ -335,6 +336,8 @@ async def radar(
                 continue
 
             ask = listing.asking_price_usd
+            if ask is not None and ask <= 0:
+                ask = None
             priced = ask is not None and ask > 0
             if mode == "priced" and not priced:
                 continue
@@ -430,7 +433,12 @@ async def radar(
                     provider_id=listing.provider_id,
                     state=parcel.state,
                 )
-            pd = price_display(ask, listing.provider_id, auction_path if isinstance(auction_path, dict) else None)
+            pd = price_display(
+                ask,
+                listing.provider_id,
+                auction_path if isinstance(auction_path, dict) else None,
+                score.estimated_value_usd,
+            )
             vd = value_display(
                 score.estimated_value_usd,
                 (enrichment.comps.knowledge_state.value if enrichment and enrichment.comps else "ESTIMATED"),
@@ -438,7 +446,18 @@ async def radar(
             ppa = listing.price_per_acre_usd
             if ppa is None and ask and parcel.acreage:
                 ppa = ask / parcel.acreage
-            links = build_action_links(
+            source = sourcing_card(
+                provider_id=listing.provider_id,
+                source_url=listing.source_url,
+                title=listing.title or "",
+                apn=parcel.apn,
+                state=parcel.state,
+                county=parcel.county,
+                latitude=parcel.latitude,
+                longitude=parcel.longitude,
+                raw=listing.raw,
+            )
+            links = source.get("links") or build_action_links(
                 provider_id=listing.provider_id,
                 source_url=listing.source_url,
                 title=listing.title or "",
@@ -575,6 +594,11 @@ async def radar(
                     headline_metric=headline,
                     risk_label=risk_label,
                     confidence_label=conf_label,
+                    source_name=source.get("source_name"),
+                    contact_office=source.get("office"),
+                    contact_phone=source.get("phone"),
+                    contact_website=source.get("website"),
+                    how_to_buy=source.get("how_to_buy"),
                 )
             )
         return out
@@ -647,7 +671,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         human_wetlands,
     )
     from landsignal.services.links import annotate_links
-    from landsignal.services.presentation import build_action_links, price_display, rating_breakdown
+    from landsignal.services.presentation import price_display, rating_breakdown, sourcing_card
 
     store = get_store(get_settings().demo_seed)
     parcel = store.parcels.get(parcel_id)
@@ -657,7 +681,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     score = await analyze_parcel(store, parcel_id, fast=False)
     listing = store.listing_for_parcel(parcel_id)
     enrichment = store.enrichments.get(parcel_id)
-    links = build_action_links(
+    source = sourcing_card(
         provider_id=listing.provider_id if listing else None,
         source_url=listing.source_url if listing else None,
         title=(listing.title if listing else None) or "",
@@ -668,17 +692,18 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         longitude=parcel.longitude,
         raw=listing.raw if listing else None,
     )
-    # Only validate non-map links; maps/search are assumed reachable (keeps page snappy)
-    non_map = [l for l in links if l.get("kind") != "map"]
-    maps = [{**l, "available": True, "availability_reason": "ok", "status_code": 200} for l in links if l.get("kind") == "map"]
-    checked = await annotate_links(non_map)
-    annotated = checked + maps
-    # Promote first available non-map link if primary is dead
-    if annotated and not annotated[0].get("available"):
-        for i, link in enumerate(annotated):
-            if link.get("available") and link.get("kind") != "map":
-                annotated[0], annotated[i] = annotated[i], annotated[0]
-                break
+    links = source.get("links") or []
+    # Only validate http(s) links; tel: and maps stay available
+    http_links = [l for l in links if str(l.get("url") or "").startswith("http")]
+    other_links = [
+        {**l, "available": True, "availability_reason": "ok", "status_code": None}
+        for l in links
+        if not str(l.get("url") or "").startswith("http")
+    ]
+    checked = await annotate_links(http_links)
+    annotated = checked + other_links
+    # Keep "Open source posting" first when available
+    annotated.sort(key=lambda l: 0 if l.get("kind") == "primary" and l.get("available") else 1)
 
     dd_raw = store.dd_items.get(parcel_id, [])
     dd_guided = human_dd_items(
@@ -735,10 +760,14 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     if not isinstance(auction_path, dict):
         auction_path = None
 
+    ask = listing.asking_price_usd if listing else None
+    if ask is not None and ask <= 0:
+        ask = None
     price = price_display(
-        listing.asking_price_usd if listing else None,
+        ask,
         listing.provider_id if listing else None,
         auction_path,
+        score.estimated_value_usd if score else None,
     )
     brief = build_intelligence_brief(
         parcel=parcel,
@@ -753,15 +782,42 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     user = UUID("00000000-0000-4000-8000-000000000002")
     watched = parcel_id in store.watchlists.get(user, set())
 
-    # Interactive cockpit under the map — property-unique acquisition intelligence
+    # XY clearing chart: price (x) vs remaining buyer competition (y)
+    model_v = float(score.estimated_value_usd or 0) if score else 0.0
+    opener_v = float((auction_path or {}).get("opening_bid_usd") or ask or 0)
+    settle_v = float((auction_path or {}).get("expected_settle_usd") or 0)
+    settle_lo = float((auction_path or {}).get("settle_low_usd") or settle_v)
+    settle_hi = float((auction_path or {}).get("settle_high_usd") or settle_v)
+    if auction_path and opener_v > 0 and model_v > 0:
+        chart_points = [
+            {"x": opener_v, "y": 100, "label": "Opener", "note": "Published floor — almost everyone still in"},
+            {"x": settle_lo, "y": 72, "label": "Low clear", "note": "Thin auction / weak day"},
+            {"x": settle_v, "y": 48, "label": "Expected settle", "note": "Typical contested clear"},
+            {"x": settle_hi, "y": 28, "label": "High clear", "note": "Hot room / retail spillover"},
+            {"x": model_v, "y": 12, "label": "Model value", "note": "Screening retail — few tax-sale buyers pay here"},
+        ]
+    elif model_v > 0:
+        chart_points = [
+            {"x": model_v * 0.55, "y": 80, "label": "Distressed band", "note": "Where process buyers often land"},
+            {"x": model_v * 0.75, "y": 45, "label": "Negotiate band", "note": "Brokered / surplus outcomes"},
+            {"x": model_v, "y": 18, "label": "Model value", "note": "Screening retail mark"},
+        ]
+    else:
+        chart_points = []
+
     unsold = ((enrichment.narratives or {}).get("why_unsold") if enrichment else None) or {}
     hypotheses = (unsold.get("hypotheses") if isinstance(unsold, dict) else None) or []
     cockpit = {
-        "title": "Acquisition signal cockpit",
-        "subtitle": f"Live underwriting lens for {(listing.title if listing else None) or parcel.apn}",
+        "title": "Bid clearing chart",
+        "subtitle": f"{parcel.apn or 'Parcel'} · {parcel.county}, {parcel.state}",
         "auction_path": auction_path,
         "price": price,
         "model_value": score.estimated_value_usd if score else None,
+        "chart": {
+            "x_label": "Price ($)",
+            "y_label": "Buyers still competing (%)",
+            "points": chart_points,
+        },
         "opportunity": score.opportunity if score else None,
         "risk": score.risk if score else None,
         "confidence": score.confidence if score else None,
@@ -790,7 +846,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
             "county": parcel.county,
             "state": parcel.state,
         },
-        "decision_prompt": brief.get("score_story", {}).get("landsignal"),
+        "source": source,
     }
 
     return {
@@ -806,6 +862,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         "links": annotated,
         "price": price,
         "auction_path": auction_path,
+        "sourcing": source,
         "cockpit": cockpit,
         "rating_breakdown": rating_breakdown(score) if score else [],
         "score_explained": brief.get("score_story")

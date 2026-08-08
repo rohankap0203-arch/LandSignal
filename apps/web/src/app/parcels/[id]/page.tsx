@@ -75,16 +75,28 @@ export default function ParcelIntelligencePage() {
   const land = (data.land_readouts as Record<string, AnyRec>) || {};
   const brief = (data.brief as AnyRec) || {};
   const cockpit = (data.cockpit as AnyRec) || {};
+  const sourcing = (data.sourcing as AnyRec) || ((cockpit.source as AnyRec) || {});
   const whyOpp = (brief.why_opportunity as AnyRec[]) || [];
   const whyStill = (brief.why_still_available as AnyRec[]) || [];
   const scenarios = (brief.scenario_cards as AnyRec[]) || (data.scenarios_human as AnyRec[]) || [];
   const dd = (brief.dd_focus as AnyRec[]) || (data.due_diligence_guided as AnyRec[]) || [];
   const story = (brief.score_story as Record<string, string>) || {};
-  const primaryCta = brief.primary_cta as { label: string; url: string } | undefined;
   const liveLinks = links.filter((l) => l.available !== false);
   const sellerLink =
-    liveLinks.find((l) => l.kind === "primary" || l.kind === "contact") ||
-    (primaryCta ? { label: primaryCta.label, url: primaryCta.url, kind: "primary", available: true } : null);
+    liveLinks.find((l) => l.kind === "primary" && l.available !== false) ||
+    (sourcing.website
+      ? { label: "Open source posting", url: String(sourcing.website), kind: "primary", available: true }
+      : null);
+  const phoneLink =
+    liveLinks.find((l) => l.kind === "contact" && String(l.url).startsWith("tel:")) ||
+    (sourcing.phone
+      ? {
+          label: String(sourcing.phone),
+          url: `tel:${String(sourcing.phone).replace(/-/g, "")}`,
+          kind: "contact",
+          available: true,
+        }
+      : null);
 
   async function toggleWatch() {
     try {
@@ -155,25 +167,40 @@ export default function ParcelIntelligencePage() {
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <Stat label={String(price?.label || "Price")} value={String(price?.display || "Contact source")} />
+              <Stat label={String(price?.label || "Price")} value={String(price?.display || "No public ask")} />
               <Stat label="Deal readiness" value={`${Number(score?.deal_readiness || 0).toFixed(0)}/100`} />
             </div>
 
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="source-card mt-5">
+              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Where this came from</div>
+              <div className="font-semibold break-words">{String(sourcing.source_name || "Public GIS feed")}</div>
+              <div className="mt-1 text-sm text-[var(--muted)] break-words">
+                Seller / office: {String(sourcing.office || "See source site")}
+                {sourcing.phone ? ` · ${String(sourcing.phone)}` : ""}
+              </div>
+              {sourcing.how_to_buy ? (
+                <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{String(sourcing.how_to_buy)}</p>
+              ) : null}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
               {sellerLink && (
-                <a className="btn btn-dark" href={sellerLink.url} target="_blank" rel="noreferrer">
-                  {sellerLink.label.includes("Maps")
-                    ? "Contact / learn about this listing"
-                    : sellerLink.label}
+                <a className="btn-posting" href={sellerLink.url} target="_blank" rel="noreferrer">
+                  Open posting
                 </a>
               )}
-              {primaryCta && primaryCta.url !== sellerLink?.url && (
-                <a className="btn btn-ghost" href={primaryCta.url} target="_blank" rel="noreferrer">
-                  {primaryCta.label}
+              {phoneLink && (
+                <a className="btn-call" href={phoneLink.url}>
+                  Call {phoneLink.label}
                 </a>
               )}
               {links
-                .filter((l) => l.url !== sellerLink?.url && l.url !== primaryCta?.url)
+                .filter(
+                  (l) =>
+                    l.url !== sellerLink?.url &&
+                    l.url !== phoneLink?.url &&
+                    l.kind !== "map",
+                )
                 .map((link, i) => (
                   <LinkButton key={`${link.url}-${i}`} link={link} />
                 ))}

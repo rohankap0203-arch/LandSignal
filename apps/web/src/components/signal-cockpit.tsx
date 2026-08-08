@@ -10,220 +10,147 @@ function money(v: unknown): string {
   return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
-/** Property-unique interactive underwriting panel under the map. */
+/** X–Y bid clearing chart + compact source/contact under the map. */
 export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
-  const auction = (cockpit.auction_path as AnyRec) || null;
-  const constraints = (cockpit.constraints as Record<string, AnyRec>) || {};
-  const buyers = (cockpit.buyer_filters as AnyRec[]) || [];
-  const pin = (cockpit.pin as AnyRec) || {};
-  const model = Number(cockpit.model_value || 0);
-  const opener = Number(auction?.opening_bid_usd || 0);
-  const settleLow = Number(auction?.settle_low_usd || opener);
-  const settle = Number(auction?.expected_settle_usd || opener);
-  const settleHigh = Number(auction?.settle_high_usd || settle);
-  const maxX = Math.max(model, settleHigh, opener, 1);
+  const chart = (cockpit.chart as AnyRec) || {};
+  const points = ((chart.points as AnyRec[]) || []).filter(
+    (p) => Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)),
+  );
+  const source = (cockpit.source as AnyRec) || {};
+  const [active, setActive] = useState(0);
 
-  const [bidGuess, setBidGuess] = useState(settle || Math.max(opener * 3, 1));
-  const [focus, setFocus] = useState<"bid" | "buyers" | "constraints">("bid");
+  const layout = useMemo(() => {
+    if (!points.length) return null;
+    const xs = points.map((p) => Number(p.x));
+    const ys = points.map((p) => Number(p.y));
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = 0;
+    const maxY = Math.max(100, ...ys);
+    const padL = 44;
+    const padR = 12;
+    const padT = 16;
+    const padB = 36;
+    const w = 320;
+    const h = 200;
+    const xScale = (x: number) => padL + ((x - minX) / Math.max(1, maxX - minX)) * (w - padL - padR);
+    const yScale = (y: number) => padT + (1 - (y - minY) / Math.max(1, maxY - minY)) * (h - padT - padB);
+    const mapped = points.map((p) => ({
+      ...p,
+      cx: xScale(Number(p.x)),
+      cy: yScale(Number(p.y)),
+    }));
+    const path = mapped.map((p, i) => `${i === 0 ? "M" : "L"} ${p.cx.toFixed(1)} ${p.cy.toFixed(1)}`).join(" ");
+    return { w, h, padL, padT, padB, minX, maxX, maxY, mapped, path, xScale, yScale };
+  }, [points]);
 
-  const edge = useMemo(() => {
-    if (!model) return null;
-    const pct = ((bidGuess - model) / model) * 100;
-    return { pct, dollars: model - bidGuess };
-  }, [bidGuess, model]);
-
-  const seed = useMemo(() => {
-    const lat = Number(pin.lat || 0);
-    const lon = Number(pin.lon || 0);
-    return Math.abs(Math.sin(lat * 12.9898 + lon * 78.233) * 10000) % 1;
-  }, [pin.lat, pin.lon]);
-
-  const layers = [
-    { key: "flood", label: "Flood", c: constraints.flood },
-    { key: "wetlands", label: "Wetlands", c: constraints.wetlands },
-    { key: "soil", label: "Soil", c: constraints.soil },
-    { key: "transmission", label: "Power", c: constraints.transmission },
-  ];
+  const selected = points[Math.min(active, Math.max(0, points.length - 1))];
 
   return (
     <div className="signal-cockpit">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
-            Not a listing card — underwriting lens
-          </div>
-          <h3 className="display text-lg font-semibold">{String(cockpit.title || "Acquisition signal cockpit")}</h3>
-          <p className="mt-0.5 text-xs text-[var(--muted)] break-words">
-            {String(cockpit.subtitle || "")}
-          </p>
+      <div>
+        <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
+          Price (X) × buyers still in (Y)
         </div>
-        <div className="cockpit-tabs">
-          {(
-            [
-              ["bid", "Bid path"],
-              ["buyers", "Who walks"],
-              ["constraints", "Constraints"],
-            ] as const
-          ).map(([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              className={focus === k ? "active" : ""}
-              onClick={() => setFocus(k)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <h3 className="display text-lg font-semibold">{String(cockpit.title || "Bid clearing chart")}</h3>
+        <p className="mt-0.5 text-xs text-[var(--muted)]">{String(cockpit.subtitle || "")}</p>
       </div>
 
-      {/* Unique topographic fingerprint from coordinates */}
-      <svg className="cockpit-fingerprint" viewBox="0 0 320 56" aria-hidden>
-        {Array.from({ length: 5 }).map((_, i) => {
-          const y = 12 + i * 8;
-          const amp = 6 + seed * 10 + i;
-          return (
-            <path
-              key={i}
-              d={`M0 ${y} C 40 ${y - amp}, 80 ${y + amp}, 120 ${y - amp / 2} S 200 ${y + amp}, 240 ${y} S 300 ${y - amp}, 320 ${y + 2}`}
-              fill="none"
-              stroke={`hsla(${120 - Number(cockpit.risk || 40) * 1.2}, 45%, 38%, ${0.35 + i * 0.1})`}
+      {layout ? (
+        <>
+          <svg className="clearing-chart" viewBox={`0 0 ${layout.w} ${layout.h}`} role="img">
+            <title>Bid clearing chart</title>
+            {/* grid */}
+            {[0, 25, 50, 75, 100].map((y) => {
+              const gy = layout.yScale(y);
+              return (
+                <g key={y}>
+                  <line x1={layout.padL} x2={layout.w - 12} y1={gy} y2={gy} stroke="var(--line)" strokeWidth="1" />
+                  <text x={layout.padL - 6} y={gy + 3} textAnchor="end" className="chart-tick">
+                    {y}
+                  </text>
+                </g>
+              );
+            })}
+            <line
+              x1={layout.padL}
+              y1={layout.padT}
+              x2={layout.padL}
+              y2={layout.h - layout.padB}
+              stroke="var(--ink)"
               strokeWidth="1.2"
             />
-          );
-        })}
-        <circle cx={40 + seed * 240} cy={28} r="4" fill="var(--accent)" opacity="0.85" />
-      </svg>
-
-      {focus === "bid" && (
-        <div className="space-y-3">
-          {auction ? (
-            <>
-              <p className="text-sm text-[var(--muted)] leading-relaxed">
-                Opening bids are floors. Drag your max bid and see settle-adjusted edge vs the screening
-                model — the number Zillow never shows.
-              </p>
-              <div className="bid-track" aria-hidden>
-                <div className="bid-mark opener" style={{ left: `${(opener / maxX) * 100}%` }}>
-                  <span>Opener</span>
-                </div>
-                <div className="bid-band" style={{ left: `${(settleLow / maxX) * 100}%`, width: `${((settleHigh - settleLow) / maxX) * 100}%` }} />
-                <div className="bid-mark settle" style={{ left: `${(settle / maxX) * 100}%` }}>
-                  <span>Settle</span>
-                </div>
-                {model > 0 && (
-                  <div className="bid-mark model" style={{ left: `${Math.min(100, (model / maxX) * 100)}%` }}>
-                    <span>Model</span>
-                  </div>
-                )}
-              </div>
-              <label className="block text-xs uppercase tracking-wide text-[var(--muted)]">
-                Your max bid · {money(bidGuess)}
-                <input
-                  type="range"
-                  className="mt-2 w-full"
-                  min={opener || 1}
-                  max={Math.max(model * 1.1, settleHigh * 1.2, opener * 2)}
-                  step={Math.max(1, Math.round((model || settle || 1000) / 100))}
-                  value={bidGuess}
-                  onChange={(e) => setBidGuess(Number(e.target.value))}
+            <line
+              x1={layout.padL}
+              y1={layout.h - layout.padB}
+              x2={layout.w - 12}
+              y2={layout.h - layout.padB}
+              stroke="var(--ink)"
+              strokeWidth="1.2"
+            />
+            <path d={layout.path} fill="none" stroke="var(--brand)" strokeWidth="2.2" />
+            {layout.mapped.map((p, i) => (
+              <g key={String(p.label)} className="chart-point" onClick={() => setActive(i)} style={{ cursor: "pointer" }}>
+                <circle
+                  cx={p.cx}
+                  cy={p.cy}
+                  r={active === i ? 6 : 4.5}
+                  fill={active === i ? "var(--accent)" : "var(--brand)"}
+                  stroke="#fff"
+                  strokeWidth="1.5"
                 />
-              </label>
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="cockpit-stat">
-                  <div className="k">Opener</div>
-                  <div className="v">{money(opener)}</div>
-                </div>
-                <div className="cockpit-stat">
-                  <div className="k">Expected settle</div>
-                  <div className="v">{money(settle)}</div>
-                </div>
-                <div className="cockpit-stat">
-                  <div className="k">Your edge vs model</div>
-                  <div className={`v ${edge && edge.dollars > 0 ? "pos" : "neg"}`}>
-                    {edge ? `${edge.pct.toFixed(0)}%` : "—"}
-                  </div>
-                </div>
-              </div>
-              <p className="text-xs text-[var(--muted)] leading-relaxed">
-                {String(auction.note || "").slice(0, 280)}
-              </p>
-            </>
-          ) : (
-            <div className="space-y-2 text-sm text-[var(--muted)]">
-              <p>
-                No auction opener on file — this is process / inquiry pricing. Model value{" "}
-                <strong className="text-[var(--ink)]">{money(model)}</strong>.
-              </p>
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="cockpit-stat">
-                  <div className="k">LandSignal</div>
-                  <div className="v">{Math.round(Number(cockpit.opportunity || 0))}</div>
-                </div>
-                <div className="cockpit-stat">
-                  <div className="k">Risk</div>
-                  <div className="v">{Math.round(Number(cockpit.risk || 0))}</div>
-                </div>
-                <div className="cockpit-stat">
-                  <div className="k">Readiness</div>
-                  <div className="v">{Math.round(Number(cockpit.deal_readiness || 0))}</div>
-                </div>
-              </div>
+                <text x={p.cx} y={p.cy - 10} textAnchor="middle" className="chart-label">
+                  {String(p.label)}
+                </text>
+              </g>
+            ))}
+            <text x={(layout.padL + layout.w - 12) / 2} y={layout.h - 8} textAnchor="middle" className="chart-axis">
+              {String(chart.x_label || "Price ($)")}
+            </text>
+            <text
+              x={12}
+              y={layout.h / 2}
+              textAnchor="middle"
+              className="chart-axis"
+              transform={`rotate(-90 12 ${layout.h / 2})`}
+            >
+              {String(chart.y_label || "Buyers still competing (%)")}
+            </text>
+          </svg>
+          {selected && (
+            <div className="chart-readout">
+              <strong>{String(selected.label)}</strong>
+              <span>
+                {money(selected.x)} · {Number(selected.y).toFixed(0)}% still competing
+              </span>
+              <p>{String(selected.note || "")}</p>
             </div>
           )}
-        </div>
+        </>
+      ) : (
+        <p className="text-sm text-[var(--muted)]">Not enough price points to chart this parcel yet.</p>
       )}
 
-      {focus === "buyers" && (
-        <div className="space-y-2">
-          <p className="text-sm text-[var(--muted)]">
-            Why capital walks — tap a filter. This is listing psychology, not marketing copy.
-          </p>
-          {buyers.map((b, i) => (
-            <details key={i} className="cockpit-detail" open={i === 0}>
-              <summary>
-                <span>{String(b.label || "Buyer filter")}</span>
-                {b.likelihood != null && (
-                  <span className="lik">{Math.round(Number(b.likelihood) * 100)}%</span>
-                )}
-              </summary>
-              <p className="mt-2 text-sm text-[var(--muted)]">
-                {String(b.psychology || "")}
-              </p>
-              <ul className="mt-1 space-y-1 text-xs text-[var(--muted)]">
-                {((b.evidence as string[]) || []).map((e) => (
-                  <li key={e}>• {e}</li>
-                ))}
-              </ul>
-            </details>
-          ))}
-          {!buyers.length && (
-            <p className="text-sm text-[var(--muted)]">No strong walk-away filters extracted yet.</p>
-          )}
+      {/* Concrete source / contact — no filler */}
+      <div className="source-card">
+        <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Retrieved from</div>
+        <div className="font-semibold break-words">{String(source.source_name || cockpit.subtitle || "Public GIS")}</div>
+        <div className="mt-1 text-sm text-[var(--muted)] break-words">{String(source.office || "")}</div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {source.website ? (
+            <a className="btn-posting" href={String(source.website)} target="_blank" rel="noreferrer">
+              Open source site
+            </a>
+          ) : null}
+          {source.phone ? (
+            <a className="btn-call" href={`tel:${String(source.phone).replace(/-/g, "")}`}>
+              {String(source.phone)}
+            </a>
+          ) : null}
         </div>
-      )}
-
-      {focus === "constraints" && (
-        <div className="grid grid-cols-2 gap-2">
-          {layers.map(({ key, label, c }) => (
-            <details key={key} className="cockpit-detail">
-              <summary>
-                <span>{label}</span>
-                <span className="lik">{String(c?.level || c?.knowledge_state || "—")}</span>
-              </summary>
-              <p className="mt-2 text-sm text-[var(--muted)]">
-                {String(c?.plain_english || "No reading yet for this pin.")}
-              </p>
-            </details>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-3 text-[11px] text-[var(--muted)]">
-        Pin {pin.lat != null ? Number(pin.lat).toFixed(5) : "—"},{" "}
-        {pin.lon != null ? Number(pin.lon).toFixed(5) : "—"}
-        {pin.apn ? ` · ${String(pin.apn)}` : ""}
-        {pin.acres != null ? ` · ${Number(pin.acres).toFixed(2)} ac` : ""}
+        {source.how_to_buy ? (
+          <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{String(source.how_to_buy)}</p>
+        ) : null}
       </div>
     </div>
   );

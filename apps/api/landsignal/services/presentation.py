@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import quote_plus
 
 from landsignal.services.humanize import CATEGORY_HELP
+from landsignal.services.sourcing import build_sourcing_bundle
 
 
 def build_action_links(
@@ -18,106 +18,51 @@ def build_action_links(
     longitude: float | None,
     raw: dict | None = None,
 ) -> list[dict[str, str]]:
-    """Return actionable links: source, contact/learn path, and map."""
-    links: list[dict[str, str]] = []
-    raw = raw or {}
-    contact_q = " ".join(
-        x for x in [title, apn or "", county or "", state or "", "land parcel contact seller"] if x
+    """Return actionable links: source posting, contact, parcel lookup, map."""
+    bundle = build_sourcing_bundle(
+        provider_id=provider_id,
+        source_url=source_url,
+        title=title,
+        apn=apn,
+        state=state,
+        county=county,
+        latitude=latitude,
+        longitude=longitude,
+        raw=raw,
     )
-    contact_url = f"https://www.google.com/search?q={quote_plus(contact_q)}"
+    return bundle["links"]
 
-    if source_url:
-        label = "Official listing / source documents"
-        if provider_id == "blm_lpad":
-            label = "BLM plan / disposal documents"
-        elif provider_id == "public_tax_sale":
-            label = "County tax-sale / parcel record"
-        elif provider_id == "public_surplus":
-            label = "Surplus property record"
-        links.append({"label": label, "url": source_url, "kind": "primary"})
 
-    # Always provide a learn/contact path (survives if primary docs are offline)
-    if provider_id == "blm_lpad":
-        links.append(
-            {
-                "label": "Learn / contact BLM land tenure",
-                "url": "https://www.blm.gov/programs/lands-and-realty/land-tenure",
-                "kind": "contact",
-            }
-        )
-    elif provider_id == "public_tax_sale" and state == "CA" and (county or "").lower().startswith("shasta"):
-        links.append(
-            {
-                "label": "Shasta Treasurer / tax sale office",
-                "url": "https://www.shastacounty.gov/treasurer-tax-collector",
-                "kind": "contact",
-            }
-        )
-    elif provider_id == "public_tax_sale" and state == "WI":
-        links.append(
-            {
-                "label": "Sauk County land records",
-                "url": "https://lrs.co.sauk.wi.us/AscentLandRecords/",
-                "kind": "contact",
-            }
-        )
-    elif provider_id == "public_tax_sale" and state == "IN":
-        links.append(
-            {
-                "label": "Indy tax sale info / contact",
-                "url": "https://www.indy.gov/activity/property-tax-sale",
-                "kind": "contact",
-            }
-        )
-    elif provider_id == "public_surplus":
-        links.append(
-            {
-                "label": "Find surplus office / how to buy",
-                "url": f"https://www.google.com/search?q={quote_plus((county or '') + ' ' + (state or '') + ' surplus property sale contact')}",
-                "kind": "contact",
-            }
-        )
-    else:
-        links.append({"label": "Search seller / listing contacts", "url": contact_url, "kind": "contact"})
-
-    if not any(l["kind"] == "primary" for l in links):
-        # Promote contact to primary when no official source URL
-        links[0]["kind"] = "primary"
-
-    if latitude is not None and longitude is not None:
-        links.append(
-            {
-                "label": "View on Google Maps",
-                "url": f"https://www.google.com/maps?q={latitude},{longitude}",
-                "kind": "map",
-            }
-        )
-    else:
-        q = " ".join(x for x in [apn or title, county or "", state or ""] if x)
-        links.append(
-            {
-                "label": "Locate parcel",
-                "url": f"https://www.google.com/maps/search/{quote_plus(q)}",
-                "kind": "map",
-            }
-        )
-
-    seen = set()
-    out = []
-    for link in links:
-        if link["url"] in seen:
-            continue
-        seen.add(link["url"])
-        out.append(link)
-        if len(out) >= 3:
-            break
-    return out
+def sourcing_card(
+    *,
+    provider_id: str | None,
+    source_url: str | None,
+    title: str,
+    apn: str | None,
+    state: str | None,
+    county: str | None,
+    latitude: float | None,
+    longitude: float | None,
+    raw: dict | None = None,
+) -> dict[str, Any]:
+    return build_sourcing_bundle(
+        provider_id=provider_id,
+        source_url=source_url,
+        title=title,
+        apn=apn,
+        state=state,
+        county=county,
+        latitude=latitude,
+        longitude=longitude,
+        raw=raw,
+    )
 
 
 def price_display(
     ask: float | None,
     provider_id: str | None,
     auction_path: dict[str, Any] | None = None,
+    model_value: float | None = None,
 ) -> dict[str, Any]:
     if ask is not None and ask > 0:
         if auction_path and auction_path.get("is_opening_bid"):
@@ -151,14 +96,36 @@ def price_display(
         return {
             "amount_usd": None,
             "label": "Price process",
-            "display": "Federal disposal (no retail ask)",
+            "display": (
+                f"Federal disposal · model ${model_value:,.0f}"
+                if model_value
+                else "Federal disposal (no retail ask)"
+            ),
             "kind": "process",
+            "model_value_usd": model_value,
+        }
+    if provider_id in ("public_tax_sale", "public_surplus"):
+        return {
+            "amount_usd": None,
+            "label": "No published ask",
+            "display": (
+                f"No public ask · model ${model_value:,.0f}"
+                if model_value
+                else "No public ask on this feed"
+            ),
+            "kind": "unpriced_inventory",
+            "model_value_usd": model_value,
         }
     return {
         "amount_usd": None,
-        "label": "Price",
-        "display": "Contact agency for pricing",
+        "label": "No published ask",
+        "display": (
+            f"No public ask · model ${model_value:,.0f}"
+            if model_value
+            else "No public ask on this feed"
+        ),
         "kind": "inquiry",
+        "model_value_usd": model_value,
     }
 
 
@@ -184,64 +151,46 @@ def match_reasons(
     parcel,
     listing,
     filters: dict[str, Any],
-    enrichment,
+    enrichment=None,
 ) -> list[str]:
     reasons: list[str] = []
+    if score.asking_discount_pct is not None and score.asking_discount_pct < -10:
+        reasons.append(f"Settle/ask sits {abs(score.asking_discount_pct):.0f}% under screening model")
     if score.best_strategy:
         reasons.append(f"Best strategy fit: {score.best_strategy.value.replace('_', ' ').title()}")
-    if score.asking_discount_pct is not None and score.asking_discount_pct < -10:
-        reasons.append(
-            f"Ask appears {abs(score.asking_discount_pct):.0f}% below screening model value"
-        )
-    if score.asymmetry >= 70:
-        reasons.append(f"High asymmetry ({score.asymmetry:.0f}/100): upside vs downside skew")
-    if score.confidence >= 55:
-        reasons.append(f"Data confidence {score.confidence:.0f}/100 from government + listing provenance")
+    if score.confidence >= 60:
+        reasons.append(f"Evidence confidence {score.confidence:.0f}/100")
     if score.risk <= 35:
-        reasons.append(f"Contained screened risk ({score.risk:.0f}/100)")
-    wet = None
-    if enrichment and enrichment.wetlands and enrichment.wetlands.normalized:
-        wet = enrichment.wetlands.normalized.get("wetland_pct")
-    if wet is not None:
-        reasons.append(f"Wetland screen: {wet:.0f}% of parcel (NWI point/poly screen)")
-    hold = filters.get("hold_years")
-    if hold and score.best_strategy and score.best_strategy.value in ("LAND_BANK", "DEVELOPMENT", "FARMLAND"):
-        reasons.append(f"Aligns with ~{hold}-year hold theses ({score.best_strategy.value})")
-    roi = filters.get("target_roi")
-    if roi is not None and enrichment and enrichment.scenarios:
-        base = next((s for s in enrichment.scenarios if s.get("case_type") == "BASE"), None)
-        if base and base.get("irr") is not None:
-            reasons.append(f"Base farmland IRR screen {base['irr']*100:.1f}% vs your {float(roi)*100:.0f}% target")
+        reasons.append(f"Lower screened risk ({score.risk:.0f}/100)")
+    if listing and listing.provider_id == "blm_lpad":
+        reasons.append("Federal disposal channel — fewer retail bidders")
+    if listing and listing.provider_id == "public_tax_sale":
+        reasons.append("Public tax-sale / county inventory channel")
     if not reasons:
-        reasons.append("Passes stage-1 screens for at least one investment strategy")
+        reasons.append("Passes stage-1 strategy screens")
     return reasons[:5]
 
 
 def rating_breakdown(score) -> list[dict[str, Any]]:
-    """Human-readable backed ratings from score components."""
     out = []
     for c in score.components or []:
-        key = c.get("category")
-        help_meta = CATEGORY_HELP.get(str(key or ""), {})
+        key = c.get("category") or c.get("label")
+        help_row = CATEGORY_HELP.get(key, {})
         val = float(c.get("value") or 0)
-        if val >= 70:
-            plain = "Looks helpful for this deal on the data we have."
-        elif val >= 45:
-            plain = "Mixed — worth a closer look, not a green light by itself."
-        else:
-            plain = "Weak on this factor — dig in before you rely on it."
+        label = help_row.get("title") or str(key).replace("_", " ").title()
+        simple = help_row.get("simple") or ""
         out.append(
             {
                 "key": key,
-                "label": help_meta.get("title") or str(key or "").replace("_", " ").title(),
-                "simple": help_meta.get("simple") or "Part of the overall LandSignal screening score.",
-                "plain_english": plain,
+                "label": label,
+                "simple": simple,
+                "plain_english": f"{simple} Score {val:.0f}/100." if simple else f"Category score {val:.0f}/100.",
                 "score": val,
                 "score_display": f"{val:.0f} out of 100",
-                "weight_pct": round(float(c.get("weight") or 0) * 100),
-                "weight_display": f"{round(float(c.get('weight') or 0) * 100)}% of the score",
-                "evidence": (c.get("evidence") or [])[:4],
-                "knowledge_state": c.get("knowledge_state"),
+                "weight_pct": int(round(float(c.get("weight") or 0) * 100)),
+                "weight_display": f"{int(round(float(c.get('weight') or 0) * 100))}% of the score",
+                "evidence": c.get("evidence") or [],
+                "knowledge_state": c.get("knowledge_state") or "UNKNOWN",
             }
         )
     return out
