@@ -397,6 +397,9 @@ def load_persisted_store(store: MemoryStore) -> int:
     for raw in payload.get("listings") or []:
         try:
             L = ListingRecord.model_validate(raw)
+            # $0 bids are missing prices — never treat as free land
+            if L.asking_price_usd is not None and L.asking_price_usd <= 0:
+                L.asking_price_usd = None
             store.listings[L.id] = L
         except Exception:
             continue
