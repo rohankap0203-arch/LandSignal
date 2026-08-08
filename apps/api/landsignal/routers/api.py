@@ -414,7 +414,23 @@ async def radar(
                     else:
                         fit = max(0, fit - 8)
 
-            pd = price_display(ask, listing.provider_id)
+            auction_path = None
+            if enrichment and enrichment.comps:
+                auction_path = (enrichment.comps.normalized or {}).get("auction_path")
+            if not isinstance(auction_path, dict) and ask and listing.provider_id in (
+                "public_tax_sale",
+                "public_surplus",
+            ):
+                from landsignal.services.auction import expected_auction_clearing
+
+                auction_path = expected_auction_clearing(
+                    opening_bid=ask,
+                    model_value=score.estimated_value_usd,
+                    acres=parcel.acreage,
+                    provider_id=listing.provider_id,
+                    state=parcel.state,
+                )
+            pd = price_display(ask, listing.provider_id, auction_path if isinstance(auction_path, dict) else None)
             vd = value_display(
                 score.estimated_value_usd,
                 (enrichment.comps.knowledge_state.value if enrichment and enrichment.comps else "ESTIMATED"),
@@ -451,13 +467,29 @@ async def radar(
                     "Strategy is a soft match — ranked lower, not hidden, so you still see nearby options.",
                     *reasons,
                 ][:5]
+            if isinstance(auction_path, dict) and auction_path.get("expected_settle_usd"):
+                reasons = [
+                    (
+                        f"Opening bid ${auction_path['opening_bid_usd']:,.0f} — expected settle "
+                        f"~${auction_path['expected_settle_usd']:,.0f} after typical bid-up "
+                        f"(~{auction_path.get('bid_inflation_mult_base', 0):.1f}×)"
+                    ),
+                    *reasons,
+                ][:5]
             acres = parcel.acreage
             acres_display = f"{acres:,.2f} acres" if acres is not None else "Acreage not published"
-            discount_display = (
-                f"{score.asking_discount_pct:+.1f}% vs model"
-                if score.asking_discount_pct is not None
-                else "No retail ask to compare"
-            )
+            settle_disc = None
+            if isinstance(auction_path, dict):
+                settle_disc = auction_path.get("settle_discount_pct")
+            if settle_disc is not None:
+                discount_display = (
+                    f"Settle-adj {settle_disc:+.1f}% vs model "
+                    f"(opener teaser {auction_path.get('opener_discount_pct', 0):+.0f}%)"
+                )
+            elif score.asking_discount_pct is not None:
+                discount_display = f"{score.asking_discount_pct:+.1f}% vs model"
+            else:
+                discount_display = "No retail ask to compare"
             risk_label = (
                 "Lower screened risk"
                 if score.risk < 30
@@ -477,11 +509,20 @@ async def radar(
                 f"LandSignal {score.opportunity:.0f}/100 · Risk {score.risk:.0f}/100 · "
                 f"{pd['display']}"
             )
-            headline = (
-                f"{abs(score.asking_discount_pct):.0f}% below model"
-                if score.asking_discount_pct is not None and score.asking_discount_pct < -8
-                else f"Asymmetry {score.asymmetry:.0f}/100"
-            )
+            headline_disc = settle_disc if settle_disc is not None else score.asking_discount_pct
+            if headline_disc is not None and headline_disc < -8:
+                headline = (
+                    f"Settle ~{abs(headline_disc):.0f}% under model"
+                    if isinstance(auction_path, dict)
+                    else f"{abs(headline_disc):.0f}% below model"
+                )
+            elif isinstance(auction_path, dict):
+                headline = (
+                    f"Opener ${auction_path.get('opening_bid_usd', 0):,.0f} → "
+                    f"~${auction_path.get('expected_settle_usd', 0):,.0f}"
+                )
+            else:
+                headline = f"Asymmetry {score.asymmetry:.0f}/100"
 
             out.append(
                 RadarRow(
@@ -688,9 +729,16 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
 
     from landsignal.services.briefing import build_intelligence_brief
 
+    auction_path = None
+    if enrichment and enrichment.comps:
+        auction_path = (enrichment.comps.normalized or {}).get("auction_path")
+    if not isinstance(auction_path, dict):
+        auction_path = None
+
     price = price_display(
         listing.asking_price_usd if listing else None,
         listing.provider_id if listing else None,
+        auction_path,
     )
     brief = build_intelligence_brief(
         parcel=parcel,
@@ -705,6 +753,46 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     user = UUID("00000000-0000-4000-8000-000000000002")
     watched = parcel_id in store.watchlists.get(user, set())
 
+    # Interactive cockpit under the map — property-unique acquisition intelligence
+    unsold = ((enrichment.narratives or {}).get("why_unsold") if enrichment else None) or {}
+    hypotheses = (unsold.get("hypotheses") if isinstance(unsold, dict) else None) or []
+    cockpit = {
+        "title": "Acquisition signal cockpit",
+        "subtitle": f"Live underwriting lens for {(listing.title if listing else None) or parcel.apn}",
+        "auction_path": auction_path,
+        "price": price,
+        "model_value": score.estimated_value_usd if score else None,
+        "opportunity": score.opportunity if score else None,
+        "risk": score.risk if score else None,
+        "confidence": score.confidence if score else None,
+        "deal_readiness": score.deal_readiness if score else None,
+        "best_strategy": score.best_strategy.value if score and score.best_strategy else None,
+        "constraints": {
+            "flood": land_readouts.get("flood"),
+            "wetlands": land_readouts.get("wetlands"),
+            "soil": land_readouts.get("soil"),
+            "transmission": land_readouts.get("transmission"),
+        },
+        "buyer_filters": [
+            {
+                "label": h.get("reason"),
+                "psychology": h.get("psychology"),
+                "likelihood": h.get("likelihood"),
+                "evidence": h.get("evidence") or [],
+            }
+            for h in hypotheses[:5]
+        ],
+        "pin": {
+            "lat": parcel.latitude,
+            "lon": parcel.longitude,
+            "apn": parcel.apn,
+            "acres": parcel.acreage,
+            "county": parcel.county,
+            "state": parcel.state,
+        },
+        "decision_prompt": brief.get("score_story", {}).get("landsignal"),
+    }
+
     return {
         "parcel": parcel,
         "listing": listing,
@@ -717,6 +805,8 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         "brief": brief,
         "links": annotated,
         "price": price,
+        "auction_path": auction_path,
+        "cockpit": cockpit,
         "rating_breakdown": rating_breakdown(score) if score else [],
         "score_explained": brief.get("score_story")
         or {

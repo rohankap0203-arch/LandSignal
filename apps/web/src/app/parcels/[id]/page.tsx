@@ -4,8 +4,10 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { LandLoader } from "@/components/land-loader";
 import { ScoreBar } from "@/components/score-bar";
 import { SignalBadge } from "@/components/signal-badge";
+import { SignalCockpit } from "@/components/signal-cockpit";
 import { landsignalApi, type ActionLink } from "@/lib/api";
 
 const ParcelMap = dynamic(() => import("@/components/parcel-map").then((m) => m.ParcelMap), {
@@ -35,6 +37,7 @@ export default function ParcelIntelligencePage() {
   const [data, setData] = useState<AnyRec | null>(null);
   const [memo, setMemo] = useState<string | null>(null);
   const [verdict, setVerdict] = useState<string | null>(null);
+  const [memoLoading, setMemoLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ddOpen, setDdOpen] = useState<Record<string, boolean>>({});
   const [watched, setWatched] = useState(false);
@@ -42,6 +45,8 @@ export default function ParcelIntelligencePage() {
   const [openCard, setOpenCard] = useState<string | null>("soil");
 
   useEffect(() => {
+    setData(null);
+    setError(null);
     landsignalApi
       .parcel(params.id)
       .then((d) => {
@@ -52,7 +57,14 @@ export default function ParcelIntelligencePage() {
   }, [params.id]);
 
   if (error) return <div className="panel p-5 text-[var(--danger)]">{error}</div>;
-  if (!data) return <div className="text-[var(--muted)]">Loading property intelligence…</div>;
+  if (!data) {
+    return (
+      <LandLoader
+        label="Building land intelligence…"
+        detail="Pulling soils, flood, wetlands, auction settle math, and buyer-psychology filters for this pin."
+      />
+    );
+  }
 
   const parcel = data.parcel as AnyRec;
   const listing = data.listing as AnyRec | null;
@@ -62,6 +74,7 @@ export default function ParcelIntelligencePage() {
   const ratings = (data.rating_breakdown as AnyRec[]) || [];
   const land = (data.land_readouts as Record<string, AnyRec>) || {};
   const brief = (data.brief as AnyRec) || {};
+  const cockpit = (data.cockpit as AnyRec) || {};
   const whyOpp = (brief.why_opportunity as AnyRec[]) || [];
   const whyStill = (brief.why_still_available as AnyRec[]) || [];
   const scenarios = (brief.scenario_cards as AnyRec[]) || (data.scenarios_human as AnyRec[]) || [];
@@ -111,7 +124,7 @@ export default function ParcelIntelligencePage() {
       )}
 
       <section className="panel overflow-hidden">
-        <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="p-6">
             <div className="flex flex-wrap items-center gap-2">
               {score && <SignalBadge signal={score.signal as string} />}
@@ -132,17 +145,8 @@ export default function ParcelIntelligencePage() {
             </p>
 
             <div className="mt-5 grid gap-4">
-              <ScoreBar
-                label="LandSignal"
-                value={Number(score?.opportunity || 0)}
-                hint={story.landsignal}
-              />
-              <ScoreBar
-                label="Risk"
-                value={Number(score?.risk || 0)}
-                invert
-                hint={story.risk}
-              />
+              <ScoreBar label="LandSignal" value={Number(score?.opportunity || 0)} hint={story.landsignal} />
+              <ScoreBar label="Risk" value={Number(score?.risk || 0)} invert hint={story.risk} />
               <ScoreBar
                 label="Confidence (evidence completeness)"
                 value={Number(score?.confidence || 0)}
@@ -152,10 +156,7 @@ export default function ParcelIntelligencePage() {
 
             <div className="mt-5 grid grid-cols-2 gap-3">
               <Stat label={String(price?.label || "Price")} value={String(price?.display || "Contact source")} />
-              <Stat
-                label="Deal readiness"
-                value={`${Number(score?.deal_readiness || 0).toFixed(0)}/100`}
-              />
+              <Stat label="Deal readiness" value={`${Number(score?.deal_readiness || 0).toFixed(0)}/100`} />
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
@@ -179,28 +180,41 @@ export default function ParcelIntelligencePage() {
               <button
                 type="button"
                 className="btn btn-ghost"
-                onClick={() =>
-                  landsignalApi.memo(params.id).then((m) => {
-                    setMemo(m.markdown);
-                    setVerdict(m.verdict);
-                  })
-                }
+                disabled={memoLoading}
+                onClick={() => {
+                  setMemoLoading(true);
+                  landsignalApi
+                    .memo(params.id)
+                    .then((m) => {
+                      setMemo(m.markdown);
+                      setVerdict(m.verdict);
+                    })
+                    .finally(() => setMemoLoading(false));
+                }}
               >
-                Generate investment memo
+                {memoLoading ? "Writing memo…" : "Generate investment memo"}
               </button>
             </div>
           </div>
-          <div className="min-h-[280px] border-t border-[var(--line)] lg:border-l lg:border-t-0">
+
+          <div className="flex flex-col border-t border-[var(--line)] lg:border-l lg:border-t-0">
             <ParcelMap
               latitude={parcel.latitude as number}
               longitude={parcel.longitude as number}
               polygon={parcel.polygon as number[][][]}
               title={listing?.title as string}
-              height={360}
+              height={280}
             />
+            <div className="border-t border-[var(--line)] p-4">
+              <SignalCockpit cockpit={cockpit} />
+            </div>
           </div>
         </div>
       </section>
+
+      {memoLoading && (
+        <LandLoader compact label="Composing investment memo…" detail="Weighing score, constraints, and diligence gaps." />
+      )}
 
       <section className="grid gap-4 md:grid-cols-2">
         <InteractiveList

@@ -451,7 +451,8 @@ def _norm_bexar_vacant(raw: dict) -> dict | None:
             f"Land value mark=${land_val}. Owner mark={props.get('Owner') or 'n/a'}. "
             "Not a dedicated tax-sale feed — screen for land thesis only."
         ),
-        "asking_price_usd": float(land_val) * 0.55 if land_val else None,
+        # LandVal is assessed mark, not an auction opener — don't fake a bid price
+        "asking_price_usd": None,
         "acreage": float(acreage),
         "state": "TX",
         "county": "Bexar",
@@ -520,7 +521,8 @@ def _norm_nashville_vacant(raw: dict) -> dict | None:
             f"Use={props.get('LUDesc')}. Land appraisal mark=${land}. "
             "Public land inventory screen — not MLS."
         ),
-        "asking_price_usd": float(land) * 0.65 if land else None,
+        # LandAppr is assessed mark, not a list/bid price
+        "asking_price_usd": None,
         "acreage": float(acreage),
         "state": "TN",
         "county": "Davidson",

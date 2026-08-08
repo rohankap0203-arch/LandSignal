@@ -79,12 +79,39 @@ def build_intelligence_brief(
     wet_pct = _n(wet_n.get("wetland_pct"))
     tx_m = _n(infra_n.get("nearest_transmission_m"))
 
+    auction = None
+    if enrichment and enrichment.comps:
+        auction = (enrichment.comps.normalized or {}).get("auction_path")
+    if not isinstance(auction, dict):
+        auction = None
+
     ppa = (ask / acres) if ask and acres and acres > 0 else None
     model_ppa = (est / acres) if est and acres and acres > 0 else None
+    settle = _n(auction.get("expected_settle_usd")) if auction else None
 
     # ---- Why this opportunity ----
     why: list[dict[str, str]] = []
-    if disc is not None and ask is not None and est is not None:
+    if auction and ask is not None and est is not None:
+        settle_v = settle or ask
+        gap = est - settle_v
+        why.append(
+            {
+                "headline": (
+                    f"Auction math: {_money(ask)} opener → ~{_money(settle_v)} settle "
+                    f"vs {_money(est)} model"
+                ),
+                "detail": (
+                    f"On {apn} in {county}, {state}, do not treat {_money(ask)} as the buy price — "
+                    f"tax/auction openers are floors. Screening applies ~{auction.get('bid_inflation_mult_base', 0):.1f}× "
+                    f"typical bid-up (band {auction.get('bid_inflation_mult_low', 0):.1f}×–"
+                    f"{auction.get('bid_inflation_mult_high', 0):.1f}×) → likely clear near {_money(settle_v)}. "
+                    f"Settle-adjusted gap vs model ≈ {_money(abs(gap))} "
+                    f"({abs(disc):.0f}% {'under' if (disc or 0) < 0 else 'over'}). "
+                    f"Teaser opener looked {abs(auction.get('opener_discount_pct') or 0):.0f}% under model — that was anchoring, not edge."
+                ),
+            }
+        )
+    elif disc is not None and ask is not None and est is not None:
         gap = est - ask
         why.append(
             {
@@ -93,7 +120,7 @@ def build_intelligence_brief(
                     f"({abs(disc):.0f}% {'under' if disc < 0 else 'over'})"
                 ),
                 "detail": (
-                    f"On {apn} in {county}, {state}, the public ask/bid is {_money(ask)}"
+                    f"On {apn} in {county}, {state}, the public ask is {_money(ask)}"
                     + (f" ({_money(ppa)}/ac)" if ppa else "")
                     + f" while the screening base is {_money(est)}"
                     + (f" ({_money(model_ppa)}/ac)" if model_ppa else "")
@@ -242,21 +269,37 @@ def build_intelligence_brief(
             }
         )
 
-    # ---- Why still available ----
+    # ---- Why still available (multi-hypothesis + buyer psychology) ----
     still: list[dict[str, str]] = []
     narratives = (enrichment.narratives if enrichment else None) or {}
     unsold = (narratives.get("why_unsold") if isinstance(narratives, dict) else None) or {}
-    if isinstance(unsold, dict) and unsold.get("most_likely"):
-        ml = unsold["most_likely"]
-        evid = " ".join(str(e) for e in (ml.get("evidence") or [])[:3])
+    hyps = (unsold.get("hypotheses") if isinstance(unsold, dict) else None) or []
+    if not hyps and isinstance(unsold, dict) and unsold.get("most_likely"):
+        hyps = [unsold["most_likely"]]
+    for h in hyps[:5]:
+        evid = "; ".join(str(e) for e in (h.get("evidence") or [])[:3])
+        psych = h.get("psychology")
+        detail = evid or f"Buyer friction on {apn}."
+        if psych:
+            detail = f"{detail} Buyer psychology: {psych}"
         still.append(
             {
-                "headline": str(ml.get("reason") or "Likely friction for other buyers"),
-                "detail": evid
-                or (
-                    f"Screening model flags buyer friction on {apn} without inventing a single poison pill."
-                ),
+                "headline": str(h.get("reason") or "Likely friction for other buyers"),
+                "detail": detail,
             }
+        )
+    if auction and ask is not None:
+        still.insert(
+            0,
+            {
+                "headline": "Teaser opener attracts browsers; settle price filters capital",
+                "detail": (
+                    f"Published {_money(ask)} looks like a steal next to {_money(est)} model value — "
+                    f"until you price ~{_money(settle)} expected clear. "
+                    f"Pros underwrite bid-up; novices get anchored. That gap in sophistication is why "
+                    f"the parcel can sit through a full auction calendar."
+                ),
+            },
         )
     if flood_pct is not None and flood_pct >= 20:
         still.append(

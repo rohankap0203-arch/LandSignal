@@ -88,21 +88,21 @@ def _estimate_value(parcel, soil_n, flood_n, wet_n, growth_n, listing=None) -> d
     ask = listing.asking_price_usd if listing else None
     provider = listing.provider_id if listing else None
 
-    # Small urban / tax-sale lots: do NOT apply farmland $/acre priors (creates nonsense discounts)
+    # Small urban / tax-sale lots: do NOT apply farmland $/acre priors (creates nonsense discounts).
+    # Also do NOT anchor model value to the opening bid — openers are floors, not retail.
     if acres and acres < 2.0 and provider in ("public_tax_sale", "public_surplus"):
+        # Urban land residual prior ~$2–8/sqft depending on state
+        psf = 4.0 if state in ("CA", "FL", "NY", "WA", "NJ") else 2.5 if state in ("TX", "IL", "GA", "NC") else 2.0
+        base = acres * 43560 * psf
+        # Soft floor: model shouldn't sit below a trivial multiple of opener when opener exists
         if ask and ask > 0:
-            # Distressed auction clearing often below retail; screen retail band from bid
-            base = ask * 4.0 if ask < 5000 else ask * 1.8
-        else:
-            # Urban land residual prior ~$2–8/sqft depending on state
-            psf = 4.0 if state in ("CA", "FL", "NY", "WA") else 2.0
-            base = acres * 43560 * psf
+            base = max(base, ask * 2.5)
         return {
-            "estimated_value_low_usd": base * 0.6,
+            "estimated_value_low_usd": base * 0.55,
             "estimated_value_base_usd": base,
-            "estimated_value_high_usd": base * 1.5,
-            "downside_value_usd": max(ask or 0, base * 0.4),
-            "development_upside_usd": base * 2.5,
+            "estimated_value_high_usd": base * 1.6,
+            "downside_value_usd": max(ask or 0, base * 0.35),
+            "development_upside_usd": base * 2.4,
             "comps_count": 0,
             "liquidity_score": 45,
             "scarcity_score": 40,
@@ -114,7 +114,10 @@ def _estimate_value(parcel, soil_n, flood_n, wet_n, growth_n, listing=None) -> d
             "path_of_growth_score": growth_n.get("path_of_growth_score") or 50,
             "knowledge_state": KnowledgeState.ESTIMATED,
             "confidence": 40,
-            "note": "Small-lot / tax-sale screening value (not ag $/acre prior). Verify with local comps.",
+            "note": (
+                "Small-lot screening value from $/sqft residual (not tied to auction opener). "
+                "Opening bids are floors — see auction settle path for likely clear price."
+            ),
             "ppa_prior": (base / acres) if acres else None,
         }
 
@@ -310,14 +313,38 @@ async def analyze_parcel(
 
     comps_n = dict(existing.comps.normalized or existing.comps.value or {}) if existing.comps else comps_n
     access_n = existing.access.normalized or existing.access.value or {}
-    ask = listing.asking_price_usd if listing else None
+    raw_ask = listing.asking_price_usd if listing else None
+    # $0 / negative "bids" are missing prices, not free land
+    ask = raw_ask if raw_ask is not None and raw_ask > 0 else None
+    if listing and ask is None and raw_ask is not None and raw_ask <= 0:
+        listing.asking_price_usd = None
 
     # Merge growth into comps path score if present
     if growth_n.get("path_of_growth_score") is not None:
         comps_n = {**comps_n, "path_of_growth_score": growth_n["path_of_growth_score"]}
 
+    # Auction / tax-sale: score mispricing on expected settle, not the teaser opening bid
+    from landsignal.services.auction import effective_comparison_price
+
+    model_base = comps_n.get("estimated_value_base_usd")
+    comparison_price, auction_path = effective_comparison_price(
+        ask,
+        listing.provider_id if listing else None,
+        float(model_base) if model_base is not None else None,
+        parcel.acreage,
+        parcel.state,
+    )
+    if auction_path:
+        comps_n["auction_path"] = auction_path
+        if existing.comps:
+            existing.comps.normalized = {**(existing.comps.normalized or {}), "auction_path": auction_path}
+            existing.comps.value = {**(existing.comps.value or {}), "auction_path": auction_path}
+
     score_input = {
-        "asking_price_usd": ask,
+        "asking_price_usd": comparison_price if comparison_price is not None else ask,
+        "opening_bid_usd": ask if auction_path else None,
+        "is_auction_opener": bool(auction_path),
+        "auction_path": auction_path,
         "acreage": parcel.acreage,
         "estimated_value_low_usd": _wrap(comps_n.get("estimated_value_low_usd"), existing.comps),
         "estimated_value_base_usd": _wrap(comps_n.get("estimated_value_base_usd"), existing.comps),
@@ -414,12 +441,22 @@ async def analyze_parcel(
         "asking_discount_pct": result["asking_discount_pct"],
         "liquidity_score": comps_n.get("liquidity_score"),
         "asking_price_usd": ask,
+        "comparison_price_usd": comparison_price,
+        "auction_path": auction_path,
         "provider_id": listing.provider_id if listing else None,
         "path_of_growth_score": comps_n.get("path_of_growth_score"),
         "zoning_development_friendly": comps_n.get("zoning_development_friendly"),
         "nearest_transmission_m": infra_n.get("nearest_transmission_m"),
         "solar_irradiance_score": comps_n.get("solar_irradiance_score"),
         "prime_farmland_pct": soil_n.get("prime_farmland_pct"),
+        "acreage": parcel.acreage,
+        "state": parcel.state,
+        "county": parcel.county,
+        "confidence": result.get("confidence"),
+        "risk": result.get("risk"),
+        "deal_readiness": result.get("deal_readiness"),
+        "estimated_value_usd": result.get("estimated_value_usd"),
+        "best_strategy": result.get("best_strategy"),
     }
     unsold = why_still_unsold(narrative_ctx)
     hidden = hidden_value_score(narrative_ctx)

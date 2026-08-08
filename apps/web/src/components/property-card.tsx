@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { SignalBadge } from "@/components/signal-badge";
 import type { ActionLink, RadarRow } from "@/lib/api";
 
@@ -24,6 +25,7 @@ function ActionAnchor({ link, primary }: { link: ActionLink; primary?: boolean }
 }
 
 export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
+  const [intelPending, setIntelPending] = useState(false);
   const primary =
     row.links.find((l) => l.kind === "primary" && l.available !== false) ||
     row.links.find((l) => l.available !== false && l.kind !== "map") ||
@@ -115,7 +117,13 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
         <div className="card-actions">
           {primary && <ActionAnchor link={primary} primary />}
           {secondary && <ActionAnchor link={secondary} />}
-          <Link href={`/parcels/${row.parcel_id}`}>Full intelligence</Link>
+          <Link
+            href={`/parcels/${row.parcel_id}`}
+            className={`btn-intel ${intelPending ? "pending" : ""}`}
+            onClick={() => setIntelPending(true)}
+          >
+            {intelPending ? "Opening intelligence…" : "Full intelligence"}
+          </Link>
         </div>
       </div>
     </article>

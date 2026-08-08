@@ -536,3 +536,288 @@ select {
 .metric-span {
   grid-column: span 1;
 }
+
+/* Silver / platinum Full intelligence CTA */
+.card-actions a.btn-intel,
+a.btn-intel {
+  background: linear-gradient(145deg, #f5f7fa 0%, #c3cfe2 45%, #9aa8bc 100%);
+  color: #1a2430;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    0 6px 16px rgba(30, 40, 55, 0.18);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.card-actions a.btn-intel:hover,
+a.btn-intel:hover {
+  filter: brightness(1.04);
+  transform: translateY(-1px);
+}
+
+.card-actions a.btn-intel.pending {
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* Land-esque loading */
+.land-loader {
+  margin: 18px 0 8px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+}
+
+.land-loader.compact {
+  margin: 8px 0;
+}
+
+.land-loader-stage {
+  position: relative;
+  height: 150px;
+  overflow: hidden;
+}
+
+.land-loader.compact .land-loader-stage {
+  height: 96px;
+}
+
+.land-loader-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.land-contour {
+  stroke-dasharray: 420;
+  stroke-dashoffset: 420;
+  animation: contour-draw 2.4s ease-in-out infinite;
+}
+
+@keyframes contour-draw {
+  0% {
+    stroke-dashoffset: 420;
+    opacity: 0.2;
+  }
+  45% {
+    stroke-dashoffset: 0;
+    opacity: 0.85;
+  }
+  100% {
+    stroke-dashoffset: -60;
+    opacity: 0.25;
+  }
+}
+
+.land-ping {
+  fill: rgba(255, 255, 255, 0.9);
+  transform-origin: 188px 78px;
+  animation: ping 1.8s ease-out infinite;
+}
+
+.land-ping.delay {
+  animation-delay: 0.55s;
+}
+
+@keyframes ping {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+
+.land-scan {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.18) 45%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  animation: scan-sweep 2.2s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes scan-sweep {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+.land-loader-copy {
+  padding: 14px 18px 16px;
+}
+
+.land-loader-dots {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.land-loader-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: var(--brand-soft);
+  animation: dot-pulse 1.1s ease-in-out infinite;
+}
+
+.land-loader-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.land-loader-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes dot-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+/* Signal cockpit under map */
+.signal-cockpit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 220px;
+}
+
+.cockpit-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cockpit-tabs button {
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  padding: 5px 10px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.cockpit-tabs button.active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+  font-weight: 650;
+}
+
+.cockpit-fingerprint {
+  width: 100%;
+  height: 56px;
+  border-radius: 12px;
+  background: var(--bg-soft);
+}
+
+.bid-track {
+  position: relative;
+  height: 36px;
+  margin: 18px 4px 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #b42318, #b7791f, #1f7a4d);
+  opacity: 0.92;
+}
+
+.bid-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+}
+
+.bid-mark {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: #fff;
+  transform: translateX(-1px);
+}
+
+.bid-mark span {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  white-space: nowrap;
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.cockpit-stat {
+  border-radius: 12px;
+  background: var(--bg-soft);
+  padding: 8px 6px;
+}
+
+.cockpit-stat .k {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.cockpit-stat .v {
+  margin-top: 2px;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.cockpit-stat .v.pos {
+  color: var(--positive);
+}
+.cockpit-stat .v.neg {
+  color: var(--danger);
+}
+
+.cockpit-detail {
+  border-radius: 12px;
+  background: var(--bg-soft);
+  padding: 8px 10px;
+}
+
+.cockpit-detail summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 650;
+  list-style: none;
+}
+
+.cockpit-detail summary::-webkit-details-marker {
+  display: none;
+}
+
+.cockpit-detail .lik {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+}

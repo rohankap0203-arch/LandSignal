@@ -6,8 +6,8 @@ from typing import Any
 
 from landsignal.scoring.financial import asking_discount_pct, clamp, margin_of_safety
 
-ALGORITHM_VERSION = "landsignal_score_v2"
-WEIGHT_VERSION = "weights_default_v2"
+ALGORITHM_VERSION = "landsignal_score_v3_1"
+WEIGHT_VERSION = "weights_default_v3"
 
 DEFAULT_WEIGHTS = {
     "valuation_mispricing": 0.24,
@@ -222,7 +222,10 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
     weights = weights or DEFAULT_WEIGHTS
     screens = screen_strategies(inp)
     risk, risk_evidence = compute_risk(inp)
-    ask = inp.get("asking_price_usd")
+    ask = inp.get("asking_price_usd")  # may already be expected settle for auctions
+    opening_bid = inp.get("opening_bid_usd")
+    is_auction = bool(inp.get("is_auction_opener"))
+    auction_path = inp.get("auction_path") if isinstance(inp.get("auction_path"), dict) else None
     base = _v(inp, "estimated_value_base_usd")
     acres = inp.get("acreage") or 0
     discount = asking_discount_pct(ask, base)
@@ -246,7 +249,16 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
     else:
         # Stronger response to deep discounts so real bargains can clear the 50s/60s
         valuation_value = _round1(clamp(58 - discount * 1.35, 0, 100))
-        valuation_evidence = [f"Ask {ask} vs base value {base} → discount/premium {discount:.1f}%"]
+        if is_auction and opening_bid is not None:
+            valuation_evidence = [
+                f"Auction opener ${opening_bid:,.0f} ≠ settle. "
+                f"Expected clear ~${ask:,.0f} vs model ${base:,.0f} → {discount:.1f}% "
+                f"(not the teaser {(opening_bid - base) / base * 100:.0f}% vs opener)."
+            ]
+            if auction_path and auction_path.get("note"):
+                valuation_evidence.append(str(auction_path["note"])[:220])
+        else:
+            valuation_evidence = [f"Ask {ask} vs base value {base} → discount/premium {discount:.1f}%"]
         valuation_ks = "KNOWN"
 
     prime = _v(inp, "prime_farmland_pct")

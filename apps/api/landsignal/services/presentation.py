@@ -114,16 +114,38 @@ def build_action_links(
     return out
 
 
-def price_display(ask: float | None, provider_id: str | None) -> dict[str, Any]:
+def price_display(
+    ask: float | None,
+    provider_id: str | None,
+    auction_path: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     if ask is not None and ask > 0:
-        kind = "asking"
-        if provider_id == "public_tax_sale":
-            kind = "minimum_bid"
+        if auction_path and auction_path.get("is_opening_bid"):
+            settle = (auction_path or {}).get("expected_settle_usd")
+            if settle:
+                return {
+                    "amount_usd": ask,
+                    "label": "Opening bid → expected settle",
+                    "display": f"${ask:,.0f} opener · ~${settle:,.0f} settle",
+                    "kind": "minimum_bid",
+                    "opening_bid_usd": ask,
+                    "expected_settle_usd": settle,
+                    "settle_low_usd": (auction_path or {}).get("settle_low_usd"),
+                    "settle_high_usd": (auction_path or {}).get("settle_high_usd"),
+                    "note": (auction_path or {}).get("note"),
+                }
+            return {
+                "amount_usd": ask,
+                "label": "Minimum / opening bid",
+                "display": f"${ask:,.0f} opener (not settle)",
+                "kind": "minimum_bid",
+                "opening_bid_usd": ask,
+            }
         return {
             "amount_usd": ask,
-            "label": "Minimum bid" if kind == "minimum_bid" else "Listed price",
+            "label": "Listed price",
             "display": f"${ask:,.0f}",
-            "kind": kind,
+            "kind": "asking",
         }
     if provider_id == "blm_lpad":
         return {

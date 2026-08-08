@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ComboFilter, FilterField } from "@/components/filter-field";
+import { LandLoader } from "@/components/land-loader";
 import { PropertyCard } from "@/components/property-card";
 import {
   landsignalApi,
@@ -505,6 +506,13 @@ export default function SearchPage() {
 
       {error && <div className="panel mb-4 p-4 text-[var(--danger)]">{error}</div>}
 
+      {loading && (
+        <LandLoader
+          label="Surveying matches…"
+          detail="Ranking live public parcels against your filters — settle-adjusted prices, risk, and fit."
+        />
+      )}
+
       {!loading && !hasSearched && (
         <div className="panel empty-state">
           <div className="display text-2xl text-[var(--ink)]">Ready when you are</div>
@@ -525,11 +533,13 @@ export default function SearchPage() {
         </div>
       )}
 
-      <div className="results-grid">
-        {sortedRows.map((row, i) => (
-          <PropertyCard key={row.parcel_id} row={row} index={i} />
-        ))}
-      </div>
+      {!loading && (
+        <div className="results-grid">
+          {sortedRows.map((row, i) => (
+            <PropertyCard key={row.parcel_id} row={row} index={i} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
