@@ -4028,14 +4028,20 @@ a.acquire-block:hover {
 }
 
 .land-viewer-nearby {
-  --nearby-chip-gap: 0.4rem;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.3rem var(--nearby-chip-gap);
-  padding: 0.28rem 0.6rem 0.3rem;
+  flex-direction: column;
+  gap: 0.28rem;
+  padding: 0.28rem 0.6rem 0.35rem;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-elevated) 90%, var(--bg-soft));
+}
+
+.land-viewer-nearby-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  min-height: 1.15rem;
 }
 
 .land-viewer-nearby-label {
@@ -4044,20 +4050,35 @@ a.acquire-block:hover {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
-  margin-right: 0.05rem;
+}
+
+.land-viewer-nearby-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, auto));
+  gap: 0.28rem;
+  width: 100%;
 }
 
 .land-viewer-chip {
-  min-height: 1.4rem;
-  padding: 0.1rem 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 1.55rem;
+  padding: 0.18rem 0.2rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--chip, var(--brand)) 45%, var(--line));
   background: color-mix(in srgb, var(--chip, var(--brand)) 10%, var(--bg-elevated));
   color: var(--ink);
-  font-size: 0.66rem;
-  font-weight: 600;
+  font-size: clamp(0.62rem, 2.5vw, 0.72rem);
+  font-weight: 650;
+  line-height: 1.1;
   cursor: pointer;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .land-viewer-chip:hover:not(:disabled) {
@@ -4074,22 +4095,12 @@ a.acquire-block:hover {
   cursor: not-allowed;
 }
 
-/* Keep Water body + working spinner on one unbreakable unit */
-.land-viewer-nearby-tail {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  gap: var(--nearby-chip-gap, 0.5rem);
-  white-space: nowrap;
-  max-width: 100%;
-}
-
 .land-viewer-nearby-loading {
   display: inline-flex;
   align-items: center;
   gap: 0.18rem;
-  min-height: 1.4rem;
-  padding: 0.08rem 0.22rem 0.08rem 0.2rem;
+  min-height: 1.15rem;
+  padding: 0.05rem 0.28rem 0.05rem 0.18rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line));
   background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
@@ -4098,6 +4109,7 @@ a.acquire-block:hover {
   font-weight: 650;
   line-height: 1;
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .land-viewer-nearby-loading .live-magnifier {
