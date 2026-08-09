@@ -3396,6 +3396,8 @@ a.acquire-block:hover {
 
 .land-alert-back-rail {
   overflow: visible;
+  margin-top: 0.45rem;
+  margin-bottom: 0.35rem;
 }
 
 .land-alert-acquire.acquire-rail,
