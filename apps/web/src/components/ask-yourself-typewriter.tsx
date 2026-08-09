@@ -20,7 +20,7 @@ export function AskYourselfTypewriter({
   because,
   aftertaste,
   charMs = 28,
-  holdMs = 7000,
+  holdMs = 10000,
 }: Props) {
   const fullQuestion = question.trim();
   const fullAfter = (because || aftertaste || "").trim();

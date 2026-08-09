@@ -506,7 +506,7 @@ export default function ParcelIntelligencePage() {
                   ? String(askYourself.aftertaste)
                   : null
             }
-            holdMs={7000}
+            holdMs={10000}
           />
         </section>
       ) : null}
