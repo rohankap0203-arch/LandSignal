@@ -1689,6 +1689,19 @@ a.btn-intel:hover {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.acquire-check-empty {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid currentColor;
+  border-radius: 1.5px;
+  opacity: 0.9;
+  flex-shrink: 0;
 }
 
 .acquire-reveal-count {
