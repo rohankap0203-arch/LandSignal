@@ -578,9 +578,9 @@ def build_intelligence_brief(
         "dd_focus": dd_focus,
         "score_story": {
             "landsignal": (
-                f"{title[:70]} ({apn}, {county} {state}"
-                + (f", {acres:,.2f} acres" if acres is not None else "")
-                + f") scores {opp:.0f}/100 for opportunity because "
+                f"{apn} in {county}, {state}"
+                + (f" ({acres:,.2f} acres)" if acres is not None else "")
+                + " ranks here because "
                 + (
                     f"the realistic buy price sits {abs(disc):.0f}% "
                     f"{'under' if (disc or 0) < 0 else 'over'} our estimated value {_money(est)}, "
@@ -591,7 +591,7 @@ def build_intelligence_brief(
                 + f". Ready-to-pursue for this file: {readiness:.0f}/100."
             ),
             "risk": (
-                f"Risk for {title[:50]} is {risk:.0f}/100 at map pin {pin} because "
+                f"At map pin {pin}, "
                 + (
                     f"about {flood_pct:.0f}% of the checked area looks flood-exposed"
                     if flood_pct is not None
@@ -605,14 +605,13 @@ def build_intelligence_brief(
                 + f". That’s why {apn} needs extra homework before a bid."
             ),
             "confidence": (
-                f"How complete the file is for {apn}: {conf:.0f}/100. "
-                f"This tracks soils, flood, value, and map data at {pin} — "
-                f"missing pieces lower this number on purpose (it is not a quality grade)."
+                f"Tracks soils, flood, value, and map data at {pin} for {apn}. "
+                f"Missing pieces lower this number on purpose — it is not a quality grade."
             ),
         },
         "primary_cta": primary_cta,
         "watch_hint": (
-            "Add to watchlist to track opportunity score, risk, how-complete, price, and status. "
+            "Track opportunity, risk, how-complete, price, and status here. "
             "Set your email under My criteria → Watchlist email sync to get change notices."
         ),
     }

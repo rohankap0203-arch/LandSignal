@@ -940,7 +940,42 @@ a.btn-intel:hover {
 .price-trajectory {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+}
+
+.traj-windows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.traj-window-btn {
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.traj-window-btn:hover {
+  color: var(--ink);
+  border-color: var(--brand-soft, var(--brand));
+}
+
+.traj-window-btn.active {
+  background: color-mix(in srgb, var(--brand) 16%, var(--bg-elevated));
+  color: var(--brand);
+  border-color: var(--brand);
+}
+
+.traj-chart-wrap {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .traj-chart {
@@ -949,6 +984,51 @@ a.btn-intel:hover {
   min-height: 160px;
   background: var(--bg-soft);
   border-radius: 14px;
+}
+
+.traj-chart.interactive {
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.traj-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.traj-readout > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.traj-readout-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--brand);
+  font-variant-numeric: tabular-nums;
+}
+
+.traj-readout.live {
+  outline: 1px solid color-mix(in srgb, var(--brand) 35%, transparent);
+  border-radius: 12px;
+}
+
+.estimate-source {
+  border-radius: 14px;
+  background: var(--bg-soft);
+  padding: 12px 14px;
+}
+
+.intel-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .traj-stats {
@@ -1008,13 +1088,19 @@ a.btn-intel:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 14px 0 12px;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--bg-elevated);
   color: var(--muted);
   cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  flex-shrink: 0;
+  margin-left: auto;
   transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 

@@ -57,26 +57,120 @@ def sourcing_card(
     )
 
 
+def estimate_source(
+    *,
+    ask: float | None,
+    model_value: float | None,
+    provider_id: str | None,
+    state: str | None,
+    county: str | None,
+    acres: float | None,
+    apn: str | None,
+    comps_normalized: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Plain-English provenance when no public asking price is published."""
+    if ask is not None and ask > 0:
+        return None
+    if model_value is None:
+        return {
+            "headline": "Why there’s no dollar price yet",
+            "summary": (
+                "This feed has not published a sale price for this parcel, and we don’t have enough "
+                "acres / local inputs yet to publish a dollar estimate either."
+            ),
+            "bullets": [
+                "Check the official page or call the office for current pricing.",
+                "Refresh this file after more map layers finish loading.",
+            ],
+        }
+
+    n = comps_normalized or {}
+    st = (state or "this state").upper() if state else "this state"
+    ppa = n.get("ppa_prior")
+    channel = {
+        "public_tax_sale": "a county tax-sale / land-bank feed",
+        "public_surplus": "a government surplus feed",
+        "blm_lpad": "a federal BLM land feed",
+    }.get(provider_id or "", "a public land feed")
+    bullets: list[str] = [
+        f"No asking price is published on {channel} for {apn or 'this parcel'}.",
+    ]
+    if acres and acres < 2 and provider_id in ("public_tax_sale", "public_surplus"):
+        bullets.append(
+            f"For this small {acres:,.2f}-acre lot, we estimate value from typical "
+            f"city/suburban land prices in {st} (dollars per square foot), not farm-per-acre tables."
+        )
+    elif acres and ppa:
+        bullets.append(
+            f"Starting math: about ${float(ppa):,.0f} per acre for typical land in {st} "
+            f"× {acres:,.2f} acres."
+        )
+        bullets.append(
+            "Then we nudge that number using soil, flood, and wetlands on this exact map pin "
+            "(better soil → higher; more flood/wetlands → lower)."
+        )
+    elif acres:
+        bullets.append(
+            f"Starting math uses typical land prices in {st} × {acres:,.2f} acres, "
+            f"then adjusts for soil, flood, and wetlands on this pin."
+        )
+    else:
+        bullets.append(
+            f"Starting math uses typical land prices in {st}, then adjusts for what we know about this pin."
+        )
+    if county:
+        bullets.append(f"Location used: {county}, {st}.")
+    bullets.append(
+        "This is a first-look estimate for ranking — not an appraisal, and not what you will definitely pay."
+    )
+    return {
+        "headline": "Where our estimate comes from",
+        "summary": (
+            f"No public price is listed. We estimate about ${model_value:,.0f} for "
+            f"{apn or 'this parcel'} so you can still compare it with other land."
+        ),
+        "amount_usd": model_value,
+        "bullets": bullets,
+    }
+
+
 def price_display(
     ask: float | None,
     provider_id: str | None,
     auction_path: dict[str, Any] | None = None,
     model_value: float | None = None,
+    *,
+    state: str | None = None,
+    county: str | None = None,
+    acres: float | None = None,
+    apn: str | None = None,
+    comps_normalized: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    src = estimate_source(
+        ask=ask,
+        model_value=model_value,
+        provider_id=provider_id,
+        state=state,
+        county=county,
+        acres=acres,
+        apn=apn,
+        comps_normalized=comps_normalized,
+    )
     if ask is not None and ask > 0:
         if auction_path and auction_path.get("is_opening_bid"):
             settle = (auction_path or {}).get("expected_settle_usd")
             if settle:
                 return {
                     "amount_usd": ask,
-            "label": "Starting bid → likely finish",
-            "display": f"${ask:,.0f} start · ~${settle:,.0f} likely finish",
+                    "label": "Starting bid → likely finish",
+                    "display": f"${ask:,.0f} start · ~${settle:,.0f} likely finish",
                     "kind": "minimum_bid",
                     "opening_bid_usd": ask,
                     "expected_settle_usd": settle,
                     "settle_low_usd": (auction_path or {}).get("settle_low_usd"),
                     "settle_high_usd": (auction_path or {}).get("settle_high_usd"),
                     "note": (auction_path or {}).get("note"),
+                    "estimate_source": None,
                 }
             return {
                 "amount_usd": ask,
@@ -84,12 +178,14 @@ def price_display(
                 "display": f"${ask:,.0f} start (usually finishes higher)",
                 "kind": "minimum_bid",
                 "opening_bid_usd": ask,
+                "estimate_source": None,
             }
         return {
             "amount_usd": ask,
             "label": "Listed price",
             "display": f"${ask:,.0f}",
             "kind": "asking",
+            "estimate_source": None,
         }
     if provider_id == "blm_lpad":
         return {
@@ -102,6 +198,7 @@ def price_display(
             ),
             "kind": "process",
             "model_value_usd": model_value,
+            "estimate_source": src,
         }
     if provider_id in ("public_tax_sale", "public_surplus"):
         return {
@@ -114,6 +211,7 @@ def price_display(
             ),
             "kind": "unpriced_inventory",
             "model_value_usd": model_value,
+            "estimate_source": src,
         }
     return {
         "amount_usd": None,
@@ -125,6 +223,7 @@ def price_display(
         ),
         "kind": "inquiry",
         "model_value_usd": model_value,
+        "estimate_source": src,
     }
 
 

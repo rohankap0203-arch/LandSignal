@@ -423,11 +423,19 @@ async def radar(
                     provider_id=listing.provider_id,
                     state=parcel.state,
                 )
+            comps_n = {}
+            if enrichment and enrichment.comps:
+                comps_n = enrichment.comps.normalized or enrichment.comps.value or {}
             pd = price_display(
                 ask,
                 listing.provider_id,
                 auction_path if isinstance(auction_path, dict) else None,
                 score.estimated_value_usd,
+                state=parcel.state,
+                county=parcel.county,
+                acres=parcel.acreage,
+                apn=parcel.apn,
+                comps_normalized=comps_n if isinstance(comps_n, dict) else {},
             )
             vd = value_display(
                 score.estimated_value_usd,
@@ -799,11 +807,19 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     ask = listing.asking_price_usd if listing else None
     if ask is not None and ask <= 0:
         ask = None
+    comps_n = {}
+    if enrichment and enrichment.comps:
+        comps_n = enrichment.comps.normalized or enrichment.comps.value or {}
     price = price_display(
         ask,
         listing.provider_id if listing else None,
         auction_path,
         score.estimated_value_usd if score else None,
+        state=parcel.state,
+        county=parcel.county,
+        acres=parcel.acreage,
+        apn=parcel.apn,
+        comps_normalized=comps_n if isinstance(comps_n, dict) else {},
     )
     brief = build_intelligence_brief(
         parcel=parcel,

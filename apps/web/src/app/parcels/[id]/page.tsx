@@ -129,8 +129,8 @@ export default function ParcelIntelligencePage() {
       <section className="panel overflow-hidden">
         <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="p-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="intel-topbar">
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
                 {score && <SignalBadge signal={score.signal as string} />}
                 <span className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-xs font-semibold">
                   {String(sourcing.source_name || "Public source")}
@@ -144,7 +144,7 @@ export default function ParcelIntelligencePage() {
                 aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
                 aria-pressed={watched}
               >
-                <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
                   {watched ? (
                     <>
                       <path
@@ -165,6 +165,7 @@ export default function ParcelIntelligencePage() {
                   )}
                   {!watched && <circle fill="currentColor" cx="12" cy="12" r="2.5" />}
                 </svg>
+                <span>{watched ? "Added" : "Add"}</span>
               </button>
             </div>
             <h1 className="display mt-3 text-3xl font-semibold leading-tight break-words">
@@ -194,6 +195,22 @@ export default function ParcelIntelligencePage() {
                 value={`${Number(score?.deal_readiness || 0).toFixed(0)}/100`}
               />
             </div>
+
+            {price?.estimate_source ? (
+              <div className="estimate-source mt-4">
+                <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+                  {String((price.estimate_source as AnyRec).headline || "Where our estimate comes from")}
+                </div>
+                <p className="mt-1 text-sm leading-relaxed">
+                  {String((price.estimate_source as AnyRec).summary || "")}
+                </p>
+                <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
+                  {(((price.estimate_source as AnyRec).bullets as string[]) || []).slice(0, 5).map((b) => (
+                    <li key={b}>• {b}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             {returnCase.headline ? (
               <div className="return-case mt-5">

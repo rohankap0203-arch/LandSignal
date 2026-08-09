@@ -49,10 +49,10 @@ export function ReturnVisual({
     return (
       <div className="return-visual">
         <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Possible yearly return</div>
-        <h3 className="display text-lg font-semibold">Return if you hold this land</h3>
+        <h3 className="display text-lg font-semibold">If you hold {identity}</h3>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          {identity}: we don’t have enough rent numbers yet to chart a yearly return. Use the buy-price
-          case above and check local cash rents.
+          Not enough local rent numbers yet to chart a yearly %. Use the buy-price case above and check
+          nearby cash rents.
         </p>
       </div>
     );
@@ -65,9 +65,9 @@ export function ReturnVisual({
       <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Possible yearly return</div>
       <h3 className="display text-lg font-semibold">If you hold {identity}</h3>
       <p className="mt-1 text-sm text-[var(--muted)]">
-        Simple what-if returns for this listing
+        Simple what-if cases
         {entryLabel ? ` · buy near ${entryLabel}` : ""}
-        {markLabel ? ` · our value ${markLabel}` : ""}. A first look — not a promise.
+        {markLabel ? ` · our value ${markLabel}` : ""}. First look only — not a promise.
       </p>
       <div className="mt-4 space-y-3">
         {rows.map((r) => {

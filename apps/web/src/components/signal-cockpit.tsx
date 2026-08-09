@@ -63,10 +63,14 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
     <div className="signal-cockpit">
       <div>
         <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
-          Price going up → fewer buyers still bidding
+          Who’s still bidding at each price
         </div>
-        <h3 className="display text-lg font-semibold">Who’s still in at each price</h3>
-        <p className="mt-0.5 text-xs text-[var(--muted)]">{String(cockpit.subtitle || "")}</p>
+        <h3 className="display text-lg font-semibold">
+          {String(cockpit.subtitle || "Price up → fewer buyers left")}
+        </h3>
+        <p className="mt-0.5 text-xs text-[var(--muted)]">
+          Tap a point or legend item to read that price level.
+        </p>
       </div>
 
       {layout ? (

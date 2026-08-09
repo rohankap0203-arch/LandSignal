@@ -13,6 +13,7 @@ so the chart is always parcel-specific — never a blank generic chart.
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 from typing import Any
 
@@ -182,42 +183,58 @@ def _base_annual_rate(
 ) -> tuple[float, list[str]]:
     st = (state or "").upper()
     base = STATE_ANNUAL_APPRECIATION.get(st, 0.028)
-    notes = [f"State land regime prior for {st or 'US'}: {base*100:.1f}%/yr"]
+    notes = [
+        f"Starting point: typical land in {(st or 'this state')} has risen about {base*100:.1f}% per year over long periods."
+    ]
     ch = CHANNEL_MULT.get(provider_id or "", 0.9)
+    channel_plain = {
+        "public_tax_sale": "county tax-sale listings",
+        "public_surplus": "government surplus listings",
+        "blm_lpad": "federal BLM land",
+    }.get(provider_id or "", "this listing type")
     if ch != 1.0:
         notes.append(
-            f"Channel {provider_id} multiplies trend by {ch:.2f} "
-            f"(distressed/federal paths lag retail indexes)"
+            f"For {channel_plain}, we use {ch*100:.0f}% of that pace because these sales usually "
+            f"move slower than normal retail land."
         )
     rate = base * ch
 
     if growth_score is not None:
-        # growth 50 → no change; 80 → +1.2pp; 20 → -1.2pp
         adj = (growth_score - 50) / 50 * 0.012
         rate += adj
-        notes.append(f"Census/path-of-growth {growth_score:.0f} adjusts annual rate by {adj*100:+.1f} pp")
+        notes.append(
+            f"Local growth signal ({growth_score:.0f}/100) changes the yearly pace by {adj*100:+.1f} percentage points."
+        )
 
     if acres is not None:
         if acres < 2:
             rate *= 0.85
-            notes.append("Sub-2 ac urban/tax-sale class: softer, lumpier path (−15% rate)")
+            notes.append("Under 2 acres: we use a softer path (−15%) because small lots jump around more year to year.")
         elif acres >= 80:
             rate *= 1.05
-            notes.append("Institutional scale (≥80 ac): slightly stronger farmland/fringe path (+5%)")
+            notes.append("80+ acres: slightly stronger path (+5%) — bigger tracts often track farm/fringe land indexes.")
 
     if prime_pct is not None and prime_pct >= 50 and (acres or 0) >= 10:
         rate += 0.004
-        notes.append(f"Prime farmland screen {prime_pct:.0f}% adds +0.4 pp")
+        notes.append(f"About {prime_pct:.0f}% prime farmland on the map adds +0.4 percentage points per year.")
     if flood_pct is not None and flood_pct >= 30:
         rate -= 0.006
-        notes.append(f"Flood overlap {flood_pct:.0f}% subtracts −0.6 pp")
+        notes.append(f"About {flood_pct:.0f}% flood overlap on the map subtracts −0.6 percentage points per year.")
     if wet_pct is not None and wet_pct >= 25:
         rate -= 0.004
-        notes.append(f"Wetlands {wet_pct:.0f}% subtracts −0.4 pp")
+        notes.append(f"About {wet_pct:.0f}% wetlands on the map subtracts −0.4 percentage points per year.")
 
     # Clamp to sane land ranges
     rate = max(-0.04, min(0.12, rate))
     return rate, notes
+
+
+def _cycle_shaper(offset: int) -> float:
+    """Mild year-to-year wiggle so long paths are not a perfect straight compound."""
+    if offset in CYCLE_SHAPERS:
+        return CYCLE_SHAPERS[offset]
+    # Longer history: soft multi-year cycle (±3%)
+    return 1.0 + 0.03 * math.sin(offset * 0.55)
 
 
 def build_market_trajectory(
@@ -226,10 +243,10 @@ def build_market_trajectory(
     listing=None,
     score=None,
     enrichment=None,
-    years_back: int = 10,
-    years_forward: int = 3,
+    years_back: int = 100,
+    years_forward: int = 10,
 ) -> dict[str, Any]:
-    """Always returns a parcel-bound appreciation/depreciation series."""
+    """Always returns a parcel-bound path (up to 100y history + forward outlook)."""
     state = getattr(parcel, "state", None)
     county = getattr(parcel, "county", None)
     apn = getattr(parcel, "apn", None) or "parcel"
@@ -281,7 +298,10 @@ def build_market_trajectory(
 
         ppa = STATE_PPA_PRIOR.get((state or "").upper(), 3000)
         anchor = ppa * (acres or 1.0)
-        method_notes.append(f"No mark/ask — anchored to state PPA prior ${_money(ppa)}/ac × acres")
+        st_u = (state or "US").upper()
+        method_notes.append(
+            f"No public price — started from typical {st_u} land at about {_money(ppa)} per acre × acres"
+        )
 
     raw = (listing.raw if listing else None) or {}
     observed = _extract_observed_marks(raw, ask=None)  # don't double-count ask as history
@@ -296,15 +316,13 @@ def build_market_trajectory(
     # Calibrate so year 0 = anchor
     past_vals: dict[int, float] = {0: float(anchor)}
     for k in range(1, years_back + 1):
-        shaper = CYCLE_SHAPERS.get(-k, 1.0)
-        # effective one-year factor looking back
+        shaper = _cycle_shaper(-k)
         factor = (1.0 + annual) * shaper
         past_vals[-k] = past_vals[-k + 1] / max(factor, 0.85)
 
     future_vals: dict[int, float] = {0: float(anchor)}
     for k in range(1, years_forward + 1):
-        shaper = CYCLE_SHAPERS.get(k, 1.0)
-        factor = (1.0 + annual) * shaper
+        shaper = _cycle_shaper(k)
         # Forward slightly conservative vs history
         future_vals[k] = future_vals[k - 1] * (1.0 + annual * 0.9) * (0.98 + 0.02 * shaper)
 
@@ -322,10 +340,10 @@ def build_market_trajectory(
             # Pull series toward observed mark (70% observed / 30% trend)
             val = 0.7 * obs["value_usd"] + 0.3 * val
             point_src = "blended_observed"
-            note = f"{obs['label']} mark blended into trend"
+            note = f"Includes a real {obs['label'].lower()} figure from the source, blended with the local trend"
         else:
             point_src = "trend_proxy"
-            note = "Regime trend for this state/channel/parcel class"
+            note = "Estimated from similar land in this state and listing type (no deed sale found for this year)"
         points.append(
             {
                 "year": year,
@@ -339,8 +357,7 @@ def build_market_trajectory(
 
     # Stats
     y0 = next(p for p in points if p["offset"] == 0)
-    y_5 = next((p for p in points if p["offset"] == -5), None)
-    y_10 = next((p for p in points if p["offset"] == -years_back), None)
+    y_10 = next((p for p in points if p["offset"] == -10), None)
     y_fwd = next((p for p in points if p["offset"] == years_forward), None)
 
     def _cagr(start: dict | None, end: dict | None) -> float | None:
@@ -349,11 +366,29 @@ def build_market_trajectory(
         yrs = max(1, end["year"] - start["year"])
         return (end["value_usd"] / start["value_usd"]) ** (1 / yrs) - 1
 
-    cagr_5 = _cagr(y_5, y0)
-    cagr_10 = _cagr(y_10, y0)
+    windows = [1, 3, 5, 10, 15, 30, 50, 75, 100]
+    window_stats: dict[str, Any] = {}
+    for w in windows:
+        start = next((p for p in points if p["offset"] == -w), points[0] if points else None)
+        c = _cagr(start, y0)
+        window_stats[str(w)] = {
+            "years": w,
+            "start_year": start["year"] if start else None,
+            "start_usd": start["value_usd"] if start else None,
+            "end_usd": y0["value_usd"],
+            "cagr": c,
+            "cagr_display": f"{c*100:+.1f}%/yr" if c is not None else "n/a",
+            "change_pct": (
+                ((y0["value_usd"] - start["value_usd"]) / start["value_usd"]) * 100
+                if start and start["value_usd"]
+                else None
+            ),
+        }
+
+    cagr_5 = window_stats.get("5", {}).get("cagr")
+    cagr_10 = window_stats.get("10", {}).get("cagr")
     cagr_fwd = _cagr(y0, y_fwd)
 
-    # Peak / trough in history window
     hist = [p for p in points if p["kind"] == "history"]
     peak = max(hist, key=lambda p: p["value_usd"]) if hist else y0
     trough = min(hist, key=lambda p: p["value_usd"]) if hist else y0
@@ -365,19 +400,19 @@ def build_market_trajectory(
         regime_label = f"Down {abs(from_peak)*100:.0f}% from the {peak['year']} high"
     elif cagr_5 is not None and cagr_5 >= 0.03:
         regime = "APPRECIATING"
-        regime_label = f"Rising about {cagr_5*100:.1f}% per year over 5 years"
+        regime_label = f"Up about {cagr_5*100:.1f}% per year over the last 5 years"
     elif cagr_5 is not None and cagr_5 <= 0:
         regime = "FLAT_TO_DOWN"
-        regime_label = f"Flat to soft · about {cagr_5*100:.1f}% per year over 5 years"
+        regime_label = f"Flat to soft · about {cagr_5*100:.1f}% per year over the last 5 years"
     else:
         regime = "MODEST_GROWTH"
-        regime_label = f"Slow rise · about {(cagr_5 or 0)*100:.1f}% per year over 5 years"
+        regime_label = f"Slow rise · about {(cagr_5 or 0)*100:.1f}% per year over the last 5 years"
 
     knowledge = "BLENDED" if has_observed else "TREND_PROXY"
     knowledge_label = (
-        "Mixed: tax-roll marks + local trend"
+        "Uses tax-roll / sale figures plus the local trend"
         if has_observed
-        else "Estimate from similar land in this area"
+        else "Estimated from similar land nearby (no multi-year sale tape on this feed)"
     )
     confidence = 55 if has_observed else 38
     if growth_score is not None:
@@ -391,50 +426,30 @@ def build_market_trajectory(
         identity += f" · {acres:,.2f} acres"
 
     headline = (
-        f"For {identity}: {regime_label}. "
-        f"Today’s path value ~{_money(y0['value_usd'])}"
-        + (f". Ten years ago on this path: {_money(y_10['value_usd'])}" if y_10 else "")
-        + (
-            f". In about {years_forward} years (outlook): {_money(y_fwd['value_usd'])}"
-            if y_fwd
-            else ""
-        )
+        f"{regime_label}. Today ~{_money(y0['value_usd'])}"
+        + (f" · 10 years ago ~{_money(y_10['value_usd'])}" if y_10 else "")
+        + (f" · in {years_forward} years (outlook) ~{_money(y_fwd['value_usd'])}" if y_fwd else "")
         + "."
     )
 
     summary_bullets = [
-        f"Typical yearly change we use for this listing: {annual*100:.1f}% ({knowledge_label}).",
-        (
-            f"Last 5 years on this path: about {cagr_5*100:+.1f}% per year"
-            if cagr_5 is not None
-            else "5-year path not available"
-        ),
-        (
-            f"Last 10 years on this path: about {cagr_10*100:+.1f}% per year"
-            if cagr_10 is not None
-            else "10-year path not available"
-        ),
-        (
-            f"Next {years_forward} years (cautious outlook): about {cagr_fwd*100:+.1f}% per year"
-            if cagr_fwd is not None
-            else "Forward outlook not modeled"
-        ),
-        (
-            f"Highest point in the window: {_money(peak['value_usd'])} in {peak['year']}. "
-            f"Lowest: {_money(trough['value_usd'])} in {trough['year']}."
-        ),
+        f"Yearly pace used for this listing: {annual*100:.1f}%.",
+        f"Highest in the full history: {_money(peak['value_usd'])} ({peak['year']}); "
+        f"lowest: {_money(trough['value_usd'])} ({trough['year']}).",
     ]
     if has_observed:
         summary_bullets.append(
-            f"We folded in {len(observed)} tax-roll / sale figure(s) from this listing’s source feed."
+            f"Folded in {len(observed)} tax-roll / sale figure(s) from this listing’s source."
         )
     else:
         summary_bullets.append(
-            "This public feed has no multi-year sale history for this parcel, "
-            "so the chart follows similar land in this state and listing type — not recorded deeds."
+            "No multi-year sale history on this public feed for this parcel ID, "
+            "so the line follows similar land in this state and listing type — not recorded deeds."
         )
 
-    spark = [p["value_usd"] for p in points if p["kind"] == "history"]
+    # Card sparkline stays short (last ~10 years)
+    hist_vals = [p["value_usd"] for p in points if p["kind"] == "history"]
+    spark = hist_vals[-11:] if len(hist_vals) > 11 else hist_vals
 
     return {
         "identity": identity,
@@ -458,13 +473,18 @@ def build_market_trajectory(
         "trough": {"year": trough["year"], "value_usd": trough["value_usd"]},
         "from_peak_pct": from_peak,
         "from_trough_pct": from_trough,
+        "years_back": years_back,
+        "years_forward": years_forward,
+        "windows": windows,
+        "window_stats": window_stats,
         "points": points,
         "sparkline": spark,
         "observed_marks": observed,
         "method_notes": method_notes,
         "summary_bullets": summary_bullets,
+        "interaction_hint": "Drag across the chart to see the dollar value in any year. Use the year buttons to zoom the window.",
         "disclaimer": (
-            "First-look value path for this listing. When deed history is missing, we estimate "
-            "from similar land in this state and listing type. Not an appraisal or guarantee."
+            "First look only. When deed history is missing, dollars follow similar land in this state "
+            "and listing type. Not an appraisal or a promise of future prices."
         ),
     }
