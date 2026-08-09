@@ -471,7 +471,7 @@ export function LandViewerModal({
           [lat, b.getWest()],
           [lat, b.getEast()],
         ],
-        { color: "#ffffff", weight: 0.6, opacity: 0.22 },
+        { color: "#ffffff", weight: 1.15, opacity: 0.55 },
       ).addTo(group);
     }
     for (let lon = Math.floor(b.getWest() / step) * step; lon <= b.getEast(); lon += step) {
@@ -480,7 +480,7 @@ export function LandViewerModal({
           [b.getSouth(), lon],
           [b.getNorth(), lon],
         ],
-        { color: "#ffffff", weight: 0.6, opacity: 0.22 },
+        { color: "#ffffff", weight: 1.15, opacity: 0.55 },
       ).addTo(group);
     }
   }, []);
