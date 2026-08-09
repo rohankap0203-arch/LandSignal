@@ -41,6 +41,7 @@ def _refresh_listing(store: MemoryStore, listing, raw: dict[str, Any]) -> bool:
     listing.last_seen_at = _utcnow()
     listing.raw = {**(listing.raw or {}), **{k: v for k, v in raw.items() if k != "polygon"}}
     store.listings[listing.id] = listing
+    store.index_listing(listing)
     parcel = store.parcels.get(listing.parcel_id)
     if parcel:
         if raw.get("latitude") is not None:

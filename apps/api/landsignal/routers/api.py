@@ -396,8 +396,48 @@ async def radar(
     mode = (unpriced_mode or ("include" if include_unpriced else "priced")).lower()
     channel = (market_channel or "Any").strip()
 
-    async def build_rows(*, apply_region: bool, apply_strict_channel: bool) -> list[RadarRow]:
-        out: list[RadarRow] = []
+    from dataclasses import dataclass
+
+    @dataclass
+    class _Cand:
+        parcel_id: UUID
+        listing_id: UUID
+        fit: float
+        opportunity: float
+        risk: float
+        confidence: float
+        ask: float | None
+        acres: float | None
+        discount_pct: float | None
+        strategy_soft_miss: bool
+        best_strategy: Any
+
+    def _sort_cands(cands: list[_Cand], sort_key: str | None) -> list[_Cand]:
+        key = (sort_key or "fit_desc").lower()
+
+        def discount_key(r: _Cand) -> float:
+            return r.discount_pct if r.discount_pct is not None else 999.0
+
+        if key == "score_desc":
+            cands.sort(key=lambda r: (r.opportunity, r.fit), reverse=True)
+        elif key == "risk_asc":
+            cands.sort(key=lambda r: (r.risk, -r.fit))
+        elif key == "confidence_desc":
+            cands.sort(key=lambda r: (r.confidence, r.opportunity), reverse=True)
+        elif key == "price_asc":
+            cands.sort(key=lambda r: (r.ask is None, r.ask if r.ask is not None else 0))
+        elif key == "price_desc":
+            cands.sort(key=lambda r: (r.ask is None, -(r.ask or 0)))
+        elif key == "acres_desc":
+            cands.sort(key=lambda r: (r.acres is None, -(r.acres or 0)))
+        elif key == "discount_asc":
+            cands.sort(key=discount_key)
+        else:
+            cands.sort(key=lambda r: (r.fit, r.opportunity), reverse=True)
+        return cands
+
+    def collect_cands(*, apply_region: bool, apply_strict_channel: bool) -> list[_Cand]:
+        out: list[_Cand] = []
         for parcel in store.parcels.values():
             score = store.latest_score(parcel.id)
             listing = store.listing_for_parcel(parcel.id)
@@ -449,7 +489,6 @@ async def radar(
                         score.secondary_strategy and score.secondary_strategy.value == s_up
                     )
                     if not hit:
-                        # Soft: keep parcel but mark for fit penalty instead of hard exclude
                         strategy_soft_miss = True
                 else:
                     blob = f"{listing.title} {listing.description or ''} {_strategy_label(score.best_strategy)}".lower()
@@ -477,425 +516,445 @@ async def radar(
             )
             if strategy_soft_miss:
                 fit = max(0, fit - 12)
-            enrichment = store.enrichments.get(parcel.id)
-
-            auction_path = None
-            if enrichment and enrichment.comps and listing.provider_id != "public_vacant_gis":
-                auction_path = (enrichment.comps.normalized or {}).get("auction_path")
-            if listing.provider_id == "public_vacant_gis":
-                auction_path = None
-            if not isinstance(auction_path, dict) and ask and listing.provider_id in (
-                "public_tax_sale",
-                "public_surplus",
-            ):
-                from landsignal.services.auction import expected_auction_clearing
-
-                auction_path = expected_auction_clearing(
-                    opening_bid=ask,
-                    model_value=score.estimated_value_usd,
-                    acres=parcel.acreage,
-                    provider_id=listing.provider_id,
-                    state=parcel.state,
-                )
-            comps_n = {}
-            if enrichment and enrichment.comps:
-                comps_n = enrichment.comps.normalized or enrichment.comps.value or {}
-            pd = price_display(
-                ask,
-                listing.provider_id,
-                auction_path if isinstance(auction_path, dict) else None,
-                score.estimated_value_usd,
-                state=parcel.state,
-                county=parcel.county,
-                acres=parcel.acreage,
-                apn=parcel.apn,
-                comps_normalized=comps_n if isinstance(comps_n, dict) else {},
-            )
-            vd = value_display(
-                score.estimated_value_usd,
-                (enrichment.comps.knowledge_state.value if enrichment and enrichment.comps else "ESTIMATED"),
-            )
-            ppa = listing.price_per_acre_usd
-            if ppa is None and ask and parcel.acreage:
-                ppa = ask / parcel.acreage
-            source = sourcing_card(
-                provider_id=listing.provider_id,
-                source_url=listing.source_url,
-                title=listing.title or "",
-                apn=parcel.apn,
-                state=parcel.state,
-                county=parcel.county,
-                latitude=parcel.latitude,
-                longitude=parcel.longitude,
-                raw=listing.raw,
-            )
-            links = source.get("links") or build_action_links(
-                provider_id=listing.provider_id,
-                source_url=listing.source_url,
-                title=listing.title or "",
-                apn=parcel.apn,
-                state=parcel.state,
-                county=parcel.county,
-                latitude=parcel.latitude,
-                longitude=parcel.longitude,
-                raw=listing.raw,
-            )
-            # Fast path for search cards: assume links work; detail page validates & grays dead ones.
-            annotated = [
-                {**l, "available": True, "availability_reason": "deferred", "status_code": None}
-                for l in links
-            ]
-
-            reasons = match_reasons(
-                score=score,
-                parcel=parcel,
-                listing=listing,
-                filters=filters,
-                enrichment=enrichment,
-            )
-            if strategy_soft_miss:
-                reasons = [
-                    "Strategy is a soft match — ranked lower, not hidden, so you still see nearby options.",
-                    *reasons,
-                ][:5]
-            if isinstance(auction_path, dict) and auction_path.get("expected_settle_usd"):
-                # Prefer the plain buy-price bullet from match_reasons
-                if not any("likely auction finish" in r.lower() or "likely finish" in r.lower() for r in reasons):
-                    reasons = [
-                        (
-                            f"Starts at ${auction_path['opening_bid_usd']:,.0f}; auctions like this "
-                            f"usually finish near ${auction_path['expected_settle_usd']:,.0f} "
-                            f"(about {auction_path.get('bid_inflation_mult_base', 0):.1f}× the start)"
-                        ),
-                        *reasons,
-                    ][:5]
-            acres = parcel.acreage
-            acres_display = f"{acres:,.2f} acres" if acres is not None else "Acreage not published"
-            settle_disc = None
-            if isinstance(auction_path, dict):
-                settle_disc = auction_path.get("settle_discount_pct")
-            if settle_disc is not None:
-                discount_display = (
-                    f"Likely finish {settle_disc:+.1f}% vs our value "
-                    f"(start bid looked {auction_path.get('opener_discount_pct', 0):+.0f}%)"
-                )
-            elif score.asking_discount_pct is not None:
-                discount_display = f"{score.asking_discount_pct:+.1f}% vs our value"
-            else:
-                discount_display = "No public price to compare"
-
-            # Plain-English explainer — phrasing mirrors the card headline left of “?”
-            discount_help: str | None = None
-            gap_pct = settle_disc if settle_disc is not None else score.asking_discount_pct
-            our_val = score.estimated_value_usd
-            compare_price = None
-            compare_label = "public price"
-            is_auction_settle = bool(
-                isinstance(auction_path, dict) and auction_path.get("expected_settle_usd")
-            )
-            if is_auction_settle:
-                compare_price = float(auction_path["expected_settle_usd"])
-                compare_label = "likely auction finish"
-            elif ask is not None and ask > 0:
-                compare_price = float(ask)
-                compare_label = "listed / starting price"
-            if gap_pct is not None and our_val is not None and our_val > 0:
-                pct_abs = abs(float(gap_pct))
-                acres_bit = f"{acres:,.2f}-acre " if acres is not None else ""
-                place_bit = f" in {parcel.county or 'this county'}, {parcel.state or 'US'}"
-                channel_bit = _provider_label(listing.provider_id, parcel.county)
-                our_s = f"${our_val:,.0f}"
-                # Lead with the same wording the card shows (About / Likely finish / vs our value)
-                if float(gap_pct) < -8 and listing.provider_id != "public_vacant_gis":
-                    lead = (
-                        f"“Likely finish ~{pct_abs:.0f}% under our value” means "
-                        if is_auction_settle
-                        else f"“About {pct_abs:.0f}% under our value” means "
-                    )
-                elif is_auction_settle:
-                    lead = f"“Likely finish {float(gap_pct):+.1f}% vs our value” means "
-                elif score.asking_discount_pct is not None:
-                    lead = f"“{float(gap_pct):+.1f}% vs our value” means "
-                else:
-                    lead = "This price gap means "
-                if compare_price is not None:
-                    cmp_s = f"${compare_price:,.0f}"
-                    if float(gap_pct) < -3:
-                        discount_help = (
-                            f"{lead}our desktop value for this {acres_bit}{channel_bit} tract{place_bit} "
-                            f"is about {our_s}, while the {compare_label} we see is about {cmp_s} — "
-                            f"roughly {pct_abs:.0f}% lower. That gap is a buy-edge screen from maps, "
-                            f"comps, and channel norms — not a promise you’ll close at that number. "
-                            f"Auctions and negotiations often move the price; check flood, access, "
-                            f"and title before you treat the gap as locked-in profit."
-                        )
-                    elif float(gap_pct) > 3:
-                        discount_help = (
-                            f"{lead}our desktop value for this {acres_bit}tract{place_bit} is about {our_s}. "
-                            f"The {compare_label} ({cmp_s}) sits roughly {pct_abs:.0f}% above that mark — "
-                            f"so the screen does not show a clear under-value buy yet. Dig into why the "
-                            f"ask is high (improvements, location, thin comps) before chasing it."
-                        )
-                    else:
-                        discount_help = (
-                            f"{lead}our desktop value (~{our_s}) and the {compare_label} "
-                            f"(~{cmp_s}) are close for this {acres_bit}tract{place_bit}. "
-                            f"You’re not looking at a big under-value gap — underwrite the site and "
-                            f"process instead of leaning on discount math."
-                        )
-                elif float(gap_pct) < -3:
-                    discount_help = (
-                        f"{lead}we underwrite a process entry on this {acres_bit}{channel_bit} "
-                        f"file{place_bit} about {pct_abs:.0f}% under our desktop mark of {our_s}. "
-                        f"There’s no firm public ask — the gap is an optionality screen, not a "
-                        f"listed sale price. Confirm the real buy path with the office before you spend."
-                    )
-            risk_label = (
-                "Lower risk on the map checks"
-                if score.risk < 30
-                else "Medium risk — dig into flood/wetlands"
-                if score.risk < 55
-                else "Higher risk — budget more homework"
-            )
-            conf_label = (
-                "File looks fairly complete"
-                if score.confidence >= 70
-                else "Some data still missing"
-                if score.confidence >= 45
-                else "Thin file — double-check before bidding"
-            )
-            thesis, conviction = build_return_thesis(
-                score=score,
-                listing=listing,
-                auction_path=auction_path if isinstance(auction_path, dict) else None,
-                enrichment=enrichment,
-            )
-            from landsignal.services.market_trajectory import build_market_trajectory
-
-            traj = ((enrichment.narratives or {}).get("market_trajectory") if enrichment else None) or None
-            if not isinstance(traj, dict) or not traj.get("sparkline") or not traj.get("hitches"):
-                traj = build_market_trajectory(
-                    parcel=parcel,
-                    listing=listing,
-                    score=score,
-                    enrichment=enrichment,
-                )
-                if enrichment is not None:
-                    enrichment.narratives = {
-                        **(enrichment.narratives or {}),
-                        "market_trajectory": traj,
-                    }
-            summary = thesis or (
-                f"{_strategy_label(score.best_strategy)} · "
-                f"Opportunity {score.opportunity:.0f} · Risk {score.risk:.0f} · {pd['display']}"
-            )
-            headline_disc = settle_disc if settle_disc is not None else score.asking_discount_pct
-            if listing.provider_id == "public_vacant_gis":
-                headline_disc = score.asking_discount_pct
-            if listing.provider_id == "public_vacant_gis":
-                acres_h = f"{acres:,.0f} ac" if acres is not None else "tract"
-                headline = (
-                    f"Vacant map screen · {acres_h} · confirm owner path"
-                    if score.opportunity < 62
-                    else f"Worth a look · {acres_h} vacant map screen — verify it’s buyable"
-                )
-            elif headline_disc is not None and headline_disc < -8:
-                headline = (
-                    f"Likely finish ~{abs(headline_disc):.0f}% under our value"
-                    if isinstance(auction_path, dict)
-                    else f"About {abs(headline_disc):.0f}% under our value"
-                )
-            elif isinstance(auction_path, dict):
-                headline = (
-                    f"Starts ${auction_path.get('opening_bid_usd', 0):,.0f} → "
-                    f"likely ~${auction_path.get('expected_settle_usd', 0):,.0f}"
-                )
-            else:
-                headline = f"{conviction or 'WATCH'} interest · opportunity score {score.opportunity:.0f}/100"
-
-            # One tailored scout line for the card — always parcel-specific
-            scout_bits: list[str] = []
-
-            def _nv(prov):
-                if not prov:
-                    return {}
-                return prov.normalized or prov.value or {}
-
-            sn = fn = wn = an = gn = cn = {}
-            if enrichment:
-                sn = _nv(enrichment.soil)
-                fn = _nv(enrichment.flood)
-                wn = _nv(enrichment.wetlands)
-                an = _nv(enrichment.access)
-                gn = _nv(enrichment.growth)
-                cn = _nv(enrichment.comps)
-            try:
-                prime_v = float(sn["prime_farmland_pct"]) if sn.get("prime_farmland_pct") is not None else None
-            except Exception:
-                prime_v = None
-            try:
-                flood_v = float(fn["flood_zone_pct"]) if fn.get("flood_zone_pct") is not None else None
-            except Exception:
-                flood_v = None
-            try:
-                wet_v = float(wn["wetland_pct"]) if wn.get("wetland_pct") is not None else None
-            except Exception:
-                wet_v = None
-            try:
-                access_v = (
-                    float(an["legal_access_confidence"]) if an.get("legal_access_confidence") is not None else None
-                )
-            except Exception:
-                access_v = None
-            try:
-                growth_v = float(gn["path_of_growth_score"]) if gn.get("path_of_growth_score") is not None else None
-            except Exception:
-                growth_v = None
-            if growth_v is None:
-                try:
-                    growth_v = (
-                        float(cn["path_of_growth_score"]) if cn.get("path_of_growth_score") is not None else None
-                    )
-                except Exception:
-                    growth_v = None
-
-            edge_pct = settle_disc if settle_disc is not None else score.asking_discount_pct
-            # Vacant GIS: no fake bargain copy — the job is “is this actually buyable?”
-            if listing.provider_id == "public_vacant_gis":
-                edge_pct = None
-            elif edge_pct is not None and edge_pct <= -20:
-                scout_bits.append(f"Buy edge ~{abs(edge_pct):.0f}% under our mark")
-            elif edge_pct is not None and edge_pct <= -8:
-                scout_bits.append(f"Modest edge ~{abs(edge_pct):.0f}% under our mark")
-            if listing.provider_id == "public_tax_sale":
-                scout_bits.append("tax-sale channel — process, not MLS")
-            elif listing.provider_id == "blm_lpad":
-                scout_bits.append("BLM disposal process")
-            elif listing.provider_id == "public_surplus":
-                scout_bits.append("public surplus inventory")
-            elif listing.provider_id == "public_vacant_gis":
-                scout_bits.append("vacant map screen — confirm owner path")
-            if prime_v is not None and prime_v >= 45:
-                scout_bits.append(f"~{prime_v:.0f}% prime soil")
-            if flood_v is not None and flood_v >= 25:
-                scout_bits.append(f"flood ~{flood_v:.0f}% — price that in")
-            elif wet_v is not None and wet_v >= 20:
-                scout_bits.append(f"wetlands ~{wet_v:.0f}% trim usable acres")
-            if access_v is not None and access_v < 45:
-                scout_bits.append("access not clear yet")
-            elif access_v is not None and access_v >= 75 and len(scout_bits) < 2:
-                scout_bits.append("access screen looks workable")
-            if growth_v is not None and growth_v >= 65 and len(scout_bits) < 3:
-                scout_bits.append(f"growth support ~{growth_v:.0f}/100")
-            if score.risk is not None and score.risk >= 55 and len(scout_bits) < 3:
-                scout_bits.append("higher map risk — dig in")
-            if not scout_bits and score.best_strategy:
-                scout_bits.append(f"Best use screen: {_strategy_label(score.best_strategy)}")
-            if not scout_bits:
-                scout_bits.append(
-                    f"{_provider_label(listing.provider_id, parcel.county)} in {parcel.county or 'this county'}"
-                )
-            scout_note = " · ".join(scout_bits[:3])
-
             out.append(
-                RadarRow(
+                _Cand(
                     parcel_id=parcel.id,
                     listing_id=listing.id,
-                    signal=score.signal,
-                    property_name=display_title(parcel, listing),
-                    location=f"{parcel.county or 'County TBD'}, {parcel.state or 'US'}",
-                    state=parcel.state,
-                    county=parcel.county,
-                    region=f"{parcel.county or ''}, {parcel.state or ''}".strip(", "),
-                    acres=acres,
-                    acres_display=acres_display,
+                    fit=float(fit),
+                    opportunity=float(score.opportunity),
+                    risk=float(score.risk),
+                    confidence=float(score.confidence),
                     ask=ask,
-                    price_display=pd["display"],
-                    price_label=pd["label"],
-                    price_per_acre=ppa,
-                    price_per_acre_display=f"${ppa:,.0f}/ac" if ppa else "n/a — no priced ask",
-                    estimated_value=score.estimated_value_usd,
-                    estimated_value_display=vd["display"],
-                    value_knowledge=vd["knowledge_state"],
+                    acres=parcel.acreage,
                     discount_pct=score.asking_discount_pct,
-                    discount_display=discount_display,
-                    discount_help=discount_help,
-                    opportunity=score.opportunity,
-                    asymmetry=score.asymmetry,
-                    risk=score.risk,
-                    confidence=score.confidence,
-                    deal_readiness=score.deal_readiness,
+                    strategy_soft_miss=strategy_soft_miss,
                     best_strategy=score.best_strategy,
-                    best_strategy_label=_strategy_label(score.best_strategy),
-                    secondary_strategy_label=_strategy_label(score.secondary_strategy),
-                    freshness_hours=(
-                        (datetime.now(timezone.utc) - listing.last_seen_at).total_seconds() / 3600
-                        if listing.last_seen_at
-                        else None
-                    ),
-                    status=listing.status,
-                    status_label="Available" if listing.status == "ACTIVE" else listing.status.title(),
-                    is_demo=False,
-                    personalized_opportunity=fit,
-                    fit_score=fit,
-                    summary=summary,
-                    match_reasons=reasons,
-                    rating_breakdown=rating_breakdown(score, parcel=parcel, listing=listing),
-                    links=annotated,
-                    latitude=parcel.latitude,
-                    longitude=parcel.longitude,
-                    provider_id=listing.provider_id,
-                    provider_label=_provider_label(listing.provider_id, parcel.county),
-                    headline_metric=headline,
-                    risk_label=risk_label,
-                    confidence_label=conf_label,
-                    source_name=source.get("source_name"),
-                    contact_office=source.get("office"),
-                    contact_phone=source.get("phone"),
-                    contact_website=source.get("website"),
-                    how_to_buy=source.get("how_to_buy"),
-                    return_thesis=thesis,
-                    conviction=conviction,
-                    scout_note=scout_note,
-                    trajectory_regime=traj.get("regime"),
-                    trajectory_label=traj.get("regime_label"),
-                    trajectory_cagr_5y=traj.get("cagr_5y_display"),
-                    trajectory_sparkline=list(traj.get("sparkline") or [])[-8:],
                 )
             )
         return out
 
-    rows = await build_rows(apply_region=True, apply_strict_channel=True)
-    # Soft broaden within the same state when region is too tight
-    if broaden and not rows:
-        rows = await build_rows(apply_region=False, apply_strict_channel=True)
-        for r in rows:
-            r.match_reasons = [
-                "Loosened city/region a bit so you still get real matches for your other filters.",
-                *r.match_reasons,
+    def fat_row(cand: _Cand, *, broaden_reason: str | None = None) -> RadarRow | None:
+        parcel = store.parcels.get(cand.parcel_id)
+        listing = store.listing_for_parcel(cand.parcel_id)
+        score = store.latest_score(cand.parcel_id)
+        if not parcel or not listing or not score:
+            return None
+        strategy_soft_miss = cand.strategy_soft_miss
+        fit = cand.fit
+        ask = cand.ask
+        enrichment = store.enrichments.get(parcel.id)
+
+        auction_path = None
+        if enrichment and enrichment.comps and listing.provider_id != "public_vacant_gis":
+            auction_path = (enrichment.comps.normalized or {}).get("auction_path")
+        if listing.provider_id == "public_vacant_gis":
+            auction_path = None
+        if not isinstance(auction_path, dict) and ask and listing.provider_id in (
+            "public_tax_sale",
+            "public_surplus",
+        ):
+            from landsignal.services.auction import expected_auction_clearing
+
+            auction_path = expected_auction_clearing(
+                opening_bid=ask,
+                model_value=score.estimated_value_usd,
+                acres=parcel.acreage,
+                provider_id=listing.provider_id,
+                state=parcel.state,
+            )
+        comps_n = {}
+        if enrichment and enrichment.comps:
+            comps_n = enrichment.comps.normalized or enrichment.comps.value or {}
+        pd = price_display(
+            ask,
+            listing.provider_id,
+            auction_path if isinstance(auction_path, dict) else None,
+            score.estimated_value_usd,
+            state=parcel.state,
+            county=parcel.county,
+            acres=parcel.acreage,
+            apn=parcel.apn,
+            comps_normalized=comps_n if isinstance(comps_n, dict) else {},
+        )
+        vd = value_display(
+            score.estimated_value_usd,
+            (enrichment.comps.knowledge_state.value if enrichment and enrichment.comps else "ESTIMATED"),
+        )
+        ppa = listing.price_per_acre_usd
+        if ppa is None and ask and parcel.acreage:
+            ppa = ask / parcel.acreage
+        source = sourcing_card(
+            provider_id=listing.provider_id,
+            source_url=listing.source_url,
+            title=listing.title or "",
+            apn=parcel.apn,
+            state=parcel.state,
+            county=parcel.county,
+            latitude=parcel.latitude,
+            longitude=parcel.longitude,
+            raw=listing.raw,
+        )
+        links = source.get("links") or build_action_links(
+            provider_id=listing.provider_id,
+            source_url=listing.source_url,
+            title=listing.title or "",
+            apn=parcel.apn,
+            state=parcel.state,
+            county=parcel.county,
+            latitude=parcel.latitude,
+            longitude=parcel.longitude,
+            raw=listing.raw,
+        )
+        annotated = [
+            {**l, "available": True, "availability_reason": "deferred", "status_code": None}
+            for l in links
+        ]
+
+        reasons = match_reasons(
+            score=score,
+            parcel=parcel,
+            listing=listing,
+            filters=filters,
+            enrichment=enrichment,
+        )
+        if strategy_soft_miss:
+            reasons = [
+                "Strategy is a soft match — ranked lower, not hidden, so you still see nearby options.",
+                *reasons,
             ][:5]
-    # Last resort: if a price band wiped everything, show unpriced + near-band in-state/all
-    if broaden and not rows and (min_price is not None or max_price is not None):
+        if broaden_reason:
+            reasons = [broaden_reason, *reasons][:5]
+        if isinstance(auction_path, dict) and auction_path.get("expected_settle_usd"):
+            if not any("likely auction finish" in r.lower() or "likely finish" in r.lower() for r in reasons):
+                reasons = [
+                    (
+                        f"Starts at ${auction_path['opening_bid_usd']:,.0f}; auctions like this "
+                        f"usually finish near ${auction_path['expected_settle_usd']:,.0f} "
+                        f"(about {auction_path.get('bid_inflation_mult_base', 0):.1f}× the start)"
+                    ),
+                    *reasons,
+                ][:5]
+        acres = parcel.acreage
+        acres_display = f"{acres:,.2f} acres" if acres is not None else "Acreage not published"
+        settle_disc = None
+        if isinstance(auction_path, dict):
+            settle_disc = auction_path.get("settle_discount_pct")
+        if settle_disc is not None:
+            discount_display = (
+                f"Likely finish {settle_disc:+.1f}% vs our value "
+                f"(start bid looked {auction_path.get('opener_discount_pct', 0):+.0f}%)"
+            )
+        elif score.asking_discount_pct is not None:
+            discount_display = f"{score.asking_discount_pct:+.1f}% vs our value"
+        else:
+            discount_display = "No public price to compare"
+
+        discount_help: str | None = None
+        gap_pct = settle_disc if settle_disc is not None else score.asking_discount_pct
+        our_val = score.estimated_value_usd
+        compare_price = None
+        compare_label = "public price"
+        is_auction_settle = bool(
+            isinstance(auction_path, dict) and auction_path.get("expected_settle_usd")
+        )
+        if is_auction_settle:
+            compare_price = float(auction_path["expected_settle_usd"])
+            compare_label = "likely auction finish"
+        elif ask is not None and ask > 0:
+            compare_price = float(ask)
+            compare_label = "listed / starting price"
+        if gap_pct is not None and our_val is not None and our_val > 0:
+            pct_abs = abs(float(gap_pct))
+            acres_bit = f"{acres:,.2f}-acre " if acres is not None else ""
+            place_bit = f" in {parcel.county or 'this county'}, {parcel.state or 'US'}"
+            channel_bit = _provider_label(listing.provider_id, parcel.county)
+            our_s = f"${our_val:,.0f}"
+            if float(gap_pct) < -8 and listing.provider_id != "public_vacant_gis":
+                lead = (
+                    f"“Likely finish ~{pct_abs:.0f}% under our value” means "
+                    if is_auction_settle
+                    else f"“About {pct_abs:.0f}% under our value” means "
+                )
+            elif is_auction_settle:
+                lead = f"“Likely finish {float(gap_pct):+.1f}% vs our value” means "
+            elif score.asking_discount_pct is not None:
+                lead = f"“{float(gap_pct):+.1f}% vs our value” means "
+            else:
+                lead = "This price gap means "
+            if compare_price is not None:
+                cmp_s = f"${compare_price:,.0f}"
+                if float(gap_pct) < -3:
+                    discount_help = (
+                        f"{lead}our desktop value for this {acres_bit}{channel_bit} tract{place_bit} "
+                        f"is about {our_s}, while the {compare_label} we see is about {cmp_s} — "
+                        f"roughly {pct_abs:.0f}% lower. That gap is a buy-edge screen from maps, "
+                        f"comps, and channel norms — not a promise you’ll close at that number. "
+                        f"Auctions and negotiations often move the price; check flood, access, "
+                        f"and title before you treat the gap as locked-in profit."
+                    )
+                elif float(gap_pct) > 3:
+                    discount_help = (
+                        f"{lead}our desktop value for this {acres_bit}tract{place_bit} is about {our_s}. "
+                        f"The {compare_label} ({cmp_s}) sits roughly {pct_abs:.0f}% above that mark — "
+                        f"so the screen does not show a clear under-value buy yet. Dig into why the "
+                        f"ask is high (improvements, location, thin comps) before chasing it."
+                    )
+                else:
+                    discount_help = (
+                        f"{lead}our desktop value (~{our_s}) and the {compare_label} "
+                        f"(~{cmp_s}) are close for this {acres_bit}tract{place_bit}. "
+                        f"You’re not looking at a big under-value gap — underwrite the site and "
+                        f"process instead of leaning on discount math."
+                    )
+            elif float(gap_pct) < -3:
+                discount_help = (
+                    f"{lead}we underwrite a process entry on this {acres_bit}{channel_bit} "
+                    f"file{place_bit} about {pct_abs:.0f}% under our desktop mark of {our_s}. "
+                    f"There’s no firm public ask — the gap is an optionality screen, not a "
+                    f"listed sale price. Confirm the real buy path with the office before you spend."
+                )
+        risk_label = (
+            "Lower risk on the map checks"
+            if score.risk < 30
+            else "Medium risk — dig into flood/wetlands"
+            if score.risk < 55
+            else "Higher risk — budget more homework"
+        )
+        conf_label = (
+            "File looks fairly complete"
+            if score.confidence >= 70
+            else "Some data still missing"
+            if score.confidence >= 45
+            else "Thin file — double-check before bidding"
+        )
+        thesis, conviction = build_return_thesis(
+            score=score,
+            listing=listing,
+            auction_path=auction_path if isinstance(auction_path, dict) else None,
+            enrichment=enrichment,
+        )
+        from landsignal.services.market_trajectory import build_market_trajectory
+
+        traj = ((enrichment.narratives or {}).get("market_trajectory") if enrichment else None) or None
+        if not isinstance(traj, dict) or not traj.get("sparkline") or not traj.get("hitches"):
+            traj = build_market_trajectory(
+                parcel=parcel,
+                listing=listing,
+                score=score,
+                enrichment=enrichment,
+            )
+            if enrichment is not None:
+                enrichment.narratives = {
+                    **(enrichment.narratives or {}),
+                    "market_trajectory": traj,
+                }
+        summary = thesis or (
+            f"{_strategy_label(score.best_strategy)} · "
+            f"Opportunity {score.opportunity:.0f} · Risk {score.risk:.0f} · {pd['display']}"
+        )
+        headline_disc = settle_disc if settle_disc is not None else score.asking_discount_pct
+        if listing.provider_id == "public_vacant_gis":
+            headline_disc = score.asking_discount_pct
+        if listing.provider_id == "public_vacant_gis":
+            acres_h = f"{acres:,.0f} ac" if acres is not None else "tract"
+            headline = (
+                f"Vacant map screen · {acres_h} · confirm owner path"
+                if score.opportunity < 62
+                else f"Worth a look · {acres_h} vacant map screen — verify it’s buyable"
+            )
+        elif headline_disc is not None and headline_disc < -8:
+            headline = (
+                f"Likely finish ~{abs(headline_disc):.0f}% under our value"
+                if isinstance(auction_path, dict)
+                else f"About {abs(headline_disc):.0f}% under our value"
+            )
+        elif isinstance(auction_path, dict):
+            headline = (
+                f"Starts ${auction_path.get('opening_bid_usd', 0):,.0f} → "
+                f"likely ~${auction_path.get('expected_settle_usd', 0):,.0f}"
+            )
+        else:
+            headline = f"{conviction or 'WATCH'} interest · opportunity score {score.opportunity:.0f}/100"
+
+        scout_bits: list[str] = []
+
+        def _nv(prov):
+            if not prov:
+                return {}
+            return prov.normalized or prov.value or {}
+
+        sn = fn = wn = an = gn = cn = {}
+        if enrichment:
+            sn = _nv(enrichment.soil)
+            fn = _nv(enrichment.flood)
+            wn = _nv(enrichment.wetlands)
+            an = _nv(enrichment.access)
+            gn = _nv(enrichment.growth)
+            cn = _nv(enrichment.comps)
+        try:
+            prime_v = float(sn["prime_farmland_pct"]) if sn.get("prime_farmland_pct") is not None else None
+        except Exception:
+            prime_v = None
+        try:
+            flood_v = float(fn["flood_zone_pct"]) if fn.get("flood_zone_pct") is not None else None
+        except Exception:
+            flood_v = None
+        try:
+            wet_v = float(wn["wetland_pct"]) if wn.get("wetland_pct") is not None else None
+        except Exception:
+            wet_v = None
+        try:
+            access_v = (
+                float(an["legal_access_confidence"]) if an.get("legal_access_confidence") is not None else None
+            )
+        except Exception:
+            access_v = None
+        try:
+            growth_v = float(gn["path_of_growth_score"]) if gn.get("path_of_growth_score") is not None else None
+        except Exception:
+            growth_v = None
+        if growth_v is None:
+            try:
+                growth_v = (
+                    float(cn["path_of_growth_score"]) if cn.get("path_of_growth_score") is not None else None
+                )
+            except Exception:
+                growth_v = None
+
+        edge_pct = settle_disc if settle_disc is not None else score.asking_discount_pct
+        if listing.provider_id == "public_vacant_gis":
+            edge_pct = None
+        elif edge_pct is not None and edge_pct <= -20:
+            scout_bits.append(f"Buy edge ~{abs(edge_pct):.0f}% under our mark")
+        elif edge_pct is not None and edge_pct <= -8:
+            scout_bits.append(f"Modest edge ~{abs(edge_pct):.0f}% under our mark")
+        if listing.provider_id == "public_tax_sale":
+            scout_bits.append("tax-sale channel — process, not MLS")
+        elif listing.provider_id == "blm_lpad":
+            scout_bits.append("BLM disposal process")
+        elif listing.provider_id == "public_surplus":
+            scout_bits.append("public surplus inventory")
+        elif listing.provider_id == "public_vacant_gis":
+            scout_bits.append("vacant map screen — confirm owner path")
+        if prime_v is not None and prime_v >= 45:
+            scout_bits.append(f"~{prime_v:.0f}% prime soil")
+        if flood_v is not None and flood_v >= 25:
+            scout_bits.append(f"flood ~{flood_v:.0f}% — price that in")
+        elif wet_v is not None and wet_v >= 20:
+            scout_bits.append(f"wetlands ~{wet_v:.0f}% trim usable acres")
+        if access_v is not None and access_v < 45:
+            scout_bits.append("access not clear yet")
+        elif access_v is not None and access_v >= 75 and len(scout_bits) < 2:
+            scout_bits.append("access screen looks workable")
+        if growth_v is not None and growth_v >= 65 and len(scout_bits) < 3:
+            scout_bits.append(f"growth support ~{growth_v:.0f}/100")
+        if score.risk is not None and score.risk >= 55 and len(scout_bits) < 3:
+            scout_bits.append("higher map risk — dig in")
+        if not scout_bits and score.best_strategy:
+            scout_bits.append(f"Best use screen: {_strategy_label(score.best_strategy)}")
+        if not scout_bits:
+            scout_bits.append(
+                f"{_provider_label(listing.provider_id, parcel.county)} in {parcel.county or 'this county'}"
+            )
+        scout_note = " · ".join(scout_bits[:3])
+
+        return RadarRow(
+            parcel_id=parcel.id,
+            listing_id=listing.id,
+            signal=score.signal,
+            property_name=display_title(parcel, listing),
+            location=f"{parcel.county or 'County TBD'}, {parcel.state or 'US'}",
+            state=parcel.state,
+            county=parcel.county,
+            region=f"{parcel.county or ''}, {parcel.state or ''}".strip(", "),
+            acres=acres,
+            acres_display=acres_display,
+            ask=ask,
+            price_display=pd["display"],
+            price_label=pd["label"],
+            price_per_acre=ppa,
+            price_per_acre_display=f"${ppa:,.0f}/ac" if ppa else "n/a — no priced ask",
+            estimated_value=score.estimated_value_usd,
+            estimated_value_display=vd["display"],
+            value_knowledge=vd["knowledge_state"],
+            discount_pct=score.asking_discount_pct,
+            discount_display=discount_display,
+            discount_help=discount_help,
+            opportunity=score.opportunity,
+            asymmetry=score.asymmetry,
+            risk=score.risk,
+            confidence=score.confidence,
+            deal_readiness=score.deal_readiness,
+            best_strategy=score.best_strategy,
+            best_strategy_label=_strategy_label(score.best_strategy),
+            secondary_strategy_label=_strategy_label(score.secondary_strategy),
+            freshness_hours=(
+                (datetime.now(timezone.utc) - listing.last_seen_at).total_seconds() / 3600
+                if listing.last_seen_at
+                else None
+            ),
+            status=listing.status,
+            status_label="Available" if listing.status == "ACTIVE" else listing.status.title(),
+            is_demo=False,
+            personalized_opportunity=fit,
+            fit_score=fit,
+            summary=summary,
+            match_reasons=reasons,
+            rating_breakdown=rating_breakdown(score, parcel=parcel, listing=listing),
+            links=annotated,
+            latitude=parcel.latitude,
+            longitude=parcel.longitude,
+            provider_id=listing.provider_id,
+            provider_label=_provider_label(listing.provider_id, parcel.county),
+            headline_metric=headline,
+            risk_label=risk_label,
+            confidence_label=conf_label,
+            source_name=source.get("source_name"),
+            contact_office=source.get("office"),
+            contact_phone=source.get("phone"),
+            contact_website=source.get("website"),
+            how_to_buy=source.get("how_to_buy"),
+            return_thesis=thesis,
+            conviction=conviction,
+            scout_note=scout_note,
+            trajectory_regime=traj.get("regime"),
+            trajectory_label=traj.get("regime_label"),
+            trajectory_cagr_5y=traj.get("cagr_5y_display"),
+            trajectory_sparkline=list(traj.get("sparkline") or [])[-8:],
+        )
+
+    # Phase 1: cheap filter + fit across full inventory (same match set as before)
+    cands = collect_cands(apply_region=True, apply_strict_channel=True)
+    broaden_reason: str | None = None
+    if broaden and not cands:
+        cands = collect_cands(apply_region=False, apply_strict_channel=True)
+        broaden_reason = "Loosened city/region a bit so you still get real matches for your other filters."
+    if broaden and not cands and (min_price is not None or max_price is not None):
         saved_min, saved_max = min_price, max_price
         min_price = None
         max_price = None
-        rows = await build_rows(apply_region=False, apply_strict_channel=False)
+        cands = collect_cands(apply_region=False, apply_strict_channel=False)
         min_price, max_price = saved_min, saved_max
-        for r in rows:
-            r.match_reasons = [
-                "Your exact price band had no hits — showing the closest live opportunities instead.",
-                *r.match_reasons,
-            ][:5]
+        broaden_reason = "Your exact price band had no hits — showing the closest live opportunities instead."
 
-    # Cap the match set first (hold must not change *which* parcels make the cut),
-    # then apply hold as a soft priority nudge and re-order within that set.
-    ranked = _sort_rows(rows, sort)
-    capped = ranked[: max(1, min(limit, 500))]
-    if hold_years is not None:
-        capped = _apply_hold_priority(capped, hold_years)
+    ranked = _sort_cands(cands, sort)
+    capped = ranked[: max(1, min(limit, 500))] if ranked else []
+    if hold_years is not None and capped:
+        for c in capped:
+            strat = c.best_strategy.value if c.best_strategy else None
+            boost = _hold_priority_boost(hold_years, strat)
+            if boost:
+                c.fit = max(0.0, min(100.0, float(c.fit) + boost))
         if (sort or "fit_desc").lower() in ("fit_desc", ""):
-            capped = _sort_rows(capped, "fit_desc")
-    return capped
+            capped = _sort_cands(capped, "fit_desc")
+
+    # Phase 2: full presentation cards only for the capped result set
+    rows: list[RadarRow] = []
+    for c in capped:
+        row = fat_row(c, broaden_reason=broaden_reason)
+        if row is not None:
+            rows.append(row)
+    return rows
 
 
 @router.post("/rescore")
@@ -955,8 +1014,34 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         mark_match_viewed(store, DEMO_USER_ID, parcel_id)
     except Exception:  # noqa: BLE001
         pass
-    # Always run full (non-fast) enrichment on detail so soils/flood are real when opened
-    score = await analyze_parcel(store, parcel_id, fast=False)
+
+    from landsignal.models import KnowledgeState
+    from landsignal.scoring.engine import ALGORITHM_VERSION
+
+    def _layer_usable(prov) -> bool:
+        if not prov:
+            return False
+        ks = prov.knowledge_state
+        if ks == KnowledgeState.UNKNOWN or ks == KnowledgeState.TEMPORARILY_UNAVAILABLE:
+            return False
+        label = ks.value if hasattr(ks, "value") else str(ks or "")
+        return label not in ("UNKNOWN", "TEMPORARILY_UNAVAILABLE", "")
+
+    enrichment = store.enrichments.get(parcel_id)
+    existing_score = store.latest_score(parcel_id)
+    # Reuse cached live layers + current-algorithm score when already complete.
+    # Missing layers still trigger analyze_parcel (same accuracy as before).
+    already_complete = bool(
+        enrichment
+        and _layer_usable(enrichment.soil)
+        and _layer_usable(enrichment.flood)
+        and existing_score
+        and getattr(existing_score, "algorithm_version", None) == ALGORITHM_VERSION
+    )
+    if already_complete:
+        score = existing_score
+    else:
+        score = await analyze_parcel(store, parcel_id, fast=False)
     listing = store.listing_for_parcel(parcel_id)
     enrichment = store.enrichments.get(parcel_id)
     source = sourcing_card(
@@ -1007,26 +1092,25 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
                 return c, "replaced_dead"
         return google_fallback, "replaced_dead"
 
-    annotated = []
-    for l in links:
+    async def _annotate_one(l: dict[str, Any]) -> dict[str, Any]:
         kind = l.get("kind")
         url = str(l.get("url") or "")
         reason = "ok"
-        if kind in ("primary", "contact_web") or (
-            kind == "contact" and url.startswith("http")
-        ):
+        if kind in ("primary", "contact_web") or (kind == "contact" and url.startswith("http")):
             url, reason = await _repair(url)
         elif not url and kind == "primary":
             url, reason = str(fallback_site), "replaced_missing"
-        annotated.append(
-            {
-                **l,
-                "url": url,
-                "available": True,
-                "availability_reason": reason,
-                "status_code": None,
-            }
-        )
+        return {
+            **l,
+            "url": url,
+            "available": True,
+            "availability_reason": reason,
+            "status_code": None,
+        }
+
+    import asyncio as _asyncio
+
+    annotated = list(await _asyncio.gather(*[_annotate_one(l) for l in links])) if links else []
     if not any(l.get("kind") == "primary" for l in annotated):
         annotated.insert(
             0,
@@ -1439,11 +1523,9 @@ async def list_land_alert_matches(profile_id: UUID | None = None, status: str | 
     from landsignal.services.land_alerts import DEMO_USER_ID, match_card, matches_for_user
 
     store = get_store(get_settings().demo_seed)
-    rows = matches_for_user(store, DEMO_USER_ID, profile_id)
-    if status:
-        rows = [m for m in rows if m.status == status]
-    cards = [match_card(store, m) for m in rows]
     all_rows = matches_for_user(store, DEMO_USER_ID, profile_id)
+    rows = [m for m in all_rows if m.status == status] if status else all_rows
+    cards = [match_card(store, m) for m in rows]
     return {
         "matches": cards,
         "counts": {
@@ -1452,6 +1534,24 @@ async def list_land_alert_matches(profile_id: UUID | None = None, status: str | 
             "viewed": sum(1 for m in all_rows if m.status == "viewed"),
             "total": len(all_rows),
         },
+    }
+
+
+@router.get("/parcels/{parcel_id}/geometry")
+async def parcel_geometry(parcel_id: UUID) -> dict[str, Any]:
+    """Lightweight map payload for Land Viewer — no live re-enrichment."""
+    store = get_store(get_settings().demo_seed)
+    parcel = store.parcels.get(parcel_id)
+    if not parcel:
+        raise HTTPException(404, "Parcel not found")
+    return {
+        "parcel_id": str(parcel.id),
+        "latitude": parcel.latitude,
+        "longitude": parcel.longitude,
+        "polygon": parcel.polygon,
+        "acres": parcel.acreage,
+        "state": parcel.state,
+        "county": parcel.county,
     }
 
 

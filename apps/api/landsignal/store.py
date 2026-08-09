@@ -54,6 +54,8 @@ class MemoryStore:
         self.dd_items: dict[UUID, list[dict[str, Any]]] = {}
         # parcel_id -> snapshot of key metrics for change detection
         self.watch_snapshots: dict[UUID, dict[str, Any]] = {}
+        # O(1) parcel → listing lookup (kept in sync on upsert / restore)
+        self._listing_id_by_parcel: dict[UUID, UUID] = {}
 
     def seed_demo(self) -> None:
         """Deterministic DEMO fixtures for UI walkthrough — never labeled as live feeds."""
@@ -155,6 +157,7 @@ class MemoryStore:
             )
             self.parcels[parcel.id] = parcel
             self.listings[listing.id] = listing
+            self.index_listing(listing)
             fe = d["fixture_enrichment"]
             self.enrichments[parcel.id] = EnrichmentBundle(
                 soil=Provenanced(
@@ -269,6 +272,7 @@ class MemoryStore:
         )
         self.parcels[parcel.id] = parcel
         self.listings[listing.id] = listing
+        self.index_listing(listing)
         self.dd_items[parcel.id] = default_dd_checklist()
         return parcel, listing
 
@@ -312,9 +316,22 @@ class MemoryStore:
             pass
         return items[-1]
 
+    def index_listing(self, listing: ListingRecord) -> None:
+        self._listing_id_by_parcel[listing.parcel_id] = listing.id
+
+    def rebuild_listing_index(self) -> None:
+        self._listing_id_by_parcel = {L.parcel_id: L.id for L in self.listings.values()}
+
     def listing_for_parcel(self, parcel_id: UUID) -> ListingRecord | None:
+        lid = self._listing_id_by_parcel.get(parcel_id)
+        if lid is not None:
+            hit = self.listings.get(lid)
+            if hit is not None and hit.parcel_id == parcel_id:
+                return hit
+        # Fallback + heal index if we ever got out of sync
         for listing in self.listings.values():
             if listing.parcel_id == parcel_id:
+                self._listing_id_by_parcel[parcel_id] = listing.id
                 return listing
         return None
 
@@ -421,8 +438,10 @@ def load_persisted_store(store: MemoryStore) -> int:
             if L.asking_price_usd is not None and L.asking_price_usd <= 0:
                 L.asking_price_usd = None
             store.listings[L.id] = L
+            store.index_listing(L)
         except Exception:
             continue
+    store.rebuild_listing_index()
     for pid_s, scores in (payload.get("scores") or {}).items():
         try:
             pid = UUID(pid_s)

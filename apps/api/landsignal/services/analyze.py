@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -199,37 +200,56 @@ async def analyze_parcel(
     existing = store.enrichments.get(parcel_id) or EnrichmentBundle()
 
     # Fast path skips live gov calls so bulk discover can index thousands of parcels quickly.
-    # Detail pages re-run with fast=False for full soils/flood/wetlands enrichment.
+    # Detail pages request fast=False — but only re-hit providers for layers we still lack.
+    # Same data validity: missing/unknown/unavailable layers are still fetched live.
     run_live = (
         (not fast)
         and settings.enable_live_gov_enrichment
         and (not parcel.is_demo or settings.force_live_on_demo)
     )
+
+    def _layer_usable(prov) -> bool:
+        if not prov:
+            return False
+        ks = prov.knowledge_state
+        label = ks.value if hasattr(ks, "value") else str(ks or "")
+        return label not in ("UNKNOWN", "TEMPORARILY_UNAVAILABLE", "")
+
     if run_live:
-        soil_res, flood_res, wet_res, terrain_res, tx_res, growth_res = await asyncio.gather(
-            providers["ssurgo"].enrich(parcel_dict),
-            providers["fema_nfhl"].enrich(parcel_dict),
-            providers["nwi"].enrich(parcel_dict),
-            providers["usgs_3dep"].enrich(parcel_dict),
-            providers["hifld_transmission"].enrich(parcel_dict),
-            providers["census_acs"].enrich(parcel_dict),
-        )
-        if soil_res.data:
-            existing.soil = soil_res.data
-        if flood_res.data:
-            existing.flood = flood_res.data
-        if wet_res.data:
-            existing.wetlands = wet_res.data
-        if terrain_res.data:
-            existing.terrain = terrain_res.data
-        if tx_res.data:
-            existing.infrastructure = tx_res.data
-        if growth_res.data:
-            existing.growth = growth_res.data
-            gn = growth_res.data.normalized or {}
-            if gn.get("county_name") and not parcel.county:
-                parcel.county = str(gn["county_name"]).replace(" County", "")
-                store.parcels[parcel_id] = parcel
+        jobs: list[tuple[str, Any]] = []
+        if not _layer_usable(existing.soil):
+            jobs.append(("soil", providers["ssurgo"].enrich(parcel_dict)))
+        if not _layer_usable(existing.flood):
+            jobs.append(("flood", providers["fema_nfhl"].enrich(parcel_dict)))
+        if not _layer_usable(existing.wetlands):
+            jobs.append(("wetlands", providers["nwi"].enrich(parcel_dict)))
+        if not _layer_usable(existing.terrain):
+            jobs.append(("terrain", providers["usgs_3dep"].enrich(parcel_dict)))
+        if not _layer_usable(existing.infrastructure):
+            jobs.append(("infrastructure", providers["hifld_transmission"].enrich(parcel_dict)))
+        if not _layer_usable(existing.growth):
+            jobs.append(("growth", providers["census_acs"].enrich(parcel_dict)))
+        if jobs:
+            results = await asyncio.gather(*(coro for _, coro in jobs))
+            for (key, _), res in zip(jobs, results):
+                if not getattr(res, "data", None):
+                    continue
+                if key == "soil":
+                    existing.soil = res.data
+                elif key == "flood":
+                    existing.flood = res.data
+                elif key == "wetlands":
+                    existing.wetlands = res.data
+                elif key == "terrain":
+                    existing.terrain = res.data
+                elif key == "infrastructure":
+                    existing.infrastructure = res.data
+                elif key == "growth":
+                    existing.growth = res.data
+                    gn = res.data.normalized or {}
+                    if gn.get("county_name") and not parcel.county:
+                        parcel.county = str(gn["county_name"]).replace(" County", "")
+                        store.parcels[parcel_id] = parcel
 
     soil_n = (existing.soil.normalized or existing.soil.value or {}) if existing.soil else {}
     flood_n = (existing.flood.normalized or existing.flood.value or {}) if existing.flood else {}

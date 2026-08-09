@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from landsignal.routers.api import router
 from landsignal.settings import get_settings
@@ -15,6 +16,7 @@ app = FastAPI(
     description="Institutional land acquisition intelligence — screening only; no automated purchasing.",
 )
 
+app.add_middleware(GZipMiddleware, minimum_size=800)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -31,6 +33,7 @@ async def startup() -> None:
     import asyncio
 
     store = get_store(settings.demo_seed)
+    store.rebuild_listing_index()
     # Default high-conviction alert rule
     if not store.alert_rules:
         from landsignal.services.alerts import create_rule

@@ -205,6 +205,16 @@ export const landsignalApi = {
   providers: () =>
     api<Array<{ id: string; kind: string; name: string; status: string; detail?: string }>>("/providers"),
   parcel: (id: string) => api<Record<string, unknown>>(`/parcels/${id}`),
+  parcelGeometry: (id: string) =>
+    api<{
+      parcel_id: string;
+      latitude: number | null;
+      longitude: number | null;
+      polygon: number[][][] | null;
+      acres: number | null;
+      state?: string | null;
+      county?: string | null;
+    }>(`/parcels/${id}/geometry`),
   memo: (id: string) =>
     api<{ markdown: string; verdict: string }>(`/parcels/${id}/memo`, { method: "POST" }),
   alerts: () => api<Record<string, unknown>[]>("/alerts"),

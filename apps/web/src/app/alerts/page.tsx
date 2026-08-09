@@ -134,6 +134,7 @@ function MatchCard({
   const [animating, setAnimating] = useState(false);
   const [snapPose, setSnapPose] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerPolygon, setViewerPolygon] = useState<number[][][] | null>(row.polygon ?? null);
   const flipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const href = row.deep_link || `/parcels/${row.parcel_id}`;
   const canViewLand = row.latitude != null && row.longitude != null;
@@ -143,6 +144,21 @@ function MatchCard({
       if (flipTimer.current) clearTimeout(flipTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!viewerOpen) return;
+    if (viewerPolygon?.[0]?.length) return;
+    let cancelled = false;
+    void landsignalApi
+      .parcelGeometry(row.parcel_id)
+      .then((g) => {
+        if (!cancelled && g.polygon) setViewerPolygon(g.polygon);
+      })
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, [viewerOpen, row.parcel_id, viewerPolygon]);
 
   function flipToggle() {
     if (animating || viewerOpen) return;
@@ -302,7 +318,7 @@ function MatchCard({
         priceDisplay={row.asking_price_display}
         latitude={row.latitude}
         longitude={row.longitude}
-        polygon={row.polygon}
+        polygon={viewerPolygon}
         reportHref={href}
       />
     </div>
@@ -382,12 +398,14 @@ export default function LandAlertsPage() {
         setHasProfile(false);
         setEditing(true);
       }
-      const m = await landsignalApi.landAlertMatches(
-        data.has_profile && data.profile ? String((data.profile as { id: string }).id) : undefined,
-      );
+      const profileKey =
+        data.has_profile && data.profile ? String((data.profile as { id: string }).id) : undefined;
+      const [m, alerts] = await Promise.all([
+        landsignalApi.landAlertMatches(profileKey),
+        landsignalApi.alerts().catch(() => []),
+      ]);
       setMatches(m.matches || []);
       setCounts(m.counts || { new: 0, unseen: 0, viewed: 0, total: 0 });
-      const alerts = await landsignalApi.alerts().catch(() => []);
       setInAppAlerts(
         (alerts || []).filter((a) => String((a as { severity?: string }).severity) === "LAND_ALERT").slice(0, 12),
       );
@@ -403,8 +421,8 @@ export default function LandAlertsPage() {
   }, [hydrate]);
 
   useEffect(() => {
-    // Brief distinguished boot visual even on fast loads
-    const t = window.setTimeout(() => setBootReady(true), 1100);
+    // Short boot cue — do not artificially delay the page for over a second
+    const t = window.setTimeout(() => setBootReady(true), 180);
     return () => window.clearTimeout(t);
   }, []);
 
