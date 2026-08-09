@@ -57,25 +57,26 @@ function buildGuideSteps(kind: "web" | "call", script: ScriptSide | undefined): 
   return steps;
 }
 
-/** Wide obtuse chevron (not a skinny letter v). */
-function ChevronV({ open }: { open: boolean }) {
+function quoteIfNeeded(text: string): string {
+  const t = text.trim().replace(/^["“”']+|["“”']+$/g, "");
+  return `“${t}”`;
+}
+
+function formatStepBody(tone: "source" | "call", step: Step): string {
+  if (tone !== "call") return step.body;
+  // Spoken beats get quotes; watch-outs stay plain coaching
+  if (step.kicker === "Watch out") return step.body;
+  return quoteIfNeeded(step.body);
+}
+
+/** Compact animated reveal — clearer than a bare V for “open the guide”. */
+function GuideRevealMark({ open }: { open: boolean }) {
   return (
-    <svg
-      className={`acquire-chevron-icon ${open ? "on" : ""}`}
-      viewBox="0 0 40 14"
-      width="40"
-      height="14"
-      aria-hidden
-    >
-      <path
-        d="M4 3.5 L20 11.5 L36 3.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <span className={`acquire-reveal-mark ${open ? "on" : ""}`} aria-hidden>
+      <span className="acquire-reveal-bar" />
+      <span className="acquire-reveal-bar" />
+      <span className="acquire-reveal-bar" />
+    </span>
   );
 }
 
@@ -112,6 +113,8 @@ function GuidePanel({
   if (!steps.length) return null;
   const step = steps[Math.min(i, steps.length - 1)];
   const n = steps.length;
+  const bodies = steps.map((s) => formatStepBody(tone, s));
+  const body = bodies[Math.min(i, bodies.length - 1)];
 
   return (
     <div className={`acquire-guide tone-${tone}`} role="region" aria-label="Guide steps">
@@ -122,13 +125,13 @@ function GuidePanel({
         </span>
       </div>
       <div className="acquire-guide-body-wrap" style={bodyMin ? { minHeight: bodyMin } : undefined}>
-        <p className="acquire-guide-body">{step.body}</p>
+        <p className="acquire-guide-body">{body}</p>
       </div>
-      {/* Off-screen measure all steps at the same width */}
+      {/* Off-screen measure all steps at the same width (quoted when call) */}
       <div className="acquire-guide-measure" ref={measureRef} aria-hidden>
-        {steps.map((s, idx) => (
+        {bodies.map((b, idx) => (
           <p key={idx} data-step-measure className="acquire-guide-body">
-            {s.body}
+            {b}
           </p>
         ))}
       </div>
@@ -167,7 +170,7 @@ function ActionCard({
   value,
   hint,
   href,
-  hasGuide,
+  stepCount,
   open,
   onToggle,
 }: {
@@ -176,10 +179,12 @@ function ActionCard({
   value: string;
   hint?: string | null;
   href?: string | null;
-  hasGuide: boolean;
+  stepCount: number;
   open: boolean;
   onToggle: () => void;
 }) {
+  const hasGuide = stepCount > 0;
+  const revealLabel = tone === "call" ? "Talk track" : "Look-for guide";
   return (
     <div className={`acquire-card tone-${tone} ${open ? "open" : ""}`}>
       {href ? (
@@ -203,12 +208,14 @@ function ActionCard({
       {hasGuide ? (
         <button
           type="button"
-          className={`acquire-chevron ${open ? "on" : ""}`}
-          aria-label={open ? "Hide guide" : "Show guide steps"}
+          className={`acquire-reveal ${open ? "on" : ""}`}
+          aria-label={open ? `Hide ${revealLabel}` : `Show ${revealLabel}`}
           aria-expanded={open}
           onClick={onToggle}
         >
-          <ChevronV open={open} />
+          <GuideRevealMark open={open} />
+          <span className="acquire-reveal-label">{open ? "Hide" : revealLabel}</span>
+          <span className="acquire-reveal-count">{stepCount}</span>
         </button>
       ) : null}
     </div>
@@ -271,7 +278,7 @@ export function AcquireRail({
               : "Use parcel lookup below if you have it"
           }
           href={postingUrl}
-          hasGuide={webSteps.length > 0}
+          stepCount={webSteps.length}
           open={openGuide === "web"}
           onToggle={() => setOpenGuide((v) => (v === "web" ? null : "web"))}
         />
@@ -282,7 +289,7 @@ export function AcquireRail({
           value={phoneDisplay || "No public phone listed"}
           hint={office || (tel ? "County / agency desk" : "Use the official page to contact them")}
           href={tel}
-          hasGuide={callSteps.length > 0}
+          stepCount={callSteps.length}
           open={openGuide === "call"}
           onToggle={() => setOpenGuide((v) => (v === "call" ? null : "call"))}
         />
