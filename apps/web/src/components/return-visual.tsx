@@ -332,7 +332,6 @@ export function ReturnVisual({
   const [activeCase, setActiveCase] = useState<(typeof CASE_ORDER)[number]>("BASE");
   const [scrubYear, setScrubYear] = useState(holdYears);
   const [dragging, setDragging] = useState(false);
-  const [showAllFactors, setShowAllFactors] = useState(false);
   const [openFactor, setOpenFactor] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [casesHelpOpen, setCasesHelpOpen] = useState(false);
@@ -468,7 +467,7 @@ export function ReturnVisual({
   };
   const onPointerUp = () => setDragging(false);
 
-  const factors = showAllFactors ? intel?.all_factors || intel?.factors || [] : intel?.factors || [];
+  const factors = intel?.factors || [];
   const factorCount = intel?.model?.factor_count ?? factors.length;
   const irrPct = endpoint?.irr != null ? Number(endpoint.irr) * 100 : null;
 
@@ -858,19 +857,8 @@ export function ReturnVisual({
 
       {factors.length > 0 && (
         <div className="return-factors mt-4">
-          <div className="flex items-baseline justify-between gap-2">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-              What bends this path · {factorCount} screens
-            </div>
-            {(intel?.all_factors?.length || 0) > (intel?.factors?.length || 0) && (
-              <button
-                type="button"
-                className="text-[11px] text-[var(--brand)] underline-offset-2 hover:underline"
-                onClick={() => setShowAllFactors((v) => !v)}
-              >
-                {showAllFactors ? "Show top drivers" : "Show all"}
-              </button>
-            )}
+          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+            What bends this path · {factorCount} screens
           </div>
           <div className="return-factor-grid mt-2">
             {factors.map((f) => {

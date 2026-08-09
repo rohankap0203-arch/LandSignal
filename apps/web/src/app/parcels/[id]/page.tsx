@@ -246,7 +246,7 @@ export default function ParcelIntelligencePage() {
             <div className="mt-5 grid grid-cols-2 gap-3">
               <Stat label={String(price?.label || "Price")} value={String(price?.display || "No public price yet")} />
               <Stat
-                label="Ready to pursue? (0–100)"
+                label="Basics already on file"
                 value={`${Number(score?.deal_readiness || 0).toFixed(0)}/100`}
               />
             </div>
@@ -448,9 +448,6 @@ export default function ParcelIntelligencePage() {
       <section id="sec-land" className="scroll-mt-20">
         <div className="mb-2">
           <h2 className="display text-lg font-semibold">Land checks that move the needle</h2>
-          <p className="text-sm text-[var(--muted)]">
-            Same caliber as soil and flood — tap any card for the short read on this pin.
-          </p>
         </div>
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           {(
@@ -498,10 +495,15 @@ export default function ParcelIntelligencePage() {
       </section>
 
       <section id="sec-checklist" className="panel p-4 scroll-mt-20 dd-compact">
-        <h2 className="display text-lg font-semibold">
-          Checklist before you bid · readiness{" "}
-          {Number(score?.deal_readiness || 0).toFixed(0)}/100
-        </h2>
+        <h2 className="display text-lg font-semibold">Before you spend money on this file</h2>
+        <p className="mt-1 text-sm text-[var(--muted)]">
+          Open each row for why it matters here and how to start.{" "}
+          {dd.filter((i) => i.completed).length} of {dd.length} already cleared
+          {score?.deal_readiness != null
+            ? ` · ${Number(score.deal_readiness).toFixed(0)}/100 of the land basics (access, flood, wetlands, comps, zoning) are already in the file`
+            : ""}
+          .
+        </p>
         <div className="mt-3 grid gap-1.5">
           {dd.map((item) => {
             const label = String(item.label);
