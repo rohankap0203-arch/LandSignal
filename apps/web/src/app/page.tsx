@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ComboFilter, FilterField } from "@/components/filter-field";
 import { LandLoader } from "@/components/land-loader";
+import { MapPinMark } from "@/components/map-pin-mark";
 import { PropertyCard } from "@/components/property-card";
 import {
   landsignalApi,
@@ -377,59 +378,45 @@ export default function SearchPage() {
         </div>
 
         <div className="filter-actions">
-          <div className="filter-actions-main">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => void runSearch()}
-              disabled={loading}
-            >
-              {loading ? "Searching…" : "Show matches"}
-            </button>
-            <div className="filter-map-mark" aria-hidden title="Map scout">
-              <svg viewBox="0 0 64 56" className="filter-map-svg" fill="none">
-                {/* Perspective map board */}
-                <path
-                  className="filter-map-stroke"
-                  d="M6 38 L14 18 L50 14 L58 34 L50 48 L12 50 Z"
-                />
-                {/* Grid lines */}
-                <path className="filter-map-grid" d="M18 19.5 L22 46.5" />
-                <path className="filter-map-grid" d="M34 16.2 L38 45.2" />
-                <path className="filter-map-grid" d="M12 30 L54 26" />
-                {/* Location pin */}
-                <path
-                  className="filter-map-pin"
-                  d="M24 8 C19.6 8 16 11.5 16 15.8 C16 21.2 24 30 24 30 C24 30 32 21.2 32 15.8 C32 11.5 28.4 8 24 8 Z"
-                />
-                <circle className="filter-map-pin-hole" cx="24" cy="15.5" r="3.1" />
-              </svg>
+          <div className="filter-actions-stage">
+            <div className="filter-actions-stack">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void runSearch()}
+                disabled={loading}
+              >
+                {loading ? "Searching…" : "Show matches"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={loading}
+                onClick={() => {
+                  const next = { ...DEFAULT_FORM, sort: "score_desc" };
+                  setForm(next);
+                  void runSearch(next);
+                }}
+              >
+                Top opportunities
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={scanFresh} disabled={scanning}>
+                {scanning ? "Starting refresh…" : "Refresh live inventory"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setForm(DEFAULT_FORM);
+                  setStatus("Filters reset to Any. Click Show matches when you want results.");
+                }}
+              >
+                Reset to Any
+              </button>
             </div>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={loading}
-              onClick={() => {
-                const next = { ...DEFAULT_FORM, sort: "score_desc" };
-                setForm(next);
-                void runSearch(next);
-              }}
-            >
-              Top opportunities
-            </button>
-            <button type="button" className="btn btn-secondary" onClick={scanFresh} disabled={scanning}>
-              {scanning ? "Starting refresh…" : "Refresh live inventory"}
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => {
-                setForm(DEFAULT_FORM);
-                setStatus("Filters reset to Any. Click Show matches when you want results.");
-              }}
-            >
-              Reset to Any
-            </button>
+            <div className="filter-map-hero" aria-hidden title="Map scout">
+              <MapPinMark className="filter-map-hero-svg" />
+            </div>
           </div>
           {meta?.inventory_count != null && (
             <div className="filter-inventory-note">

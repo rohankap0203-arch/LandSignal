@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { MapPinMark } from "@/components/map-pin-mark";
 
 const NAV = [
   { href: "/", label: "Search" },
@@ -26,9 +27,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <header className="shell-header">
         <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-4 px-4 py-3.5">
           <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-baseline gap-2">
+            <Link href="/" className="shell-brand">
               <span className="display text-2xl font-semibold text-[var(--brand)]">LandSignal</span>
-              <span className="hidden text-xs text-[var(--muted)] sm:inline">Land investment intelligence</span>
+              <MapPinMark className="shell-brand-mark" />
+              <span className="shell-brand-tagline hidden text-xs text-[var(--muted)] sm:inline">
+                Land investment intelligence
+              </span>
             </Link>
             <nav className="hidden items-center gap-1 md:flex">
               {NAV.map((item) => (
