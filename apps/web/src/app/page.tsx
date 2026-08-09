@@ -46,7 +46,7 @@ const DEFAULT_FORM: FormState = {
   holdYears: "Any",
   holdCustom: "",
   unpricedMode: "include",
-  sort: "fit_desc",
+  sort: "score_desc",
 };
 
 function stateCode(label: string): string {
@@ -218,11 +218,12 @@ export default function SearchPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="text-xs uppercase tracking-[0.14em] text-white/70">LandSignal</div>
-            <h1>Find land that matches what you want</h1>
+            <h1>Scout the best land buys in the country</h1>
             <p>
-              Set price, acres, and location, then click Show matches. Each file scores opportunity,
-              risk, and completeness — then opens into a multi-factor return path (soil, flood,
-              growth, channel, carry) instead of a flat diagonal.
+              We index tax-sale, surplus, and federal inventory Google and Zillow miss — then score
+              each file for opportunity, risk, and a multi-factor return path. Start with Top
+              opportunities, or set filters and Show matches. Refresh inventory anytime for new
+              postings.
             </p>
           </div>
         </div>
@@ -411,6 +412,18 @@ export default function SearchPage() {
           >
             {loading ? "Searching…" : "Show matches"}
           </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={loading}
+            onClick={() => {
+              const next = { ...DEFAULT_FORM, sort: "score_desc", unpricedMode: "include" };
+              setForm(next);
+              void runSearch(next);
+            }}
+          >
+            Top opportunities
+          </button>
           <button type="button" className="btn btn-secondary" onClick={scanFresh} disabled={scanning}>
             {scanning ? "Starting refresh…" : "Refresh live inventory"}
           </button>
@@ -435,10 +448,10 @@ export default function SearchPage() {
 
       <div id="search-results" className="results-head scroll-mt-24">
         <div>
-          <h2 className="display text-2xl font-semibold">Matching land</h2>
+          <h2 className="display text-2xl font-semibold">Scouted opportunities</h2>
           <p className="mt-1 text-[var(--muted)]">
             {status ||
-              "Match score (0–100) ranks how well each parcel fits your filters. Opportunity score is the same for everyone."}
+              "Ranked by opportunity by default — process / off-MLS inventory first, with risk and file completeness on every card."}
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -469,11 +482,11 @@ export default function SearchPage() {
           </label>
           {topFit && (
             <div className="panel px-4 py-3 text-sm">
-              <div className="text-[var(--muted)]">Best match right now</div>
+              <div className="text-[var(--muted)]">Strongest file in this set</div>
               <div className="font-semibold">{topFit.property_name}</div>
               <div className="text-xs text-[var(--muted)]">
-                Match {Math.round(topFit.fit_score ?? 0)}/100 · Opportunity{" "}
-                {Math.round(topFit.opportunity)}/100
+                Opportunity {Math.round(topFit.opportunity)}/100 · Risk {Math.round(topFit.risk)}/100
+                {topFit.signal ? ` · ${topFit.signal}` : ""}
               </div>
             </div>
           )}
@@ -491,10 +504,11 @@ export default function SearchPage() {
 
       {!loading && !hasSearched && (
         <div className="panel empty-state">
-          <div className="display text-2xl text-[var(--ink)]">Ready when you are</div>
+          <div className="display text-2xl text-[var(--ink)]">Find buys others can’t see</div>
           <p className="mx-auto mt-2 max-w-lg">
-            Choose any filters you want, then click <strong>Show matches</strong>. Nothing searches until
-            you do — and it won’t keep re-searching on its own.
+            Hit <strong>Top opportunities</strong> for the strongest engine-ranked files nationwide, or
+            set filters and <strong>Show matches</strong>. Use <strong>Refresh live inventory</strong> to
+            pull new tax-sale / surplus / BLM postings into the queue.
           </p>
         </div>
       )}

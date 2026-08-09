@@ -926,6 +926,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
 
     from landsignal.services.market_trajectory import build_market_trajectory
     from landsignal.services.return_path import build_return_intelligence
+    from landsignal.services.score_drivers import build_score_drivers
 
     market_trajectory = build_market_trajectory(
         parcel=parcel,
@@ -965,6 +966,17 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         hold_years=10,
         trajectory_annual=float(traj_annual) if traj_annual is not None else None,
     )
+    score_drivers = (
+        build_score_drivers(
+            parcel=parcel,
+            listing=listing,
+            score=score,
+            enrichment=enrichment,
+            price=price if isinstance(price, dict) else None,
+        )
+        if score
+        else {}
+    )
 
     return {
         "parcel": parcel,
@@ -983,6 +995,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         "cockpit": cockpit,
         "market_trajectory": market_trajectory,
         "return_intelligence": return_intelligence,
+        "score_drivers": score_drivers,
         "rating_breakdown": rating_breakdown(score, parcel=parcel, listing=listing) if score else [],
         "score_explained": brief.get("score_story")
         or {

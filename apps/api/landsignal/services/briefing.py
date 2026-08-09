@@ -515,9 +515,9 @@ def build_intelligence_brief(
             pass
     conviction = (
         "HIGH"
-        if opp >= 68 and risk <= 42 and conf >= 40 and (gap_pct is None or gap_pct >= 12)
+        if opp >= 66 and risk <= 55 and conf >= 32 and (gap_pct is None or gap_pct >= 10)
         else "MEDIUM"
-        if opp >= 52 and risk <= 58
+        if opp >= 50 and risk <= 62
         else "WATCH"
     )
     thesis_bullets: list[str] = []

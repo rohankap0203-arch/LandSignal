@@ -84,6 +84,10 @@ export default function ParcelIntelligencePage() {
   const dd = (brief.dd_focus as AnyRec[]) || (data.due_diligence_guided as AnyRec[]) || [];
   const story = (brief.score_story as Record<string, string>) || {};
   const returnCase = (brief.return_case as AnyRec) || {};
+  const drivers = (data.score_drivers as AnyRec) || {};
+  const oppDrive = (drivers.opportunity as AnyRec) || {};
+  const riskDrive = (drivers.risk as AnyRec) || {};
+  const confDrive = (drivers.confidence as AnyRec) || {};
 
   const place = parcel.county
     ? `${parcel.county}, ${parcel.state}`
@@ -156,41 +160,41 @@ export default function ParcelIntelligencePage() {
             <div className="intel-topbar">
               <div className="flex flex-wrap items-center gap-2 min-w-0">
                 {score && <SignalBadge signal={score.signal as string} />}
+                <button
+                  type="button"
+                  className={`watch-eye ${watched ? "on" : ""}`}
+                  onClick={toggleWatch}
+                  title={watched ? "Remove from watchlist" : "Add to watchlist"}
+                  aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+                  aria-pressed={watched}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden>
+                    {watched ? (
+                      <>
+                        <path
+                          fill="currentColor"
+                          d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"
+                        />
+                        <circle fill="var(--bg-elevated)" cx="12" cy="12" r="2.2" />
+                      </>
+                    ) : (
+                      <path
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"
+                      />
+                    )}
+                    {!watched && <circle fill="currentColor" cx="12" cy="12" r="2.5" />}
+                  </svg>
+                  <span>{watched ? "Added" : "Add"}</span>
+                </button>
                 <span className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-xs font-semibold">
                   {String(sourcing.source_name || "Public source")}
                 </span>
               </div>
-              <button
-                type="button"
-                className={`watch-eye ${watched ? "on" : ""}`}
-                onClick={toggleWatch}
-                title={watched ? "Remove from watchlist" : "Add to watchlist"}
-                aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
-                aria-pressed={watched}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden>
-                  {watched ? (
-                    <>
-                      <path
-                        fill="currentColor"
-                        d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"
-                      />
-                      <circle fill="var(--bg-elevated)" cx="12" cy="12" r="2.2" />
-                    </>
-                  ) : (
-                    <path
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.7"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"
-                    />
-                  )}
-                  {!watched && <circle fill="currentColor" cx="12" cy="12" r="2.5" />}
-                </svg>
-                <span>{watched ? "Added" : "Add"}</span>
-              </button>
             </div>
             <h1 className="display mt-3 text-3xl font-semibold leading-tight break-words">
               {pageTitle}
@@ -203,17 +207,28 @@ export default function ParcelIntelligencePage() {
             ) : null}
             {watchMsg ? <p className="mt-2 text-xs text-[var(--muted)]">{watchMsg}</p> : null}
 
-            <div className="mt-5 grid gap-4">
+            <div className="mt-5 grid gap-3">
               <ScoreBar
                 label="Opportunity score"
                 value={Number(score?.opportunity || 0)}
-                hint={firstSentence(story.landsignal)}
+                hint={String(oppDrive.verdict || firstSentence(story.landsignal) || "Tap for why this score")}
+                verdict={String(oppDrive.verdict || "")}
+                bullets={(oppDrive.bullets as string[]) || []}
               />
-              <ScoreBar label="Risk" value={Number(score?.risk || 0)} invert hint={firstSentence(story.risk)} />
+              <ScoreBar
+                label="Risk"
+                value={Number(score?.risk || 0)}
+                invert
+                hint={String(riskDrive.verdict || firstSentence(story.risk) || "Tap for risk drivers")}
+                verdict={String(riskDrive.verdict || "")}
+                bullets={(riskDrive.bullets as string[]) || []}
+              />
               <ScoreBar
                 label="How complete the file is"
                 value={Number(score?.confidence || 0)}
-                hint={firstSentence(story.confidence)}
+                hint={String(confDrive.verdict || firstSentence(story.confidence) || "")}
+                verdict={String(confDrive.verdict || "")}
+                bullets={(confDrive.bullets as string[]) || []}
               />
             </div>
 

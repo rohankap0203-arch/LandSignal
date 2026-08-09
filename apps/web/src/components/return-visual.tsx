@@ -261,6 +261,7 @@ export function ReturnVisual({
   const [dragging, setDragging] = useState(false);
   const [showAllFactors, setShowAllFactors] = useState(false);
   const [openFactor, setOpenFactor] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
   const available = intel?.available !== false && Boolean(intel?.endpoints || intel?.paths_100);
@@ -388,10 +389,48 @@ export function ReturnVisual({
 
   return (
     <div className="return-visual">
-      <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-        Multi-factor return path
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+            Multi-factor return path
+          </div>
+          <h3 className="display text-lg font-semibold">If you hold this property</h3>
+        </div>
+        <button
+          type="button"
+          className={`help-q ${helpOpen ? "on" : ""}`}
+          aria-label="How this return path works"
+          aria-expanded={helpOpen}
+          title="How this works"
+          onClick={() => setHelpOpen((v) => !v)}
+        >
+          ?
+        </button>
       </div>
-      <h3 className="display text-lg font-semibold">If you hold this property</h3>
+      {helpOpen ? (
+        <div className="help-panel mt-2">
+          <p>
+            This is not a straight “price goes up X% every year” line. LandSignal bends the path
+            with this property’s own screens — soil, flood, wetlands, growth, how it’s sold, carry
+            costs, and exit friction — then shows three cases:
+          </p>
+          <ul>
+            <li>
+              <strong>Cautious</strong> — slower rents, softer exit, higher carry
+            </li>
+            <li>
+              <strong>Typical</strong> — base path for this file
+            </li>
+            <li>
+              <strong>Optimistic</strong> — stronger rents and exit, still bounded
+            </li>
+          </ul>
+          <p>
+            Pick a hold length (1–100 yr). Drag the chart to read any year. Tap a factor card to see
+            why it lifts or slows the path. First look only — not an appraisal.
+          </p>
+        </div>
+      ) : null}
       <p className="mt-1 text-sm text-[var(--muted)] leading-snug">
         {factorCount} local screens shape the curve
         {intel?.purchase_usd ? ` · buy near ${money(intel.purchase_usd)}` : ""}.
@@ -630,7 +669,7 @@ export function ReturnVisual({
                           : "—"}
                     </span>
                   </div>
-                  {open ? <p>{f.plain}</p> : <p className="truncate">{f.plain}</p>}
+                  <p className={open ? "" : "line-clamp-3"}>{f.plain}</p>
                 </button>
               );
             })}

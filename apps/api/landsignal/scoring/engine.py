@@ -6,7 +6,7 @@ from typing import Any
 
 from landsignal.scoring.financial import asking_discount_pct, clamp, margin_of_safety
 
-ALGORITHM_VERSION = "landsignal_score_v3_2"
+ALGORITHM_VERSION = "landsignal_score_v3_3"
 WEIGHT_VERSION = "weights_default_v3"
 
 DEFAULT_WEIGHTS = {
@@ -209,11 +209,12 @@ def deal_readiness(inp: dict) -> float:
 
 
 def _signal(opportunity: float, risk: float, confidence: float) -> str:
-    if opportunity < 40 or (risk > 75 and opportunity < 70):
+    """Surface real asymmetric process buys — keep Strong rare enough to mean something."""
+    if opportunity < 40 or (risk > 78 and opportunity < 65):
         return "REJECT"
-    if opportunity >= 90 and risk <= 35 and confidence >= 70:
+    if opportunity >= 84 and risk <= 48 and confidence >= 42:
         return "EXCEPTIONAL"
-    if opportunity >= 75 and risk <= 50:
+    if opportunity >= 72 and risk <= 55:
         return "STRONG"
     return "WATCH"
 
@@ -454,31 +455,58 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
     # Evidence-backed lifts so thin “everything ~50” fast scores can separate real edges
     lift = 0.0
     lift_notes: list[str] = []
-    if discount is not None:
-        if discount <= -50:
+    provider = str(inp.get("provider_id") or "")
+    eff_discount = discount
+    # Unpriced process inventory (≥5 ac): underwrite a channel entry so mispricing can surface
+    if (
+        eff_discount is None
+        and ask is None
+        and base is not None
+        and float(acres or 0) >= 5
+        and provider in ("public_tax_sale", "public_surplus", "blm_lpad")
+    ):
+        underwrite = base * (
+            0.62 if provider == "public_tax_sale" else 0.72 if provider == "public_surplus" else 0.78
+        )
+        eff_discount = asking_discount_pct(underwrite, base)
+        lift_notes.append(
+            f"Process underwrite ~${underwrite:,.0f} vs mark ${base:,.0f} ({eff_discount:.0f}% gap)"
+        )
+    if eff_discount is not None:
+        if eff_discount <= -50:
             lift += 16
-            lift_notes.append(f"Deep discount lift (+16) for {discount:.0f}% vs model")
-        elif discount <= -30:
+            lift_notes.append(f"Deep discount lift (+16) for {eff_discount:.0f}% vs model")
+        elif eff_discount <= -30:
             lift += 11
-            lift_notes.append(f"Strong discount lift (+11) for {discount:.0f}% vs model")
-        elif discount <= -15:
+            lift_notes.append(f"Strong discount lift (+11) for {eff_discount:.0f}% vs model")
+        elif eff_discount <= -15:
             lift += 6
-            lift_notes.append(f"Discount lift (+6) for {discount:.0f}% vs model")
+            lift_notes.append(f"Discount lift (+6) for {eff_discount:.0f}% vs model")
+    # Channel edge only when the file also shows a real price/use gap
+    if provider in ("public_tax_sale", "public_surplus", "blm_lpad") and (
+        (eff_discount is not None and eff_discount <= -15) or float(acres or 0) >= 40
+    ):
+        lift += 3
+        lift_notes.append("Off-MLS / process channel scout edge (+3)")
     sp = _v(inp, "seller_pressure_score")
     if sp is not None and sp >= 72:
         lift += 5
         lift_notes.append("Distressed / high seller-pressure channel (+5)")
     if ask is None and acres >= 40:
-        lift += 7
-        lift_notes.append("Unpriced large-tract process edge (+7)")
+        lift += 6
+        lift_notes.append("Unpriced large-tract process edge (+6)")
         if (_v(inp, "scarcity_score") or 0) >= 65:
             lift += 4
             lift_notes.append("Scarcity on large unpriced tract (+4)")
+    # Usable-acre quality when soil is strong and flood/wetlands are contained
+    if (prime or 0) >= 50 and (wetland or 0) < 15 and (_v(inp, "flood_zone_pct") or 0) < 20:
+        lift += 4
+        lift_notes.append("Cleaner soil + contained flood/wetland screens (+4)")
     if risk > 70:
-        lift *= 0.35
+        lift *= 0.4
         lift_notes.append("Lift cut — elevated risk")
-    elif risk > 55:
-        lift *= 0.7
+    elif risk > 58:
+        lift *= 0.75
         lift_notes.append("Lift tempered — moderate-high risk")
     if lift:
         opportunity = _round1(clamp(opportunity + lift, 0, 100))
@@ -537,7 +565,7 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
         "strategy_scores": strategy_scores,
         "strategy_screens": screens,
         "estimated_value_usd": base,
-        "asking_discount_pct": discount,
+        "asking_discount_pct": discount if discount is not None else eff_discount,
         "deal_readiness": deal_readiness(inp),
         "components": components,
         "explanations": [f"[{c['category']}] {e}" for c in components for e in c["evidence"]],

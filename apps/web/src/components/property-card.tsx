@@ -135,6 +135,16 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
         </div>
 
         <div className="card-chip-line mt-2">
+          {row.freshness_hours != null && Number(row.freshness_hours) <= 72 ? (
+            <span className="chip new-chip" title="Seen in inventory within the last 72 hours">
+              New
+            </span>
+          ) : null}
+          {(row.signal === "EXCEPTIONAL" || row.signal === "STRONG") && (
+            <span className="chip new-chip" title="Engine-ranked buy candidate — not a typical MLS find">
+              Scout pick
+            </span>
+          )}
           <span className="chip">{row.discount_display}</span>
           <span className="chip">{row.best_strategy_label}</span>
           <span className="chip" title="Detail page builds a year-by-year path from soil, flood, growth, channel, and more">
