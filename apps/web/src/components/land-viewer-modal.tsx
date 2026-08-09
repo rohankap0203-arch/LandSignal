@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { LiveMagnifier } from "@/components/live-magnifier";
 
 export type LandViewerProps = {
   open: boolean;
@@ -842,6 +843,12 @@ export function LandViewerModal({
               {chip.label}
             </button>
           ))}
+          {nearbyLoading ? (
+            <span className="land-viewer-nearby-loading" role="status" aria-live="polite">
+              <LiveMagnifier size={18} label="Finding closest landmark" />
+              <span>Working…</span>
+            </span>
+          ) : null}
         </div>
 
         <div className="land-viewer-stage">
@@ -856,21 +863,29 @@ export function LandViewerModal({
           </div>
 
           <div className="land-viewer-hud" aria-live="polite">
-            <span>Zoom {zoom}</span>
-            <span>Cursor {coords}</span>
-            {hasGeo ? (
-              <span>
-                Pin {latitude!.toFixed(4)}, {longitude!.toFixed(4)}
-              </span>
-            ) : null}
-            {parcelAcres ? <span>{parcelAcres}</span> : null}
-            {elevationFt ? <span>{elevationFt}</span> : null}
-            {tool === "measure" ? <span className="land-viewer-measure">{measureInfo}</span> : null}
-            {nearbyStatus ? (
-              <span className="land-viewer-nearby-status">
-                {nearbyLoading ? "Searching…" : nearbyStatus}
-                {activeHit ? ` · ${activeHit.lat.toFixed(4)}, ${activeHit.lon.toFixed(4)}` : ""}
-              </span>
+            <div className="land-viewer-hud-row">
+              <span>Zoom {zoom}</span>
+              <span>Cursor {coords}</span>
+              {hasGeo ? (
+                <span>
+                  Pin {latitude!.toFixed(4)}, {longitude!.toFixed(4)}
+                </span>
+              ) : null}
+              {parcelAcres ? <span>{parcelAcres}</span> : null}
+              {elevationFt ? <span>{elevationFt}</span> : null}
+            </div>
+            {(tool === "measure" || nearbyStatus) ? (
+              <div className="land-viewer-hud-row">
+                {tool === "measure" ? <span className="land-viewer-measure">{measureInfo}</span> : null}
+                {nearbyStatus ? (
+                  <span className="land-viewer-nearby-status">
+                    {nearbyLoading ? "Searching…" : nearbyStatus}
+                    {activeHit && !nearbyLoading
+                      ? ` · ${activeHit.lat.toFixed(4)}, ${activeHit.lon.toFixed(4)}`
+                      : ""}
+                  </span>
+                ) : null}
+              </div>
             ) : null}
           </div>
         </div>

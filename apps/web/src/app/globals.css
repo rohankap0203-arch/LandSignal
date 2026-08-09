@@ -3343,7 +3343,7 @@ a.acquire-block:hover {
 }
 
 .land-alert-card {
-  padding: 0.35rem 0.5rem 0.2rem;
+  padding: 0.85rem 0.7rem 0.65rem;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel, var(--bg-elevated));
@@ -3360,12 +3360,14 @@ a.acquire-block:hover {
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.55rem;
   box-sizing: border-box;
 }
 
 .land-alert-card-back {
   overflow: visible;
+  padding-top: 1rem;
+  padding-bottom: 0.85rem;
 }
 
 .land-alert-flip.is-new .land-alert-card-front,
@@ -3388,7 +3390,8 @@ a.acquire-block:hover {
 .land-alert-back-head {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.45rem;
+  margin-bottom: 0.25rem;
 }
 
 .land-alert-back-rail {
@@ -3410,7 +3413,8 @@ a.acquire-block:hover {
 
 .land-alert-back-actions {
   margin-top: auto;
-  padding-top: 0.35rem;
+  padding-top: 0.65rem;
+  padding-bottom: 0.15rem;
   flex: 0 0 auto;
 }
 
@@ -3483,7 +3487,8 @@ a.acquire-block:hover {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 0.35rem;
+  margin-top: 0.15rem;
+  margin-bottom: 0.55rem;
 }
 
 .land-alert-card-scores {
@@ -3546,31 +3551,36 @@ a.acquire-block:hover {
 .land-alert-card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.2rem 0.6rem;
-  margin-top: 0.1rem;
+  gap: 0.35rem 0.75rem;
+  margin-top: 0.45rem;
   font-size: 0.8rem;
   color: var(--muted);
 }
 
 .land-alert-why {
-  margin: 0.2rem 0 0;
-  padding-left: 0.9rem;
+  margin: 0.55rem 0 0;
+  padding-left: 0.95rem;
   font-size: 0.72rem;
   color: var(--ink);
-  line-height: 1.25;
+  line-height: 1.45;
+  display: grid;
+  gap: 0.45rem;
 }
 
 .land-alert-watch {
-  margin-top: 0.15rem;
-  margin-bottom: 0.1rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.15rem;
   font-size: 0.72rem;
   color: color-mix(in srgb, #a65b1a 80%, var(--ink));
-  line-height: 1.2;
+  line-height: 1.35;
 }
 
 .land-alert-view-land-wrap {
-  margin: 0.55rem 0 0.45rem;
+  display: flex;
+  justify-content: center;
+  margin: 0.85rem 0 0.35rem;
   margin-top: auto;
+  transform: translateY(-6px);
 }
 
 .land-alert-view-land {
@@ -3578,9 +3588,9 @@ a.acquire-block:hover {
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  width: 100%;
+  width: auto;
   min-height: 2rem;
-  padding: 0.35rem 0.85rem;
+  padding: 0.35rem 1rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--brand) 45%, var(--line));
   background:
@@ -3826,6 +3836,21 @@ a.acquire-block:hover {
   cursor: not-allowed;
 }
 
+.land-viewer-nearby-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 0.2rem;
+  min-height: 1.55rem;
+  padding: 0.1rem 0.55rem 0.1rem 0.35rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line));
+  background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
+  color: color-mix(in srgb, var(--brand) 55%, var(--ink));
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
 .land-viewer-stage {
   position: relative;
   min-height: 0;
@@ -3905,15 +3930,24 @@ a.acquire-block:hover {
   right: 0.75rem;
   bottom: 0.75rem;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 0.55rem;
+  flex-direction: column;
+  gap: 0.35rem;
   pointer-events: none;
   z-index: 500;
+}
+
+.land-viewer-hud-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.4rem;
+  overflow: hidden;
 }
 
 .land-viewer-hud span {
   display: inline-flex;
   align-items: center;
+  flex: 0 1 auto;
   min-height: 1.7rem;
   padding: 0.2rem 0.55rem;
   border-radius: 999px;
@@ -3923,6 +3957,7 @@ a.acquire-block:hover {
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
   backdrop-filter: blur(4px);
+  white-space: nowrap;
 }
 
 .land-viewer-hud .land-viewer-measure {
@@ -3951,11 +3986,7 @@ a.acquire-block:hover {
 }
 
 .land-alert-card-title {
-  margin-top: 0;
-}
-
-.land-alert-card-top {
-  margin-bottom: 0.1rem;
+  margin-top: 0.15rem;
 }
 
 .land-alert-indicators {
