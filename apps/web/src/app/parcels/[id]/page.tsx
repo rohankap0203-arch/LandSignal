@@ -126,13 +126,6 @@ export default function ParcelIntelligencePage() {
   const askYourself = (brief.ask_yourself as AnyRec) || null;
   const story = (brief.score_story as Record<string, string>) || {};
   const returnCase = (brief.return_case as AnyRec) || {};
-  const convictionKey = String(returnCase.conviction || score?.conviction || "WATCH").toUpperCase();
-  const convictionLabel =
-    convictionKey === "HIGH"
-      ? "Strong interest"
-      : convictionKey === "MEDIUM"
-        ? "Moderate interest"
-        : "Worth watching";
   const drivers = (data.score_drivers as AnyRec) || {};
   const oppDrive = (drivers.opportunity as AnyRec) || {};
   const riskDrive = (drivers.risk as AnyRec) || {};
@@ -206,13 +199,13 @@ export default function ParcelIntelligencePage() {
       <section className="panel overflow-hidden">
         <div className="p-6 pb-4">
           <div className="intel-topbar">
-            <div className="flex flex-wrap items-center gap-2 min-w-0">
-              {score && <SignalBadge signal={score.signal as string} />}
-              <span className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-xs font-semibold">
-                {String(sourcing.source_name || "Public source")}
-              </span>
+            <span className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-xs font-semibold">
+              {String(sourcing.source_name || "Public source")}
+            </span>
+            <div className="intel-topbar-right">
+              {score ? <SignalBadge signal={score.signal as string} /> : null}
+              <WatchEyeButton watched={watched} onToggle={toggleWatch} />
             </div>
-            <WatchEyeButton watched={watched} onToggle={toggleWatch} />
           </div>
           <h1 className="display mt-3 text-3xl font-semibold leading-tight break-words">
             {pageTitle}
@@ -379,27 +372,19 @@ export default function ParcelIntelligencePage() {
             </div>
           ) : null}
 
-          <div className="return-case mt-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          {returnCase.headline ? (
+            <div className="return-case mt-5">
               <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
                 Buy case for this listing
               </div>
-              <div className="return-case-actions">
-                <span className={`conviction-pill ${convictionKey.toLowerCase()}`}>{convictionLabel}</span>
-                <WatchEyeButton watched={watched} onToggle={toggleWatch} />
-              </div>
+              <div className="mt-1 font-semibold leading-snug break-words">{String(returnCase.headline)}</div>
+              <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
+                {((returnCase.bullets as string[]) || []).slice(0, 2).map((b) => (
+                  <li key={b}>• {b}</li>
+                ))}
+              </ul>
             </div>
-            {returnCase.headline ? (
-              <>
-                <div className="mt-1 font-semibold leading-snug break-words">{String(returnCase.headline)}</div>
-                <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
-                  {((returnCase.bullets as string[]) || []).slice(0, 2).map((b) => (
-                    <li key={b}>• {b}</li>
-                  ))}
-                </ul>
-              </>
-            ) : null}
-          </div>
+          ) : null}
 
           <div id="sec-reach" className="source-card mt-5 scroll-mt-20">
             <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">How to reach the seller</div>
