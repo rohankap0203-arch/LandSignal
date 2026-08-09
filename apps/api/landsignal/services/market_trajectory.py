@@ -495,7 +495,7 @@ def build_market_trajectory(
         "observed_marks": observed,
         "method_notes": method_notes,
         "summary_bullets": summary_bullets,
-        "interaction_hint": "Drag across the chart to see the dollar value in any year. Use the year buttons to zoom the window.",
+        "interaction_hint": "Each button shows that many years back and the same span ahead. Drag to read any year.",
         "disclaimer": (
             "First look only. When deed history is missing, dollars follow similar land in this state "
             "and listing type. Not an appraisal or a promise of future prices."
