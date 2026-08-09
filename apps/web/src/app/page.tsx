@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FilterField } from "@/components/filter-field";
 import { LandLoader } from "@/components/land-loader";
-import { LiveMagnifier } from "@/components/live-magnifier";
+import { AlertBell } from "@/components/alert-bell";
 import { PropertyCard } from "@/components/property-card";
 import {
   landsignalApi,
@@ -443,14 +443,14 @@ export default function SearchPage() {
                 {loading ? "Searching…" : "Show matches"}
               </button>
               <Link href="/alerts" className="btn btn-land-alerts btn-search-primary">
-                <span>Land Alerts</span>
-                <LiveMagnifier size={16} animated={false} label="Land Alerts" className="btn-land-alerts-mag" />
+                <span className="btn-land-alerts-label">Land Alerts</span>
+                <AlertBell size={15} label="Land Alerts" className="btn-land-alerts-bell" />
               </Link>
             </div>
             <div className="filter-actions-secondary">
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn btn-secondary filter-action-top"
                 disabled={loading}
                 onClick={() => {
                   const next = { ...DEFAULT_FORM, sort: "score_desc" };
@@ -460,12 +460,17 @@ export default function SearchPage() {
               >
                 Top opportunities
               </button>
-              <button type="button" className="btn btn-secondary" onClick={scanFresh} disabled={scanning}>
+              <button
+                type="button"
+                className="btn btn-secondary filter-action-refresh"
+                onClick={scanFresh}
+                disabled={scanning}
+              >
                 {scanning ? "Starting refresh…" : "Refresh live inventory"}
               </button>
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn btn-secondary filter-action-reset"
                 onClick={() => {
                   setForm(DEFAULT_FORM);
                   setStatus("Filters reset to Any. Click Show matches when you want results.");

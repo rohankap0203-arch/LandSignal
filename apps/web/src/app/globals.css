@@ -362,13 +362,15 @@ select {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
-  align-items: center;
-  gap: 10px;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
 }
 
 .filter-actions-primary > .btn,
 .filter-actions-primary > a.btn {
-  flex: 0 0 auto;
+  flex: 1 1 0;
+  min-width: 0;
   width: auto;
   max-width: none;
 }
@@ -381,20 +383,21 @@ select {
 }
 
 .btn-search-primary {
-  min-width: 10.5rem;
+  min-width: 0;
 }
 
 .btn-land-alerts {
+  position: relative;
   display: inline-flex;
-  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
   background: #0a0a0a;
   color: #ffffff;
   font-weight: 600;
   text-align: center;
   border: 1px solid #0a0a0a;
+  padding-left: 1.15rem;
+  padding-right: 2.15rem;
 }
 
 .btn-land-alerts:hover {
@@ -403,13 +406,65 @@ select {
   color: #ffffff;
 }
 
-.btn-land-alerts-mag {
-  color: #ffffff;
+.btn-land-alerts-label {
+  display: block;
+  width: 100%;
+  text-align: center;
+  line-height: 1.2;
 }
 
-@media (max-width: 520px) {
+.btn-land-alerts-bell {
+  position: absolute;
+  right: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #ffffff;
+  pointer-events: none;
+}
+
+/* Small screens: stack secondary actions; keep primary pair side-by-side */
+@media (max-width: 720px) {
   .filter-actions-primary {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  .filter-actions-primary > .btn,
+  .filter-actions-primary > a.btn {
+    flex: 1 1 0;
+    padding-left: 10px;
+    padding-right: 10px;
+    font-size: 0.9rem;
+    white-space: nowrap;
+  }
+
+  .btn-land-alerts {
+    padding-left: 0.65rem;
+    padding-right: 1.75rem;
+  }
+
+  .btn-land-alerts-bell {
+    right: 0.45rem;
+  }
+
+  .filter-actions-secondary {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .filter-actions-secondary > .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (min-width: 721px) {
+  .filter-actions-primary > .btn,
+  .filter-actions-primary > a.btn {
+    flex: 0 0 auto;
+    min-width: 10.5rem;
   }
 }
 

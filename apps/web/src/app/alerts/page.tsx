@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LiveMagnifier } from "@/components/live-magnifier";
+import { AlertBell } from "@/components/alert-bell";
 import { landsignalApi, type LandAlertMatchCard } from "@/lib/api";
 
 type PrefMode = "must" | "prefer" | "flexible";
@@ -381,7 +381,7 @@ export default function LandAlertsPage() {
             ← Back
           </Link>
           <div className="land-alerts-live" title="LandSignal is scanning live">
-            <LiveMagnifier size={28} />
+            <AlertBell size={26} animated label="Scanning live" />
             <span>Scanning live</span>
           </div>
         </div>
@@ -398,7 +398,7 @@ export default function LandAlertsPage() {
           ← Back
         </Link>
         <div className="land-alerts-live" title="LandSignal is scanning live">
-          <LiveMagnifier size={28} />
+          <AlertBell size={26} animated label="Scanning live" />
           <span>Scanning live</span>
         </div>
       </div>
