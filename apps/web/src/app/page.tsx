@@ -229,12 +229,6 @@ export default function SearchPage() {
           <div>
             <div className="text-xs uppercase tracking-[0.14em] text-white/70">LandSignal</div>
             <h1>Scout the best land buys in the country</h1>
-            <p>
-              We index tax-sale, surplus, and federal inventory Google and Zillow miss — then score
-              each file for opportunity, risk, and a multi-factor return path. Start with Top
-              opportunities, or set filters and Show matches. Refresh inventory anytime for new
-              postings.
-            </p>
           </div>
         </div>
 
