@@ -560,9 +560,10 @@ export function LandViewerModal({
         doubleClickZoom: true,
         boxZoom: true,
         keyboard: true,
-        zoomControl: false,
+        zoomControl: true,
         attributionControl: true,
       }).setView(center, hasGeo ? 15 : 4);
+      map.zoomControl.setPosition("topleft");
       mapRef.current = map;
 
       const streets = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -798,12 +799,6 @@ export function LandViewerModal({
           </div>
 
           <div className="land-viewer-tool-group" aria-label="View">
-            <button type="button" onClick={() => mapRef.current?.zoomIn()}>
-              +
-            </button>
-            <button type="button" onClick={() => mapRef.current?.zoomOut()}>
-              −
-            </button>
             <button type="button" onClick={fitParcel} disabled={!hasGeo}>
               Fit land
             </button>
@@ -887,22 +882,20 @@ export function LandViewerModal({
                   Pin {latitude!.toFixed(4)}, {longitude!.toFixed(4)}
                 </span>
               ) : null}
+            </div>
+            <div className="land-viewer-hud-row">
               {parcelAcres ? <span>{parcelAcres}</span> : null}
               {elevationFt ? <span>{elevationFt}</span> : null}
+              {tool === "measure" ? <span className="land-viewer-measure">{measureInfo}</span> : null}
+              {nearbyStatus ? (
+                <span className="land-viewer-nearby-status">
+                  {nearbyLoading ? "Searching…" : nearbyStatus}
+                  {activeHit && !nearbyLoading
+                    ? ` · ${activeHit.lat.toFixed(4)}, ${activeHit.lon.toFixed(4)}`
+                    : ""}
+                </span>
+              ) : null}
             </div>
-            {(tool === "measure" || nearbyStatus) ? (
-              <div className="land-viewer-hud-row">
-                {tool === "measure" ? <span className="land-viewer-measure">{measureInfo}</span> : null}
-                {nearbyStatus ? (
-                  <span className="land-viewer-nearby-status">
-                    {nearbyLoading ? "Searching…" : nearbyStatus}
-                    {activeHit && !nearbyLoading
-                      ? ` · ${activeHit.lat.toFixed(4)}, ${activeHit.lon.toFixed(4)}`
-                      : ""}
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
           </div>
         </div>
       </div>
