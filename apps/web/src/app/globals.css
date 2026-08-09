@@ -4094,11 +4094,18 @@ a.acquire-block:hover {
   max-width: 100%;
 }
 
-.land-viewer-nearby-loading {
+.land-viewer-nearby-loading,
+.land-viewer-nearby-next {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.18rem;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  min-width: 4.85rem;
   min-height: 1.4rem;
+  height: 1.4rem;
+  margin: 0;
   padding: 0.08rem 0.22rem 0.08rem 0.2rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line));
@@ -4106,6 +4113,7 @@ a.acquire-block:hover {
   color: color-mix(in srgb, var(--brand) 55%, var(--ink));
   font-size: 0.62rem;
   font-weight: 650;
+  letter-spacing: 0.02em;
   line-height: 1;
   white-space: nowrap;
 }
@@ -4116,28 +4124,10 @@ a.acquire-block:hover {
 }
 
 .land-viewer-nearby-next {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.28rem;
-  flex: 0 0 auto;
-  margin: 0;
-  box-sizing: border-box;
-  height: 1.4rem;
-  min-height: 1.4rem;
-  min-width: 5.6rem;
-  padding: 0 0.9rem;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line));
-  background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
-  color: color-mix(in srgb, var(--brand) 55%, var(--ink));
   font: inherit;
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  line-height: 1;
+  font-size: 0.62rem;
+  font-weight: 650;
   cursor: pointer;
-  white-space: nowrap;
 }
 
 .land-viewer-nearby-next.is-done {
@@ -4151,7 +4141,7 @@ a.acquire-block:hover {
 
 .land-viewer-nearby-next-arrow {
   display: inline-block;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   line-height: 1;
   transform: translateX(0);
 }
