@@ -128,8 +128,12 @@ const NEARBY_CHIPS: NearbyChip[] = [
     kind: "hospital",
     label: "Hospital",
     color: "#dc2626",
-    overpassParts: ['nwr["amenity"="hospital"]', 'nwr["amenity"="clinic"]["emergency"="yes"]'],
-    radiiM: [2500, 10000, 28000],
+    overpassParts: [
+      'nwr["amenity"="hospital"]',
+      'nwr["healthcare"="hospital"]',
+      'nwr["amenity"="clinic"]["emergency"="yes"]',
+    ],
+    radiiM: [3000, 12000, 32000],
     maxMiles: 22,
     outMode: "center",
   },
@@ -154,6 +158,14 @@ const OVERPASS_ENDPOINTS = [
 ];
 
 const nearbyCache = new Map<string, NearbyHit[]>();
+/** In-flight Overpass aborts when the user switches Closest chips. */
+let nearbyOverpassAbort: AbortController | null = null;
+
+function beginNearbyOverpass() {
+  nearbyOverpassAbort?.abort();
+  nearbyOverpassAbort = new AbortController();
+  return nearbyOverpassAbort;
+}
 
 function haversineMeters(a: [number, number], b: [number, number]) {
   const R = 6371000;
@@ -325,10 +337,23 @@ function closestOnElement(
   return { lat, lon, meters: haversineMeters(origin, [lat, lon]) };
 }
 
-async function overpassQuery(query: string, timeoutMs = 8000): Promise<OverpassElement[]> {
+async function overpassQuery(
+  query: string,
+  timeoutMs = 8000,
+  externalSignal?: AbortSignal,
+): Promise<OverpassElement[]> {
   // Race public Overpass mirrors — first valid payload wins (wetland geom used to stall for 14s+).
   const controllers = OVERPASS_ENDPOINTS.map(() => new AbortController());
-  const timer = window.setTimeout(() => controllers.forEach((c) => c.abort()), timeoutMs);
+  const abortAll = () => controllers.forEach((c) => c.abort());
+  const timer = window.setTimeout(abortAll, timeoutMs);
+  const onExternalAbort = () => abortAll();
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      window.clearTimeout(timer);
+      throw new DOMException("Aborted", "AbortError");
+    }
+    externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+  }
   try {
     const elements = await Promise.any(
       OVERPASS_ENDPOINTS.map(async (endpoint, i) => {
@@ -340,15 +365,18 @@ async function overpassQuery(query: string, timeoutMs = 8000): Promise<OverpassE
         });
         if (!res.ok) throw new Error(`Overpass ${res.status}`);
         const data = (await res.json()) as { elements?: OverpassElement[] };
+        // Empty is a valid answer for this radius — still prefer a mirror that responded.
         return data.elements || [];
       }),
     );
-    controllers.forEach((c) => c.abort());
+    abortAll();
     return elements;
   } catch (e) {
+    if (externalSignal?.aborted) throw new DOMException("Aborted", "AbortError");
     throw e instanceof Error ? e : new Error("Overpass unavailable");
   } finally {
     window.clearTimeout(timer);
+    externalSignal?.removeEventListener("abort", onExternalAbort);
   }
 }
 
@@ -444,15 +472,21 @@ async function fetchNearby(
   if (!meta) return [];
 
   const cacheKey = `${kind}:${lat.toFixed(4)}:${lon.toFixed(4)}`;
+  // Only reuse successful caches — never lock in an empty miss (Overpass blips used to
+  // make Hospital "permanently" fail after Water until reload).
   if (nearbyCache.has(cacheKey)) {
     const cached = nearbyCache.get(cacheKey) ?? [];
-    if (cached.length) onPartial?.(cached);
-    return cached;
+    if (cached.length) {
+      onPartial?.(cached);
+      return cached;
+    }
+    nearbyCache.delete(cacheKey);
   }
 
   const origin: [number, number] = [lat, lon];
   let best: NearbyHit[] = [];
   let lastPartialSig = "";
+  const overpassCtl = beginNearbyOverpass();
 
   const emit = (hits: NearbyHit[]) => {
     if (!hits.length || !onPartial) return;
@@ -468,7 +502,7 @@ async function fetchNearby(
   // Progressive radii: surface the first hit ASAP, then keep going for up to 3.
   for (let i = 0; i < meta.radiiM.length; i++) {
     const radius = meta.radiiM[i];
-    if (isCancelled?.()) break;
+    if (isCancelled?.() || overpassCtl.signal.aborted) break;
     const union = meta.overpassParts.map((part) => `  ${part}(around:${radius},${lat},${lon});`).join("\n");
     const query = `
 [out:json][timeout:8];
@@ -479,8 +513,8 @@ ${outClause}
 `.trim();
     try {
       // First radius: fail fast. Later radii get a bit more time.
-      const elements = await overpassQuery(query, i === 0 ? 7000 : 9000);
-      if (isCancelled?.()) break;
+      const elements = await overpassQuery(query, i === 0 ? 8000 : 10000, overpassCtl.signal);
+      if (isCancelled?.() || overpassCtl.signal.aborted) break;
       const hits = pickTopHits(kind, meta.label, origin, elements, NEARBY_RESULT_LIMIT).filter(
         (h) => h.meters / 1609.344 <= meta.maxMiles,
       );
@@ -492,14 +526,19 @@ ${outClause}
         const farthestKept = hits[hits.length - 1];
         if (hits.length >= NEARBY_RESULT_LIMIT && farthestKept.meters <= radius * 1.05) break;
       }
-    } catch {
+    } catch (e) {
+      if (isCancelled?.() || overpassCtl.signal.aborted) break;
+      if (e instanceof DOMException && e.name === "AbortError") break;
       // Try next radius / endpoint path; do not invent a fake location.
       continue;
     }
   }
 
   best = verifyNearbyHits(origin, best);
-  if (!isCancelled?.()) nearbyCache.set(cacheKey, best);
+  // Never cache empty misses — allow a real retry on the next click.
+  if (!isCancelled?.() && !overpassCtl.signal.aborted && best.length) {
+    nearbyCache.set(cacheKey, best);
+  }
   return best;
 }
 
@@ -826,6 +865,7 @@ export function LandViewerModal({
       if (!hasGeo || !mapRef.current) return;
       if (nearbyActive === kind) {
         nearbySearchGen.current += 1;
+        nearbyOverpassAbort?.abort();
         layersRef.current.nearby?.clearLayers();
         setNearbyActive(null);
         setNearbyHits([]);
@@ -836,7 +876,10 @@ export function LandViewerModal({
         return;
       }
       const chip = NEARBY_CHIPS.find((c) => c.kind === kind);
-      const gen = ++nearbySearchGen.current;
+      // Cancel any in-flight Water/#2/#3 Overpass work before starting Hospital/School/etc.
+      nearbySearchGen.current += 1;
+      const gen = nearbySearchGen.current;
+      nearbyOverpassAbort?.abort();
       setNearbyLoading(true);
       setNearbyStatus(`Finding closest ${chip?.label ?? "feature"}…`);
       setNearbyActive(kind);
@@ -871,6 +914,17 @@ export function LandViewerModal({
           applyPartial,
           () => gen !== nearbySearchGen.current,
         );
+        // One automatic retry on hard miss (Overpass often flakes right after another chip).
+        if (!hits.length && gen === nearbySearchGen.current) {
+          nearbyCache.delete(`${kind}:${latitude!.toFixed(4)}:${longitude!.toFixed(4)}`);
+          hits = await fetchNearby(
+            kind,
+            latitude!,
+            longitude!,
+            applyPartial,
+            () => gen !== nearbySearchGen.current,
+          );
+        }
       } catch {
         hits = [];
       }
