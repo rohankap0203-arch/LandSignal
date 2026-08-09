@@ -222,7 +222,7 @@ function ActionCard({
   );
 }
 
-/** Equal-height Call / Office cards; wide v expands a full-width step guide below. */
+/** Equal-height Call / Office cards; animated reveal expands a full-width step guide. */
 export function AcquireRail({
   postingUrl,
   postingLabel = "Open site",
