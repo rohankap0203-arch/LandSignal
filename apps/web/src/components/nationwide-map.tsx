@@ -56,7 +56,7 @@ export function NationwideMap({ points }: { points: Point[] }) {
   }, [points]);
 
   return (
-    <div className="overflow-hidden border border-[var(--border)]">
+    <div className="nationwide-map-shell overflow-hidden border border-[var(--border)]">
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossOrigin="" />
       <div ref={ref} style={{ height: 480, width: "100%" }} />
     </div>

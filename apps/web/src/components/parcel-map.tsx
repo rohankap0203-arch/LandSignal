@@ -74,7 +74,7 @@ export function ParcelMap({ latitude, longitude, polygon, title, height = 360 }:
   }
 
   return (
-    <div className="overflow-hidden border border-[var(--border)]">
+    <div className="parcel-map-shell overflow-hidden border border-[var(--border)]">
       <link
         rel="stylesheet"
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"

@@ -74,10 +74,18 @@ select {
 .shell-header {
   position: sticky;
   top: 0;
-  z-index: 40;
+  z-index: 1000;
   backdrop-filter: blur(14px);
-  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
   border-bottom: 1px solid var(--line);
+}
+
+/* Keep Leaflet pane z-indexes inside the map so they can't cover the sticky brand header */
+.parcel-map-shell,
+.nationwide-map-shell {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
 }
 
 .panel {
@@ -1104,7 +1112,7 @@ button.score-bar-click:disabled {
 .help-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 1100;
   display: flex;
   align-items: center;
   justify-content: center;
