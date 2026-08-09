@@ -10,6 +10,8 @@ from landsignal.models import (
     AlertRuleCreate,
     AlertRuleRecord,
     InvestorProfileUpdate,
+    LandAlertNotify,
+    LandAlertProfileUpsert,
     ManualIngestRequest,
     ProviderInfo,
     ProviderStatus,
@@ -931,6 +933,13 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     parcel = store.parcels.get(parcel_id)
     if not parcel:
         raise HTTPException(404, "Parcel not found")
+    # Opening a parcel marks Land Alert matches as viewed (persists across sessions)
+    try:
+        from landsignal.services.land_alerts import DEMO_USER_ID, mark_match_viewed
+
+        mark_match_viewed(store, DEMO_USER_ID, parcel_id)
+    except Exception:  # noqa: BLE001
+        pass
     # Always run full (non-fast) enrichment on detail so soils/flood are real when opened
     score = await analyze_parcel(store, parcel_id, fast=False)
     listing = store.listing_for_parcel(parcel_id)
@@ -1329,6 +1338,157 @@ async def create_alert_rule(body: AlertRuleCreate) -> AlertRuleRecord:
 async def list_alerts() -> list:
     store = get_store(get_settings().demo_seed)
     return store.alerts
+
+
+# ----- Land Alerts (preference-driven acquisition monitoring) -----
+
+
+@router.get("/land-alerts/profiles")
+async def list_land_alert_profiles() -> list[dict[str, Any]]:
+    from landsignal.services.land_alerts import DEMO_USER_ID
+
+    store = get_store(get_settings().demo_seed)
+    rows = [p for p in store.land_alert_profiles.values() if p.user_id == DEMO_USER_ID]
+    rows.sort(key=lambda p: p.updated_at, reverse=True)
+    return [p.model_dump(mode="json") for p in rows]
+
+
+@router.get("/land-alerts/profile")
+async def get_land_alert_profile() -> dict[str, Any]:
+    """Primary profile for the demo user (first active, or empty template)."""
+    from landsignal.services.land_alerts import DEMO_USER_ID
+
+    store = get_store(get_settings().demo_seed)
+    rows = [p for p in store.land_alert_profiles.values() if p.user_id == DEMO_USER_ID]
+    rows.sort(key=lambda p: p.updated_at, reverse=True)
+    if not rows:
+        return {
+            "profile": None,
+            "has_profile": False,
+            "notify": LandAlertNotify().model_dump(mode="json"),
+            "preferences": {},
+        }
+    p = rows[0]
+    return {
+        "profile": p.model_dump(mode="json"),
+        "has_profile": True,
+        "notify": p.notify.model_dump(mode="json"),
+        "preferences": p.preferences,
+    }
+
+
+@router.put("/land-alerts/profile")
+async def upsert_land_alert_profile(body: LandAlertProfileUpsert) -> dict[str, Any]:
+    from landsignal.services.land_alerts import DEMO_USER_ID, match_card, upsert_profile
+
+    store = get_store(get_settings().demo_seed)
+    profile, matches = upsert_profile(store, body, DEMO_USER_ID)
+    cards = [match_card(store, m) for m in matches]
+    cards.sort(key=lambda c: (-(c.get("preference_match_pct") or 0), -(c.get("landsignal_score") or 0)))
+    return {
+        "profile": profile.model_dump(mode="json"),
+        "match_count": len(matches),
+        "new_count": sum(1 for m in matches if m.status == "new"),
+        "matches": cards[:100],
+        "note": "Matches recalculated against existing inventory. Preference changes do not create 'new listing' notifications.",
+    }
+
+
+@router.post("/land-alerts/profile/{profile_id}/pause")
+async def pause_land_alert(profile_id: UUID) -> dict[str, Any]:
+    from landsignal.services.land_alerts import DEMO_USER_ID, set_paused
+
+    store = get_store(get_settings().demo_seed)
+    try:
+        profile = set_paused(store, profile_id, True, DEMO_USER_ID)
+    except KeyError:
+        raise HTTPException(404, "Land Alert profile not found") from None
+    return {"profile": profile.model_dump(mode="json")}
+
+
+@router.post("/land-alerts/profile/{profile_id}/resume")
+async def resume_land_alert(profile_id: UUID) -> dict[str, Any]:
+    from landsignal.services.land_alerts import DEMO_USER_ID, rescan_profile, set_paused
+
+    store = get_store(get_settings().demo_seed)
+    try:
+        profile = set_paused(store, profile_id, False, DEMO_USER_ID)
+    except KeyError:
+        raise HTTPException(404, "Land Alert profile not found") from None
+    matches = rescan_profile(store, profile, origin="existing_inventory")
+    return {"profile": profile.model_dump(mode="json"), "match_count": len(matches)}
+
+
+@router.get("/land-alerts/matches")
+async def list_land_alert_matches(profile_id: UUID | None = None, status: str | None = None) -> dict[str, Any]:
+    from landsignal.services.land_alerts import DEMO_USER_ID, match_card, matches_for_user
+
+    store = get_store(get_settings().demo_seed)
+    rows = matches_for_user(store, DEMO_USER_ID, profile_id)
+    if status:
+        rows = [m for m in rows if m.status == status]
+    cards = [match_card(store, m) for m in rows]
+    all_rows = matches_for_user(store, DEMO_USER_ID, profile_id)
+    return {
+        "matches": cards,
+        "counts": {
+            "new": sum(1 for m in all_rows if m.status == "new"),
+            "unseen": sum(1 for m in all_rows if m.status == "unseen"),
+            "viewed": sum(1 for m in all_rows if m.status == "viewed"),
+            "total": len(all_rows),
+        },
+    }
+
+
+@router.post("/land-alerts/matches/{parcel_id}/viewed")
+async def mark_land_alert_viewed(parcel_id: UUID) -> dict[str, Any]:
+    from landsignal.services.land_alerts import DEMO_USER_ID, mark_match_viewed
+    from landsignal.store import persist_store
+
+    store = get_store(get_settings().demo_seed)
+    n = mark_match_viewed(store, DEMO_USER_ID, parcel_id)
+    persist_store(store)
+    return {"updated": n}
+
+
+@router.post("/land-alerts/mark-all-seen")
+async def mark_all_land_alerts_seen(profile_id: UUID | None = None) -> dict[str, Any]:
+    from landsignal.services.land_alerts import DEMO_USER_ID, mark_all_seen
+    from landsignal.store import persist_store
+
+    store = get_store(get_settings().demo_seed)
+    n = mark_all_seen(store, DEMO_USER_ID, profile_id)
+    persist_store(store)
+    return {"updated": n}
+
+
+@router.put("/land-alerts/notify")
+async def update_land_alert_notify(body: LandAlertNotify) -> dict[str, Any]:
+    from landsignal.services.land_alerts import DEMO_USER_ID
+    from landsignal.store import persist_store
+
+    store = get_store(get_settings().demo_seed)
+    rows = [p for p in store.land_alert_profiles.values() if p.user_id == DEMO_USER_ID]
+    if not rows:
+        raise HTTPException(404, "Create a Land Alert profile first")
+    rows.sort(key=lambda p: p.updated_at, reverse=True)
+    profile = rows[0].model_copy(update={"notify": body})
+    store.land_alert_profiles[profile.id] = profile
+    persist_store(store)
+    return {"profile": profile.model_dump(mode="json")}
+
+
+@router.post("/land-alerts/rescan")
+async def rescan_land_alerts() -> dict[str, Any]:
+    from landsignal.services.land_alerts import DEMO_USER_ID, match_card, rescan_profile
+
+    store = get_store(get_settings().demo_seed)
+    profiles = [p for p in store.land_alert_profiles.values() if p.user_id == DEMO_USER_ID and not p.paused]
+    all_matches = []
+    for p in profiles:
+        all_matches.extend(rescan_profile(store, p, origin="existing_inventory"))
+    cards = [match_card(store, m) for m in all_matches]
+    return {"match_count": len(all_matches), "matches": cards[:100]}
 
 
 @router.get("/investor-profile")

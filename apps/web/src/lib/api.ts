@@ -30,6 +30,37 @@ export type ActionLink = {
   status_code?: number | null;
 };
 
+export type LandAlertMatchCard = {
+  id: string;
+  profile_id: string;
+  parcel_id: string;
+  status: "new" | "unseen" | "viewed" | string;
+  origin: string;
+  is_new_discovery: boolean;
+  update_kind?: string | null;
+  preference_match_pct: number;
+  landsignal_score: number;
+  why_matched: string[];
+  watch_flags: string[];
+  property_name: string;
+  location: string;
+  state?: string | null;
+  county?: string | null;
+  asking_price?: number | null;
+  asking_price_display: string;
+  acres?: number | null;
+  acres_display: string;
+  price_per_acre?: number | null;
+  price_per_acre_display: string;
+  land_type: string;
+  signal?: string | null;
+  best_strategy?: string | null;
+  risk?: number | null;
+  deep_link: string;
+  opportunity_indicators?: string[];
+  risk_indicators?: string[];
+};
+
 export type RatingPart = {
   key: string;
   label: string;
@@ -171,6 +202,47 @@ export const landsignalApi = {
     predicate: Record<string, number>;
     channels: string[];
   }) => api("/alerts/rules", { method: "POST", body: JSON.stringify(body) }),
+  landAlertProfile: () =>
+    api<{
+      profile: Record<string, unknown> | null;
+      has_profile: boolean;
+      notify: Record<string, unknown>;
+      preferences: Record<string, unknown>;
+    }>("/land-alerts/profile"),
+  upsertLandAlertProfile: (body: Record<string, unknown>) =>
+    api<{
+      profile: Record<string, unknown>;
+      match_count: number;
+      new_count: number;
+      matches: LandAlertMatchCard[];
+      note?: string;
+    }>("/land-alerts/profile", { method: "PUT", body: JSON.stringify(body) }),
+  landAlertMatches: (profileId?: string, status?: string) => {
+    const qs = new URLSearchParams();
+    if (profileId) qs.set("profile_id", profileId);
+    if (status) qs.set("status", status);
+    const q = qs.toString();
+    return api<{
+      matches: LandAlertMatchCard[];
+      counts: { new: number; unseen: number; viewed: number; total: number };
+    }>(`/land-alerts/matches${q ? `?${q}` : ""}`);
+  },
+  pauseLandAlert: (profileId: string) =>
+    api(`/land-alerts/profile/${profileId}/pause`, { method: "POST" }),
+  resumeLandAlert: (profileId: string) =>
+    api(`/land-alerts/profile/${profileId}/resume`, { method: "POST" }),
+  markLandAlertViewed: (parcelId: string) =>
+    api(`/land-alerts/matches/${parcelId}/viewed`, { method: "POST" }),
+  markAllLandAlertsSeen: (profileId?: string) => {
+    const q = profileId ? `?profile_id=${profileId}` : "";
+    return api<{ updated: number }>(`/land-alerts/mark-all-seen${q}`, { method: "POST" });
+  },
+  updateLandAlertNotify: (body: Record<string, unknown>) =>
+    api("/land-alerts/notify", { method: "PUT", body: JSON.stringify(body) }),
+  rescanLandAlerts: () =>
+    api<{ match_count: number; matches: LandAlertMatchCard[] }>("/land-alerts/rescan", {
+      method: "POST",
+    }),
   profile: () => api<Record<string, unknown>>("/investor-profile"),
   updateProfile: (body: Record<string, unknown>) =>
     api("/investor-profile", { method: "PUT", body: JSON.stringify(body) }),

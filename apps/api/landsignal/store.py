@@ -11,6 +11,8 @@ from landsignal.models import (
     AlertRuleRecord,
     EnrichmentBundle,
     InvestorProfileUpdate,
+    LandAlertMatch,
+    LandAlertProfile,
     ListingRecord,
     ParcelRecord,
     Provenanced,
@@ -34,6 +36,8 @@ class MemoryStore:
         self.scores: dict[UUID, list[ScoreRecord]] = {}
         self.alerts: list[AlertRecord] = []
         self.alert_rules: dict[UUID, AlertRuleRecord] = {}
+        self.land_alert_profiles: dict[UUID, LandAlertProfile] = {}
+        self.land_alert_matches: dict[str, LandAlertMatch] = {}
         self.watchlists: dict[UUID, set[UUID]] = {}
         self.investor_profile: dict[str, Any] = {
             "capital_available_usd": 1_000_000,
@@ -383,6 +387,10 @@ def persist_store(store: MemoryStore | None = None) -> None:
             for pid, scores in store.scores.items()
         },
         "investor_profile": store.investor_profile,
+        "land_alert_profiles": [p.model_dump(mode="json") for p in store.land_alert_profiles.values()],
+        "land_alert_matches": [m.model_dump(mode="json") for m in store.land_alert_matches.values()],
+        "alerts": [a.model_dump(mode="json") for a in store.alerts[:500]],
+        "alert_rules": [r.model_dump(mode="json") for r in store.alert_rules.values()],
     }
     Path(_PERSIST_PATH).write_text(json.dumps(payload), encoding="utf-8")
 
@@ -423,6 +431,29 @@ def load_persisted_store(store: MemoryStore) -> int:
             continue
     if payload.get("investor_profile"):
         store.investor_profile.update(payload["investor_profile"])
+    for raw in payload.get("land_alert_profiles") or []:
+        try:
+            p = LandAlertProfile.model_validate(raw)
+            store.land_alert_profiles[p.id] = p
+        except Exception:
+            continue
+    for raw in payload.get("land_alert_matches") or []:
+        try:
+            m = LandAlertMatch.model_validate(raw)
+            store.land_alert_matches[f"{m.profile_id}:{m.parcel_id}"] = m
+        except Exception:
+            continue
+    for raw in payload.get("alerts") or []:
+        try:
+            store.alerts.append(AlertRecord.model_validate(raw))
+        except Exception:
+            continue
+    for raw in payload.get("alert_rules") or []:
+        try:
+            r = AlertRuleRecord.model_validate(raw)
+            store.alert_rules[r.id] = r
+        except Exception:
+            continue
     return n
 
 

@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     auto_discover_on_startup: bool = True
     discover_limit: int = 10000
     discover_min_acres: float = 0.1
+    # Always-on Land Alerts monitor (seconds between discovery cycles; respects source rate limits)
+    land_alerts_monitor_enabled: bool = True
+    land_alerts_poll_seconds: int = 900
+    land_alerts_discover_limit: int = 2500
     http_timeout_seconds: float = 20.0
     mapbox_token: str | None = None
     smtp_url: str | None = None

@@ -9,7 +9,7 @@ const NAV = [
   { href: "/", label: "Search" },
   { href: "/map", label: "Map" },
   { href: "/watchlist", label: "Watchlist" },
-  { href: "/alerts", label: "Alerts" },
+  { href: "/alerts", label: "Land Alerts" },
   { href: "/profile", label: "My criteria" },
   { href: "/ingest", label: "Add land" },
 ];

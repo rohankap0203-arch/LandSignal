@@ -81,6 +81,41 @@ async def startup() -> None:
 
         asyncio.create_task(_bg_discover())
 
+    # Always-on Land Alerts monitor — runs even when no browser is open
+    if settings.land_alerts_monitor_enabled:
+        from landsignal.services.discover import discover_opportunities
+        from landsignal.store import persist_store
+
+        async def _land_alerts_monitor() -> None:
+            import structlog
+
+            log = structlog.get_logger()
+            # Stagger first cycle so startup discover can finish
+            await asyncio.sleep(max(60, min(300, settings.land_alerts_poll_seconds // 3)))
+            failures = 0
+            while True:
+                try:
+                    summary = await discover_opportunities(
+                        store,
+                        settings,
+                        limit=settings.land_alerts_discover_limit,
+                        min_acres=settings.discover_min_acres,
+                        fast=True,
+                    )
+                    persist_store(store)
+                    failures = 0
+                    log.info("land_alerts_monitor_cycle", **{k: summary.get(k) for k in ("imported", "refreshed", "scored", "inventory_total", "errors")})
+                except Exception as exc:  # noqa: BLE001
+                    failures += 1
+                    log.warning("land_alerts_monitor_failed", error=str(exc), failures=failures)
+                # Back off on repeated failures without stopping the loop
+                delay = settings.land_alerts_poll_seconds
+                if failures:
+                    delay = min(delay * (2 ** min(failures, 4)), delay * 8)
+                await asyncio.sleep(delay)
+
+        asyncio.create_task(_land_alerts_monitor())
+
 
 @app.get("/")
 async def root() -> dict[str, str]:

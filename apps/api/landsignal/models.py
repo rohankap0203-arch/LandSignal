@@ -203,6 +203,71 @@ class AlertRuleRecord(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class PrefMode(str, Enum):
+    MUST = "must"
+    PREFER = "prefer"
+    FLEXIBLE = "flexible"
+
+
+class LandAlertNotify(BaseModel):
+    email: bool = True
+    sms: bool = False
+    in_app: bool = True
+    push: bool = False
+    sensitivity: str = "strong"  # exceptional | strong | all
+    frequency: str = "immediate"  # immediate | daily_digest | weekly_digest | in_app_only
+    email_address: str = ""
+    phone: str = ""
+
+
+class LandAlertProfile(BaseModel):
+    """Preference-driven land acquisition profile (soft scoring, not rigid SQL filters).
+
+    Supports multiple profiles per user later — keyed by id, scoped by user_id.
+    Preferences are soft unless a field's *_mode is \"must\".
+    """
+
+    id: UUID = Field(default_factory=uuid4)
+    user_id: UUID
+    name: str = "My Land Alert"
+    paused: bool = False
+    active: bool = True
+    preferences: dict[str, Any] = Field(default_factory=dict)
+    notify: LandAlertNotify = Field(default_factory=LandAlertNotify)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class LandAlertProfileUpsert(BaseModel):
+    id: UUID | None = None
+    name: str = "My Land Alert"
+    preferences: dict[str, Any] = Field(default_factory=dict)
+    notify: LandAlertNotify | None = None
+    paused: bool | None = None
+
+
+class LandAlertMatch(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    profile_id: UUID
+    user_id: UUID
+    parcel_id: UUID
+    preference_match_pct: float
+    landsignal_score: float
+    why_matched: list[str] = Field(default_factory=list)
+    watch_flags: list[str] = Field(default_factory=list)
+    status: str = "unseen"  # new | unseen | viewed
+    origin: str = "existing_inventory"  # existing_inventory | new_discovery | preference_change | price_update
+    is_new_discovery: bool = False
+    update_kind: str | None = None  # new_listing | price_drop | price_increase | status_change | new_data
+    viewed_at: datetime | None = None
+    qualified_for_alert: bool = True
+    notified: bool = False
+    notified_at: datetime | None = None
+    notification_channels: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class RadarRow(BaseModel):
     parcel_id: UUID
     listing_id: UUID | None = None

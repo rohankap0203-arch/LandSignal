@@ -361,6 +361,8 @@ select {
 .filter-actions-primary {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .filter-actions-secondary {
@@ -1283,16 +1285,16 @@ a.btn-intel:hover {
 
 @keyframes scout-pin-pop {
   0%,
-  12% {
+  18% {
     opacity: 0;
     transform: translate(-50%, -70%) scale(calc(var(--pin-scale, 1) * 0.55));
   }
-  28%,
-  52% {
+  30%,
+  42% {
     opacity: 1;
     transform: translate(-50%, -100%) scale(var(--pin-scale, 1));
   }
-  68%,
+  58%,
   100% {
     opacity: 0;
     transform: translate(-50%, -118%) scale(calc(var(--pin-scale, 1) * 0.7));
@@ -1944,15 +1946,6 @@ a.btn-intel:hover {
   justify-content: flex-end;
   gap: 6px;
   margin-left: auto;
-}
-
-.intel-topbar .return-case-actions .conviction-pill {
-  max-width: 100%;
-}
-
-.intel-topbar .watch-eye {
-  height: 26px;
-  min-height: 26px;
 }
 
 .watch-eye {
@@ -2637,4 +2630,256 @@ a.acquire-block:hover {
     animation: none;
     opacity: 0;
   }
+}
+
+/* ——— Land Alerts ——— */
+.land-alerts-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.land-alerts-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.land-alerts-msg {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  font-size: 0.9rem;
+}
+
+.land-alerts-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.land-alerts-new-count {
+  font-family: var(--font-display, inherit);
+  font-weight: 600;
+  color: var(--brand);
+}
+
+.land-alert-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.land-alert-field span {
+  color: var(--muted);
+}
+
+.land-alert-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.land-alert-field-row .grow {
+  flex: 1 1 14rem;
+}
+
+.land-alert-mode {
+  min-width: 8.5rem;
+  align-self: flex-end;
+}
+
+.land-alert-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.land-alert-chip {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.land-alert-chip.on {
+  border-color: color-mix(in srgb, var(--brand) 55%, var(--line));
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  color: var(--brand);
+}
+
+.land-alert-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.25rem;
+}
+
+.land-alert-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+}
+
+.land-alert-notify {
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.land-alerts-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.35rem;
+}
+
+.land-alerts-tabs button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.45rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.land-alerts-tabs button.on {
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.land-alert-card {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.land-alert-card.is-new {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
+.land-alert-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.land-alert-card-scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  font-size: 0.82rem;
+}
+
+.land-alert-match-pct {
+  font-weight: 650;
+  color: var(--brand);
+}
+
+.land-alert-ls-score {
+  color: var(--muted);
+}
+
+.land-alert-card-badges {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.land-alert-new {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: var(--brand);
+  color: #fff;
+}
+
+.land-alert-update,
+.land-alert-viewed {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.land-alert-card-title {
+  display: inline-block;
+  font-family: var(--font-display, inherit);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.land-alert-card-title:hover {
+  color: var(--brand);
+}
+
+.land-alert-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.land-alert-why {
+  margin: 0.65rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.84rem;
+  color: var(--ink);
+}
+
+.land-alert-watch {
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
+  color: color-mix(in srgb, #a65b1a 80%, var(--ink));
+}
+
+.land-alert-indicators {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
+  font-size: 0.78rem;
+}
+
+.land-alert-indicators .ok {
+  color: color-mix(in srgb, var(--brand) 70%, var(--ink));
+}
+
+.land-alert-indicators .risk {
+  color: color-mix(in srgb, #9a3b2f 75%, var(--ink));
+}
+
+.land-alert-notif {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease;
+}
+
+.land-alert-notif:hover {
+  border-color: color-mix(in srgb, var(--brand) 40%, var(--line));
 }

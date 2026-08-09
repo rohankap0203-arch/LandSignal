@@ -169,6 +169,9 @@ async def discover_opportunities(
     parcel_ids: list[UUID] = []
     to_score: list[UUID] = []
     refreshed = 0
+    new_parcel_ids: set[UUID] = set()
+    price_drop_ids: set[UUID] = set()
+    price_up_ids: set[UUID] = set()
     for raw in diversified:
         existing = next(
             (
@@ -180,11 +183,17 @@ async def discover_opportunities(
             None,
         )
         if existing:
+            old_ask = existing.asking_price_usd
             price_moved = _refresh_listing(store, existing, raw)
             refreshed += 1
             parcel_ids.append(existing.parcel_id)
             if store.latest_score(existing.parcel_id) is None or price_moved:
                 to_score.append(existing.parcel_id)
+            if price_moved and existing.asking_price_usd is not None and old_ask is not None:
+                if existing.asking_price_usd < old_ask:
+                    price_drop_ids.add(existing.parcel_id)
+                elif existing.asking_price_usd > old_ask:
+                    price_up_ids.add(existing.parcel_id)
             continue
         parcel, listing = store.upsert_manual({**raw, "provider_id": raw.get("provider_id") or "manual"})
         parcel.is_demo = False
@@ -195,6 +204,7 @@ async def discover_opportunities(
         store.listings[listing.id] = listing
         parcel_ids.append(parcel.id)
         to_score.append(parcel.id)
+        new_parcel_ids.add(parcel.id)
 
     sem = asyncio.Semaphore(24 if fast else 6)
     scored = 0
@@ -205,6 +215,24 @@ async def discover_opportunities(
             try:
                 score = await analyze_parcel(store, pid, settings, fast=fast)
                 evaluate_rules(store, score, settings)
+                from landsignal.services.land_alerts import match_parcel
+
+                if pid in new_parcel_ids:
+                    match_parcel(
+                        store, pid, origin="new_discovery", update_kind="new_listing", settings=settings
+                    )
+                elif pid in price_drop_ids:
+                    match_parcel(
+                        store, pid, origin="price_update", update_kind="price_drop", settings=settings
+                    )
+                elif pid in price_up_ids:
+                    match_parcel(
+                        store, pid, origin="price_update", update_kind="price_increase", settings=settings
+                    )
+                else:
+                    match_parcel(
+                        store, pid, origin="price_update", update_kind="new_data", settings=settings
+                    )
                 scored += 1
             except Exception as exc:  # noqa: BLE001
                 log.warning("discover_analyze_failed", parcel_id=str(pid), error=str(exc))

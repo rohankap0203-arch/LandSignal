@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FilterField } from "@/components/filter-field";
 import { LandLoader } from "@/components/land-loader";
@@ -440,6 +441,9 @@ export default function SearchPage() {
               >
                 {loading ? "Searching…" : "Show matches"}
               </button>
+              <Link href="/alerts" className="btn btn-secondary btn-search-primary">
+                Land Alerts
+              </Link>
             </div>
             <div className="filter-actions-secondary">
               <button
