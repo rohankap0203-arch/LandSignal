@@ -373,18 +373,51 @@ function ordinalClosest(index: number) {
   return `${index + 1}th closest`;
 }
 
-async function fetchNearby(kind: NearbyKind, lat: number, lon: number): Promise<NearbyHit[]> {
+function verifyNearbyHits(origin: [number, number], hits: NearbyHit[]): NearbyHit[] {
+  return hits.slice(0, NEARBY_RESULT_LIMIT).map((hit) => {
+    const again = haversineMeters(origin, [hit.lat, hit.lon]);
+    if (Math.abs(again - hit.meters) > 25) return { ...hit, meters: again };
+    return hit;
+  });
+}
+
+/**
+ * Progressive Overpass search. Calls onPartial as soon as #1 is known so the UI
+ * can paint immediately, then keeps expanding radii in the background for #2/#3.
+ */
+async function fetchNearby(
+  kind: NearbyKind,
+  lat: number,
+  lon: number,
+  onPartial?: (hits: NearbyHit[]) => void,
+  isCancelled?: () => boolean,
+): Promise<NearbyHit[]> {
   const meta = NEARBY_CHIPS.find((c) => c.kind === kind);
   if (!meta) return [];
 
   const cacheKey = `${kind}:${lat.toFixed(4)}:${lon.toFixed(4)}`;
-  if (nearbyCache.has(cacheKey)) return nearbyCache.get(cacheKey) ?? [];
+  if (nearbyCache.has(cacheKey)) {
+    const cached = nearbyCache.get(cacheKey) ?? [];
+    if (cached.length) onPartial?.(cached);
+    return cached;
+  }
 
   const origin: [number, number] = [lat, lon];
   let best: NearbyHit[] = [];
+  let lastPartialSig = "";
 
-  // Progressive radii: expand until we have up to 3 distinct hits (or radii exhausted).
+  const emit = (hits: NearbyHit[]) => {
+    if (!hits.length || !onPartial) return;
+    const verified = verifyNearbyHits(origin, hits);
+    const sig = verified.map((h) => `${h.osmKey ?? h.name}:${Math.round(h.meters)}`).join("|");
+    if (sig === lastPartialSig) return;
+    lastPartialSig = sig;
+    onPartial(verified);
+  };
+
+  // Progressive radii: surface the first hit ASAP, then keep going for up to 3.
   for (const radius of meta.radiiM) {
+    if (isCancelled?.()) return verifyNearbyHits(origin, best);
     const union = meta.overpassParts.map((part) => `  ${part}(around:${radius},${lat},${lon});`).join("\n");
     const query = `
 [out:json][timeout:12];
@@ -395,11 +428,13 @@ out geom;
 `.trim();
     try {
       const elements = await overpassQuery(query);
+      if (isCancelled?.()) return verifyNearbyHits(origin, best);
       const hits = pickTopHits(kind, meta.label, origin, elements, NEARBY_RESULT_LIMIT).filter(
         (h) => h.meters / 1609.344 <= meta.maxMiles,
       );
       if (hits.length) {
         best = hits;
+        emit(best);
         const farthestKept = hits[hits.length - 1];
         if (hits.length >= NEARBY_RESULT_LIMIT && farthestKept.meters <= radius * 1.05) break;
       }
@@ -409,13 +444,8 @@ out geom;
     }
   }
 
-  best = best.slice(0, NEARBY_RESULT_LIMIT).map((hit) => {
-    const again = haversineMeters(origin, [hit.lat, hit.lon]);
-    if (Math.abs(again - hit.meters) > 25) return { ...hit, meters: again };
-    return hit;
-  });
-
-  nearbyCache.set(cacheKey, best);
+  best = verifyNearbyHits(origin, best);
+  if (!isCancelled?.()) nearbyCache.set(cacheKey, best);
   return best;
 }
 
@@ -503,6 +533,8 @@ export function LandViewerModal({
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [nearbyHits, setNearbyHits] = useState<NearbyHit[]>([]);
   const [nearbyHitIndex, setNearbyHitIndex] = useState(0);
+  const nearbySearchGen = useRef(0);
+  const nearbyHitIndexRef = useRef(0);
 
   const hasGeo = latitude != null && longitude != null;
   const center = useMemo<[number, number]>(
@@ -527,6 +559,8 @@ export function LandViewerModal({
     setNearbyStatus("");
     setNearbyHits([]);
     setNearbyHitIndex(0);
+    nearbyHitIndexRef.current = 0;
+    nearbySearchGen.current += 1;
     setElevationFt(null);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -730,28 +764,56 @@ export function LandViewerModal({
     async (kind: NearbyKind) => {
       if (!hasGeo || !mapRef.current) return;
       if (nearbyActive === kind) {
+        nearbySearchGen.current += 1;
         layersRef.current.nearby?.clearLayers();
         setNearbyActive(null);
         setNearbyHits([]);
         setNearbyHitIndex(0);
+        nearbyHitIndexRef.current = 0;
+        setNearbyLoading(false);
         setNearbyStatus("");
         return;
       }
       const chip = NEARBY_CHIPS.find((c) => c.kind === kind);
+      const gen = ++nearbySearchGen.current;
       setNearbyLoading(true);
       setNearbyStatus(`Finding closest ${chip?.label ?? "feature"}…`);
       setNearbyActive(kind);
       setNearbyHits([]);
       setNearbyHitIndex(0);
+      nearbyHitIndexRef.current = 0;
       const group = layersRef.current.nearby;
       group?.clearLayers();
 
+      let paintedKey: string | null = null;
+      const applyPartial = (partial: NearbyHit[]) => {
+        if (gen !== nearbySearchGen.current || !partial.length) return;
+        setNearbyLoading(false);
+        setNearbyHits(partial);
+        const first = partial[0];
+        const key = first.osmKey ?? `${first.lat.toFixed(5)},${first.lon.toFixed(5)}`;
+        // Paint #1 immediately; only re-paint if still viewing #1 and it improved.
+        if (paintedKey === null || (nearbyHitIndexRef.current === 0 && paintedKey !== key)) {
+          paintedKey = key;
+          setNearbyHitIndex(0);
+          nearbyHitIndexRef.current = 0;
+          void paintNearbyHit(first, 0);
+        }
+      };
+
       let hits: NearbyHit[] = [];
       try {
-        hits = await fetchNearby(kind, latitude!, longitude!);
+        hits = await fetchNearby(
+          kind,
+          latitude!,
+          longitude!,
+          applyPartial,
+          () => gen !== nearbySearchGen.current,
+        );
       } catch {
         hits = [];
       }
+      if (gen !== nearbySearchGen.current) return;
       setNearbyLoading(false);
 
       if (!mapRef.current || !layersRef.current.nearby) return;
@@ -759,6 +821,7 @@ export function LandViewerModal({
       if (!hits.length) {
         setNearbyHits([]);
         setNearbyHitIndex(0);
+        nearbyHitIndexRef.current = 0;
         setNearbyStatus(
           `No mapped ${chip?.label?.toLowerCase() ?? "feature"} within ~${chip?.maxMiles ?? 10} mi`,
         );
@@ -766,8 +829,11 @@ export function LandViewerModal({
       }
 
       setNearbyHits(hits);
-      setNearbyHitIndex(0);
-      await paintNearbyHit(hits[0], 0);
+      if (paintedKey === null) {
+        setNearbyHitIndex(0);
+        nearbyHitIndexRef.current = 0;
+        await paintNearbyHit(hits[0], 0);
+      }
     },
     [hasGeo, latitude, longitude, nearbyActive, paintNearbyHit],
   );
@@ -778,6 +844,7 @@ export function LandViewerModal({
     const hit = nearbyHits[prev];
     if (!hit) return;
     setNearbyHitIndex(prev);
+    nearbyHitIndexRef.current = prev;
     void paintNearbyHit(hit, prev);
   }, [nearbyHitIndex, nearbyHits, paintNearbyHit]);
 
@@ -788,6 +855,7 @@ export function LandViewerModal({
     const hit = nearbyHits[next];
     if (!hit) return;
     setNearbyHitIndex(next);
+    nearbyHitIndexRef.current = next;
     void paintNearbyHit(hit, next);
   }, [nearbyHitIndex, nearbyHits, paintNearbyHit]);
 
