@@ -292,9 +292,36 @@ select {
 
 .filter-actions-buttons {
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.filter-actions-primary {
+  display: flex;
+  align-items: center;
+}
+
+.filter-actions-secondary {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
+}
+
+.btn-search-primary {
+  min-width: 10.5rem;
+}
+
+.filter-custom-pair {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.filter-custom-pair input {
+  min-width: 0;
+  flex: 1;
 }
 
 .filter-inventory-note {
@@ -1583,6 +1610,43 @@ a.btn-intel:hover {
   background: color-mix(in srgb, var(--brand) 16%, var(--bg-elevated));
   color: var(--brand);
   border-color: var(--brand);
+}
+
+.hold-custom-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 8px;
+}
+
+.hold-custom-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.hold-custom-label input {
+  width: 5.5rem;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 7px 10px;
+  font-size: 0.9rem;
+  font-weight: 650;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.hold-custom-hint {
+  font-size: 0.75rem;
+  color: var(--muted);
 }
 
 .traj-chart-wrap {

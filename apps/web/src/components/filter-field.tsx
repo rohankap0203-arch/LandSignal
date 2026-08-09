@@ -81,14 +81,14 @@ export function ComboFilter({
           </option>
         ))}
       </select>
-      {(customMode || custom) && (
+      {customMode ? (
         <input
           className="mt-1.5"
           value={custom}
           placeholder={customPlaceholder || "Type your own…"}
           onChange={(e) => onCustom(e.target.value)}
         />
-      )}
+      ) : null}
     </FilterField>
   );
 }

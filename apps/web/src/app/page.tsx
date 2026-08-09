@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ComboFilter, FilterField } from "@/components/filter-field";
+import { FilterField } from "@/components/filter-field";
 import { LandLoader } from "@/components/land-loader";
 import { PropertyCard } from "@/components/property-card";
 import {
@@ -45,7 +45,7 @@ const DEFAULT_FORM: FormState = {
   sort: "score_desc",
 };
 
-/** Hold-period filter steps — 5-year increments (plus custom). */
+/** Hold-period filter steps — 5-year increments up to 100 (plus custom). */
 const HOLD_YEAR_OPTIONS: Array<string | number> = [
   "Any",
   5,
@@ -58,6 +58,16 @@ const HOLD_YEAR_OPTIONS: Array<string | number> = [
   40,
   45,
   50,
+  55,
+  60,
+  65,
+  70,
+  75,
+  80,
+  85,
+  90,
+  95,
+  100,
 ];
 
 function stateCode(label: string): string {
@@ -105,8 +115,12 @@ export default function SearchPage() {
         (f.region.startsWith("Type a") || f.region === "Any" ? undefined : f.region);
 
       let hold: number | undefined;
-      if (f.holdCustom.trim()) hold = Number(f.holdCustom);
-      else if (f.holdYears !== "Any" && f.holdYears !== "__custom__") hold = Number(f.holdYears);
+      if (f.holdYears === "__custom__") {
+        const n = Number(f.holdCustom);
+        if (Number.isFinite(n)) hold = Math.max(1, Math.min(100, n));
+      } else if (f.holdYears !== "Any") {
+        hold = Number(f.holdYears);
+      }
 
       const strategy =
         f.strategy === "CUSTOM"
@@ -269,73 +283,101 @@ export default function SearchPage() {
                 </option>
               ))}
             </select>
-            {(form.region.startsWith("Type a") || form.regionCustom) && (
+            {form.region.startsWith("Type a") ? (
               <input
                 className="mt-1.5"
                 value={form.regionCustom}
                 placeholder="Type city, county, or corridor…"
                 onChange={(e) => setForm((f) => ({ ...f, regionCustom: e.target.value }))}
               />
-            )}
+            ) : null}
           </FilterField>
 
-          <ComboFilter
-            label="Price range"
-            preset={form.pricePreset}
-            presets={(meta?.price_presets || [{ label: "Any" }]).map((p) => p.label)}
-            onPreset={(v) => setForm((f) => ({ ...f, pricePreset: v }))}
-            custom={form.priceMin || form.priceMax ? `${form.priceMin}-${form.priceMax}` : ""}
-            onCustom={() => undefined}
-            showCustom={form.pricePreset.toLowerCase().includes("custom")}
-            customPlaceholder="Use min/max below"
-          />
-          {form.pricePreset.toLowerCase().includes("custom") && (
-            <FilterField label="Custom price min / max">
-              <div className="flex gap-2">
+          <FilterField label="Price range">
+            <select
+              value={form.pricePreset}
+              onChange={(e) => {
+                const v = e.target.value;
+                setForm((f) => ({
+                  ...f,
+                  pricePreset: v,
+                  ...(v.toLowerCase().includes("custom")
+                    ? {}
+                    : { priceMin: "", priceMax: "" }),
+                }));
+              }}
+            >
+              {(meta?.price_presets || [{ label: "Any" }]).map((p) => (
+                <option key={p.label} value={p.label}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            {form.pricePreset.toLowerCase().includes("custom") ? (
+              <div className="filter-custom-pair mt-1.5">
                 <input
                   value={form.priceMin}
                   placeholder="Min $"
+                  inputMode="decimal"
                   onChange={(e) => setForm((f) => ({ ...f, priceMin: e.target.value }))}
                 />
                 <input
                   value={form.priceMax}
                   placeholder="Max $"
+                  inputMode="decimal"
                   onChange={(e) => setForm((f) => ({ ...f, priceMax: e.target.value }))}
                 />
               </div>
-            </FilterField>
-          )}
+            ) : null}
+          </FilterField>
 
-          <ComboFilter
-            label="Acreage"
-            preset={form.acrePreset}
-            presets={(meta?.acre_presets || [{ label: "Any" }]).map((p) => p.label)}
-            onPreset={(v) => setForm((f) => ({ ...f, acrePreset: v }))}
-            custom=""
-            onCustom={() => undefined}
-            showCustom={form.acrePreset.toLowerCase().includes("custom")}
-          />
-          {form.acrePreset.toLowerCase().includes("custom") && (
-            <FilterField label="Custom acres min / max">
-              <div className="flex gap-2">
+          <FilterField label="Acreage">
+            <select
+              value={form.acrePreset}
+              onChange={(e) => {
+                const v = e.target.value;
+                setForm((f) => ({
+                  ...f,
+                  acrePreset: v,
+                  ...(v.toLowerCase().includes("custom") ? {} : { acreMin: "", acreMax: "" }),
+                }));
+              }}
+            >
+              {(meta?.acre_presets || [{ label: "Any" }]).map((p) => (
+                <option key={p.label} value={p.label}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            {form.acrePreset.toLowerCase().includes("custom") ? (
+              <div className="filter-custom-pair mt-1.5">
                 <input
                   value={form.acreMin}
                   placeholder="Min ac"
+                  inputMode="decimal"
                   onChange={(e) => setForm((f) => ({ ...f, acreMin: e.target.value }))}
                 />
                 <input
                   value={form.acreMax}
                   placeholder="Max ac"
+                  inputMode="decimal"
                   onChange={(e) => setForm((f) => ({ ...f, acreMax: e.target.value }))}
                 />
               </div>
-            </FilterField>
-          )}
+            ) : null}
+          </FilterField>
 
           <FilterField label="Strategy">
             <select
               value={form.strategy}
-              onChange={(e) => setForm((f) => ({ ...f, strategy: e.target.value }))}
+              onChange={(e) => {
+                const v = e.target.value;
+                setForm((f) => ({
+                  ...f,
+                  strategy: v,
+                  strategyCustom: v === "CUSTOM" ? f.strategyCustom : "",
+                }));
+              }}
             >
               {(meta?.strategies || ["Any"]).map((s) => (
                 <option key={s} value={s}>
@@ -343,20 +385,27 @@ export default function SearchPage() {
                 </option>
               ))}
             </select>
-            {(form.strategy === "CUSTOM" || form.strategyCustom) && (
+            {form.strategy === "CUSTOM" ? (
               <input
                 className="mt-1.5"
                 value={form.strategyCustom}
                 placeholder="e.g. solar lease, hunting lease…"
                 onChange={(e) => setForm((f) => ({ ...f, strategyCustom: e.target.value }))}
               />
-            )}
+            ) : null}
           </FilterField>
 
           <FilterField label="Hold period">
             <select
               value={form.holdYears}
-              onChange={(e) => setForm((f) => ({ ...f, holdYears: e.target.value }))}
+              onChange={(e) => {
+                const v = e.target.value;
+                setForm((f) => ({
+                  ...f,
+                  holdYears: v,
+                  holdCustom: v === "__custom__" ? f.holdCustom : "",
+                }));
+              }}
             >
               {(meta?.hold_years?.length ? meta.hold_years : HOLD_YEAR_OPTIONS).map((s) => (
                 <option key={String(s)} value={String(s)}>
@@ -365,52 +414,59 @@ export default function SearchPage() {
               ))}
               <option value="__custom__">Type my own…</option>
             </select>
-            {(form.holdYears === "__custom__" || form.holdCustom) && (
+            {form.holdYears === "__custom__" ? (
               <input
                 className="mt-1.5"
                 value={form.holdCustom}
-                placeholder="Years (e.g. 10)"
-                onChange={(e) => setForm((f) => ({ ...f, holdCustom: e.target.value, holdYears: "__custom__" }))}
+                placeholder="Years (1–100)"
+                inputMode="numeric"
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, holdCustom: e.target.value, holdYears: "__custom__" }))
+                }
               />
-            )}
+            ) : null}
           </FilterField>
         </div>
 
         <div className="filter-actions">
           <div className="filter-actions-buttons">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => void runSearch()}
-              disabled={loading}
-            >
-              {loading ? "Searching…" : "Show matches"}
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={loading}
-              onClick={() => {
-                const next = { ...DEFAULT_FORM, sort: "score_desc" };
-                setForm(next);
-                void runSearch(next);
-              }}
-            >
-              Top opportunities
-            </button>
-            <button type="button" className="btn btn-secondary" onClick={scanFresh} disabled={scanning}>
-              {scanning ? "Starting refresh…" : "Refresh live inventory"}
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => {
-                setForm(DEFAULT_FORM);
-                setStatus("Filters reset to Any. Click Show matches when you want results.");
-              }}
-            >
-              Reset to Any
-            </button>
+            <div className="filter-actions-primary">
+              <button
+                type="button"
+                className="btn btn-primary btn-search-primary"
+                onClick={() => void runSearch()}
+                disabled={loading}
+              >
+                {loading ? "Searching…" : "Show matches"}
+              </button>
+            </div>
+            <div className="filter-actions-secondary">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={loading}
+                onClick={() => {
+                  const next = { ...DEFAULT_FORM, sort: "score_desc" };
+                  setForm(next);
+                  void runSearch(next);
+                }}
+              >
+                Top opportunities
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={scanFresh} disabled={scanning}>
+                {scanning ? "Starting refresh…" : "Refresh live inventory"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setForm(DEFAULT_FORM);
+                  setStatus("Filters reset to Any. Click Show matches when you want results.");
+                }}
+              >
+                Reset to Any
+              </button>
+            </div>
           </div>
           {meta?.inventory_count != null && (
             <div className="filter-inventory-note">

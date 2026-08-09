@@ -96,6 +96,7 @@ type LegacyCase = {
   cash_rent_per_acre?: number;
 };
 
+/** Hold-period presets on LandSignal return path — 5-year steps to 100. */
 const HOLD_YEARS = [
   5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100,
 ] as const;
@@ -105,6 +106,71 @@ function money(v: unknown): string {
   const n = Number(v);
   if (!Number.isFinite(n)) return "—";
   return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+function clampHoldYears(n: number): number {
+  if (!Number.isFinite(n)) return 10;
+  return Math.max(1, Math.min(100, Math.round(n)));
+}
+
+/** Newton IRR for cashflow series starting at t=0. */
+function solveIrr(flows: number[]): number | null {
+  if (flows.length < 2) return null;
+  let r = 0.08;
+  for (let i = 0; i < 50; i++) {
+    let npv = 0;
+    let d = 0;
+    for (let t = 0; t < flows.length; t++) {
+      const den = Math.pow(1 + r, t);
+      if (!Number.isFinite(den) || den === 0) return null;
+      npv += flows[t] / den;
+      if (t > 0) d -= (t * flows[t]) / (den * (1 + r));
+    }
+    if (Math.abs(d) < 1e-12) break;
+    const next = r - npv / d;
+    if (!Number.isFinite(next)) break;
+    if (Math.abs(next - r) < 1e-7) return next;
+    r = Math.max(-0.95, Math.min(5, next));
+  }
+  return Number.isFinite(r) ? r : null;
+}
+
+/** Slice a 100-yr path to an exact hold and recompute endpoint stats. */
+function endpointFromPath(
+  full: { path?: PathPoint[]; purchase_usd?: number; starting_noi?: number; effective_annual_used?: number; case_label?: string } | undefined,
+  holdYears: number,
+  fallbackPurchase?: number | null,
+): CaseEndpoint | null {
+  const years = clampHoldYears(holdYears);
+  const path = (full?.path || []).filter((p) => Number(p.year_offset) >= 1 && Number(p.year_offset) <= years);
+  const purchase = Number(full?.purchase_usd || fallbackPurchase || 0);
+  if (!path.length) return null;
+  const last = path[path.length - 1];
+  const flows = [-purchase];
+  for (let i = 0; i < path.length; i++) {
+    const noi = Number(path[i].noi_usd || 0);
+    if (i === path.length - 1) {
+      flows.push(noi + Number(path[i].exit_usd ?? path[i].land_usd ?? 0));
+    } else {
+      flows.push(noi);
+    }
+  }
+  const irr = purchase > 0 ? solveIrr(flows) : null;
+  return {
+    irr,
+    irr_display: irr != null ? `${(irr * 100).toFixed(1)}%/yr` : "n/a",
+    exit_usd: last.exit_usd ?? last.land_usd ?? null,
+    land_mark_usd: last.land_usd ?? null,
+    cumulative_rent_usd: last.cumulative_rent_usd ?? 0,
+    total_back_usd: last.total_back_usd ?? null,
+    gain_usd: last.gain_usd ?? (last.total_back_usd != null && purchase ? last.total_back_usd - purchase : null),
+    path,
+    starting_noi: full?.starting_noi ?? null,
+    effective_annual_used: full?.effective_annual_used ?? null,
+    case_label: full?.case_label,
+    purchase_usd: purchase || null,
+    hold_years: years,
+  };
 }
 
 function shortMoney(v: number): string {
@@ -259,7 +325,12 @@ export function ReturnVisual({
   const windows = (intel?.windows?.length ? intel.windows : [...HOLD_YEARS]).filter((w) =>
     HOLD_YEARS.includes(w as (typeof HOLD_YEARS)[number]),
   );
-  const [holdYears, setHoldYears] = useState(intel?.hold_years && windows.includes(intel.hold_years) ? intel.hold_years : 10);
+  const initialHold =
+    intel?.hold_years && windows.includes(intel.hold_years) ? intel.hold_years : 10;
+  const [holdPreset, setHoldPreset] = useState<number | "custom">(initialHold);
+  const [customHold, setCustomHold] = useState(String(initialHold));
+  const holdYears =
+    holdPreset === "custom" ? clampHoldYears(Number(customHold) || initialHold) : holdPreset;
   const [activeCase, setActiveCase] = useState<(typeof CASE_ORDER)[number]>("BASE");
   const [scrubYear, setScrubYear] = useState(holdYears);
   const [dragging, setDragging] = useState(false);
@@ -267,6 +338,10 @@ export function ReturnVisual({
   const [openFactor, setOpenFactor] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [casesHelpOpen, setCasesHelpOpen] = useState(false);
+
+  useEffect(() => {
+    setScrubYear((y) => Math.max(1, Math.min(holdYears, y)));
+  }, [holdYears]);
 
   useEffect(() => {
     if (!casesHelpOpen) return;
@@ -280,7 +355,25 @@ export function ReturnVisual({
 
   const available = intel?.available !== false && Boolean(intel?.endpoints || intel?.paths_100);
 
-  const endpoint = intel?.endpoints?.[String(holdYears)]?.[activeCase];
+  const endpointsAtHold = useMemo(() => {
+    const out: Record<string, CaseEndpoint> = {};
+    for (const c of CASE_ORDER) {
+      const fromApi = intel?.endpoints?.[String(holdYears)]?.[c];
+      if (fromApi) {
+        out[c] = fromApi;
+        continue;
+      }
+      const sliced = endpointFromPath(
+        intel?.paths_100?.[c],
+        holdYears,
+        intel?.purchase_usd,
+      );
+      if (sliced) out[c] = sliced;
+    }
+    return out;
+  }, [intel, holdYears]);
+
+  const endpoint = endpointsAtHold[activeCase];
   const fullPath = intel?.paths_100?.[activeCase]?.path || endpoint?.path || [];
   const path = useMemo(() => {
     const pts = fullPath.filter((p) => Number(p.year_offset) >= 1 && Number(p.year_offset) <= holdYears);
@@ -380,7 +473,6 @@ export function ReturnVisual({
   const factors = showAllFactors ? intel?.all_factors || intel?.factors || [] : intel?.factors || [];
   const factorCount = intel?.model?.factor_count ?? factors.length;
   const irrPct = endpoint?.irr != null ? Number(endpoint.irr) * 100 : null;
-  const endpointsAtHold = intel?.endpoints?.[String(holdYears)] || {};
 
   // Fallback: legacy flat compound if intel missing
   if (!available) {
@@ -472,17 +564,56 @@ export function ReturnVisual({
             key={y}
             type="button"
             role="tab"
-            aria-selected={holdYears === y}
-            className={`traj-window-btn ${holdYears === y ? "active" : ""}`}
+            aria-selected={holdPreset === y}
+            className={`traj-window-btn ${holdPreset === y ? "active" : ""}`}
             onClick={() => {
-              setHoldYears(y);
+              setHoldPreset(y);
+              setCustomHold(String(y));
               setScrubYear(y);
             }}
           >
             {y} yr
           </button>
         ))}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={holdPreset === "custom"}
+          className={`traj-window-btn ${holdPreset === "custom" ? "active" : ""}`}
+          onClick={() => {
+            setHoldPreset("custom");
+            setScrubYear(clampHoldYears(Number(customHold) || holdYears));
+          }}
+        >
+          Custom
+        </button>
       </div>
+      {holdPreset === "custom" ? (
+        <div className="hold-custom-row">
+          <label className="hold-custom-label">
+            Hold years
+            <input
+              type="number"
+              min={1}
+              max={100}
+              step={1}
+              value={customHold}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setCustomHold(raw);
+                const n = clampHoldYears(Number(raw));
+                if (Number.isFinite(Number(raw)) && Number(raw) > 0) setScrubYear(n);
+              }}
+              onBlur={() => {
+                const n = clampHoldYears(Number(customHold) || holdYears);
+                setCustomHold(String(n));
+                setScrubYear(n);
+              }}
+            />
+          </label>
+          <span className="hold-custom-hint">1–100 · chart &amp; totals update live</span>
+        </div>
+      ) : null}
 
       <div className="return-chart-wrap mt-3">
         <svg
