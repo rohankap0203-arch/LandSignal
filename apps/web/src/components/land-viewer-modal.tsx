@@ -221,8 +221,8 @@ function MagnifierIcon({ className = "" }: { className?: string }) {
   return (
     <svg
       className={`land-alert-view-land-icon ${className}`.trim()}
-      width="22"
-      height="22"
+      width="18"
+      height="18"
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden
