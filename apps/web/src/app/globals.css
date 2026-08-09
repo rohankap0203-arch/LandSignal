@@ -318,6 +318,7 @@ select {
   align-items: center;
   justify-content: flex-end;
   overflow: hidden;
+  opacity: 0.12;
 }
 
 .filter-map-hero-svg {
@@ -350,6 +351,8 @@ select {
   height: 1.48rem;
   color: var(--brand);
   flex: 0 0 auto;
+  /* Optical center with LandSignal wordmark (pin mass sits high) */
+  transform: translateY(2px);
 }
 
 .shell-brand-tagline {
@@ -374,18 +377,20 @@ select {
 
 @media (max-width: 720px) {
   .filter-map-hero {
-    inset: -28px -14% -28px 6%;
+    inset: -28px -10% -28px 0;
   }
 
   .filter-map-hero-svg {
     width: min(200px, 62vw);
     height: min(168px, 52vw);
-    margin-right: -12%;
+    margin-right: -8%;
+    transform: translateX(-8%);
   }
 
   .shell-brand-mark {
     width: 1.5rem;
     height: 1.26rem;
+    transform: translateY(1px);
   }
 }
 
