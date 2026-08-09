@@ -391,18 +391,33 @@ export default function LandAlertsPage() {
     [matches],
   );
 
+  // Undo when this session marked all, OR everything already sits in Viewed (e.g. after refresh)
+  const showUndoMarkAll =
+    markAllActive ||
+    pendingSeen.size > 0 ||
+    (counts.viewed > 0 && markAllTargetCount === 0);
+
   async function toggleMarkAllSeen() {
-    if (markAllActive) {
-      const ids = [...pendingSeen];
+    if (showUndoMarkAll) {
       setMarkAllActive(false);
       setPendingSeen(new Set());
       try {
         await landsignalApi.markAllLandAlertsUnseen(profileId || undefined);
       } catch {
-        await Promise.all(ids.map((id) => landsignalApi.unmarkLandAlertViewed(id).catch(() => null)));
+        const viewedIds = matches.filter((m) => m.status === "viewed").map((m) => m.parcel_id);
+        await Promise.all(
+          viewedIds.map((id) => landsignalApi.unmarkLandAlertViewed(id).catch(() => null)),
+        );
       }
+      // Reload so restored matches leave Viewed and return to New / Current
+      const data = await landsignalApi.landAlertMatches(profileId || undefined);
+      setMatches(data.matches || []);
+      setCounts(data.counts || { new: 0, unseen: 0, viewed: 0, total: 0 });
+      setTab("current");
+      setMsg("Mark all undone — matches restored to New / Current.");
       return;
     }
+
     const ids = matches
       .filter((m) => m.status === "new" || m.status === "unseen")
       .map((m) => m.parcel_id);
@@ -414,6 +429,16 @@ export default function LandAlertsPage() {
     } catch {
       await Promise.all(ids.map((id) => landsignalApi.markLandAlertViewed(id).catch(() => null)));
     }
+    // Keep cards greyed in Current this session; persist viewed for next visit
+    setMatches((prev) =>
+      prev.map((m) => (ids.includes(m.parcel_id) ? { ...m, status: "viewed" } : m)),
+    );
+    setCounts((c) => ({
+      ...c,
+      new: 0,
+      unseen: 0,
+      viewed: c.total,
+    }));
   }
 
   async function saveProfile() {
@@ -556,10 +581,10 @@ export default function LandAlertsPage() {
             <button
               type="button"
               className="btn btn-ghost"
-              disabled={!markAllActive && markAllTargetCount === 0}
+              disabled={!showUndoMarkAll && markAllTargetCount === 0}
               onClick={() => void toggleMarkAllSeen()}
             >
-              {markAllActive ? "Undo mark all" : "Mark all as seen"}
+              {showUndoMarkAll ? "Undo mark all" : "Mark all as seen"}
             </button>
           </div>
         ) : null}
