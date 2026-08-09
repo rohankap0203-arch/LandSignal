@@ -142,15 +142,19 @@ def build_intelligence_brief(
             }
         )
     elif ask is None:
-        size_bit = f"{acres:,.2f} acres" if acres is not None else "this parcel"
+        size_bit = f"{acres:,.2f} acres" if acres is not None else "the land"
+        ppa_bit = f" (~{_money(model_ppa)} per acre)" if model_ppa else ""
         why.append(
             {
-                "headline": f"No public sale price yet · {provider_label.replace('_', ' ')}",
+                "headline": f"No public sale price · we estimate {_money(est)}",
                 "detail": (
-                    f"{title[:90]} is on a {provider_label.replace('_', ' ')} feed with no consumer-style asking price. "
-                    f"We estimate about {_money(est)} for {size_bit} at map pin {pin}. "
-                    f"Your advantage is knowing how to buy through the agency / auction / surplus process — "
-                    f"not racing a retail listing crowd."
+                    f"{prop} sits on a {provider_label.replace('_', ' ')} feed with no consumer-style asking price — "
+                    f"so casual shoppers never see a neat Zillow-style number. "
+                    f"We still publish {_money(est)}{ppa_bit} for {size_bit} at pin {pin} so you can rank it "
+                    f"against other land. That estimate starts from typical {state} land prices, then adjusts "
+                    f"for soil, flood, and wetlands on this exact shape. "
+                    f"Your real edge is knowing the agency / auction / surplus process and timing — "
+                    f"not racing a retail bidding crowd."
                 ),
             }
         )
@@ -160,8 +164,10 @@ def build_intelligence_brief(
                 {
                     "headline": f"Large tract: {acres:,.1f} acres",
                     "detail": (
-                        f"At {acres:,.1f} acres in {county}, {state}, this is big enough for farming, holding, "
-                        f"or energy-style uses without buying neighboring lots."
+                        f"At {acres:,.1f} acres in {county}, {state}, {prop_short} clears most farming, "
+                        f"land-bank, and energy minimums on its own — you are not forced to assemble neighbors "
+                        f"just to have a workable position. That size also changes who shows up as a buyer later "
+                        f"(operators and longer-hold capital more than weekend lot shoppers)."
                     ),
                 }
             )
@@ -170,8 +176,10 @@ def build_intelligence_brief(
                 {
                     "headline": f"Mid-size rural tract: {acres:,.1f} acres",
                     "detail": (
-                        f"{acres:,.1f} acres in {county} is enough to rent to a farmer, lease for recreation, "
-                        f"or hold. Bigger than a city lot, small enough that road access and usable acres still matter a lot."
+                        f"{acres:,.1f} acres in {county} is enough to cash-rent to a farmer, lease for recreation, "
+                        f"or hold as a multi-year pad. It is bigger than a leftover city lot, yet still small enough "
+                        f"that road access, tillable share, and flood/wetland bite can swing the usable acres a lot — "
+                        f"so those map layers deserve extra weight on {prop_short}."
                     ),
                 }
             )

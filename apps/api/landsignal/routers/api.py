@@ -773,13 +773,21 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     for s in (enrichment.scenarios if enrichment else []) or []:
         case_key = str(s.get("case_type") or "Scenario")
         case_name = case_labels.get(case_key, case_key)
+        appr = s.get("annual_appreciation")
+        rent_ac = s.get("cash_rent_per_acre")
         if s.get("irr") is not None:
             plain = (
-                f"{case_name}: about {float(s['irr']) * 100:.1f}% per year on a simple farm-rent screen "
-                f"if cash rents and a later sale hold for this parcel."
+                f"{case_name}: about {float(s['irr']) * 100:.1f}% per year if cash rent"
+                + (f" near ${float(rent_ac):.0f}/acre" if rent_ac is not None else "")
+                + " and a later sale hold for this property"
+                + (f", with land value growing about {float(appr)*100:.1f}%/yr" if appr is not None else "")
+                + ". Toggle the hold length on the chart to see the land’s future dollar value."
             )
         else:
-            plain = "This case needs more crop/rent numbers before a yearly return can be shown."
+            plain = (
+                "This case needs more local rent numbers before a yearly return can be shown. "
+                "Pull nearby cash-rent comps, then refresh."
+            )
         scenarios_human.append(
             {
                 **s,
