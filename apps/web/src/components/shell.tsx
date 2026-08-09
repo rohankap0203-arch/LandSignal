@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { AccountMenu } from "@/components/account-menu";
 import { MapPinMark } from "@/components/map-pin-mark";
 
@@ -15,14 +15,38 @@ const NAV = [
   { href: "/ingest", label: "Add land" },
 ];
 
+function navActive(pathname: string, href: string) {
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuId = useId();
   const isAuthPage = pathname === "/login";
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [menuOpen]);
 
   if (isAuthPage) {
     return <div className="min-h-screen">{children}</div>;
@@ -40,24 +64,37 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 Land investment intelligence
               </span>
             </Link>
-            <nav className="shell-nav">
-              {NAV.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="rounded-full px-3 py-1.5 text-sm"
-                  style={{
-                    color: pathname === item.href ? "var(--brand)" : "var(--muted)",
-                    background: pathname === item.href ? "var(--bg-soft)" : "transparent",
-                    fontWeight: pathname === item.href ? 650 : 500,
-                  }}
-                >
-                  {item.label}
-                </Link>
-              ))}
+            <nav className="shell-nav" aria-label="Primary">
+              {NAV.map((item) => {
+                const active = navActive(pathname, item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="rounded-full px-3 py-1.5 text-sm"
+                    style={{
+                      color: active ? "var(--brand)" : "var(--muted)",
+                      background: active ? "var(--bg-soft)" : "transparent",
+                      fontWeight: active ? 650 : 500,
+                    }}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
             </nav>
           </div>
           <div className="shell-header-actions">
+            <button
+              type="button"
+              className="shell-menu-toggle"
+              aria-expanded={menuOpen}
+              aria-controls={menuId}
+              aria-label={menuOpen ? "Close site menu" : "Open site menu"}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <span className="shell-menu-toggle-bars" data-open={menuOpen ? "true" : "false"} />
+            </button>
             <AccountMenu />
             <button
               type="button"
@@ -68,6 +105,35 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </div>
+        {menuOpen ? (
+          <>
+            <button
+              type="button"
+              className="shell-menu-backdrop"
+              aria-label="Close site menu"
+              onClick={() => setMenuOpen(false)}
+            />
+            <nav id={menuId} className="shell-menu-panel" aria-label="Site sections">
+              {NAV.map((item) => {
+                const active = navActive(pathname, item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="shell-menu-link"
+                    data-active={active ? "true" : "false"}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+              <Link href="/login" className="shell-menu-link shell-menu-link-auth" onClick={() => setMenuOpen(false)}>
+                Sign in / Create account
+              </Link>
+            </nav>
+          </>
+        ) : null}
       </header>
       <main className="mx-auto max-w-[1240px] px-4 py-6">{children}</main>
       <footer className="mx-auto max-w-[1240px] px-4 pb-10 text-center text-sm text-[var(--muted)]">

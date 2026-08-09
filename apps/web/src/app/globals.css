@@ -110,9 +110,119 @@ select {
   gap: 0.15rem;
 }
 
+.shell-menu-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  flex: 0 0 auto;
+}
+
+.shell-menu-toggle-bars,
+.shell-menu-toggle-bars::before,
+.shell-menu-toggle-bars::after {
+  display: block;
+  width: 1rem;
+  height: 1.5px;
+  border-radius: 999px;
+  background: currentColor;
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+
+.shell-menu-toggle-bars {
+  position: relative;
+}
+
+.shell-menu-toggle-bars::before,
+.shell-menu-toggle-bars::after {
+  content: "";
+  position: absolute;
+  left: 0;
+}
+
+.shell-menu-toggle-bars::before {
+  top: -5px;
+}
+
+.shell-menu-toggle-bars::after {
+  top: 5px;
+}
+
+.shell-menu-toggle-bars[data-open="true"] {
+  background: transparent;
+}
+
+.shell-menu-toggle-bars[data-open="true"]::before {
+  top: 0;
+  transform: rotate(45deg);
+}
+
+.shell-menu-toggle-bars[data-open="true"]::after {
+  top: 0;
+  transform: rotate(-45deg);
+}
+
+.shell-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 998;
+  border: 0;
+  background: color-mix(in srgb, var(--ink) 28%, transparent);
+}
+
+.shell-menu-panel {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0.75rem;
+  left: 0.75rem;
+  z-index: 999;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--bg-elevated);
+  box-shadow: 0 18px 40px color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+.shell-menu-link {
+  display: block;
+  padding: 0.85rem 0.95rem;
+  border-radius: 12px;
+  color: var(--ink);
+  font-size: 0.98rem;
+  font-weight: 550;
+  text-decoration: none;
+}
+
+.shell-menu-link[data-active="true"] {
+  color: var(--brand);
+  background: var(--bg-soft);
+  font-weight: 650;
+}
+
+.shell-menu-link-auth {
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 12px 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
 @media (min-width: 900px) {
   .shell-nav {
     display: flex;
+  }
+
+  .shell-menu-toggle,
+  .shell-menu-backdrop,
+  .shell-menu-panel {
+    display: none !important;
   }
 }
 
