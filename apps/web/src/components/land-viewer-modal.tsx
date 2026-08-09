@@ -179,9 +179,43 @@ function closestPointOnSegment(
 }
 
 function formatDistance(meters: number) {
+  if (!Number.isFinite(meters) || meters < 0) return "—";
   const miles = meters / 1609.344;
   if (miles < 0.2) return `${Math.round(meters * 3.28084)} ft`;
   return `${miles.toFixed(miles < 10 ? 2 : 1)} mi`;
+}
+
+function isValidLatLon(lat: unknown, lon: unknown): lat is number {
+  return (
+    typeof lat === "number" &&
+    typeof lon === "number" &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lon) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lon) <= 180
+  );
+}
+
+/** High-precision display for live map coordinates (no padded fake zeros beyond source). */
+function formatCoordPair(lat: number, lon: number, digits = 5): string {
+  return `${lat.toFixed(digits)}, ${lon.toFixed(digits)}`;
+}
+
+/** Only accept published acreage strings — never invent from rough geometry. */
+function legitimateAcresDisplay(acresDisplay?: string | null): string | null {
+  const raw = String(acresDisplay || "").trim();
+  if (!raw) return null;
+  if (/n\/a|not published|unknown|null|undefined/i.test(raw)) return null;
+  if (!/\d/.test(raw)) return null;
+  return raw;
+}
+
+function legitimatePriceDisplay(priceDisplay?: string | null): string | null {
+  const raw = String(priceDisplay || "").trim();
+  if (!raw) return null;
+  if (/n\/a|no public|unknown|null|undefined|—|-/i.test(raw)) return null;
+  if (!/\d/.test(raw)) return null;
+  return raw;
 }
 
 function ringAreaAcres(ring: [number, number][]) {
@@ -189,6 +223,7 @@ function ringAreaAcres(ring: [number, number][]) {
   let lat0 = 0;
   let lon0 = 0;
   for (const [lat, lon] of ring) {
+    if (!isValidLatLon(lat, lon)) return 0;
     lat0 += lat;
     lon0 += lon;
   }
@@ -196,6 +231,7 @@ function ringAreaAcres(ring: [number, number][]) {
   lon0 /= ring.length;
   const mPerDegLat = 111320;
   const mPerDegLon = 111320 * Math.cos((lat0 * Math.PI) / 180);
+  if (!Number.isFinite(mPerDegLon) || mPerDegLon <= 0) return 0;
   let area = 0;
   for (let i = 0; i < ring.length; i++) {
     const [lat1, lon1] = ring[i];
@@ -206,7 +242,8 @@ function ringAreaAcres(ring: [number, number][]) {
     const y2 = (lat2 - lat0) * mPerDegLat;
     area += x1 * y2 - x2 * y1;
   }
-  return Math.abs(area / 2) / 4046.8564224;
+  const acres = Math.abs(area / 2) / 4046.8564224;
+  return Number.isFinite(acres) && acres > 0 ? acres : 0;
 }
 
 type OverpassElement = {
@@ -523,11 +560,10 @@ export function LandViewerModal({
   const [showGrid, setShowGrid] = useState(false);
   const [radiusMiles, setRadiusMiles] = useState<0 | 1 | 5>(0);
   const [coords, setCoords] = useState<string>("—");
-  const [zoom, setZoom] = useState(14);
+  const [zoom, setZoom] = useState<number | null>(null);
   const [measureInfo, setMeasureInfo] = useState("Click the map to drop measure points");
   const [copied, setCopied] = useState(false);
   const [elevationFt, setElevationFt] = useState<string | null>(null);
-  const [parcelAcres, setParcelAcres] = useState<string | null>(null);
   const [nearbyActive, setNearbyActive] = useState<NearbyKind | null>(null);
   const [nearbyStatus, setNearbyStatus] = useState<string>("");
   const [nearbyLoading, setNearbyLoading] = useState(false);
@@ -536,7 +572,10 @@ export function LandViewerModal({
   const nearbySearchGen = useRef(0);
   const nearbyHitIndexRef = useRef(0);
 
-  const hasGeo = latitude != null && longitude != null;
+  const hasGeo = isValidLatLon(latitude, longitude);
+  const pinLabel = hasGeo ? formatCoordPair(latitude!, longitude!, 5) : null;
+  const acresLabel = useMemo(() => legitimateAcresDisplay(acresDisplay), [acresDisplay]);
+  const priceLabel = useMemo(() => legitimatePriceDisplay(priceDisplay), [priceDisplay]);
   const center = useMemo<[number, number]>(
     () => (hasGeo ? [latitude!, longitude!] : [39.5, -98.35]),
     [hasGeo, latitude, longitude],
@@ -562,6 +601,8 @@ export function LandViewerModal({
     nearbyHitIndexRef.current = 0;
     nearbySearchGen.current += 1;
     setElevationFt(null);
+    setZoom(null);
+    setCoords(isValidLatLon(latitude, longitude) ? formatCoordPair(latitude, longitude, 5) : "—");
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
@@ -572,41 +613,44 @@ export function LandViewerModal({
       document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
     };
-  }, [open, onClose]);
+  }, [open, onClose, latitude, longitude]);
 
   useEffect(() => {
-    if (!open || !hasGeo) return;
+    if (!open || !hasGeo) {
+      setElevationFt(null);
+      return;
+    }
     let cancelled = false;
+    setElevationFt(null);
     (async () => {
       try {
         const res = await fetch(
           `https://api.open-meteo.com/v1/elevation?latitude=${latitude}&longitude=${longitude}`,
         );
-        if (!res.ok) return;
-        const data = (await res.json()) as { elevation?: number[] };
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { elevation?: Array<number | null> };
         const m = data.elevation?.[0];
-        if (!cancelled && m != null && Number.isFinite(m)) {
-          setElevationFt(`${Math.round(m * 3.28084)} ft elev`);
+        // Only accept a real DEM sample in a physically plausible range — never invent.
+        if (
+          cancelled ||
+          m == null ||
+          !Number.isFinite(m) ||
+          m < -420 ||
+          m > 8850
+        ) {
+          return;
         }
+        const ft = m * 3.280839895;
+        if (!Number.isFinite(ft)) return;
+        setElevationFt(`${Math.round(ft).toLocaleString()} ft elev`);
       } catch {
-        /* optional */
+        if (!cancelled) setElevationFt(null);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [open, hasGeo, latitude, longitude]);
-
-  useEffect(() => {
-    if (polygon?.[0]?.length) {
-      const ring = polygon[0].map(([lon, lat]) => [lat, lon] as [number, number]);
-      const acres = ringAreaAcres(ring);
-      if (acres > 0) setParcelAcres(`${acres.toFixed(acres < 10 ? 2 : 1)} ac boundary`);
-      else setParcelAcres(null);
-    } else {
-      setParcelAcres(null);
-    }
-  }, [polygon]);
 
   const applyBasemap = useCallback((mode: Basemap) => {
     const { streets, satellite } = layersRef.current;
@@ -664,11 +708,11 @@ export function LandViewerModal({
       L.polyline(pts, { color: "#f2c14e", weight: 2.5, dashArray: "6 4" }).addTo(group);
       let total = 0;
       for (let i = 1; i < pts.length; i++) total += haversineMeters(pts[i - 1], pts[i]);
-      const acres = pts.length >= 3 ? ringAreaAcres(pts) : 0;
+      // Path length only — do not invent acreage from open click shapes.
       setMeasureInfo(
-        acres > 0
-          ? `Path ${formatDistance(total)} · Shape ~${acres.toFixed(2)} ac`
-          : `Path ${formatDistance(total)} · click to continue`,
+        Number.isFinite(total) && total > 0
+          ? `Path ${formatDistance(total)} · click to continue`
+          : "Click the map to drop measure points",
       );
     } else {
       setMeasureInfo("Point dropped — click again to measure");
@@ -926,14 +970,22 @@ export function LandViewerModal({
         layersRef.current.marker = L.marker(center).addTo(map).bindPopup(title || "Parcel");
       }
 
+      if (hasGeo) setCoords(formatCoordPair(latitude!, longitude!, 5));
       map.on("mousemove", (e) => {
-        setCoords(`${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`);
+        const lat = e.latlng.lat;
+        const lon = e.latlng.lng;
+        if (!isValidLatLon(lat, lon)) return;
+        setCoords(formatCoordPair(lat, lon, 5));
       });
       map.on("zoomend moveend", () => {
-        setZoom(map!.getZoom());
+        const z = map!.getZoom();
+        if (Number.isFinite(z)) setZoom(Math.round(z * 10) / 10);
         if (showGridRef.current) void drawGrid(true);
       });
-      setZoom(map.getZoom());
+      {
+        const z = map.getZoom();
+        if (Number.isFinite(z)) setZoom(Math.round(z * 10) / 10);
+      }
 
       map.on("click", (e) => {
         if (toolRef.current !== "measure") return;
@@ -995,7 +1047,7 @@ export function LandViewerModal({
   }, [radiusMiles, drawRadius]);
 
   async function copyCoords() {
-    if (!hasGeo) return;
+    if (!hasGeo || !isValidLatLon(latitude, longitude)) return;
     const text = `${latitude!.toFixed(6)}, ${longitude!.toFixed(6)}`;
     try {
       await navigator.clipboard.writeText(text);
@@ -1039,9 +1091,8 @@ export function LandViewerModal({
             <p className="land-viewer-kicker">Land view</p>
             <h2 id={titleId}>{title}</h2>
             <p className="land-viewer-sub">
-              {[location, acresDisplay || parcelAcres, priceDisplay, elevationFt]
-                .filter(Boolean)
-                .join(" · ") || "Explore this parcel"}
+              {[location, acresLabel, priceDisplay, elevationFt].filter(Boolean).join(" · ") ||
+                "Explore this parcel"}
             </p>
           </div>
           <div className="land-viewer-top-actions">
@@ -1233,16 +1284,12 @@ export function LandViewerModal({
 
           <div className="land-viewer-hud" aria-live="polite">
             <div className="land-viewer-hud-row">
-              <span>Zoom {zoom}</span>
+              {zoom != null ? <span>Zoom {zoom}</span> : null}
               <span>Cursor {coords}</span>
-              {hasGeo ? (
-                <span>
-                  Pin {latitude!.toFixed(4)}, {longitude!.toFixed(4)}
-                </span>
-              ) : null}
+              {pinLabel ? <span>Pin {pinLabel}</span> : null}
             </div>
             <div className="land-viewer-hud-row">
-              {parcelAcres ? <span>{parcelAcres}</span> : null}
+              {acresLabel ? <span>{acresLabel}</span> : null}
               {elevationFt ? <span>{elevationFt}</span> : null}
               {tool === "measure" ? <span className="land-viewer-measure">{measureInfo}</span> : null}
               {nearbyStatus ? <span className="land-viewer-nearby-status">{nearbyStatus}</span> : null}
