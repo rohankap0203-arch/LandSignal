@@ -42,7 +42,9 @@ export type LandAlertMatchCard = {
   landsignal_score: number;
   why_matched: string[];
   watch_flags: string[];
-  intel_notes?: string[];
+  imagery_url?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   property_name: string;
   location: string;
   state?: string | null;

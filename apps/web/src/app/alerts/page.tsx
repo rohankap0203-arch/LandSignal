@@ -204,22 +204,24 @@ function MatchCard({
           {row.watch_flags?.length ? (
             <div className="land-alert-watch">
               <strong>Watch:</strong> {row.watch_flags[0]}
-              {row.watch_flags.length > 1 ? (
-                <ul className="land-alert-watch-list">
-                  {row.watch_flags.slice(1, 3).map((w) => (
-                    <li key={w}>{w}</li>
-                  ))}
-                </ul>
-              ) : null}
             </div>
           ) : null}
-          {row.intel_notes?.length ? (
-            <ul className="land-alert-intel">
-              {row.intel_notes.slice(0, 2).map((n) => (
-                <li key={n}>{n}</li>
-              ))}
-            </ul>
-          ) : null}
+          {row.imagery_url ? (
+            <div className="land-alert-imagery" aria-hidden={false}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={row.imagery_url}
+                alt={`Satellite view near ${row.location || "parcel"}`}
+                loading="lazy"
+                decoding="async"
+                draggable={false}
+              />
+            </div>
+          ) : (
+            <div className="land-alert-imagery land-alert-imagery-empty" aria-hidden>
+              <span>No map pin yet</span>
+            </div>
+          )}
           <div className="land-alert-flip-hint">Tap to flip</div>
         </article>
 

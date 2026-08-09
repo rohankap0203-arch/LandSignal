@@ -751,63 +751,19 @@ def matches_for_user(
     return rows
 
 
-def _tailored_scout_line(
-    parcel: ParcelRecord | None,
-    listing: ListingRecord | None,
-    score: ScoreRecord | None,
-    source: dict[str, Any],
-    phone: str | None,
-    website: str | None,
-) -> str | None:
-    """One non-redundant acquisition angle — not price, acres, score, or strategy labels."""
-    if not parcel:
+def _imagery_url(lat: float | None, lon: float | None, acres: float | None = None) -> str | None:
+    """Esri World Imagery snapshot centered on the parcel (no Mapbox required)."""
+    if lat is None or lon is None:
         return None
-    provider = _norm(listing.provider_id if listing else None)
-    channel = {
-        "public_tax_sale": "County tax-sale / land-bank channel — confirm redemption & clear title path",
-        "public_surplus": "Government surplus disposal — process and deposit rules matter more than comps",
-        "blm_lpad": "Federal BLM disposal — access, reservations, and patent conditions are the underwrite",
-        "public_markets": "Public inventory channel — verify the live office page before you chase the pin",
-    }.get(provider)
-
-    # Prefer a concrete diligence kill over generic scores
-    if score and score.what_could_kill:
-        kill = str(score.what_could_kill[0]).strip()
-        if kill and len(kill) < 120:
-            return f"First diligence gate · {kill}"
-
-    if score and score.why_mispriced:
-        tip = str(score.why_mispriced[0]).strip()
-        if tip and len(tip) < 120:
-            return f"Mispricing scent · {tip}"
-
-    if channel:
-        return channel
-
-    # Zoning / use oddity when present
-    use = (parcel.land_use or "").strip()
-    zoning = (parcel.zoning or "").strip()
-    if zoning and use and _norm(zoning) not in _norm(use):
-        return f"Use vs zoning tension · {use} under {zoning}"
-    if zoning:
-        return f"Zoning on file · {zoning} — verify buildability with the county"
-
-    # Contact gap is action-relevant and not shown elsewhere on the front
-    if not phone and not website:
-        return "No public phone or office link yet — parcel ID lookup may be the only door in"
-    if phone and not website:
-        return "Phone on file, no office page — call for status before driving the pin"
-    if website and not phone:
-        return "Office page exists, no public desk number — dig status online first"
-
-    if score and score.why_still_available:
-        tip = str(score.why_still_available[0]).strip()
-        if tip and len(tip) < 120:
-            return f"Still available because · {tip}"
-
-    county = parcel.county or "this county"
-    st = parcel.state or ""
-    return f"Next move · pull {county}{', ' + st if st else ''} assessor / GIS before you treat the ask as firm"
+    # Wider frame for larger tracts; keep tight for small lots
+    pad = 0.008
+    if acres is not None and acres > 0:
+        pad = max(0.0035, min(0.035, (float(acres) ** 0.5) * 0.0012))
+    return (
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export"
+        f"?bbox={lon - pad},{lat - pad},{lon + pad},{lat + pad}"
+        "&bboxSR=4326&imageSR=4326&size=640,120&format=jpg&f=image"
+    )
 
 
 def match_card(store: MemoryStore, match: LandAlertMatch) -> dict[str, Any]:
@@ -843,25 +799,11 @@ def match_card(store: MemoryStore, match: LandAlertMatch) -> dict[str, Any]:
         listing.source_url if listing else None
     )
     phone = source.get("phone")
-    # Timing + one tailored scout line (never restate price/acres/score/strategy already on the card)
-    intel_notes: list[str] = []
-    if listing and listing.days_on_market is not None:
-        dom = int(listing.days_on_market)
-        if dom <= 14:
-            intel_notes.append(f"Fresh to market · {dom} days listed")
-        elif dom >= 120:
-            intel_notes.append(f"Stale on market · {dom} days — ask what blocked prior buyers")
-    elif listing and listing.last_seen_at:
-        try:
-            age_h = (datetime.now(timezone.utc) - listing.last_seen_at).total_seconds() / 3600.0
-            if age_h <= 36:
-                intel_notes.append("Just surfaced in the live feed")
-        except Exception:
-            pass
-
-    scout = _tailored_scout_line(parcel, listing, score, source, phone, website)
-    if scout:
-        intel_notes.append(scout)
+    imagery_url = _imagery_url(
+        parcel.latitude if parcel else None,
+        parcel.longitude if parcel else None,
+        acres,
+    )
 
     return {
         "id": str(match.id),
@@ -875,7 +817,9 @@ def match_card(store: MemoryStore, match: LandAlertMatch) -> dict[str, Any]:
         "landsignal_score": match.landsignal_score,
         "why_matched": match.why_matched,
         "watch_flags": match.watch_flags,
-        "intel_notes": intel_notes[:5],
+        "imagery_url": imagery_url,
+        "latitude": parcel.latitude if parcel else None,
+        "longitude": parcel.longitude if parcel else None,
         "viewed_at": match.viewed_at.isoformat() if match.viewed_at else None,
         "created_at": match.created_at.isoformat() if match.created_at else None,
         "updated_at": match.updated_at.isoformat() if match.updated_at else None,
