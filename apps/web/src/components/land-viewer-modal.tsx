@@ -772,6 +772,15 @@ export function LandViewerModal({
     [hasGeo, latitude, longitude, nearbyActive, paintNearbyHit],
   );
 
+  const showPrevNearby = useCallback(() => {
+    if (nearbyHitIndex <= 0) return;
+    const prev = nearbyHitIndex - 1;
+    const hit = nearbyHits[prev];
+    if (!hit) return;
+    setNearbyHitIndex(prev);
+    void paintNearbyHit(hit, prev);
+  }, [nearbyHitIndex, nearbyHits, paintNearbyHit]);
+
   const showNextNearby = useCallback(() => {
     if (nearbyHitIndex >= nearbyHits.length - 1) return;
     if (nearbyHitIndex >= NEARBY_RESULT_LIMIT - 1) return;
@@ -781,6 +790,12 @@ export function LandViewerModal({
     setNearbyHitIndex(next);
     void paintNearbyHit(hit, next);
   }, [nearbyHitIndex, nearbyHits, paintNearbyHit]);
+
+  const canPrevNearby = nearbyHits.length > 1 && nearbyHitIndex > 0;
+  const canNextNearby =
+    nearbyHits.length > 1 &&
+    nearbyHitIndex < nearbyHits.length - 1 &&
+    nearbyHitIndex < NEARBY_RESULT_LIMIT - 1;
 
   // Mount / tear down map when modal opens
   useEffect(() => {
@@ -1100,27 +1115,40 @@ export function LandViewerModal({
               <LiveMagnifier size={14} label="Finding closest landmark" />
               <span>Working</span>
             </span>
-          ) : nearbyHits.length > 1 && nearbyHitIndex < nearbyHits.length - 1 ? (
-            <button
-              type="button"
-              className="land-viewer-nearby-next"
-              onClick={showNextNearby}
-              aria-label={`Show next closest (${nearbyHitIndex + 2} of ${nearbyHits.length})`}
-              title={`Next closest (${nearbyHitIndex + 2}/${nearbyHits.length})`}
-            >
-              <span className="land-viewer-nearby-next-count">
-                {nearbyHitIndex + 1}/{nearbyHits.length}
-              </span>
-              <span className="land-viewer-nearby-next-arrow" aria-hidden>
-                →
-              </span>
-            </button>
           ) : nearbyHits.length > 1 ? (
-            <span className="land-viewer-nearby-next is-done" title="Furthest of nearby results">
+            <div
+              className="land-viewer-nearby-nav"
+              role="group"
+              aria-label={`Closest result ${nearbyHitIndex + 1} of ${nearbyHits.length}`}
+            >
+              <button
+                type="button"
+                className="land-viewer-nearby-nav-arrow is-back"
+                onClick={showPrevNearby}
+                disabled={!canPrevNearby}
+                aria-label="Previous closest"
+                title="Previous closest"
+              >
+                <span className="land-viewer-nearby-next-arrow" aria-hidden>
+                  ←
+                </span>
+              </button>
               <span className="land-viewer-nearby-next-count">
                 {nearbyHitIndex + 1}/{nearbyHits.length}
               </span>
-            </span>
+              <button
+                type="button"
+                className="land-viewer-nearby-nav-arrow is-forward"
+                onClick={showNextNearby}
+                disabled={!canNextNearby}
+                aria-label="Next closest"
+                title="Next closest"
+              >
+                <span className="land-viewer-nearby-next-arrow" aria-hidden>
+                  →
+                </span>
+              </button>
+            </div>
           ) : null}
         </div>
 

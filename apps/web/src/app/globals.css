@@ -4038,33 +4038,33 @@ a.acquire-block:hover {
 }
 
 .land-viewer-nearby {
-  --nearby-chip-gap: 0.3rem;
+  --nearby-chip-gap: 0.26rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.28rem var(--nearby-chip-gap);
-  padding: 0.28rem 0.5rem 0.3rem;
+  gap: 0.26rem var(--nearby-chip-gap);
+  padding: 0.28rem 0.45rem 0.3rem;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-elevated) 90%, var(--bg-soft));
 }
 
 .land-viewer-nearby-label {
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
-  margin-right: 0.02rem;
+  margin-right: 0;
 }
 
 .land-viewer-chip {
   min-height: 1.4rem;
-  padding: 0.1rem 0.36rem;
+  padding: 0.1rem 0.32rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--chip, var(--brand)) 45%, var(--line));
   background: color-mix(in srgb, var(--chip, var(--brand)) 10%, var(--bg-elevated));
   color: var(--ink);
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -4109,54 +4109,77 @@ a.acquire-block:hover {
   height: 14px !important;
 }
 
-.land-viewer-nearby-next {
+.land-viewer-nearby-nav {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.28rem;
+  gap: 0.12rem;
   box-sizing: border-box;
   flex: 0 0 auto;
-  min-width: 3.55rem;
   min-height: 1.4rem;
-  margin: 0;
-  padding: 0.08rem 0.48rem;
+  padding: 0.05rem 0.18rem;
   border-radius: 999px;
   border: 1px solid #0a0a0a;
   background: #111;
   color: #fff;
-  font: inherit;
-  font-size: 0.64rem;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+  white-space: nowrap;
+}
+
+.land-viewer-nearby-next-count {
+  min-width: 1.55rem;
+  text-align: center;
+  font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1;
-  white-space: nowrap;
+  color: #fff;
+}
+
+.land-viewer-nearby-nav-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  line-height: 1;
   cursor: pointer;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
 }
 
-.land-viewer-nearby-next.is-done {
+.land-viewer-nearby-nav-arrow:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.land-viewer-nearby-nav-arrow:disabled {
+  color: rgba(255, 255, 255, 0.28);
   cursor: default;
-  background: #2a2a2a;
-  border-color: #2a2a2a;
-  color: rgba(255, 255, 255, 0.82);
-  opacity: 1;
-}
-
-.land-viewer-nearby-next:hover:not(.is-done) {
-  background: #000;
 }
 
 .land-viewer-nearby-next-arrow {
   position: relative;
   display: inline-block;
   overflow: hidden;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   line-height: 1;
-  color: #fff;
+  color: inherit;
+}
+
+.land-viewer-nearby-nav-arrow:not(:disabled) .land-viewer-nearby-next-arrow {
   animation: land-viewer-nearby-arrow-glide 1.05s ease-in-out infinite;
 }
 
-.land-viewer-nearby-next-arrow::after {
+.land-viewer-nearby-nav-arrow.is-back:not(:disabled) .land-viewer-nearby-next-arrow {
+  animation-name: land-viewer-nearby-arrow-glide-back;
+}
+
+.land-viewer-nearby-nav-arrow:not(:disabled) .land-viewer-nearby-next-arrow::after {
   content: "";
   position: absolute;
   top: -20%;
@@ -4176,12 +4199,12 @@ a.acquire-block:hover {
   pointer-events: none;
 }
 
-.land-viewer-nearby-next.is-done .land-viewer-nearby-next-arrow {
-  animation: none;
+.land-viewer-nearby-nav-arrow.is-back:not(:disabled) .land-viewer-nearby-next-arrow::after {
+  animation-name: land-viewer-nearby-arrow-gleam-back;
 }
 
-.land-viewer-nearby-next.is-done .land-viewer-nearby-next-arrow::after {
-  display: none;
+.land-viewer-nearby-nav-arrow:disabled .land-viewer-nearby-next-arrow {
+  animation: none;
 }
 
 @keyframes land-viewer-nearby-arrow-glide {
@@ -4190,7 +4213,17 @@ a.acquire-block:hover {
     transform: translateX(0);
   }
   50% {
-    transform: translateX(3px);
+    transform: translateX(2px);
+  }
+}
+
+@keyframes land-viewer-nearby-arrow-glide-back {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-2px);
   }
 }
 
@@ -4206,6 +4239,22 @@ a.acquire-block:hover {
   70%,
   100% {
     left: 130%;
+    opacity: 0;
+  }
+}
+
+@keyframes land-viewer-nearby-arrow-gleam-back {
+  0%,
+  25% {
+    left: 130%;
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  70%,
+  100% {
+    left: -70%;
     opacity: 0;
   }
 }
