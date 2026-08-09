@@ -55,6 +55,19 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
     (/under our value|vs our value/i.test(row.headline_metric || "") ||
       /vs our value|under our/i.test(row.discount_display || ""));
 
+  useEffect(() => {
+    if (!gapHelpOpen) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") setGapHelpOpen(false);
+    };
+    const timer = window.setTimeout(() => setGapHelpOpen(false), 12000);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [gapHelpOpen]);
+
   function openIntel(e?: MouseEvent | KeyboardEvent) {
     if (e) {
       const t = e.target as HTMLElement | null;
