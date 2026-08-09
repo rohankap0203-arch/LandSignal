@@ -234,17 +234,7 @@ function ActionCard({
           onClick={onToggle}
         >
           <GuideRevealMark open={open} />
-          <span className="acquire-reveal-label">
-            {open ? (
-              "Hide"
-            ) : tone === "source" ? (
-              <>
-                Look-for <span className="acquire-check-empty" aria-hidden />
-              </>
-            ) : (
-              revealLabel
-            )}
-          </span>
+          <span className="acquire-reveal-label">{open ? "Hide" : revealLabel}</span>
           <span className="acquire-reveal-count">{stepCount}</span>
         </button>
       ) : null}
