@@ -129,9 +129,12 @@ async def discover_opportunities(
                         continue
                 else:
                     continue
-            # Slim geometry for bulk memory — keep centroid; drop giant multipolygons
-            if row.get("polygon") and acres is not None and acres < 5:
-                row = {**row, "polygon": None}
+            # Slim only oversized rings (memory) — never drop real parcel boundaries for small lots.
+            poly = row.get("polygon")
+            if poly and isinstance(poly, list) and poly and isinstance(poly[0], list):
+                ring = poly[0]
+                if len(ring) > 2500:
+                    row = {**row, "polygon": [ring[:: max(1, len(ring) // 800)] + [ring[-1]]]}
             listings.append(row)
             pid = row.get("provider_id") or label
             source_counts[pid] = source_counts.get(pid, 0) + 1
@@ -231,8 +234,9 @@ async def discover_opportunities(
                         store, pid, origin="price_update", update_kind="price_increase", settings=settings
                     )
                 else:
+                    # Re-score only — do not treat as a notify-worthy "price update".
                     match_parcel(
-                        store, pid, origin="price_update", update_kind="new_data", settings=settings
+                        store, pid, origin="existing_inventory", update_kind="new_data", settings=settings
                     )
                 scored += 1
             except Exception as exc:  # noqa: BLE001

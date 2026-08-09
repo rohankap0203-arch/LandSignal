@@ -525,16 +525,40 @@ def _sensitivity_threshold(level: str) -> float:
     return {"exceptional": 90.0, "strong": 75.0, "all": 55.0}.get(_norm(level), 75.0)
 
 
-def _notify_bucket(update_kind: str | None) -> str:
-    """Collapse redundant discovery-style kinds; keep price moves distinct."""
-    kind = _norm(update_kind or "new_listing")
-    if kind in ("price_drop", "price_increase", "status_change"):
-        return kind
-    return "discovery"
+def _parcel_has_real_boundary(parcel: ParcelRecord | None) -> bool:
+    """True only for a real closed ring — never accept pin-only or invented squares as enough."""
+    if not parcel or not parcel.polygon:
+        return False
+    try:
+        ring = parcel.polygon[0]
+    except (IndexError, TypeError):
+        return False
+    if not isinstance(ring, list) or len(ring) < 4:
+        return False
+    # Require valid lon/lat pairs
+    ok = 0
+    for pt in ring:
+        if not isinstance(pt, (list, tuple)) or len(pt) < 2:
+            continue
+        lon, lat = pt[0], pt[1]
+        if (
+            isinstance(lat, (int, float))
+            and isinstance(lon, (int, float))
+            and abs(lat) <= 90
+            and abs(lon) <= 180
+        ):
+            ok += 1
+    return ok >= 4
 
 
-def _land_alert_dedupe_key(parcel_id: UUID, profile_id: str | None, update_kind: str | None) -> str:
-    return f"{parcel_id}:{profile_id or ''}:{_notify_bucket(update_kind)}"
+def _parcel_is_mappable(parcel: ParcelRecord | None) -> bool:
+    if not parcel:
+        return False
+    if parcel.latitude is None or parcel.longitude is None:
+        return False
+    if not (-90 <= parcel.latitude <= 90 and -180 <= parcel.longitude <= 180):
+        return False
+    return _parcel_has_real_boundary(parcel)
 
 
 def _existing_land_alert(
@@ -542,25 +566,23 @@ def _existing_land_alert(
     *,
     parcel_id: UUID,
     profile_id: UUID,
-    update_kind: str | None,
+    update_kind: str | None = None,
 ) -> AlertRecord | None:
-    want = _land_alert_dedupe_key(parcel_id, str(profile_id), update_kind)
+    """One in-app notification per parcel/profile — any prior alert counts as already sent."""
+    del update_kind  # kept for call-site compatibility; bucket no longer splits duplicates
     for alert in store.alerts:
         if alert.severity != "LAND_ALERT" or alert.parcel_id != parcel_id:
             continue
         body = alert.body or {}
-        got = _land_alert_dedupe_key(
-            alert.parcel_id,
-            str(body.get("profile_id") or ""),
-            str(body.get("update_kind") or "") or None,
-        )
-        if got == want:
-            return alert
+        pid = str(body.get("profile_id") or "")
+        if pid and pid != str(profile_id):
+            continue
+        return alert
     return None
 
 
 def dedupe_land_alert_records(alerts: list[AlertRecord]) -> list[AlertRecord]:
-    """Keep newest legitimate LAND_ALERT per parcel/profile/event bucket."""
+    """Keep newest LAND_ALERT per parcel (and pass through non-land alerts)."""
     seen: set[str] = set()
     out: list[AlertRecord] = []
     for alert in alerts:
@@ -568,16 +590,40 @@ def dedupe_land_alert_records(alerts: list[AlertRecord]) -> list[AlertRecord]:
             out.append(alert)
             continue
         body = alert.body or {}
-        key = _land_alert_dedupe_key(
-            alert.parcel_id,
-            str(body.get("profile_id") or ""),
-            str(body.get("update_kind") or "") or None,
-        )
+        key = f"{alert.parcel_id}:{body.get('profile_id') or ''}"
         if key in seen:
             continue
         seen.add(key)
         out.append(alert)
     return out
+
+
+def curate_land_alert_feed(store: MemoryStore) -> list[AlertRecord]:
+    """Dedupe + drop alerts for parcels that are unmappable or no longer matching."""
+    curated: list[AlertRecord] = []
+    for alert in dedupe_land_alert_records(list(store.alerts)):
+        if alert.severity != "LAND_ALERT":
+            curated.append(alert)
+            continue
+        parcel = store.parcels.get(alert.parcel_id)
+        if not _parcel_is_mappable(parcel):
+            continue
+        body = alert.body or {}
+        profile_id = str(body.get("profile_id") or "")
+        # Must still be a live qualifying match for that profile (or any profile if unset).
+        live = False
+        for match in store.land_alert_matches.values():
+            if match.parcel_id != alert.parcel_id:
+                continue
+            if profile_id and str(match.profile_id) != profile_id:
+                continue
+            if match.qualified_for_alert and match.preference_match_pct >= 55:
+                live = True
+                break
+        if not live:
+            continue
+        curated.append(alert)
+    return curated
 
 
 def _listing_scouted_at(listing: ListingRecord | None, match: LandAlertMatch) -> datetime:
@@ -600,7 +646,17 @@ def _maybe_notify(
     # Preference-change / inventory rescan must not spam "new property" notifications
     if match.origin not in ("new_discovery", "price_update"):
         return
-    # Full legitimacy gate: never re-emit the same parcel/event if history already has it
+    kind = _norm(match.update_kind or "")
+    if kind in ("new_data", "status_change"):
+        return
+    if kind not in ("new_listing", "price_drop", "price_increase", ""):
+        return
+    # No pin-only / boundary-less parcels in the notification feed.
+    if not _parcel_is_mappable(parcel):
+        return
+    if not match.qualified_for_alert or match.preference_match_pct < 55:
+        return
+    # Full legitimacy gate: never re-emit the same parcel if history already has it
     # (covers match drop/recreate cycles that reset match.notified).
     prior = _existing_land_alert(
         store,
@@ -677,6 +733,7 @@ def _maybe_notify(
         "update_kind": match.update_kind,
         "scouted_at": scouted_at.isoformat(),
         "retrieved_at": scouted_at.isoformat(),
+        "has_boundary": True,
         "delivery": {
             "in_app": "delivered" if any(c.startswith("IN_APP") for c in channels) else "skipped",
             "email": (
@@ -700,8 +757,8 @@ def _maybe_notify(
         delivered_channels=channels,
     )
     store.alerts.insert(0, alert)
-    # Prune historical duplicates so the feed stays accurate
-    store.alerts[:] = dedupe_land_alert_records(store.alerts)
+    # Prune historical duplicates / illegitimate rows so the feed stays accurate
+    store.alerts[:] = curate_land_alert_feed(store)
     store.land_alert_matches[_match_key(profile.id, parcel.id)] = match.model_copy(
         update={
             "notified": True,
@@ -916,6 +973,7 @@ def match_card(store: MemoryStore, match: LandAlertMatch) -> dict[str, Any]:
         "imagery_url": imagery_url,
         "latitude": parcel.latitude if parcel else None,
         "longitude": parcel.longitude if parcel else None,
+        "has_boundary": _parcel_has_real_boundary(parcel),
         # Polygon omitted from list cards (multi‑MB payload). Viewer loads it via /parcels/{id}/geometry.
         "polygon": None,
         "viewed_at": match.viewed_at.isoformat() if match.viewed_at else None,

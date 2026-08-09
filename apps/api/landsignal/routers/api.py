@@ -1435,11 +1435,11 @@ async def create_alert_rule(body: AlertRuleCreate) -> AlertRuleRecord:
 
 @router.get("/alerts")
 async def list_alerts() -> list:
-    from landsignal.services.land_alerts import dedupe_land_alert_records
+    from landsignal.services.land_alerts import curate_land_alert_feed
 
     store = get_store(get_settings().demo_seed)
-    # Persist a cleaned feed so redundant LAND_ALERT rows do not keep resurfacing.
-    cleaned = dedupe_land_alert_records(list(store.alerts))
+    # Persist a cleaned feed: one alert per parcel, mappable boundary, still matching.
+    cleaned = curate_land_alert_feed(store)
     if len(cleaned) != len(store.alerts):
         store.alerts[:] = cleaned
     return store.alerts

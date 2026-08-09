@@ -121,25 +121,16 @@ function ModeSelect({
   );
 }
 
-function notifyBucket(updateKind: unknown): string {
-  const kind = String(updateKind || "new_listing").toLowerCase();
-  if (kind === "price_drop" || kind === "price_increase" || kind === "status_change") return kind;
-  return "discovery";
-}
-
-/** One legitimate card per parcel/profile/event — newest first input assumed. */
+/** One card per parcel — newest first input assumed; drop boundary-less leftovers. */
 function dedupeRecentLandAlerts(alerts: Record<string, unknown>[]): Record<string, unknown>[] {
   const seen = new Set<string>();
   const out: Record<string, unknown>[] = [];
   for (const alert of alerts) {
     if (String(alert.severity || "") !== "LAND_ALERT") continue;
     const body = (alert.body || {}) as Record<string, unknown>;
-    const key = [
-      String(alert.parcel_id || ""),
-      String(body.profile_id || ""),
-      notifyBucket(body.update_kind),
-    ].join(":");
-    if (seen.has(key)) continue;
+    if (body.has_boundary === false) continue;
+    const key = String(alert.parcel_id || "");
+    if (!key || seen.has(key)) continue;
     seen.add(key);
     out.push(alert);
   }
@@ -177,7 +168,8 @@ function MatchCard({
   const [viewerPolygon, setViewerPolygon] = useState<number[][][] | null>(row.polygon ?? null);
   const flipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const href = row.deep_link || `/parcels/${row.parcel_id}`;
-  const canViewLand = row.latitude != null && row.longitude != null;
+  const canViewLand =
+    row.has_boundary === true && row.latitude != null && row.longitude != null;
 
   useEffect(() => {
     return () => {
