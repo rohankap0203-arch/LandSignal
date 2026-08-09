@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
+import { LandAlertsLoader } from "@/components/land-alerts-loader";
 import { LiveMagnifier } from "@/components/live-magnifier";
 import { landsignalApi, type LandAlertMatchCard } from "@/lib/api";
 
@@ -267,12 +268,15 @@ export default function LandAlertsPage() {
   const [inAppAlerts, setInAppAlerts] = useState<Record<string, unknown>[]>([]);
   /** Checked this session — grey out now; move to Viewed on refresh / return */
   const [pendingSeen, setPendingSeen] = useState<Set<string>>(() => new Set());
+  const [markAllActive, setMarkAllActive] = useState(false);
+  const [bootReady, setBootReady] = useState(false);
 
   const loadMatches = useCallback(async () => {
     const data = await landsignalApi.landAlertMatches(profileId || undefined);
     setMatches(data.matches || []);
     setCounts(data.counts || { new: 0, unseen: 0, viewed: 0, total: 0 });
     setPendingSeen(new Set());
+    setMarkAllActive(false);
   }, [profileId]);
 
   const hydrate = useCallback(async () => {
@@ -342,6 +346,12 @@ export default function LandAlertsPage() {
     void hydrate();
   }, [hydrate]);
 
+  useEffect(() => {
+    // Brief distinguished boot visual even on fast loads
+    const t = window.setTimeout(() => setBootReady(true), 1100);
+    return () => window.clearTimeout(t);
+  }, []);
+
   const visible = useMemo(() => {
     if (tab === "viewed") {
       // Pending checks stay out of Viewed until refresh / return
@@ -361,6 +371,11 @@ export default function LandAlertsPage() {
       const next = new Set(prev);
       if (nextChecked) next.add(parcelId);
       else next.delete(parcelId);
+      const activeIds = matches
+        .filter((m) => m.status === "new" || m.status === "unseen" || next.has(m.parcel_id))
+        .map((m) => m.parcel_id);
+      const unique = Array.from(new Set(activeIds));
+      setMarkAllActive(unique.length > 0 && unique.every((id) => next.has(id)));
       return next;
     });
     try {
@@ -371,19 +386,15 @@ export default function LandAlertsPage() {
     }
   }
 
-  const markAllTargets = useMemo(() => {
-    const ids = matches
-      .filter((m) => m.status === "new" || m.status === "unseen" || pendingSeen.has(m.parcel_id))
-      .map((m) => m.parcel_id);
-    return Array.from(new Set(ids));
-  }, [matches, pendingSeen]);
-
-  const allMarkedPending =
-    markAllTargets.length > 0 && markAllTargets.every((id) => pendingSeen.has(id));
+  const markAllTargetCount = useMemo(
+    () => matches.filter((m) => m.status === "new" || m.status === "unseen").length,
+    [matches],
+  );
 
   async function toggleMarkAllSeen() {
-    if (allMarkedPending) {
+    if (markAllActive) {
       const ids = [...pendingSeen];
+      setMarkAllActive(false);
       setPendingSeen(new Set());
       try {
         await landsignalApi.markAllLandAlertsUnseen(profileId || undefined);
@@ -395,11 +406,9 @@ export default function LandAlertsPage() {
     const ids = matches
       .filter((m) => m.status === "new" || m.status === "unseen")
       .map((m) => m.parcel_id);
-    setPendingSeen((prev) => {
-      const next = new Set(prev);
-      for (const id of ids) next.add(id);
-      return next;
-    });
+    if (!ids.length) return;
+    setMarkAllActive(true);
+    setPendingSeen(new Set(ids));
     try {
       await landsignalApi.markAllLandAlertsSeen(profileId || undefined);
     } catch {
@@ -499,7 +508,7 @@ export default function LandAlertsPage() {
     }));
   }
 
-  if (loading) {
+  if (loading || !bootReady) {
     return (
       <div className="land-alerts-page space-y-4">
         <div className="land-alerts-topbar">
@@ -511,8 +520,7 @@ export default function LandAlertsPage() {
             <span>Scanning live</span>
           </div>
         </div>
-        <h1 className="display text-3xl font-semibold">Land Alerts</h1>
-        <p className="text-sm text-[var(--muted)]">Loading your acquisition profile…</p>
+        <LandAlertsLoader />
       </div>
     );
   }
@@ -548,10 +556,10 @@ export default function LandAlertsPage() {
             <button
               type="button"
               className="btn btn-ghost"
-              disabled={!allMarkedPending && markAllTargets.length === 0}
+              disabled={!markAllActive && markAllTargetCount === 0}
               onClick={() => void toggleMarkAllSeen()}
             >
-              {allMarkedPending ? "Undo mark all" : "Mark all as seen"}
+              {markAllActive ? "Undo mark all" : "Mark all as seen"}
             </button>
           </div>
         ) : null}
