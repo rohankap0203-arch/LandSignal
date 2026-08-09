@@ -212,6 +212,7 @@ export default function ParcelIntelligencePage() {
                 {String(sourcing.source_name || "Public source")}
               </span>
             </div>
+            <WatchEyeButton watched={watched} onToggle={toggleWatch} />
           </div>
           <h1 className="display mt-3 text-3xl font-semibold leading-tight break-words">
             {pageTitle}

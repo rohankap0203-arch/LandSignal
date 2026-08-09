@@ -1849,10 +1849,14 @@ a.btn-intel:hover {
 
 .intel-topbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
+}
+
+.intel-topbar .watch-eye {
+  margin-left: auto;
 }
 
 .traj-stats {
