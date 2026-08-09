@@ -1047,8 +1047,8 @@ export function LandViewerModal({
   }, [radiusMiles, drawRadius]);
 
   async function copyCoords() {
-    if (!hasGeo || !isValidLatLon(latitude, longitude)) return;
-    const text = `${latitude!.toFixed(6)}, ${longitude!.toFixed(6)}`;
+    if (!isValidLatLon(latitude, longitude)) return;
+    const text = formatCoordPair(latitude, longitude, 6);
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -1091,7 +1091,7 @@ export function LandViewerModal({
             <p className="land-viewer-kicker">Land view</p>
             <h2 id={titleId}>{title}</h2>
             <p className="land-viewer-sub">
-              {[location, acresLabel, priceDisplay, elevationFt].filter(Boolean).join(" · ") ||
+              {[location, acresLabel, priceLabel, elevationFt].filter(Boolean).join(" · ") ||
                 "Explore this parcel"}
             </p>
           </div>
