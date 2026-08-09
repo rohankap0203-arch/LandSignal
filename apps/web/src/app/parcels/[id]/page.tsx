@@ -207,16 +207,77 @@ export default function ParcelIntelligencePage() {
             ) : null}
             {watchMsg ? <p className="mt-2 text-xs text-[var(--muted)]">{watchMsg}</p> : null}
 
-            {((drivers.buy_lens as AnyRec) || {}).next_step ? (
-              <div className="guide-next mt-4">
-                <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-                  Clear next step
-                </div>
-                <p className="mt-1 text-sm font-medium leading-snug">
-                  {String((drivers.buy_lens as AnyRec).next_step)}
-                </p>
+            <div className="next-process mt-4">
+              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+                Three steps from here
               </div>
-            ) : null}
+              <ol className="next-process-list mt-2">
+                <li className="next-process-step">
+                  <span className="next-process-num" aria-hidden>
+                    1
+                  </span>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm">Learn this page</div>
+                    <p className="mt-0.5 text-xs leading-snug text-[var(--muted)]">
+                      Read the value path, return screens, land checks, and Ask yourself so you
+                      understand this pin before you spend attention on it.
+                    </p>
+                    <button
+                      type="button"
+                      className="next-process-action"
+                      onClick={() =>
+                        document
+                          .getElementById("sec-value")
+                          ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                      }
+                    >
+                      Start reading ↓
+                    </button>
+                  </div>
+                </li>
+                <li className="next-process-step">
+                  <span className="next-process-num" aria-hidden>
+                    2
+                  </span>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm">
+                      {watched ? "On your watchlist" : "Add to watchlist if it fits"}
+                    </div>
+                    <p className="mt-0.5 text-xs leading-snug text-[var(--muted)]">
+                      {watched
+                        ? "You’re tracking this file. Keep reading, or jump to contact when you’re ready."
+                        : "If it still feels like your kind of land after the read, save it so you can come back without losing the thread."}
+                    </p>
+                    <button type="button" className="next-process-action" onClick={toggleWatch}>
+                      {watched ? "Remove from watchlist" : "Add to watchlist"}
+                    </button>
+                  </div>
+                </li>
+                <li className="next-process-step">
+                  <span className="next-process-num" aria-hidden>
+                    3
+                  </span>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm">Contact the seller</div>
+                    <p className="mt-0.5 text-xs leading-snug text-[var(--muted)]">
+                      Reach the office or posting, then open What to say / Look-for for what to ask
+                      and where to look on their page.
+                    </p>
+                    <button
+                      type="button"
+                      className="next-process-action"
+                      onClick={() =>
+                        document
+                          .getElementById("sec-reach")
+                          ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                      }
+                    >
+                      Contact & advice ↓
+                    </button>
+                  </div>
+                </li>
+              </ol>
+            </div>
 
             <div className="mt-5 grid gap-3">
               <ScoreBar
@@ -290,7 +351,7 @@ export default function ParcelIntelligencePage() {
               </div>
             ) : null}
 
-            <div className="source-card mt-5">
+            <div id="sec-reach" className="source-card mt-5 scroll-mt-20">
               <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">How to reach the seller</div>
               <div className="font-semibold break-words">{String(sourcing.office || "County office")}</div>
               <AcquireRail
