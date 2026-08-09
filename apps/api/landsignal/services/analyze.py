@@ -464,16 +464,37 @@ async def analyze_parcel(
     }
     unsold = why_still_unsold(narrative_ctx)
     hidden = hidden_value_score(narrative_ctx)
-    existing.narratives = {"why_unsold": unsold, "hidden_value": hidden}
 
-    # Farmland scenarios when acreage + ask or estimated value exist
+    from landsignal.services.market_trajectory import build_market_trajectory
+
+    # Lightweight score stand-in so trajectory can use mark/discount before ScoreRecord exists
+    class _ScoreProxy:
+        estimated_value_usd = result.get("estimated_value_usd")
+        asking_discount_pct = result.get("asking_discount_pct")
+        risk = result.get("risk")
+
+    trajectory = build_market_trajectory(
+        parcel=parcel,
+        listing=listing,
+        score=_ScoreProxy(),
+        enrichment=existing,
+    )
+    existing.narratives = {
+        "why_unsold": unsold,
+        "hidden_value": hidden,
+        "market_trajectory": trajectory,
+    }
+
+    # Farmland scenarios when acreage + ask or estimated value exist —
+    # BASE appreciation follows this parcel's trajectory rate when available.
     purchase = ask or comps_n.get("estimated_value_base_usd")
+    traj_rate = float(trajectory.get("annual_rate") or 0.03)
     scenarios = []
     if purchase and parcel.acreage:
         for case, rent, appr in (
-            ("BEAR", 140, 0.01),
-            ("BASE", 200, 0.03),
-            ("BULL", 280, 0.05),
+            ("BEAR", 140, max(0.0, traj_rate - 0.02)),
+            ("BASE", 200, traj_rate),
+            ("BULL", 280, min(0.08, traj_rate + 0.02)),
         ):
             sc = farmland_scenario(
                 cash_rent_per_acre=rent,

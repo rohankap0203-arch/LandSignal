@@ -77,17 +77,28 @@ def justify_component(
     drivers: list[str] = []
 
     if key == "valuation_mispricing":
-        if ask is not None and est is not None and disc is not None:
+        # Prefer settle/comparison implied by scored discount — not teaser openers
+        comparison = None
+        if est is not None and disc is not None:
+            comparison = est * (1.0 + disc / 100.0)
+        elif ask is not None:
+            comparison = ask
+        if comparison is not None and est is not None and disc is not None:
+            opener_note = ""
+            if ask is not None and abs(ask - comparison) / max(ask, 1) > 0.15:
+                opener_note = f" Published opener {_money(ask)} is not the underwrite input."
             why = (
-                f"On {ident}, comparison price {_money(ask)} vs screening mark {_money(est)} "
-                f"produces {disc:+.1f}% — that math lands valuation at {value:.0f}/100. "
+                f"On {ident}, comparison/settle {_money(comparison)} vs screening mark {_money(est)} "
+                f"produces {disc:+.1f}% — that math lands valuation at {value:.0f}/100.{opener_note} "
                 f"{band}."
             )
             drivers = [
-                f"Comparison / settle input: {_money(ask)}",
+                f"Comparison / settle input: {_money(comparison)}",
                 f"Screening mark: {_money(est)}",
                 f"Gap used in formula: {disc:+.1f}% → score {value:.0f}",
             ]
+            if ask is not None and abs(ask - comparison) / max(ask, 1) > 0.15:
+                drivers.append(f"Published opener (not used as settle): {_money(ask)}")
         elif ask is None and est is not None:
             if acres is not None:
                 why = (

@@ -256,3 +256,7 @@ class RadarRow(BaseModel):
     how_to_buy: str | None = None
     return_thesis: str | None = None
     conviction: str | None = None
+    trajectory_regime: str | None = None
+    trajectory_label: str | None = None
+    trajectory_cagr_5y: str | None = None
+    trajectory_sparkline: list[float] = Field(default_factory=list)

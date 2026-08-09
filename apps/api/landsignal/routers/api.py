@@ -520,6 +520,16 @@ async def radar(
                 listing=listing,
                 auction_path=auction_path if isinstance(auction_path, dict) else None,
             )
+            from landsignal.services.market_trajectory import build_market_trajectory
+
+            traj = ((enrichment.narratives or {}).get("market_trajectory") if enrichment else None) or None
+            if not isinstance(traj, dict) or not traj.get("sparkline"):
+                traj = build_market_trajectory(
+                    parcel=parcel,
+                    listing=listing,
+                    score=score,
+                    enrichment=enrichment,
+                )
             summary = thesis or (
                 f"{_strategy_label(score.best_strategy)} · "
                 f"LandSignal {score.opportunity:.0f} · Risk {score.risk:.0f} · {pd['display']}"
@@ -597,6 +607,10 @@ async def radar(
                     how_to_buy=source.get("how_to_buy"),
                     return_thesis=thesis,
                     conviction=conviction,
+                    trajectory_regime=traj.get("regime"),
+                    trajectory_label=traj.get("regime_label"),
+                    trajectory_cagr_5y=traj.get("cagr_5y_display"),
+                    trajectory_sparkline=list(traj.get("sparkline") or [])[-8:],
                 )
             )
         return out
@@ -871,6 +885,21 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         "source": source,
     }
 
+    from landsignal.services.market_trajectory import build_market_trajectory
+
+    market_trajectory = build_market_trajectory(
+        parcel=parcel,
+        listing=listing,
+        score=score,
+        enrichment=enrichment,
+    )
+    if enrichment is not None:
+        enrichment.narratives = {
+            **(enrichment.narratives or {}),
+            "market_trajectory": market_trajectory,
+        }
+        store.enrichments[parcel_id] = enrichment
+
     return {
         "parcel": parcel,
         "listing": listing,
@@ -886,6 +915,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         "auction_path": auction_path,
         "sourcing": source,
         "cockpit": cockpit,
+        "market_trajectory": market_trajectory,
         "rating_breakdown": rating_breakdown(score, parcel=parcel, listing=listing) if score else [],
         "score_explained": brief.get("score_story")
         or {

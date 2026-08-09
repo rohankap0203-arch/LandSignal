@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
+import { TrajectorySpark } from "@/components/price-trajectory";
 import { SignalBadge } from "@/components/signal-badge";
 import type { RadarRow } from "@/lib/api";
 
@@ -107,6 +108,12 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           <span className="chip">{row.risk_label}</span>
           <span className="chip">{row.confidence_label}</span>
         </div>
+
+        <TrajectorySpark
+          values={row.trajectory_sparkline}
+          label={row.trajectory_label}
+          cagr={row.trajectory_cagr_5y}
+        />
 
         <ul className="reasons">
           {row.match_reasons.slice(0, 3).map((reason) => (

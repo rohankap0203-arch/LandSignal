@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
 import { LandLoader } from "@/components/land-loader";
+import { PriceTrajectory } from "@/components/price-trajectory";
 import { ReturnVisual } from "@/components/return-visual";
 import { ScoreBar } from "@/components/score-bar";
 import { SignalBadge } from "@/components/signal-badge";
@@ -250,6 +251,15 @@ export default function ParcelIntelligencePage() {
       {memoLoading && (
         <LandLoader compact label="Composing investment memo…" detail="Weighing this parcel’s score, constraints, and gaps." />
       )}
+
+      <section className="panel p-5">
+        <PriceTrajectory
+          trajectory={
+            (data.market_trajectory as Parameters<typeof PriceTrajectory>[0]["trajectory"]) ||
+            null
+          }
+        />
+      </section>
 
       <section className="panel p-5">
         <ReturnVisual
