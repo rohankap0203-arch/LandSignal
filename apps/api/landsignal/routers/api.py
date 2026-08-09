@@ -164,38 +164,53 @@ async def discover(
 
 @router.post("/ingest/manual")
 async def ingest_manual(body: ManualIngestRequest) -> dict[str, Any]:
+    from landsignal.services.land_alerts import match_parcel
+
     store = get_store(get_settings().demo_seed)
+    settings = get_settings()
     parcel, listing = store.upsert_manual(body.model_dump())
     score = await analyze_parcel(store, parcel.id)
-    alerts = evaluate_rules(store, score, get_settings())
+    alerts = evaluate_rules(store, score, settings)
+    land_matches = match_parcel(
+        store, parcel.id, origin="new_discovery", update_kind="new_listing", settings=settings
+    )
     return {
         "parcel_id": parcel.id,
         "listing_id": listing.id,
         "score_id": score.id,
         "alerts_triggered": len(alerts),
+        "land_alert_matches": len(land_matches),
     }
 
 
 @router.post("/ingest/csv")
 async def ingest_csv(file: UploadFile = File(...)) -> dict[str, Any]:
+    from landsignal.services.land_alerts import match_parcel
+
     store = get_store(get_settings().demo_seed)
+    settings = get_settings()
     text = (await file.read()).decode("utf-8")
     rows = store.import_csv(text)
     results = []
     for parcel, listing in rows:
         score = await analyze_parcel(store, parcel.id)
-        evaluate_rules(store, score, get_settings())
+        evaluate_rules(store, score, settings)
+        match_parcel(store, parcel.id, origin="new_discovery", update_kind="new_listing", settings=settings)
         results.append({"parcel_id": parcel.id, "listing_id": listing.id, "score_id": score.id})
     return {"imported": len(results), "results": results}
 
 
 @router.post("/parcels/{parcel_id}/analyze")
 async def reanalyze(parcel_id: UUID) -> dict[str, Any]:
+    from landsignal.services.land_alerts import match_parcel
+
     store = get_store(get_settings().demo_seed)
+    settings = get_settings()
     if parcel_id not in store.parcels:
         raise HTTPException(404, "Parcel not found")
     score = await analyze_parcel(store, parcel_id)
-    alerts = evaluate_rules(store, score, get_settings())
+    alerts = evaluate_rules(store, score, settings)
+    match_parcel(store, parcel_id, origin="price_update", update_kind="new_data", settings=settings)
     return {"score": score, "alerts_triggered": len(alerts)}
 
 
