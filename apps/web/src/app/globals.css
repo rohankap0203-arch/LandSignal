@@ -3336,6 +3336,7 @@ a.acquire-block:hover {
   color: var(--muted);
   letter-spacing: 0.02em;
   line-height: 1;
+  text-align: right;
 }
 
 .land-alert-back-head {
@@ -3522,7 +3523,7 @@ a.acquire-block:hover {
 }
 
 .land-alert-map {
-  margin: 0.1rem 0 0;
+  margin: 0.28rem 0 0.22rem;
   border-radius: 8px;
   overflow: hidden;
   cursor: grab;
