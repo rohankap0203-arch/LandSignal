@@ -143,11 +143,11 @@ function dedupeRecentLandAlerts(alerts: Record<string, unknown>[]): Record<strin
       String(body.location || "")
         .trim()
         .toLowerCase(),
-      Number.isFinite(acresNum) ? acresNum.toFixed(2) : "",
+      Number.isFinite(acresNum) ? String(Math.round(acresNum)) : "",
       String(body.update_kind || "new_listing")
         .trim()
         .toLowerCase(),
-      Number.isFinite(matchNum) ? String(Math.round(matchNum)) : "",
+      Number.isFinite(matchNum) ? String(Math.round(matchNum / 5) * 5) : "",
     ].join("|");
     if (!parcelKey || seenParcel.has(parcelKey)) continue;
     if (propKey !== "|" && seenProp.has(propKey)) continue;

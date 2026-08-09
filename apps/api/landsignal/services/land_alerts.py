@@ -689,11 +689,12 @@ def curate_land_alert_feed(store: MemoryStore) -> list[AlertRecord]:
     for alert in land:
         body = alert.body or {}
         try:
-            acres_key = f"{float(body.get('acres')):.2f}" if body.get("acres") is not None else ""
+            # Bucket near-duplicate acreage spam (5.00 / 5.01 / 5.02…).
+            acres_key = f"{round(float(body.get('acres'))):.0f}" if body.get("acres") is not None else ""
         except (TypeError, ValueError):
             acres_key = str(body.get("acres") or "")
         try:
-            match_key = str(int(round(float(body.get("preference_match_pct") or 0))))
+            match_key = str(int(round(float(body.get("preference_match_pct") or 0) / 5.0) * 5))
         except (TypeError, ValueError):
             match_key = ""
         soft = "|".join(
