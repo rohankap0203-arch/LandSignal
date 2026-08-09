@@ -35,13 +35,17 @@ export function AcquireRail({
     <div className={`acquire-rail ${className}`.trim()}>
       {postingUrl ? (
         <a className="acquire-block source" href={postingUrl} target="_blank" rel="noreferrer">
-          <span className="acquire-kicker">Official page</span>
+          <span className="acquire-kicker">Office page</span>
           <span className="acquire-value">Open {host}</span>
-          <span className="acquire-hint">Sale / inventory page for this listing</span>
+          <span className="acquire-hint">
+            {host.includes("google.")
+              ? "Search for the live county sale / assessor page"
+              : "County / agency page for this inventory"}
+          </span>
         </a>
       ) : (
         <div className="acquire-block source muted">
-          <span className="acquire-kicker">Official page</span>
+          <span className="acquire-kicker">Office page</span>
           <span className="acquire-value">No link yet</span>
         </div>
       )}

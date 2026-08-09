@@ -6,7 +6,7 @@ from typing import Any
 
 from landsignal.scoring.financial import asking_discount_pct, clamp, margin_of_safety
 
-ALGORITHM_VERSION = "landsignal_score_v3_3"
+ALGORITHM_VERSION = "landsignal_score_v3_3_1"
 WEIGHT_VERSION = "weights_default_v3"
 
 DEFAULT_WEIGHTS = {

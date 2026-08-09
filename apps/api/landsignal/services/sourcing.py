@@ -134,11 +134,12 @@ OFFICES: list[dict[str, Any]] = [
         "state": "TN",
         "county": "davidson",
         "source_name": "Davidson County / Nashville vacant cadastral GIS",
-        "office": "Metro Nashville Assessor of Property",
-        "website": "https://www.nashville.gov/departments/assessor-property",
+        "office": "Metro Nashville Assessor of Property (PAD)",
+        "website": "https://www.padctn.org/",
         "phone": "615-862-6080",
         "parcel_lookup": "https://www.padctn.org/",
-        "how": "Vacant rural/land screen — PAD lookup for owner; no published retail ask on this feed.",
+        "posting_url": "https://www.padctn.org/",
+        "how": "Open PAD to look up this parcel ID / owner. Metro tax-sale calendars change — call the Assessor or Trustee if you need the live sale path.",
     },
     {
         "provider_id": "public_tax_sale",
@@ -157,10 +158,10 @@ OFFICES: list[dict[str, Any]] = [
         "county": "",
         "source_name": "Utah tax sale parcels (public ArcGIS)",
         "office": "County Treasurer (Utah tax sale)",
-        "website": "https://tax.utah.gov/real-property",
+        "website": "https://tax.utah.gov/",
         "phone": "801-297-2200",
         "parcel_lookup": "https://www.utahcounty.gov/Dept/Assess/Index.asp",
-        "posting_url": "https://tax.utah.gov/real-property",
+        "posting_url": "https://tax.utah.gov/",
         "how": "Active tax-sale layer — call the county Treasurer on the parcel record for auction rules and deposit.",
     },
     {
@@ -303,12 +304,28 @@ def _url_path_depth(url: str | None) -> int:
         return 0
 
 
+_DEAD_PATH_MARKERS = (
+    "/departments/assessor-property",
+    "/real-property",  # utah tax.utah.gov/real-property 404
+)
+
+
 def _pick_posting_url(source_url: str | None, office: dict[str, Any]) -> str | None:
-    """Prefer a concrete sale/office page over a bare county homepage."""
+    """Prefer a concrete sale/office page over a bare or known-dead URL."""
     site = office.get("website")
     curated = office.get("posting_url") or site
     src = (source_url or "").strip() or None
     if not src:
+        return curated
+    low = src.lower()
+    if any(m in low for m in _DEAD_PATH_MARKERS) and curated:
+        return curated
+    # Bare homepage on a GIS/tax-sale feed → curated office/PAD page is more useful
+    if curated and _url_path_depth(src) <= 0 and office.get("provider_id") in (
+        "public_tax_sale",
+        "public_surplus",
+        "blm_lpad",
+    ):
         return curated
     if curated and _url_path_depth(src) <= 1 and _url_path_depth(curated) > _url_path_depth(src):
         return curated

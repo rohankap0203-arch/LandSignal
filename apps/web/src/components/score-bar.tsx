@@ -50,14 +50,17 @@ export function ScoreBar({
         <div className="score-bar-fill" style={{ width: `${v}%`, background: fill }} />
       </div>
       {!open && hint ? (
-        <p className="mt-1.5 text-sm leading-snug text-[var(--muted)] line-clamp-2 text-left">{hint}</p>
+        <p className="mt-1.5 text-sm leading-snug text-[var(--muted)] line-clamp-2 text-left">
+          {hint}
+          <span className="ml-1 text-[var(--brand)]">Why ▸</span>
+        </p>
       ) : null}
       {open ? (
         <div className="score-bar-detail mt-2 text-left">
           {verdict ? <p className="text-sm font-medium leading-snug">{verdict}</p> : null}
           {bullets && bullets.length ? (
-            <ul className="mt-1.5 space-y-1">
-              {bullets.slice(0, 5).map((b) => (
+            <ul className="mt-1.5 space-y-1.5">
+              {bullets.slice(0, 4).map((b) => (
                 <li key={b} className="text-sm leading-snug text-[var(--muted)]">
                   • {b}
                 </li>

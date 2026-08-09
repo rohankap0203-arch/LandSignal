@@ -178,6 +178,163 @@ def human_transmission(prov: Any) -> dict[str, Any]:
     }
 
 
+def human_access(prov: Any) -> dict[str, Any]:
+    n = (getattr(prov, "normalized", None) or getattr(prov, "value", None) or {}) if prov else {}
+    if isinstance(prov, dict):
+        n = prov.get("normalized") or prov.get("value") or {}
+    ks = getattr(prov, "knowledge_state", None)
+    state_s = (
+        str(ks.value) if hasattr(ks, "value") else str(prov.get("knowledge_state") if isinstance(prov, dict) else "UNKNOWN")
+    ).replace("KnowledgeState.", "")
+    access = n.get("legal_access_confidence")
+    if access is None:
+        plain = "Legal road access is not confirmed yet for this pin."
+        level = "Not confirmed"
+    elif float(access) >= 70:
+        plain = f"Access screen looks workable ({float(access):.0f}/100) — still confirm on the deed."
+        level = "Workable"
+    elif float(access) >= 40:
+        plain = f"Access is only partly clear ({float(access):.0f}/100) — check recorded easements."
+        level = "Needs check"
+    else:
+        plain = f"Access looks weak ({float(access):.0f}/100) — do not assume you can drive in."
+        level = "Weak"
+    return {
+        "title": "Road / legal access",
+        "plain_english": plain,
+        "level": level,
+        "bullets": [
+            f"Access confidence: {float(access):.0f}/100" if access is not None else "Access not scored yet",
+            "Map adjacency ≠ a recorded right of way.",
+        ],
+        "knowledge_state": state_s,
+        "source": getattr(prov, "source", None) or "access_model",
+        "confidence": getattr(prov, "confidence", None) if not isinstance(prov, dict) else prov.get("confidence"),
+        "score_hint": int(access) if access is not None else None,
+    }
+
+
+def human_slope(prov: Any) -> dict[str, Any]:
+    n = (getattr(prov, "normalized", None) or getattr(prov, "value", None) or {}) if prov else {}
+    if isinstance(prov, dict):
+        n = prov.get("normalized") or prov.get("value") or {}
+    ks = getattr(prov, "knowledge_state", None)
+    state_s = (
+        str(ks.value) if hasattr(ks, "value") else str(prov.get("knowledge_state") if isinstance(prov, dict) else "UNKNOWN")
+    ).replace("KnowledgeState.", "")
+    avg = n.get("avg_slope_pct")
+    mx = n.get("max_slope_pct")
+    elev = n.get("elevation_m")
+    if avg is None and mx is None:
+        plain = "Slope / buildability is not confirmed yet for this shape."
+        level = "Not confirmed"
+    else:
+        a = float(avg) if avg is not None else float(mx or 0)
+        if a < 5:
+            plain = f"Ground looks relatively flat (avg slope ~{a:.0f}%) — easier for build or farm use."
+            level = "Gentle"
+        elif a < 12:
+            plain = f"Moderate slope (avg ~{a:.0f}%) — usable with some site work."
+            level = "Moderate"
+        else:
+            plain = f"Steeper ground (avg ~{a:.0f}%) — can raise build/farm cost."
+            level = "Steep"
+    bullets = []
+    if avg is not None:
+        bullets.append(f"Average slope ~{float(avg):.0f}%")
+    if mx is not None:
+        bullets.append(f"Max slope screen ~{float(mx):.0f}%")
+    if elev is not None:
+        bullets.append(f"Elevation ~{float(elev):,.0f} m")
+    if not bullets:
+        bullets.append("Terrain layer thin for this pin.")
+    return {
+        "title": "Slope / buildability",
+        "plain_english": plain,
+        "level": level,
+        "bullets": bullets[:3],
+        "knowledge_state": state_s,
+        "source": getattr(prov, "source", None) or "terrain",
+        "confidence": getattr(prov, "confidence", None) if not isinstance(prov, dict) else prov.get("confidence"),
+        "score_hint": int(max(0, 100 - float(avg or mx or 20) * 4)) if (avg is not None or mx is not None) else None,
+    }
+
+
+def human_growth(prov: Any, comps: Any = None) -> dict[str, Any]:
+    n = (getattr(prov, "normalized", None) or getattr(prov, "value", None) or {}) if prov else {}
+    if isinstance(prov, dict):
+        n = prov.get("normalized") or prov.get("value") or {}
+    if comps and not n.get("path_of_growth_score"):
+        cn = getattr(comps, "normalized", None) or getattr(comps, "value", None) or {}
+        if isinstance(comps, dict):
+            cn = comps.get("normalized") or comps.get("value") or {}
+        if cn.get("path_of_growth_score") is not None:
+            n = {**n, "path_of_growth_score": cn.get("path_of_growth_score")}
+    ks = getattr(prov, "knowledge_state", None) if prov else None
+    state_s = (
+        str(ks.value) if hasattr(ks, "value") else str((prov or {}).get("knowledge_state") if isinstance(prov, dict) else "UNKNOWN")
+    ).replace("KnowledgeState.", "")
+    g = n.get("path_of_growth_score")
+    county = n.get("county_name")
+    if g is None:
+        plain = "Area growth signal is not confirmed yet for this county."
+        level = "Not confirmed"
+    elif float(g) >= 70:
+        plain = f"Growth screen is strong ({float(g):.0f}/100)" + (f" in {county}" if county else "") + " — demand may support exit."
+        level = "Strong"
+    elif float(g) >= 45:
+        plain = f"Growth screen is mixed ({float(g):.0f}/100) — neither a magnet nor a dead zone."
+        level = "Mixed"
+    else:
+        plain = f"Growth screen is soft ({float(g):.0f}/100) — plan a longer hold or a use that doesn’t need in-migration."
+        level = "Soft"
+    return {
+        "title": "Area growth",
+        "plain_english": plain,
+        "level": level,
+        "bullets": [
+            f"Path-of-growth: {float(g):.0f}/100" if g is not None else "Growth not scored yet",
+            "This is a county-level screen, not a guarantee of price.",
+        ],
+        "knowledge_state": state_s,
+        "source": getattr(prov, "source", None) or "growth",
+        "confidence": getattr(prov, "confidence", None) if prov and not isinstance(prov, dict) else None,
+        "score_hint": int(g) if g is not None else None,
+    }
+
+
+def human_resale(comps: Any) -> dict[str, Any]:
+    n = (getattr(comps, "normalized", None) or getattr(comps, "value", None) or {}) if comps else {}
+    if isinstance(comps, dict):
+        n = comps.get("normalized") or comps.get("value") or {}
+    liq = n.get("liquidity_score")
+    scar = n.get("scarcity_score")
+    if liq is None and scar is None:
+        plain = "Resale ease and scarcity are not confirmed yet for this file."
+        level = "Not confirmed"
+    else:
+        parts = []
+        if liq is not None:
+            parts.append(f"resale ease {float(liq):.0f}/100")
+        if scar is not None:
+            parts.append(f"scarcity {float(scar):.0f}/100")
+        plain = "For this channel/size: " + ", ".join(parts) + "."
+        level = "Clearer" if (liq or 0) >= 55 or (scar or 0) >= 60 else "Tougher"
+    return {
+        "title": "Resale & scarcity",
+        "plain_english": plain,
+        "level": level,
+        "bullets": [
+            f"Liquidity screen: {float(liq):.0f}/100" if liq is not None else "Liquidity not scored",
+            f"Scarcity screen: {float(scar):.0f}/100" if scar is not None else "Scarcity not scored",
+        ],
+        "knowledge_state": "ESTIMATED" if (liq is not None or scar is not None) else "UNKNOWN",
+        "source": "comps",
+        "confidence": getattr(comps, "confidence", None) if comps and not isinstance(comps, dict) else None,
+        "score_hint": int(((liq or 50) + (scar or 50)) / 2) if (liq is not None or scar is not None) else None,
+    }
+
+
 def human_dd_items(items: list[dict], score: Any, enrichment: Any) -> list[dict[str, Any]]:
     """Turn checklist into guided next steps with why-it-matters."""
     why_map = {

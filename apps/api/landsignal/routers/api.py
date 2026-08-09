@@ -699,8 +699,12 @@ async def search_meta() -> dict[str, Any]:
 @router.get("/parcels/{parcel_id}")
 async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     from landsignal.services.humanize import (
+        human_access,
         human_dd_items,
         human_flood,
+        human_growth,
+        human_resale,
+        human_slope,
         human_soil,
         human_transmission,
         human_wetlands,
@@ -727,21 +731,59 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         raw=listing.raw if listing else None,
     )
     links = source.get("links") or []
-    # Every contact/posting link must stay clickable. Agency sites often block bots —
-    # never gray out primary/office/lookup or surface http_XXX error codes to the UI.
-    fallback_site = source.get("website") or "https://www.google.com/search?q=county+treasurer+tax+sale"
+    # Keep every CTA clickable — but rewrite dead agency URLs to a working fallback
+    # so "Official page" never opens a 404 / no-results page.
+    from landsignal.services.links import validate_url
+    from urllib.parse import quote_plus as _qp
+
+    google_fallback = (
+        "https://www.google.com/search?q="
+        + _qp(
+            f"{parcel.county or ''} {parcel.state or ''} "
+            f"{source.get('office') or 'county treasurer assessor'} parcel tax sale".strip()
+        )
+    )
+    lookup_fallback = None
+    for l in links:
+        if l.get("kind") == "lookup" and str(l.get("url") or "").startswith("http"):
+            lookup_fallback = str(l["url"])
+            break
+    fallback_site = source.get("website") or lookup_fallback or google_fallback
+
+    async def _repair(url: str) -> tuple[str, str]:
+        u = (url or "").strip()
+        if not u.startswith("http"):
+            return str(fallback_site), "replaced_missing"
+        check = await validate_url(u)
+        if check.get("ok"):
+            return u, "ok"
+        # Prefer parcel viewer, then Google — never hand the user a confirmed 404
+        for candidate in (lookup_fallback, source.get("website"), google_fallback):
+            c = str(candidate or "").strip()
+            if not c.startswith("http") or c == u:
+                continue
+            c_check = await validate_url(c)
+            if c_check.get("ok"):
+                return c, "replaced_dead"
+        return google_fallback, "replaced_dead"
+
     annotated = []
     for l in links:
-        url = str(l.get("url") or "")
         kind = l.get("kind")
-        if not url or (kind == "primary" and not url.startswith("http")):
-            url = str(fallback_site)
+        url = str(l.get("url") or "")
+        reason = "ok"
+        if kind in ("primary", "contact_web") or (
+            kind == "contact" and url.startswith("http")
+        ):
+            url, reason = await _repair(url)
+        elif not url and kind == "primary":
+            url, reason = str(fallback_site), "replaced_missing"
         annotated.append(
             {
                 **l,
                 "url": url,
                 "available": True,
-                "availability_reason": "ok",
+                "availability_reason": reason,
                 "status_code": None,
             }
         )
@@ -749,7 +791,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         annotated.insert(
             0,
             {
-                "label": "Open posting",
+                "label": "Open office page",
                 "url": str(fallback_site),
                 "kind": "primary",
                 "available": True,
@@ -758,6 +800,10 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
             },
         )
     annotated.sort(key=lambda l: 0 if l.get("kind") == "primary" else 1)
+    # Keep AcquireRail website in sync with repaired primary
+    primary_url = next((l["url"] for l in annotated if l.get("kind") == "primary"), fallback_site)
+    if isinstance(source, dict):
+        source = {**source, "website": primary_url}
 
     dd_raw = store.dd_items.get(parcel_id, [])
     dd_guided = human_dd_items(
@@ -775,6 +821,13 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         "flood": human_flood(enrichment.flood if enrichment else None, apn=parcel.apn),
         "wetlands": human_wetlands(enrichment.wetlands if enrichment else None),
         "transmission": human_transmission(enrichment.infrastructure if enrichment else None),
+        "access": human_access(enrichment.access if enrichment else None),
+        "slope": human_slope(enrichment.terrain if enrichment else None),
+        "growth": human_growth(
+            enrichment.growth if enrichment else None,
+            enrichment.comps if enrichment else None,
+        ),
+        "resale": human_resale(enrichment.comps if enrichment else None),
     }
     scenarios_human = []
     case_labels = {

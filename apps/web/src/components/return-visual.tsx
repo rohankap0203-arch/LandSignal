@@ -262,6 +262,7 @@ export function ReturnVisual({
   const [showAllFactors, setShowAllFactors] = useState(false);
   const [openFactor, setOpenFactor] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [casesHelpOpen, setCasesHelpOpen] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
   const available = intel?.available !== false && Boolean(intel?.endpoints || intel?.paths_100);
@@ -576,15 +577,15 @@ export function ReturnVisual({
               <span>Total back</span>
               <strong>{money(endpoint.total_back_usd)}</strong>
             </div>
-            <div>
+            <div className="return-vs-cell">
               <span>Vs buy · annualized</span>
               <strong
-                className={
+                className={`return-vs-buy ${
                   (endpoint.gain_usd ?? 0) >= 0 ? "text-[var(--positive)]" : "text-[var(--danger)]"
-                }
+                }`}
               >
                 {(endpoint.gain_usd ?? 0) >= 0 ? "+" : ""}
-                {money(endpoint.gain_usd)}
+                {shortMoney(Number(endpoint.gain_usd || 0))}
                 {irrPct != null ? ` · ${irrPct.toFixed(1)}%/yr` : ""}
               </strong>
             </div>
@@ -593,9 +594,41 @@ export function ReturnVisual({
       )}
 
       <div className="mt-4 space-y-2">
-        <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-          All cases at {holdYears} years
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+            All cases at {holdYears} years
+          </div>
+          <button
+            type="button"
+            className={`help-q ${casesHelpOpen ? "on" : ""}`}
+            aria-label="What these cases mean"
+            aria-expanded={casesHelpOpen}
+            title="What these cases mean"
+            onClick={() => setCasesHelpOpen((v) => !v)}
+          >
+            ?
+          </button>
         </div>
+        {casesHelpOpen ? (
+          <div className="help-panel">
+            <p>Three ways the same hold can finish — tap a row to focus that path on the chart.</p>
+            <ul>
+              <li>
+                <strong>Cautious</strong> — slower rents, softer sale price, more carry cost
+              </li>
+              <li>
+                <strong>Typical</strong> — the base path for this property’s screens
+              </li>
+              <li>
+                <strong>Optimistic</strong> — stronger rents and exit, still capped by the model
+              </li>
+            </ul>
+            <p>
+              The %/yr is the annualized return if you buy near the entry, collect rent, and sell at
+              that case’s exit after exactly {holdYears} years. Not a promise — a screen.
+            </p>
+          </div>
+        ) : null}
         {CASE_ORDER.map((k) => {
           const ep = endpointsAtHold[k];
           if (!ep) return null;

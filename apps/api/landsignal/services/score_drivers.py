@@ -1,4 +1,4 @@
-"""Hyper-specific bullets for Opportunity / Risk / Completeness meters."""
+"""Plain-English reasons a buyer can trust — why THIS file scored this way."""
 
 from __future__ import annotations
 
@@ -22,14 +22,6 @@ def _money(v: float | None) -> str:
     return f"${v:,.0f}"
 
 
-def _clean(s: str) -> str:
-    t = (s or "").strip()
-    # Drop APN-leading evidence tags like "123 · County, ST · 10 ac: …"
-    if ": " in t and " · " in t.split(": ", 1)[0]:
-        t = t.split(": ", 1)[1].strip()
-    return t
-
-
 def build_score_drivers(
     *,
     parcel,
@@ -38,22 +30,24 @@ def build_score_drivers(
     enrichment=None,
     price: dict | None = None,
 ) -> dict[str, Any]:
-    """3–5 tailored bullets per meter so buyers can judge if it’s a real buy."""
+    """2–4 short, specific reasons — feedback, not metric soup."""
     place = place_phrase(parcel)
-    prop = this_property(parcel, listing, with_place=True, with_acres=True)
+    acres = _f(getattr(parcel, "acreage", None))
+    size = f"{acres:,.1f}-acre " if acres is not None else ""
     opp = _f(getattr(score, "opportunity", None)) or 0.0
     risk = _f(getattr(score, "risk", None)) or 0.0
     conf = _f(getattr(score, "confidence", None)) or 0.0
     disc = _f(getattr(score, "asking_discount_pct", None))
     est = _f(getattr(score, "estimated_value_usd", None))
     strat = getattr(score, "best_strategy", None)
-    strat_s = strat.value.replace("_", " ").title() if strat and hasattr(strat, "value") else (str(strat) if strat else None)
+    strat_s = (
+        strat.value.replace("_", " ").title()
+        if strat and hasattr(strat, "value")
+        else (str(strat).replace("_", " ").title() if strat else None)
+    )
     provider = getattr(listing, "provider_id", None) if listing else None
-    acres = _f(getattr(parcel, "acreage", None))
 
-    soil_n = {}
-    flood_n = {}
-    wet_n = {}
+    soil_n = flood_n = wet_n = access_n = growth_n = comps_n = {}
     if enrichment:
         if enrichment.soil:
             soil_n = enrichment.soil.normalized or enrichment.soil.value or {}
@@ -61,131 +55,131 @@ def build_score_drivers(
             flood_n = enrichment.flood.normalized or enrichment.flood.value or {}
         if enrichment.wetlands:
             wet_n = enrichment.wetlands.normalized or enrichment.wetlands.value or {}
+        if enrichment.access:
+            access_n = enrichment.access.normalized or enrichment.access.value or {}
+        if enrichment.growth:
+            growth_n = enrichment.growth.normalized or enrichment.growth.value or {}
+        if enrichment.comps:
+            comps_n = enrichment.comps.normalized or enrichment.comps.value or {}
 
     prime = _f(soil_n.get("prime_farmland_pct"))
     flood = _f(flood_n.get("flood_zone_pct"))
     wet = _f(wet_n.get("wetland_pct"))
+    access = _f(access_n.get("legal_access_confidence"))
+    growth = _f(growth_n.get("path_of_growth_score")) or _f(comps_n.get("path_of_growth_score"))
 
-    # --- Opportunity ---
+    # --- Opportunity: why buy THIS one ---
     opp_bullets: list[str] = []
-    if disc is not None and est is not None:
-        entry = est * (1 + disc / 100.0)
+    if disc is not None and disc <= -20 and est is not None:
+        buy = est * (1 + disc / 100.0)
         opp_bullets.append(
-            f"Buy screen ~{_money(entry)} vs our value {_money(est)} ({disc:+.0f}%) for {prop}."
+            f"You may get in near {_money(buy)} while we mark this {size}land around {_money(est)}."
+        )
+    elif disc is not None and est is not None:
+        buy = est * (1 + disc / 100.0)
+        opp_bullets.append(
+            f"Buy near {_money(buy)} vs our {_money(est)} value — a smaller edge, still worth a look."
         )
     elif est is not None:
-        opp_bullets.append(f"Our value screen for {prop}: {_money(est)} (no public ask yet).")
-    if strat_s:
-        opp_bullets.append(f"Best-use screen: {strat_s} on this file in {place}.")
-    for note in (getattr(score, "why_interesting", None) or [])[:3]:
-        c = _clean(str(note))
-        if c and c not in opp_bullets:
-            opp_bullets.append(c)
-    # Top weighted components
-    comps = sorted(
-        getattr(score, "components", None) or [],
-        key=lambda c: abs(float(c.get("contribution") or 0)),
-        reverse=True,
-    )
-    for c in comps[:3]:
-        label = str(c.get("label") or c.get("category") or "").replace("_", " ")
-        val = _f(c.get("value"))
-        if label and val is not None:
-            line = f"{label.title()} contributes {val:.0f}/100 to opportunity."
-            if line not in opp_bullets:
-                opp_bullets.append(line)
+        opp_bullets.append(f"No public ask yet; our first value read is about {_money(est)}.")
+
     if provider == "public_tax_sale":
-        opp_bullets.append(
-            "Channel edge: county tax-delinquent sale — Google/Zillow rarely underwrite these."
-        )
+        opp_bullets.append(f"This is a county tax-sale style file in {place} — not a normal Zillow listing.")
     elif provider == "blm_lpad":
-        opp_bullets.append(
-            "Channel edge: federal BLM disposal — public process inventory, not MLS retail."
-        )
-    if opp >= 75:
-        verdict = "Looks like a priority scout — edge is showing on price and/or use."
-    elif opp >= 60:
-        verdict = "Promising enough to open the full file — confirm access and land checks."
+        opp_bullets.append(f"Federal BLM disposal land in {place} — public process, not MLS retail.")
+    elif provider == "public_surplus":
+        opp_bullets.append(f"Public surplus inventory in {place} — agency sells, not a broker.")
+
+    if strat_s:
+        opp_bullets.append(f"Best fit we see here: {strat_s}.")
+    if growth is not None and growth >= 65:
+        opp_bullets.append(f"Local growth around {place} looks supportive for a hold.")
+    if prime is not None and prime >= 45:
+        opp_bullets.append(f"Soil screen shows about {prime:.0f}% prime farmland — helps farm or rent plans.")
+
+    if opp >= 72:
+        verdict = f"Strong candidate — this {size}file in {place} shows a real buy edge."
+    elif opp >= 58:
+        verdict = f"Worth opening — solid enough to compare against your other shortlist."
     elif opp >= 45:
-        verdict = "Mixed edge — only pursue if the use thesis fits your plan."
+        verdict = f"Only a maybe — keep it if the use fits; otherwise keep scanning."
     else:
-        verdict = "Weak opportunity screen — better files likely exist in the queue."
+        verdict = f"Weak edge here — better files are likely ahead in the queue."
 
-    # --- Risk ---
+    # --- Risk: what could bite you ---
     risk_bullets: list[str] = []
-    if flood is not None:
-        risk_bullets.append(f"Flood overlap screen: {flood:.0f}% on the FEMA layer for this pin.")
-    if wet is not None:
-        risk_bullets.append(f"Wetland screen: {wet:.0f}% — can cut usable acres.")
-    for kill in (getattr(score, "what_could_kill", None) or [])[:3]:
-        c = _clean(str(kill))
-        if c and c not in risk_bullets:
-            risk_bullets.append(c)
-    # Risk component evidence
-    for c in comps:
-        if str(c.get("category") or "") == "risk":
-            for e in (c.get("evidence") or [])[:2]:
-                ce = _clean(str(e))
-                if ce and ce not in risk_bullets:
-                    risk_bullets.append(ce)
-    if not risk_bullets:
-        risk_bullets.append(f"Desktop risk {risk:.0f}/100 for {prop} — thin map evidence so far.")
-    if risk <= 35:
-        risk_verdict = "Lower map risk — still verify title and access before bidding."
-    elif risk <= 55:
-        risk_verdict = "Moderate risk — budget homework on flood/wetlands/access."
-    else:
-        risk_verdict = "Elevated risk — treat as a specialist file, not a casual buy."
+    if flood is not None and flood >= 25:
+        risk_bullets.append(f"Flood map covers about {flood:.0f}% of this pin — plan for insurance cost.")
+    elif flood is not None and flood >= 10:
+        risk_bullets.append(f"Some flood overlap (~{flood:.0f}%) — check before you bid hard.")
+    elif flood is not None:
+        risk_bullets.append("Flood overlap looks light on the map for this pin.")
 
-    # --- Completeness ---
+    if wet is not None and wet >= 20:
+        risk_bullets.append(f"Wetlands (~{wet:.0f}%) may cut what you can build or farm.")
+    elif wet is not None and wet < 10:
+        risk_bullets.append("Wetland screen looks limited on this shape.")
+
+    if access is not None and access < 45:
+        risk_bullets.append("Legal road access is not clear yet — confirm before you spend.")
+    elif access is not None and access >= 70:
+        risk_bullets.append("Access screen looks workable for this parcel.")
+
+    if not risk_bullets:
+        risk_bullets.append(f"Map checks for this {size}property in {place} are still thin — verify on the ground.")
+
+    if risk <= 35:
+        risk_verdict = "Lower worry on the map — still confirm title and access."
+    elif risk <= 55:
+        risk_verdict = "Some yellow flags — fixable with homework, not a walk-away by itself."
+    else:
+        risk_verdict = "Higher worry — only pursue if you can live with the constraints."
+
+    # --- Completeness: can you trust the file ---
     conf_bullets: list[str] = []
-    conf_bullets.append(f"File completeness {conf:.0f}/100 for {prop}.")
-    known_bits = []
+    have = []
+    miss = []
     if prime is not None:
-        known_bits.append(f"soil (~{prime:.0f}% prime)")
+        have.append("soil")
+    else:
+        miss.append("soil")
     if flood is not None:
-        known_bits.append("flood")
+        have.append("flood")
+    else:
+        miss.append("flood")
     if wet is not None:
-        known_bits.append("wetlands")
+        have.append("wetlands")
+    else:
+        miss.append("wetlands")
     if est is not None:
-        known_bits.append("value mark")
-    if known_bits:
-        conf_bullets.append("On file: " + ", ".join(known_bits) + ".")
-    missing = []
-    if prime is None:
-        missing.append("prime soil")
-    if flood is None:
-        missing.append("flood")
-    if wet is None:
-        missing.append("wetlands")
-    if missing:
-        conf_bullets.append("Still thin: " + ", ".join(missing) + ".")
-    conf_bullets.append("Thin files score lower on purpose — not a quality grade.")
+        have.append("value")
+    else:
+        miss.append("value")
+    if have:
+        conf_bullets.append("We already have: " + ", ".join(have) + ".")
+    if miss:
+        conf_bullets.append("Still missing: " + ", ".join(miss) + " — don’t treat the score as final.")
+    conf_bullets.append(
+        "A lower completeness number means thinner data, not worse land."
+    )
+
+    if conf >= 65:
+        conf_verdict = "File is full enough for a first go / no-go."
+    elif conf >= 40:
+        conf_verdict = "Partly filled in — open the checks below before you bid."
+    else:
+        conf_verdict = "Thin file — use this as a tip, then verify with the county."
 
     return {
-        "opportunity": {
-            "verdict": verdict,
-            "bullets": opp_bullets[:5],
-        },
-        "risk": {
-            "verdict": risk_verdict,
-            "bullets": risk_bullets[:5],
-        },
-        "confidence": {
-            "verdict": (
-                "Fairly complete desktop file."
-                if conf >= 65
-                else "Some layers missing — double-check before you bid."
-                if conf >= 40
-                else "Thin file — treat numbers as a first look only."
-            ),
-            "bullets": conf_bullets[:5],
-        },
+        "opportunity": {"verdict": verdict, "bullets": opp_bullets[:4]},
+        "risk": {"verdict": risk_verdict, "bullets": risk_bullets[:4]},
+        "confidence": {"verdict": conf_verdict, "bullets": conf_bullets[:3]},
         "buy_lens": {
             "headline": verdict,
-            "acres": acres,
-            "place": place,
-            "strategy": strat_s,
-            "channel": provider,
+            "next_step": (
+                "Call the office, confirm the parcel ID, then decide go / no-go."
+                if opp >= 58
+                else "Keep this on a short watch list while you open stronger files."
+            ),
         },
     }

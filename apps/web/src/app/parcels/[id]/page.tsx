@@ -207,11 +207,22 @@ export default function ParcelIntelligencePage() {
             ) : null}
             {watchMsg ? <p className="mt-2 text-xs text-[var(--muted)]">{watchMsg}</p> : null}
 
+            {((drivers.buy_lens as AnyRec) || {}).next_step ? (
+              <div className="guide-next mt-4">
+                <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+                  Clear next step
+                </div>
+                <p className="mt-1 text-sm font-medium leading-snug">
+                  {String((drivers.buy_lens as AnyRec).next_step)}
+                </p>
+              </div>
+            ) : null}
+
             <div className="mt-5 grid gap-3">
               <ScoreBar
                 label="Opportunity score"
                 value={Number(score?.opportunity || 0)}
-                hint={String(oppDrive.verdict || firstSentence(story.landsignal) || "Tap for why this score")}
+                hint={String(oppDrive.verdict || "Tap for why this file scored here")}
                 verdict={String(oppDrive.verdict || "")}
                 bullets={(oppDrive.bullets as string[]) || []}
               />
@@ -219,14 +230,14 @@ export default function ParcelIntelligencePage() {
                 label="Risk"
                 value={Number(score?.risk || 0)}
                 invert
-                hint={String(riskDrive.verdict || firstSentence(story.risk) || "Tap for risk drivers")}
+                hint={String(riskDrive.verdict || "Tap for what could go wrong")}
                 verdict={String(riskDrive.verdict || "")}
                 bullets={(riskDrive.bullets as string[]) || []}
               />
               <ScoreBar
                 label="How complete the file is"
                 value={Number(score?.confidence || 0)}
-                hint={String(confDrive.verdict || firstSentence(story.confidence) || "")}
+                hint={String(confDrive.verdict || "Tap to see what’s filled in")}
                 verdict={String(confDrive.verdict || "")}
                 bullets={(confDrive.bullets as string[]) || []}
               />
@@ -320,10 +331,10 @@ export default function ParcelIntelligencePage() {
                 {[
                   { id: "sec-value", label: "Value path" },
                   { id: "sec-return", label: "Return" },
-                  { id: "sec-why", label: "Why it stands out" },
+                  { id: "sec-why", label: "Why buy / why open" },
                   { id: "sec-score", label: "Score parts" },
                   { id: "sec-land", label: "Land checks" },
-                  { id: "sec-checklist", label: "Checklist" },
+                  { id: "sec-checklist", label: "Before you bid" },
                 ].map((s) => (
                   <button
                     key={s.id}
@@ -433,37 +444,56 @@ export default function ParcelIntelligencePage() {
         </div>
       </section>
 
-      <section id="sec-land" className="grid gap-2 md:grid-cols-2 xl:grid-cols-4 scroll-mt-20">
-        {(["soil", "flood", "wetlands", "transmission"] as const).map((key) => {
-          const card = land[key] || {};
-          const level = String(card.level || card.knowledge_state || "")
-            .replace(/KnowledgeState\./gi, "")
-            .replace(/UNKNOWN/gi, "Not confirmed")
-            .replace(/KNOWN/gi, "Known")
-            .replace(/ESTIMATED/gi, "Estimate")
-            .replace(/OBSERVED/gi, "From source")
-            .replace(/BLENDED/gi, "Mixed")
-            .replace(/TEMPORARILY_UNAVAILABLE/gi, "Unavailable")
-            .replace(/_/g, " ");
-          return (
-            <details key={key} className="panel land-compact group">
-              <summary className="cursor-pointer list-none">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="font-semibold text-sm">{String(card.title || key)}</h3>
-                  <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">{level}</span>
-                </div>
-                <p className="mt-1 text-[var(--ink)]">
-                  {firstSentence(card.plain_english || "No reading for this pin yet.", 120)}
-                </p>
-              </summary>
-              <ul className="mt-1 space-y-0.5">
-                {((card.bullets as string[]) || []).slice(0, 2).map((b) => (
-                  <li key={b}>• {b}</li>
-                ))}
-              </ul>
-            </details>
-          );
-        })}
+      <section id="sec-land" className="scroll-mt-20">
+        <div className="mb-2">
+          <h2 className="display text-lg font-semibold">Land checks that move the needle</h2>
+          <p className="text-sm text-[var(--muted)]">
+            Same caliber as soil and flood — tap any card for the short read on this pin.
+          </p>
+        </div>
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          {(
+            [
+              "soil",
+              "flood",
+              "wetlands",
+              "transmission",
+              "access",
+              "slope",
+              "growth",
+              "resale",
+            ] as const
+          ).map((key) => {
+            const card = land[key] || {};
+            const level = String(card.level || card.knowledge_state || "")
+              .replace(/KnowledgeState\./gi, "")
+              .replace(/UNKNOWN/gi, "Not confirmed")
+              .replace(/KNOWN/gi, "Known")
+              .replace(/ESTIMATED/gi, "Estimate")
+              .replace(/OBSERVED/gi, "From source")
+              .replace(/BLENDED/gi, "Mixed")
+              .replace(/TEMPORARILY_UNAVAILABLE/gi, "Unavailable")
+              .replace(/_/g, " ");
+            return (
+              <details key={key} className="panel land-compact group">
+                <summary className="cursor-pointer list-none">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-semibold text-sm">{String(card.title || key)}</h3>
+                    <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">{level}</span>
+                  </div>
+                  <p className="mt-1 text-[var(--ink)]">
+                    {firstSentence(card.plain_english || "No reading for this pin yet.", 110)}
+                  </p>
+                </summary>
+                <ul className="mt-1 space-y-0.5">
+                  {((card.bullets as string[]) || []).slice(0, 2).map((b) => (
+                    <li key={b}>• {b}</li>
+                  ))}
+                </ul>
+              </details>
+            );
+          })}
+        </div>
       </section>
 
       <section id="sec-checklist" className="panel p-4 scroll-mt-20 dd-compact">
