@@ -30,7 +30,32 @@ def _norm(enrichment, attr: str) -> dict:
 
 
 def _step(kicker: str, body: str, fulfills: str) -> dict[str, str]:
-    return {"kicker": kicker, "body": body, "fulfills": fulfills}
+    # Never prefix with "Why ask/…" — the UI already labels Why ·
+    clean = fulfills.strip()
+    for prefix in (
+        "Why ask:",
+        "Why ask ·",
+        "Why this opener:",
+        "Why the ID:",
+        "Why the numbers:",
+        "Why say the use:",
+        "Why close this way:",
+        "Why it matters:",
+        "Why first:",
+        "Why search the ID:",
+        "Why screenshot:",
+        "Why follow this:",
+        "Why this check:",
+        "Why copy",
+        "Why these three:",
+        "Why switch now:",
+        "Why say this:",
+        "Why next:",
+    ):
+        if clean.lower().startswith(prefix.lower()):
+            clean = clean[len(prefix) :].lstrip(" :·—-")
+            break
+    return {"kicker": kicker, "body": body, "fulfills": clean}
 
 
 def build_outreach_playbook(
@@ -59,10 +84,25 @@ def build_outreach_playbook(
     flood = _norm(enrichment, "flood")
     wet = _norm(enrichment, "wetlands")
     access = _norm(enrichment, "access")
+    terr = _norm(enrichment, "terrain")
+    growth_n = _norm(enrichment, "growth")
+    comps = _norm(enrichment, "comps")
+
     prime = _f(soil.get("prime_farmland_pct"))
     flood_pct = _f(flood.get("flood_zone_pct"))
     wet_pct = _f(wet.get("wetland_pct"))
     access_score = _f(access.get("legal_access_confidence"))
+    if access_score is None:
+        access_score = _f(comps.get("legal_access_confidence"))
+    slope = _f(terr.get("avg_slope_pct"))
+    growth = _f(growth_n.get("path_of_growth_score")) or _f(comps.get("path_of_growth_score"))
+    liq = _f(comps.get("liquidity_score"))
+    scar = _f(comps.get("scarcity_score"))
+    seller = _f(comps.get("seller_pressure_score"))
+
+    risk = _f(getattr(score, "risk", None) if score else None)
+    conf = _f(getattr(score, "confidence", None) if score else None)
+    opp = _f(getattr(score, "opportunity", None) if score else None)
 
     strat = getattr(score, "best_strategy", None) if score else None
     strat_s = (
@@ -88,6 +128,58 @@ def build_outreach_playbook(
     pin_short = str(apn) if apn else "this pin"
     addr = getattr(parcel, "address", None)
 
+    # Usable-acre nuance from wetlands
+    usable_hint = None
+    if acres is not None and wet_pct is not None and wet_pct >= 10:
+        usable = max(0.0, acres * (1.0 - min(0.85, wet_pct / 100.0 * 0.55)))
+        usable_hint = f"~{usable:,.1f} usable ac after ~{wet_pct:.0f}% wetland drag"
+
+    size_band = (
+        "micro lot"
+        if acres is not None and acres < 2
+        else "small tract"
+        if acres is not None and acres < 20
+        else "mid tract"
+        if acres is not None and acres < 80
+        else "large tract"
+        if acres is not None
+        else "tract"
+    )
+
+    screen_bits: list[str] = []
+    if flood_pct is not None and flood_pct >= 15:
+        screen_bits.append(f"flood ~{flood_pct:.0f}%")
+    if wet_pct is not None and wet_pct >= 10:
+        screen_bits.append(f"wet ~{wet_pct:.0f}%")
+    if access_score is not None and access_score < 55:
+        screen_bits.append(f"access {access_score:.0f}/100")
+    if slope is not None and slope >= 12:
+        screen_bits.append(f"slope ~{slope:.0f}%")
+    if prime is not None and prime >= 45:
+        screen_bits.append(f"prime soil ~{prime:.0f}%")
+    screens = ", ".join(screen_bits) if screen_bits else "thin desktop screens so far"
+
+    risk_bit = (
+        f"risk {risk:.0f}/100"
+        if risk is not None
+        else "risk still forming"
+    )
+    conf_bit = (
+        f"file complete {conf:.0f}/100"
+        if conf is not None
+        else "completeness still thin"
+    )
+    growth_bit = (
+        f"growth {growth:.0f}/100 around {county}"
+        if growth is not None
+        else f"no strong growth read yet for {county}"
+    )
+    liq_bit = (
+        f"resale ease {liq:.0f}/100"
+        if liq is not None
+        else "resale ease unrated"
+    )
+
     channel_noun = {
         "public_tax_sale": "tax-sale / delinquent",
         "public_surplus": "surplus",
@@ -102,36 +194,39 @@ def build_outreach_playbook(
         )
         ask_status = "Is this pin on the next tax sale, already struck off, or still just delinquent?"
         ask_status_why = (
-            f"For {acres_s} in {county}: proves {pin_short} is still on a live tax-sale path — "
-            f"not a closed delinquency you’re researching for nothing."
+            f"{size_band.title()} {acres_s} at {pin_short} only works if {county} still has it on a "
+            f"live sale/delinquent calendar — struck-off or redeemed files waste a {strat_s} underwrite "
+            f"({risk_bit}; {screens})."
         )
         site_look = "Confirm sale date, deposit, and whether deed/title clears through the county or a trustee."
         site_look_why = (
-            f"Those three numbers are your real {county} buy checklist — date, cash-due, and who clears title "
-            f"on {pin_short}."
+            f"For {pin_short} in {place}, sale date + deposit set cash timing, and trustee vs county "
+            f"deed tells you when title is clean enough to fund survey — before you lean on {strat_s} "
+            f"and {growth_bit}."
         )
     elif provider == "blm_lpad":
         channel_line = f"I'm reviewing a BLM disposal parcel — {acres_s} near {place}."
         ask_status = "Is this still in the active LPAD / sale notice window?"
         ask_status_why = (
-            f"BLM notices die quietly — this confirms {acres_s} near {place} is still in an open window "
-            f"before you build a {strat_s} file on it."
+            f"LPAD windows close; {acres_s} near {place} ({pin_short}) is only worth a {strat_s} file "
+            f"if the notice is still open — federal dust-collectors don’t care that {conf_bit}."
         )
         site_look = "Find the case/serial number, sale type, and any mineral or access reservations."
         site_look_why = (
-            f"Case ID + reservations decide whether {acres_s} is actually usable for {strat_s}, "
-            f"or locked under minerals/access you can’t live with."
+            f"Case/serial + mineral/access reservations decide if {acres_s} can actually support "
+            f"{strat_s} given {screens} and {liq_bit} on exit."
         )
     elif provider == "public_surplus":
         channel_line = f"I'm interested in county/agency surplus land — {acres_s} in {place}."
         ask_status = "Is this still offered, and do you take sealed bids or direct offer?"
         ask_status_why = (
-            f"Surplus in {county} dies when the resolution closes — this locks offer format "
-            f"before you write the wrong package for {pin_short}."
+            f"Surplus resolutions end; {pin_short} ({acres_s}) needs a live offer format from {office} "
+            f"or your sealed packet / direct offer is dead paper — especially with {risk_bit}."
         )
         site_look = "Look for surplus resolution, minimum bid, and closing timeline."
         site_look_why = (
-            f"Min bid + close date are the only retail that matters on {acres_s} surplus in {place}."
+            f"Min bid + close date are the only price truth on {acres_s} surplus in {place}; "
+            f"pair them with {screens} before you treat {_money(est) if est else 'our mark'} as the ceiling."
         )
     elif provider == "public_vacant_gis":
         channel_line = (
@@ -143,35 +238,57 @@ def build_outreach_playbook(
             "tax sale, surplus, or redemption path — or if I should approach the owner of record?"
         )
         ask_status_why = (
-            f"{acres_s} on the {county} map isn’t a listing yet — this finds who can sell {pin_short} "
-            f"(owner vs metro vs sale calendar) before you burn a week."
+            f"{size_band.title()} {acres_s} at {pin_short} is a {county} map screen, not a sale sheet — "
+            f"owner type + tax/surplus/redemption path is the only way to know if a {strat_s} hold is "
+            f"even reachable ({conf_bit}; {screens})."
         )
         site_look = (
             "On PAD / assessor: owner name, land use, last sale, and any tax status flags — "
             "don’t assume it’s for sale until the office says so."
         )
+        seller_lane = (
+            "seller pressure is soft — this isn’t a forced-sale lane"
+            if seller is not None and seller < 50
+            else "you’re not in a forced-sale lane"
+        )
         site_look_why = (
-            f"Owner + tax flags on {pin_short} separate ‘vacant on GIS’ from ‘you can actually buy "
-            f"{acres_s} in {place}.’"
+            f"Owner name, land use, last sale, and tax flags on {pin_short} separate vacant-on-GIS from "
+            f"buyable {acres_s} in {place}. {seller_lane.capitalize()}; with {screens} and {growth_bit}, "
+            f"don’t spend on {strat_s} diligence until that record says someone can sell"
+            + (f" ({usable_hint})" if usable_hint else "")
+            + "."
         )
     else:
         channel_line = f"I'm reviewing {acres_s} in {place}."
         ask_status = "What’s the cleanest way to make an offer or get on the sale list?"
         ask_status_why = (
-            f"Gets {office}’s real intake for {pin_short} instead of guessing a path that won’t clear."
+            f"{office}’s real intake for {pin_short} ({acres_s}) beats guessing — wrong door burns "
+            f"days while {risk_bit} and {screens} still need answers."
         )
         site_look = "Confirm the live posting, price, and contact for offers."
         site_look_why = (
-            f"Confirms {acres_s} in {place} is still live and who at {office} takes the offer."
+            f"Live posting + offer contact for {acres_s} in {place} tells you whether {_money(buy) if buy else 'a process entry'} "
+            f"is even possible before you underwrite {strat_s}."
         )
+
+    edge_bit = ""
+    if buy is not None and est is not None and est > 0:
+        gap = (est - buy) / est * 100
+        edge_bit = f"~{gap:.0f}% under our mark" if gap > 0 else "near our mark"
 
     call_steps: list[dict[str, str]] = [
         _step(
             "Say this first",
             f"Hi — {channel_line}",
             (
-                f"Why this opener: {office} hears you as a buyer screening {acres_s} of "
-                f"{channel_noun} land in {place} — not a tourist asking for general info."
+                f"{office} should hear a buyer screening {acres_s} of {channel_noun} land in {place} "
+                f"for {strat_s} — not a general {county} info call. Opportunity screen "
+                f"{opp:.0f}/100 · {conf_bit}."
+                if opp is not None
+                else (
+                    f"{office} should hear a buyer screening {acres_s} of {channel_noun} land in {place} "
+                    f"for {strat_s} — not a general {county} info call ({conf_bit})."
+                )
             ),
         ),
         _step(
@@ -180,9 +297,11 @@ def build_outreach_playbook(
             + (f" near {addr or 'the mapped location'}" if addr else "")
             + ".",
             (
-                f"Why the ID: clerks pull the wrong tract constantly — {pin_short}"
+                f"Clerks mis-pull tracts; {pin_short}"
                 + (f" near {addr}" if addr else f" in {place}")
-                + f" keeps the whole call on your {acres_s} file."
+                + f" keeps the call on your {size_band} ({acres_s})"
+                + (f"; {usable_hint}" if usable_hint else "")
+                + f" while you still need clarity on {screens}."
             ),
         ),
         _step("Then say", ask_status, ask_status_why),
@@ -196,9 +315,9 @@ def build_outreach_playbook(
                     f"for a {strat_s} hold — not a retail flip ask."
                 ),
                 (
-                    f"Why the numbers: anchors {pin_short} to process money (~{_money(buy)}) vs our "
-                    f"~{_money(est)} mark for a {strat_s} hold in {place} — so they don’t pivot you to "
-                    f"retail list-price talk."
+                    f"Anchors {pin_short} to process money {_money(buy)} vs desktop mark {_money(est)} "
+                    f"({edge_bit}) for {strat_s} on {acres_s} in {place}. Stops retail list-price talk "
+                    f"when {liq_bit} and {growth_bit} already say this isn’t a Zillow flip."
                 ),
             )
         )
@@ -208,8 +327,8 @@ def build_outreach_playbook(
                 "Then say",
                 f"Best use we’re screening: {strat_s}.",
                 (
-                    f"Why say the use: frames {acres_s} in {place} as a {strat_s} underwrite — "
-                    f"they stop treating you like a tire-kicker."
+                    f"Frames {acres_s} in {place} as a {strat_s} underwrite — with {screens} and "
+                    f"{risk_bit}, they stop treating you like a tire-kicker."
                 ),
             )
         )
@@ -219,16 +338,18 @@ def build_outreach_playbook(
             "Ask next",
             "Who handles buyer questions for this exact parcel ID?",
             (
-                f"Why ask: {office} transfers wander — you need the person who can speak to "
-                f"{pin_short} ({acres_s}) without a second hold."
+                f"{office} transfer loops waste the window on {pin_short}. You need the desk that can "
+                f"speak to this {size_band} ({acres_s}) — deposit, status, and title path — while "
+                f"{conf_bit}."
             ),
         ),
         _step(
             "Ask next",
             "What paperwork or deposit do you need before I spend on a survey/title?",
             (
-                f"Why ask: stops you paying survey/title on {acres_s} in {county} before "
-                f"{office} will even accept you as a buyer on {pin_short}."
+                f"Survey/title on {acres_s} in {county} is real money. {office} must accept you on "
+                f"{pin_short} first — especially with {risk_bit} and {screens} still open."
+                + (f" Also mind {usable_hint}." if usable_hint else "")
             ),
         ),
     ]
@@ -239,8 +360,9 @@ def build_outreach_playbook(
                 "Ask next",
                 "Is there recorded legal road access, or only an easement / leftover flag?",
                 (
-                    f"Why ask: desktop access on this pin is only {access_score:.0f}/100 — "
-                    f"if {acres_s} in {place} has no recorded road, a {strat_s} hold can strand."
+                    f"Desktop access is {access_score:.0f}/100 on {pin_short}. For a {strat_s} hold on "
+                    f"{acres_s} in {place}, unrecorded/easement-only access can strand the deed — "
+                    f"and {liq_bit} already says exits are thin."
                 ),
             ),
         )
@@ -251,8 +373,9 @@ def build_outreach_playbook(
                 "Ask next",
                 f"Flood map shows ~{flood_pct:.0f}% overlap — any local gotchas buyers miss?",
                 (
-                    f"Why ask: ~{flood_pct:.0f}% of {acres_s} at {pin_short} sits in flood screen — "
-                    f"{county} staff know the insurance/fill gotchas the map won’t spell out."
+                    f"~{flood_pct:.0f}% of {acres_s} at {pin_short} hits flood screen. {county} staff "
+                    f"know insurance, fill, and culvert gotchas that change carry on a {strat_s} hold — "
+                    f"map % alone won’t price that ({risk_bit})."
                 ),
             ),
         )
@@ -263,8 +386,10 @@ def build_outreach_playbook(
                 "Ask next",
                 f"Wetlands look ~{wet_pct:.0f}% — does the county treat that as unusable for your sale?",
                 (
-                    f"Why ask: ~{wet_pct:.0f}% wetlands on {acres_s} can cut usable acres for {strat_s} — "
-                    f"confirm how {county} treats that before you bid."
+                    f"~{wet_pct:.0f}% wetlands on deeded {acres_s}"
+                    + (f" → {usable_hint}" if usable_hint else "")
+                    + f". Confirm how {county} treats that for sale/use so your {strat_s} exit math "
+                    f"isn’t on phantom acres ({liq_bit})."
                 ),
             ),
         )
@@ -274,8 +399,20 @@ def build_outreach_playbook(
                 "Ask next",
                 f"Soil screen shows ~{prime:.0f}% prime — any farm lease history on file?",
                 (
-                    f"Why ask: ~{prime:.0f}% prime on {acres_s} supports a farm/rent read — "
-                    f"lease history at {office} is free proof the thesis isn’t only desktop soil."
+                    f"~{prime:.0f}% prime on {acres_s} supports farm/rent for {strat_s}. Lease history "
+                    f"at {office} is free proof for {pin_short} — better than soil % alone when "
+                    f"{growth_bit}."
+                ),
+            )
+        )
+    if slope is not None and slope >= 12 and len(ask_next_steps) < 4:
+        ask_next_steps.append(
+            _step(
+                "Ask next",
+                f"Average slope looks ~{slope:.0f}% on our terrain screen — any build/farm limits you see locally?",
+                (
+                    f"~{slope:.0f}% avg slope on {pin_short} can kill pads or tillable rows on {acres_s}. "
+                    f"{county} nuance here protects a {strat_s} plan before you bid."
                 ),
             )
         )
@@ -289,8 +426,9 @@ def build_outreach_playbook(
                 "Watch out",
                 "This started as a vacant GIS screen — verify it’s actually obtainable before you bid time.",
                 (
-                    f"Why it matters: {acres_s} in {place} entered as a map screen, not a sale — "
-                    f"don’t calendar diligence on {pin_short} until someone confirms a buy path."
+                    f"{acres_s} in {place} ({pin_short}) entered as GIS vacant, not a sale. With "
+                    f"{conf_bit} and {screens}, don’t calendar survey/title until a human confirms "
+                    f"a buy path for {strat_s}."
                 ),
             )
         )
@@ -300,8 +438,9 @@ def build_outreach_playbook(
                 "Watch out",
                 f"Price insurance / fill for ~{flood_pct:.0f}% flood overlap.",
                 (
-                    f"Why it matters: ~{flood_pct:.0f}% flood on {pin_short} changes carry — "
-                    f"bake insurance/fill into the bid so a win on {acres_s} doesn’t become a cost shock."
+                    f"~{flood_pct:.0f}% flood on {pin_short} changes annual carry on {acres_s}. Bake "
+                    f"insurance/fill into {_money(buy) if buy else 'your entry'} so a win doesn’t "
+                    f"blow up the {strat_s} IRR ({risk_bit})."
                 ),
             )
         )
@@ -311,8 +450,20 @@ def build_outreach_playbook(
                 "Watch out",
                 "Access isn’t clear yet — don’t wire money until a title person maps the easement.",
                 (
-                    f"Why it matters: access reads {access_score:.0f}/100 on this pin — "
-                    f"wiring on {acres_s} in {county} before a title map can buy you a stranded deed."
+                    f"Access {access_score:.0f}/100 on {pin_short} + {liq_bit} is a stranded-deed recipe "
+                    f"on {acres_s} in {county}. Title map before wire — especially for {strat_s}."
+                ),
+            )
+        )
+    if scar is not None and scar >= 70 and not watch_outs:
+        watch_outs.append(
+            _step(
+                "Watch out",
+                f"Scarcity screen is high (~{scar:.0f}/100) — ask what substitutes usually trade nearby.",
+                (
+                    f"Scarcity {scar:.0f}/100 on {acres_s} in {place} can support exit — or hide a "
+                    f"one-off pin nobody else will buy. Ask {office} what actually substitutes for "
+                    f"{pin_short}."
                 ),
             )
         )
@@ -322,8 +473,9 @@ def build_outreach_playbook(
                 "Watch out",
                 f"Ask what kills deals on {acres_s} files in {county} — they’ll tell you the local trap.",
                 (
-                    f"Why it matters: {county} staff know the deal-killers on {acres_s}-class files "
-                    f"(title quirks, access, redemption) that never show on a desktop map of {pin_short}."
+                    f"{county} staff know title/access/redemption traps on {size_band} files like "
+                    f"{pin_short} that never show in {screens}. One sentence here can save the "
+                    f"{strat_s} hold ({risk_bit})."
                 ),
             )
         )
@@ -333,8 +485,8 @@ def build_outreach_playbook(
             "Close with",
             f"Thanks — I’ll confirm {pin} on your site and call back if the status is live.",
             (
-                f"Why close this way: you leave {office} with a clear next step on {pin_short} — "
-                f"and a reason to call again once the {place} status is in your notes."
+                f"Leaves {office} a clean next step on {pin_short}: you’ll verify status for "
+                f"{acres_s} in {place}, then return with deposit/title questions — not another cold loop."
             ),
         )
     )
@@ -344,8 +496,8 @@ def build_outreach_playbook(
             "Start here",
             f"On {office}'s site, hunt the live status for this pin — not a pretty brochure.",
             (
-                f"Why first: status on {office}’s site decides if {acres_s} ({pin_short}) in {place} "
-                f"is even obtainable — brochure copy won’t."
+                f"Status on {office} decides if {acres_s} ({pin_short}) in {place} is obtainable. "
+                f"Brochure copy won’t fix {screens} or {conf_bit}."
             ),
         ),
         _step("Look for", site_look, site_look_why),
@@ -353,16 +505,18 @@ def build_outreach_playbook(
             "Look for",
             f"Search the site for {pin}" + (f" or address crumbs from {place}" if place else "") + ".",
             (
-                f"Why search the ID: one hit on {pin_short} beats wandering {county} pages — "
-                f"your What to say open needs that exact record."
+                f"One hit on {pin_short} beats wandering {county} pages. What to say needs that exact "
+                f"record for your {size_band} ({acres_s}) before you dial"
+                + (f" {phone}" if phone else "")
+                + "."
             ),
         ),
         _step(
             "Look for",
             "Screenshot the status line (for sale / delinquent / surplus / owner) before you call.",
             (
-                f"Why screenshot: you need the exact status words for {pin_short} in the first "
-                f"20 seconds with {office} — memory won’t cut it."
+                f"Exact status words for {pin_short} belong in the first 20 seconds with {office}. "
+                f"Memory fails when {risk_bit} and {screens} are already in play."
             ),
         ),
     ]
@@ -373,8 +527,8 @@ def build_outreach_playbook(
                 "Look for",
                 str(how),
                 (
-                    f"Why follow this: it’s {office}’s own buy path for {place} — "
-                    f"use it for {pin_short} before inventing a process."
+                    f"{office}’s published path for {place} — follow it for {pin_short} ({acres_s}) "
+                    f"before inventing a process that won’t clear {channel_noun} rules."
                 ),
             ),
         )
@@ -387,8 +541,8 @@ def build_outreach_playbook(
                     "the office page is for ID + tax status, not a buy-it-now button."
                 ),
                 (
-                    f"Why this check: {acres_s} in {place} may be private — {office} won’t sell it; "
-                    f"owner of record on {pin_short} is the path."
+                    f"{acres_s} in {place} may be private. {office} won’t sell {pin_short}; owner of "
+                    f"record is the path — don’t wait on a buy button while {growth_bit}."
                 ),
             )
         )
@@ -398,8 +552,9 @@ def build_outreach_playbook(
                 "Look for",
                 "Ignore retail comps on Zillow for bid math — deposit, redemption, and clear title rules matter more.",
                 (
-                    f"Why ignore Zillow: {channel_noun} bids on {acres_s} in {county} clear on deposit/"
-                    f"redemption/title rules — not retail comps near {pin_short}."
+                    f"{channel_noun} clearing on {acres_s} in {county} runs on deposit, redemption, and "
+                    f"title — not retail comps near {pin_short}. Pair rules with {_money(buy) if buy else 'process entry'} "
+                    f"vs {_money(est) if est else 'mark'} and {liq_bit}."
                 ),
             )
         )
@@ -410,24 +565,30 @@ def build_outreach_playbook(
                 "Do next",
                 "Copy the exact parcel ID into their search.",
                 (
-                    f"Why copy {pin_short}: one ID → one {county} record — wrong-pin digs waste the "
-                    f"call you still need to make on {acres_s}."
+                    f"{pin_short} → one {county} record. Wrong-pin digs waste the call you still need "
+                    f"on {acres_s} while {screens} stay unresolved."
                 ),
             ),
             _step(
                 "Do next",
                 "Note sale date / min bid / owner type in one screenshot.",
                 (
-                    f"Why these three: sale date, min bid, and owner type are the facts "
-                    f"{office} expects when you open What to say on {pin_short}."
+                    f"Sale date, min bid, and owner type are what {office} expects when you open "
+                    f"What to say on {pin_short} — the three facts that unlock a {strat_s} go/no-go "
+                    f"with {edge_bit or 'your entry'} in mind."
+                    if edge_bit
+                    else (
+                        f"Sale date, min bid, and owner type are what {office} expects when you open "
+                        f"What to say on {pin_short} — three facts for a {strat_s} go/no-go on {acres_s}."
+                    )
                 ),
             ),
             _step(
                 "Do next",
                 "Then open What to say and use those facts in the first 20 seconds.",
                 (
-                    f"Why switch now: the site dig only pays off if {place} facts hit the phone "
-                    f"open for {acres_s} — don’t call cold."
+                    f"Site dig only pays if {place} facts hit the phone open for {acres_s} "
+                    f"({pin_short}). Cold calls bounce when {conf_bit}."
                 ),
             ),
         ]

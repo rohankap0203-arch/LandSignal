@@ -86,21 +86,60 @@ function formatStepBody(tone: "source" | "call", step: Step): string {
   return quoteIfNeeded(step.body);
 }
 
-/** Fallback if API didn’t send fulfills — keep the step useful. */
+/** Strip legacy "Why …:" prefixes — the UI already labels Why · */
+function cleanFulfills(text: string): string {
+  let clean = text.trim();
+  const prefixes = [
+    "Why ask:",
+    "Why ask ·",
+    "Why this opener:",
+    "Why the ID:",
+    "Why the numbers:",
+    "Why say the use:",
+    "Why close this way:",
+    "Why it matters:",
+    "Why first:",
+    "Why search the ID:",
+    "Why screenshot:",
+    "Why follow this:",
+    "Why this check:",
+    "Why copy:",
+    "Why these three:",
+    "Why switch now:",
+    "Why say this:",
+    "Why next:",
+  ];
+  for (const prefix of prefixes) {
+    if (clean.toLowerCase().startsWith(prefix.toLowerCase())) {
+      clean = clean.slice(prefix.length).replace(/^[\s:·—-]+/, "");
+      break;
+    }
+  }
+  return clean;
+}
+
+/** Fallback if API didn’t send fulfills — keep the step useful (no Why-prefix; UI has Why ·). */
 function fallbackFulfills(tone: "source" | "call", step: Step): string {
-  if (step.fulfills?.trim()) return step.fulfills.trim();
+  if (step.fulfills?.trim()) return cleanFulfills(step.fulfills);
   const k = step.kicker.toLowerCase();
   if (tone === "call") {
-    if (k.includes("first")) return "Why this opener: they hear a real buyer on this exact file, not a general info call.";
-    if (k.includes("ask")) return "Why ask: a yes/no here changes whether you keep spending time on this pin.";
-    if (k.includes("watch")) return "Why it matters: flags the local trap before it eats this deal.";
-    if (k.includes("close")) return "Why close this way: leaves a clean reason to call back with facts.";
-    return "Why say this: advances status, price, or who can sell this exact pin.";
+    if (k.includes("first"))
+      return "They should hear a buyer on this exact file and channel — not a general county info call.";
+    if (k.includes("ask"))
+      return "A yes/no here changes whether you keep spending time, survey cash, or title work on this pin.";
+    if (k.includes("watch"))
+      return "Flags the local trap (title, access, redemption, flood) before it eats this underwrite.";
+    if (k.includes("close"))
+      return "Leaves a clean reason to call back with sale date, deposit, or owner facts — not another cold loop.";
+    return "Advances status, price path, or who can actually sell this exact pin.";
   }
-  if (k.includes("start")) return "Why first: live status decides if this pin is obtainable at all.";
-  if (k.includes("do next")) return "Why next: turns the page dig into facts for What to say.";
-  if (k.includes("watch")) return "Why it matters: stops a dead-end dig on a pin that isn’t buyable.";
-  return "Why this check: pulls the fact you need before you dial or bid.";
+  if (k.includes("start"))
+    return "Live status on the office site decides if this pin is obtainable at all.";
+  if (k.includes("do next"))
+    return "Turns the page dig into the three facts you need in the first 20 seconds of What to say.";
+  if (k.includes("watch"))
+    return "Stops a dead-end dig on a pin that isn’t buyable yet.";
+  return "Pulls the fact you need before you dial, bid, or calendar diligence.";
 }
 
 /** Compact animated reveal — clearer than a bare V for “open the guide”. */
