@@ -105,7 +105,7 @@ export type SearchMeta = {
   regions_by_state?: Record<string, string[]>;
   strategies: string[];
   hold_years: Array<string | number>;
-  target_roi: Array<string | number>;
+  target_roi?: Array<string | number>;
   max_risk?: Array<string | number>;
   min_confidence?: Array<string | number>;
   price_presets: Array<{ label: string; min: number | null; max: number | null }>;
@@ -131,7 +131,6 @@ export type SearchFilters = {
   max_risk?: number | null;
   min_confidence?: number | null;
   hold_years?: number | null;
-  target_roi?: number | null;
   include_unpriced?: boolean;
   unpriced_mode?: string;
   market_channel?: string;

@@ -306,8 +306,6 @@ async def radar(
     if hold_years is not None:
         profile["target_hold_years_min"] = hold_years
         profile["target_hold_years_max"] = hold_years
-    if target_roi is not None:
-        profile["min_target_irr"] = target_roi
     if max_price is not None:
         profile["max_price_usd"] = max_price
     if min_acres is not None:
@@ -408,15 +406,6 @@ async def radar(
                 ):
                     fit = min(100, fit + 5)
             enrichment = store.enrichments.get(parcel.id)
-            if target_roi is not None:
-                base_sc = None
-                if enrichment and enrichment.scenarios:
-                    base_sc = next((s for s in enrichment.scenarios if s.get("case_type") == "BASE"), None)
-                if base_sc and base_sc.get("irr") is not None:
-                    if base_sc["irr"] + 1e-9 >= target_roi:
-                        fit = min(100, fit + 6)
-                    else:
-                        fit = max(0, fit - 8)
 
             auction_path = None
             if enrichment and enrichment.comps:
@@ -592,7 +581,7 @@ async def radar(
                     fit_score=fit,
                     summary=summary,
                     match_reasons=reasons,
-                    rating_breakdown=rating_breakdown(score),
+                    rating_breakdown=rating_breakdown(score, parcel=parcel, listing=listing),
                     links=annotated,
                     latitude=parcel.latitude,
                     longitude=parcel.longitude,
@@ -679,7 +668,6 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         human_transmission,
         human_wetlands,
     )
-    from landsignal.services.links import annotate_links
     from landsignal.services.presentation import price_display, rating_breakdown, sourcing_card
 
     store = get_store(get_settings().demo_seed)
@@ -702,22 +690,37 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         raw=listing.raw if listing else None,
     )
     links = source.get("links") or []
-    # Curated office / assessor URLs are shown as available — many agency sites block HEAD/bots
-    curated = {source.get("website"), source.get("parcel_lookup")}
+    # Every contact/posting link must stay clickable. Agency sites often block bots —
+    # never gray out primary/office/lookup or surface http_XXX error codes to the UI.
+    fallback_site = source.get("website") or "https://www.google.com/search?q=county+treasurer+tax+sale"
     annotated = []
-    to_check = []
     for l in links:
         url = str(l.get("url") or "")
-        if url.startswith("tel:") or l.get("kind") == "map" or url in curated:
-            annotated.append({**l, "available": True, "availability_reason": "ok", "status_code": None})
-        elif url.startswith("http"):
-            to_check.append(l)
-        else:
-            annotated.append({**l, "available": True, "availability_reason": "ok", "status_code": None})
-    if to_check:
-        annotated.extend(await annotate_links(to_check))
-    # Keep "Open source posting" first when available
-    annotated.sort(key=lambda l: 0 if l.get("kind") == "primary" and l.get("available") else 1)
+        kind = l.get("kind")
+        if not url or (kind == "primary" and not url.startswith("http")):
+            url = str(fallback_site)
+        annotated.append(
+            {
+                **l,
+                "url": url,
+                "available": True,
+                "availability_reason": "ok",
+                "status_code": None,
+            }
+        )
+    if not any(l.get("kind") == "primary" for l in annotated):
+        annotated.insert(
+            0,
+            {
+                "label": "Open posting",
+                "url": str(fallback_site),
+                "kind": "primary",
+                "available": True,
+                "availability_reason": "ok",
+                "status_code": None,
+            },
+        )
+    annotated.sort(key=lambda l: 0 if l.get("kind") == "primary" else 1)
 
     dd_raw = store.dd_items.get(parcel_id, [])
     dd_guided = human_dd_items(
@@ -726,8 +729,13 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         enrichment,
     )
     land_readouts = {
-        "soil": human_soil(enrichment.soil if enrichment else None),
-        "flood": human_flood(enrichment.flood if enrichment else None),
+        "soil": human_soil(
+            enrichment.soil if enrichment else None,
+            apn=parcel.apn,
+            county=parcel.county,
+            state=parcel.state,
+        ),
+        "flood": human_flood(enrichment.flood if enrichment else None, apn=parcel.apn),
         "wetlands": human_wetlands(enrichment.wetlands if enrichment else None),
         "transmission": human_transmission(enrichment.infrastructure if enrichment else None),
     }
@@ -878,7 +886,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         "auction_path": auction_path,
         "sourcing": source,
         "cockpit": cockpit,
-        "rating_breakdown": rating_breakdown(score) if score else [],
+        "rating_breakdown": rating_breakdown(score, parcel=parcel, listing=listing) if score else [],
         "score_explained": brief.get("score_story")
         or {
             "landsignal": "Overall opportunity score from 0–100 after weighing price, quality, options, and risk.",

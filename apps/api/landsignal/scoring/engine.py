@@ -6,7 +6,7 @@ from typing import Any
 
 from landsignal.scoring.financial import asking_discount_pct, clamp, margin_of_safety
 
-ALGORITHM_VERSION = "landsignal_score_v3_1"
+ALGORITHM_VERSION = "landsignal_score_v3_2"
 WEIGHT_VERSION = "weights_default_v3"
 
 DEFAULT_WEIGHTS = {
@@ -218,10 +218,20 @@ def _signal(opportunity: float, risk: float, confidence: float) -> str:
     return "WATCH"
 
 
+def _parcel_tag(inp: dict) -> str:
+    apn = inp.get("apn") or "no APN"
+    county = inp.get("county") or "county n/a"
+    state = (inp.get("state") or "US").upper()
+    acres = inp.get("acreage")
+    size = f"{float(acres):,.2f} ac" if acres is not None else "acreage n/a"
+    return f"{apn} · {county}, {state} · {size}"
+
+
 def compute_score(inp: dict, weights: dict | None = None, weight_version: str = WEIGHT_VERSION) -> dict:
     weights = weights or DEFAULT_WEIGHTS
     screens = screen_strategies(inp)
     risk, risk_evidence = compute_risk(inp)
+    tag = _parcel_tag(inp)
     ask = inp.get("asking_price_usd")  # may already be expected settle for auctions
     opening_bid = inp.get("opening_bid_usd")
     is_auction = bool(inp.get("is_auction_opener"))
@@ -231,34 +241,40 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
     discount = asking_discount_pct(ask, base)
     if base is None and ask is None:
         valuation_value = 45.0
-        valuation_evidence = ["No ask and no model value yet — neutral-low until priced"]
+        valuation_evidence = [
+            f"{tag}: no ask and no model value — valuation held at {valuation_value:.0f}/100 until priced"
+        ]
         valuation_ks = (inp.get("estimated_value_base_usd") or {}).get("knowledge_state", "UNKNOWN")
     elif ask is None and base is not None:
         # Unpriced process parcels: score entry optionality from scale + scarcity, not fake mispricing
         scar = _v(inp, "scarcity_score") or 50.0
         valuation_value = _round1(clamp(48 + min(float(acres), 640.0) / 640.0 * 22 + (scar - 50) * 0.25, 40, 82))
         valuation_evidence = [
-            f"No retail ask — process pricing. Screening value ~${base:,.0f}; "
-            f"scale/scarcity entry score {valuation_value:.0f}/100"
+            f"{tag}: no retail ask — process pricing. Screening mark ~${base:,.0f}; "
+            f"scale ({float(acres):,.2f} ac) + scarcity {scar:.0f} → valuation {valuation_value:.0f}/100"
         ]
         valuation_ks = "ESTIMATED"
     elif base is None and ask is not None:
         valuation_value = 48.0
-        valuation_evidence = ["Ask present but model value incomplete — near-neutral pending comps"]
+        valuation_evidence = [
+            f"{tag}: ask ${ask:,.0f} present but model mark incomplete — valuation {valuation_value:.0f}/100 pending comps"
+        ]
         valuation_ks = "UNKNOWN"
     else:
         # Stronger response to deep discounts so real bargains can clear the 50s/60s
         valuation_value = _round1(clamp(58 - discount * 1.35, 0, 100))
         if is_auction and opening_bid is not None:
             valuation_evidence = [
-                f"Auction opener ${opening_bid:,.0f} ≠ settle. "
-                f"Expected clear ~${ask:,.0f} vs model ${base:,.0f} → {discount:.1f}% "
-                f"(not the teaser {(opening_bid - base) / base * 100:.0f}% vs opener)."
+                f"{tag}: auction opener ${opening_bid:,.0f} ≠ settle. "
+                f"Expected clear ~${ask:,.0f} vs mark ${base:,.0f} → {discount:.1f}% → valuation {valuation_value:.0f}/100 "
+                f"(opener teaser would have been {(opening_bid - base) / base * 100:.0f}%)."
             ]
             if auction_path and auction_path.get("note"):
                 valuation_evidence.append(str(auction_path["note"])[:220])
         else:
-            valuation_evidence = [f"Ask {ask} vs base value {base} → discount/premium {discount:.1f}%"]
+            valuation_evidence = [
+                f"{tag}: ask ${ask:,.0f} vs mark ${base:,.0f} → {discount:.1f}% → valuation {valuation_value:.0f}/100"
+            ]
         valuation_ks = "KNOWN"
 
     prime = _v(inp, "prime_farmland_pct")
@@ -267,14 +283,16 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
     q_evidence = []
     if prime is not None:
         q_parts.append(prime)
-        q_evidence.append(f"Prime farmland {prime:.1f}%")
+        q_evidence.append(f"{tag}: USDA prime farmland screen {prime:.1f}%")
     if slope is not None:
         q_parts.append(clamp(100 - slope * 3, 0, 100))
-        q_evidence.append(f"Avg slope {slope:.1f}%")
+        q_evidence.append(f"{tag}: avg slope {slope:.1f}% → tillable/build score {clamp(100 - slope * 3, 0, 100):.0f}")
     quality_value = _round1(sum(q_parts) / len(q_parts)) if q_parts else 50.0
     quality_ks = "KNOWN" if q_parts else "UNKNOWN"
     if not q_parts:
-        q_evidence = ["Intrinsic quality unknown — not penalized"]
+        q_evidence = [f"{tag}: soil/slope not confirmed — quality held at {quality_value:.0f}/100 (not penalized)"]
+    else:
+        q_evidence.append(f"Composite land quality → {quality_value:.0f}/100")
 
     zoning = _v(inp, "zoning_development_friendly") or 40
     growth = _v(inp, "path_of_growth_score") or 40
@@ -344,45 +362,74 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
             "ESTIMATED"
             if _v(inp, "zoning_development_friendly") is None and prime is None
             else "KNOWN",
-            [f"Top strategy scores: " + ", ".join(f"{k}={v}" for k, v in sorted(strategy_scores.items(), key=lambda x: -x[1])[:3])],
+            [
+                f"{tag}: top use screens "
+                + ", ".join(f"{k}={v:.0f}" for k, v in sorted(strategy_scores.items(), key=lambda x: -x[1])[:3])
+                + f" → optionality {optionality_value:.0f}/100"
+            ],
         ),
         "growth_appreciation": (
             growth_v if growth_v is not None else 50.0,
             "UNKNOWN" if growth_v is None else "KNOWN",
-            ["Growth score unknown — neutral"] if growth_v is None else [f"Path-of-growth {growth_v}"],
+            [
+                f"{tag}: path-of-growth not confirmed — held at 50/100"
+                if growth_v is None
+                else f"{tag}: path-of-growth {growth_v:.0f} → growth rating {growth_v:.0f}/100"
+            ],
         ),
         "infrastructure": (
             infra,
             "UNKNOWN" if not infra_parts else "ESTIMATED",
-            ["Infrastructure unknown — neutral"] if not infra_parts else [f"Infrastructure composite {infra}"],
+            [
+                f"{tag}: access/frontage/transmission incomplete — infra {infra:.0f}/100"
+                if not infra_parts
+                else f"{tag}: infra composite {infra:.0f}/100"
+                + (f"; transmission {tx:,.0f} m" if tx is not None else "")
+                + (f"; access {access:.0f}" if _v(inp, "legal_access_confidence") is not None else "")
+            ],
         ),
         "liquidity": (
             liq if liq is not None else 50.0,
             "UNKNOWN" if liq is None else "KNOWN",
-            ["Liquidity unknown — neutral"] if liq is None else [f"Liquidity {liq}"],
+            [
+                f"{tag}: liquidity proxy missing — held at 50/100"
+                if liq is None
+                else f"{tag}: liquidity proxy {liq:.0f} → {liq:.0f}/100"
+            ],
         ),
         "scarcity": (
             _v(inp, "scarcity_score") if _v(inp, "scarcity_score") is not None else 50.0,
             "UNKNOWN" if _v(inp, "scarcity_score") is None else "KNOWN",
-            ["Scarcity unknown — neutral"]
-            if _v(inp, "scarcity_score") is None
-            else [f"Scarcity {_v(inp, 'scarcity_score')}"],
+            [
+                f"{tag}: scarcity proxy missing — held at 50/100"
+                if _v(inp, "scarcity_score") is None
+                else f"{tag}: scarcity {_v(inp, 'scarcity_score'):.0f} on {float(acres):,.2f} ac → {_v(inp, 'scarcity_score'):.0f}/100"
+            ],
         ),
         "catalysts": (
             _v(inp, "catalyst_score") if _v(inp, "catalyst_score") is not None else 40.0,
             "UNKNOWN" if _v(inp, "catalyst_score") is None else "KNOWN",
-            ["No structured catalysts"]
-            if _v(inp, "catalyst_score") is None
-            else [f"Catalyst score {_v(inp, 'catalyst_score')}"],
+            [
+                f"{tag}: no structured catalyst on file — catalysts {(_v(inp, 'catalyst_score') or 40):.0f}/100"
+                if _v(inp, "catalyst_score") is None
+                else f"{tag}: catalyst score {_v(inp, 'catalyst_score'):.0f}/100"
+            ],
         ),
         "seller_dynamics": (
             _v(inp, "seller_pressure_score") if _v(inp, "seller_pressure_score") is not None else 40.0,
             "UNKNOWN" if _v(inp, "seller_pressure_score") is None else "KNOWN",
-            ["Seller dynamics unknown"]
-            if _v(inp, "seller_pressure_score") is None
-            else [f"Seller pressure {_v(inp, 'seller_pressure_score')}"],
+            [
+                f"{tag}: seller-pressure proxy missing ({inp.get('provider_id') or 'listing'}) — held at 40/100"
+                if _v(inp, "seller_pressure_score") is None
+                else f"{tag}: seller pressure {_v(inp, 'seller_pressure_score'):.0f} via {inp.get('provider_id') or 'listing'} → {_v(inp, 'seller_pressure_score'):.0f}/100"
+            ],
         ),
-        "risk": (100 - risk, "ESTIMATED", risk_evidence),
+        "risk": (
+            100 - risk,
+            "ESTIMATED",
+            [f"{tag}: {e}" for e in risk_evidence]
+            or [f"{tag}: desktop risk {risk:.0f}/100 → risk contribution {100 - risk:.0f}/100"],
+        ),
     }
 
     components = []

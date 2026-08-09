@@ -12,7 +12,7 @@ def _pct(v: Any) -> str | None:
         return None
 
 
-def human_soil(prov: Any) -> dict[str, Any]:
+def human_soil(prov: Any, *, apn: str | None = None, county: str | None = None, state: str | None = None) -> dict[str, Any]:
     n = (getattr(prov, "normalized", None) or getattr(prov, "value", None) or {}) if prov else {}
     if isinstance(prov, dict):
         n = prov.get("normalized") or prov.get("value") or {}
@@ -20,17 +20,18 @@ def human_soil(prov: Any) -> dict[str, Any]:
     state_s = state.value if hasattr(state, "value") else (prov.get("knowledge_state") if isinstance(prov, dict) else "UNKNOWN")
     prime = n.get("prime_farmland_pct")
     farm = n.get("farmland_classification")
+    where = f"{apn or 'This parcel'}" + (f" in {county}, {state}" if county and state else "")
     bullets = []
     if farm:
-        bullets.append(f"USDA farmland class: {farm}")
+        bullets.append(f"{where}: USDA farmland class mark = {farm}")
     if prime is not None:
-        bullets.append(f"About {float(prime):.0f}% of the screened area looks like prime farmland (point/polygon screen).")
+        bullets.append(f"{where}: prime farmland screen {float(prime):.0f}% of sampled area (SSURGO).")
     else:
-        bullets.append("Prime-farmland share is not confirmed yet from USDA for this parcel geometry.")
-    bullets.append("This is a screening read from USDA SSURGO — order a soil test before farming decisions.")
+        bullets.append(f"{where}: prime-farmland share not confirmed yet from USDA for this geometry.")
+    bullets.append("SSURGO screen only — order a soil test before farming underwrite.")
     plain = (
-        f"Soil look: {farm or 'classification not confirmed'}. "
-        f"Prime farmland screen: {_pct(prime) or 'not confirmed'}."
+        f"{where}: soil class {farm or 'not confirmed'}; "
+        f"prime screen {_pct(prime) or 'not confirmed'}."
     )
     return {
         "title": "Soil quality",
@@ -43,7 +44,7 @@ def human_soil(prov: Any) -> dict[str, Any]:
     }
 
 
-def human_flood(prov: Any) -> dict[str, Any]:
+def human_flood(prov: Any, *, apn: str | None = None) -> dict[str, Any]:
     n = (getattr(prov, "normalized", None) or getattr(prov, "value", None) or {}) if prov else {}
     if isinstance(prov, dict):
         n = prov.get("normalized") or prov.get("value") or {}
@@ -51,22 +52,23 @@ def human_flood(prov: Any) -> dict[str, Any]:
     state_s = state.value if hasattr(state, "value") else (prov.get("knowledge_state") if isinstance(prov, dict) else "UNKNOWN")
     flood = n.get("flood_zone_pct")
     zone = n.get("zone")
+    who = apn or "This pin"
     if flood is None:
-        plain = "Flood exposure is not confirmed yet from FEMA for this location."
+        plain = f"{who}: flood exposure not confirmed yet from FEMA."
         level = "Unknown"
     elif float(flood) < 10:
-        plain = "FEMA screen suggests low flood overlap at the checked location."
+        plain = f"{who}: FEMA screen shows low flood overlap ({float(flood):.0f}%)."
         level = "Lower"
     elif float(flood) < 35:
-        plain = "FEMA screen suggests meaningful flood exposure — financing and insurance may be harder."
+        plain = f"{who}: FEMA screen shows {float(flood):.0f}% flood overlap — insurance/financing friction likely."
         level = "Moderate"
     else:
-        plain = "FEMA screen suggests high flood exposure — treat as a major deal risk until surveyed."
+        plain = f"{who}: FEMA screen shows high flood overlap ({float(flood):.0f}%) — major underwrite input."
         level = "Higher"
     bullets = [
-        f"Flood overlap screen: {_pct(flood) or 'not confirmed'}",
-        f"FEMA zone mark: {zone or 'not returned at point sample'}",
-        "This is not a survey or elevation certificate. Verify with a flood specialist before buying.",
+        f"{who}: flood overlap {_pct(flood) or 'not confirmed'}",
+        f"{who}: FEMA zone mark {zone or 'not returned at point sample'}",
+        "Not an elevation certificate — verify before bid.",
     ]
     return {
         "title": "Flood exposure",

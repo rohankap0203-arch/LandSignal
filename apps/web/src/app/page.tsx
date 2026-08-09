@@ -26,8 +26,6 @@ type FormState = {
   strategyCustom: string;
   holdYears: string;
   holdCustom: string;
-  targetRoi: string;
-  roiCustom: string;
   unpricedMode: string;
   sort: string;
 };
@@ -47,8 +45,6 @@ const DEFAULT_FORM: FormState = {
   strategyCustom: "",
   holdYears: "Any",
   holdCustom: "",
-  targetRoi: "Any",
-  roiCustom: "",
   unpricedMode: "include",
   sort: "fit_desc",
 };
@@ -101,13 +97,6 @@ export default function SearchPage() {
       if (f.holdCustom.trim()) hold = Number(f.holdCustom);
       else if (f.holdYears !== "Any" && f.holdYears !== "__custom__") hold = Number(f.holdYears);
 
-      let roi: number | undefined;
-      if (f.roiCustom.trim()) {
-        const raw = f.roiCustom.trim().replace("%", "");
-        const n = Number(raw);
-        roi = n > 1 ? n / 100 : n;
-      } else if (f.targetRoi !== "Any" && f.targetRoi !== "__custom__") roi = Number(f.targetRoi);
-
       const strategy =
         f.strategy === "CUSTOM"
           ? f.strategyCustom.trim() || undefined
@@ -125,7 +114,6 @@ export default function SearchPage() {
         max_acres: customAcres ? parseMoney(f.acreMax) : acres?.max ?? undefined,
         strategy,
         hold_years: Number.isFinite(hold as number) ? hold : undefined,
-        target_roi: Number.isFinite(roi as number) ? roi : undefined,
         unpriced_mode: f.unpricedMode,
         include_unpriced: f.unpricedMode !== "priced",
         sort: f.sort,
@@ -373,28 +361,6 @@ export default function SearchPage() {
                 value={form.holdCustom}
                 placeholder="Years (e.g. 8)"
                 onChange={(e) => setForm((f) => ({ ...f, holdCustom: e.target.value, holdYears: "__custom__" }))}
-              />
-            )}
-          </FilterField>
-
-          <FilterField label="Desired ROI / IRR">
-            <select
-              value={form.targetRoi}
-              onChange={(e) => setForm((f) => ({ ...f, targetRoi: e.target.value }))}
-            >
-              {(meta?.target_roi || ["Any"]).map((s) => (
-                <option key={String(s)} value={String(s)}>
-                  {s === "Any" ? "Any" : `${Math.round(Number(s) * 100)}%+`}
-                </option>
-              ))}
-              <option value="__custom__">Type my own…</option>
-            </select>
-            {(form.targetRoi === "__custom__" || form.roiCustom) && (
-              <input
-                className="mt-1.5"
-                value={form.roiCustom}
-                placeholder="e.g. 14 or 14%"
-                onChange={(e) => setForm((f) => ({ ...f, roiCustom: e.target.value, targetRoi: "__custom__" }))}
               />
             )}
           </FilterField>

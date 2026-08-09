@@ -205,7 +205,6 @@ def search_meta_payload(inventory_regions: list[str] | None = None) -> dict:
             "CUSTOM",
         ],
         "hold_years": ["Any", 1, 2, 3, 5, 7, 10, 12, 15, 20, 25, 30],
-        "target_roi": ["Any", 0.05, 0.08, 0.10, 0.12, 0.15, 0.18, 0.20, 0.25, 0.30],
         "max_risk": ["Any", 20, 30, 40, 45, 50, 60, 70, 80],
         "min_confidence": ["Any", 25, 35, 40, 50, 55, 65, 70, 80],
         "price_presets": [
@@ -282,7 +281,6 @@ def search_meta_payload(inventory_regions: list[str] | None = None) -> dict:
             "acres",
             "strategy",
             "hold_years",
-            "target_roi",
             "max_risk",
             "min_confidence",
             "region",

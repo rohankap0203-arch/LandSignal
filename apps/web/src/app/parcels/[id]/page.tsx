@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
 import { LandLoader } from "@/components/land-loader";
+import { ReturnVisual } from "@/components/return-visual";
 import { ScoreBar } from "@/components/score-bar";
 import { SignalBadge } from "@/components/signal-badge";
 import { SignalCockpit } from "@/components/signal-cockpit";
@@ -17,17 +18,11 @@ const ParcelMap = dynamic(() => import("@/components/parcel-map").then((m) => m.
 
 type AnyRec = Record<string, unknown>;
 
-function LinkButton({ link, dark }: { link: ActionLink; dark?: boolean }) {
-  const available = link.available !== false;
-  if (!available) {
-    return (
-      <span className="btn btn-ghost opacity-45 cursor-not-allowed" title="Document not currently available">
-        {link.label} (unavailable)
-      </span>
-    );
-  }
+function LinkButton({ link }: { link: ActionLink }) {
+  // Never show error codes / unavailable — every URL we render is clickable
+  if (!link.url) return null;
   return (
-    <a href={link.url} target="_blank" rel="noreferrer" className={`btn ${dark ? "btn-dark" : "btn-ghost"}`}>
+    <a href={link.url} target="_blank" rel="noreferrer" className="btn btn-ghost">
       {link.label}
     </a>
   );
@@ -43,7 +38,7 @@ export default function ParcelIntelligencePage() {
   const [ddOpen, setDdOpen] = useState<Record<string, boolean>>({});
   const [watched, setWatched] = useState(false);
   const [watchMsg, setWatchMsg] = useState("");
-  const [openCard, setOpenCard] = useState<string | null>("soil");
+  const [openRating, setOpenRating] = useState<string | null>(null);
 
   useEffect(() => {
     setData(null);
@@ -62,7 +57,7 @@ export default function ParcelIntelligencePage() {
     return (
       <LandLoader
         label="Building land intelligence…"
-        detail="Pulling soils, flood, wetlands, auction settle math, and buyer-psychology filters for this pin."
+        detail="Soils, flood, wetlands, settle math, and return screens for this exact pin."
       />
     );
   }
@@ -82,18 +77,26 @@ export default function ParcelIntelligencePage() {
   const scenarios = (brief.scenario_cards as AnyRec[]) || (data.scenarios_human as AnyRec[]) || [];
   const dd = (brief.dd_focus as AnyRec[]) || (data.due_diligence_guided as AnyRec[]) || [];
   const story = (brief.score_story as Record<string, string>) || {};
-  const liveLinks = links.filter((l) => l.available !== false);
+  const returnCase = (brief.return_case as AnyRec) || {};
+
+  const identity = [
+    parcel.apn ? String(parcel.apn) : null,
+    parcel.county ? `${parcel.county}, ${parcel.state}` : String(parcel.state || ""),
+    parcel.acreage != null ? `${Number(parcel.acreage).toFixed(2)} ac` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   const sellerLink =
-    liveLinks.find((l) => l.kind === "primary" && l.available !== false) ||
+    links.find((l) => l.kind === "primary") ||
     (sourcing.website
-      ? { label: "Open source posting", url: String(sourcing.website), kind: "primary", available: true }
+      ? { label: "Open posting", url: String(sourcing.website), kind: "primary", available: true }
       : null);
   const phone =
     (sourcing.phone ? String(sourcing.phone) : null) ||
-    liveLinks.find((l) => l.kind === "contact" && String(l.url).startsWith("tel:"))?.label ||
+    links.find((l) => l.kind === "contact" && String(l.url).startsWith("tel:"))?.label ||
     null;
-  const findLink = liveLinks.find((l) => l.kind === "lookup") || null;
-  const returnCase = (brief.return_case as AnyRec) || {};
+  const findLink = links.find((l) => l.kind === "lookup") || null;
 
   async function toggleWatch() {
     try {
@@ -127,9 +130,7 @@ export default function ParcelIntelligencePage() {
         </div>
       </div>
       {(watchMsg || brief.watch_hint) && (
-        <div className="panel px-4 py-3 text-sm text-[var(--muted)]">
-          {watchMsg || String(brief.watch_hint)}
-        </div>
+        <div className="panel px-4 py-3 text-sm text-[var(--muted)]">{watchMsg || String(brief.watch_hint)}</div>
       )}
 
       <section className="panel overflow-hidden">
@@ -138,26 +139,19 @@ export default function ParcelIntelligencePage() {
             <div className="flex flex-wrap items-center gap-2">
               {score && <SignalBadge signal={score.signal as string} />}
               <span className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-xs font-semibold">
-                LIVE PUBLIC SOURCE
+                {String(sourcing.source_name || "Public source")}
               </span>
             </div>
             <h1 className="display mt-3 text-3xl font-semibold leading-tight break-words">
               {(listing?.title as string) || (parcel.apn as string)}
             </h1>
-            <p className="mt-2 text-[var(--muted)] break-words">
-              {parcel.county as string}, {parcel.state as string}
-              {parcel.acreage != null ? ` · ${Number(parcel.acreage).toFixed(2)} acres` : ""}
-              {parcel.apn ? ` · ${String(parcel.apn)}` : ""}
-            </p>
-            <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-[var(--ink)] break-words">
-              {String(listing?.description || "No description published by source.")}
-            </p>
+            <p className="mt-2 text-[var(--muted)] break-words">{identity}</p>
 
             <div className="mt-5 grid gap-4">
               <ScoreBar label="LandSignal" value={Number(score?.opportunity || 0)} hint={story.landsignal} />
               <ScoreBar label="Risk" value={Number(score?.risk || 0)} invert hint={story.risk} />
               <ScoreBar
-                label="Confidence (evidence completeness)"
+                label="Confidence"
                 value={Number(score?.confidence || 0)}
                 hint={story.confidence}
               />
@@ -184,21 +178,15 @@ export default function ParcelIntelligencePage() {
                     <li key={b}>• {b}</li>
                   ))}
                 </ul>
-                {returnCase.desk_note ? (
-                  <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{String(returnCase.desk_note)}</p>
-                ) : null}
               </div>
             ) : null}
 
             <div className="source-card mt-5">
-              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Where this came from</div>
-              <div className="font-semibold break-words">{String(sourcing.source_name || "Public GIS feed")}</div>
-              <div className="mt-1 text-sm text-[var(--muted)] break-words">
-                Seller / office: {String(sourcing.office || "See source site")}
-              </div>
+              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Contact this land</div>
+              <div className="font-semibold break-words">{String(sourcing.office || "County office")}</div>
               <AcquireRail
                 className="mt-3"
-                postingUrl={sellerLink?.url}
+                postingUrl={sellerLink?.url || String(sourcing.website || "")}
                 phone={phone}
                 office={sourcing.office ? String(sourcing.office) : null}
                 findUrl={findLink?.url}
@@ -213,6 +201,7 @@ export default function ParcelIntelligencePage() {
               {links
                 .filter(
                   (l) =>
+                    l.url &&
                     l.url !== sellerLink?.url &&
                     l.url !== findLink?.url &&
                     !String(l.url).startsWith("tel:") &&
@@ -259,42 +248,47 @@ export default function ParcelIntelligencePage() {
       </section>
 
       {memoLoading && (
-        <LandLoader compact label="Composing investment memo…" detail="Weighing score, constraints, and diligence gaps." />
+        <LandLoader compact label="Composing investment memo…" detail="Weighing this parcel’s score, constraints, and gaps." />
       )}
 
-      <section className="grid gap-4 md:grid-cols-2">
-        <InteractiveList
-          title="Why this opportunity"
-          items={whyOpp.map((x) => ({
-            title: String(x.headline || x),
-            body: String(x.detail || ""),
-          }))}
-        />
-        <InteractiveList
-          title="Why it may still be available"
-          items={whyStill.map((x) => ({
-            title: String(x.headline || x),
-            body: String(x.detail || ""),
-          }))}
+      <section className="panel p-5">
+        <ReturnVisual
+          cases={scenarios as never[]}
+          identity={identity}
+          entryLabel={
+            returnCase.entry_usd != null
+              ? `$${Number(returnCase.entry_usd).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+              : undefined
+          }
+          markLabel={
+            returnCase.mark_usd != null
+              ? `$${Number(returnCase.mark_usd).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+              : undefined
+          }
         />
       </section>
 
+      <section className="grid gap-4 md:grid-cols-2">
+        <InsightList title={`Why ${parcel.apn || "this parcel"}`} items={whyOpp} />
+        <InsightList title="Why it may still be available" items={whyStill} />
+      </section>
+
       <section className="panel p-5">
-        <h2 className="display text-xl font-semibold">Backed rating breakdown</h2>
+        <h2 className="display text-xl font-semibold">Rating breakdown · {identity}</h2>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          Tap a category. Each bar is this parcel’s own evidence — not generic marketing copy.
+          Each score below explains the exact inputs for this parcel — tap for drivers.
         </p>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {ratings.map((r) => {
             const scoreN = Number(r.score || 0);
             const key = String(r.key);
-            const open = openCard === `r-${key}`;
+            const open = openRating === key;
             return (
               <button
                 key={key}
                 type="button"
                 className="rounded-2xl bg-[var(--bg-soft)] p-4 text-left transition hover:ring-1 hover:ring-[var(--brand-soft)]"
-                onClick={() => setOpenCard(open ? null : `r-${key}`)}
+                onClick={() => setOpenRating(open ? null : key)}
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="font-semibold">{String(r.label)}</div>
@@ -311,15 +305,14 @@ export default function ParcelIntelligencePage() {
                     }}
                   />
                 </div>
-                <p className="mt-2 text-sm text-[var(--muted)]">{String(r.simple || "")}</p>
+                <p className="mt-2 text-sm leading-relaxed text-[var(--ink)]">
+                  {String(r.why_this_number || r.plain_english || r.simple || "")}
+                </p>
                 {open && (
-                  <div className="mt-2 space-y-1 text-sm">
-                    <p className="font-medium">{String(r.plain_english || "")}</p>
-                    <div className="text-xs text-[var(--muted)]">
-                      {String(r.weight_display || `${r.weight_pct}% of score`)} · {String(r.knowledge_state)}
-                    </div>
-                    <ul className="space-y-1 text-[var(--muted)]">
-                      {((r.evidence as string[]) || []).map((e) => (
+                  <div className="mt-2 space-y-1 text-sm text-[var(--muted)]">
+                    <div className="text-xs">{String(r.weight_display || "")}</div>
+                    <ul className="space-y-1">
+                      {((r.drivers as string[]) || (r.evidence as string[]) || []).map((e) => (
                         <li key={e}>• {e}</li>
                       ))}
                     </ul>
@@ -342,93 +335,37 @@ export default function ParcelIntelligencePage() {
                 : key === "wetlands"
                   ? "wetlands_addendum"
                   : "transmission_addendum";
-          const addenda = (brief[addKey] as string[]) || [];
-          const open = openCard === key;
+          // Prefer addenda that mention this APN; skip generic duplicates of plain_english
+          const addenda = ((brief[addKey] as string[]) || []).filter(
+            (a) => a && !String(card.plain_english || "").includes(a.slice(0, 24)),
+          );
           return (
-            <button
-              key={key}
-              type="button"
-              className="panel p-4 text-left"
-              onClick={() => setOpenCard(open ? null : key)}
-            >
+            <div key={key} className="panel p-4 text-left">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="font-semibold">{String(card.title || key)}</h3>
                 <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
                   {String(card.level || card.knowledge_state || "")}
                 </span>
               </div>
-              <p className="mt-2 text-sm leading-relaxed">{String(card.plain_english || "No reading yet.")}</p>
-              {open && (
-                <div className="mt-2 space-y-1 text-sm text-[var(--muted)]">
-                  {((card.bullets as string[]) || []).map((b) => (
-                    <p key={b}>• {b}</p>
-                  ))}
-                  {addenda.map((a) => (
-                    <p key={a}>• {a}</p>
-                  ))}
-                  <p className="text-[11px]">
-                    Source: {String(card.source || "n/a")}
-                    {card.confidence != null ? ` · evidence ${String(card.confidence)}` : ""}
-                  </p>
-                </div>
-              )}
-              <div className="mt-2 text-xs text-[var(--brand)]">{open ? "Hide details" : "Show details"}</div>
-            </button>
+              <p className="mt-2 text-sm leading-relaxed">{String(card.plain_english || "No reading for this pin yet.")}</p>
+              <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
+                {((card.bullets as string[]) || []).slice(0, 3).map((b) => (
+                  <li key={b}>• {b}</li>
+                ))}
+                {addenda.slice(0, 2).map((a) => (
+                  <li key={a}>• {a}</li>
+                ))}
+              </ul>
+            </div>
           );
         })}
       </section>
 
       <section className="panel p-5">
-        <h2 className="display text-xl font-semibold">Hold-period farmland scenarios</h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Parcel-specific what-ifs. Tap a case. These are screens, not promises.
-        </p>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          {scenarios.map((s, i) => {
-            const key = String(s.case || s.case_type || i);
-            const open = openCard === `sc-${key}`;
-            const numbers = (s.numbers as AnyRec) || s;
-            return (
-              <button
-                key={key}
-                type="button"
-                className="rounded-2xl bg-[var(--bg-soft)] p-4 text-left"
-                onClick={() => setOpenCard(open ? null : `sc-${key}`)}
-              >
-                <div className="font-semibold">{String(s.case || s.case_label || s.case_type)}</div>
-                <p className="mt-2 text-sm text-[var(--muted)]">{String(s.summary || s.plain_english || "")}</p>
-                {open && (
-                  <dl className="mt-3 grid gap-2 text-sm">
-                    {(
-                      [
-                        ["Yearly income (NOI)", numbers.noi || numbers.noi_display],
-                        ["Return (IRR)", numbers.irr || numbers.irr_display],
-                        ["Value today (NPV)", numbers.npv || numbers.npv_display],
-                        ["Breakeven land price", numbers.breakeven || numbers.breakeven_display],
-                      ] as const
-                    ).map(([k, v]) =>
-                      v ? (
-                        <div key={k} className="flex justify-between gap-2">
-                          <dt className="text-[var(--muted)]">{k}</dt>
-                          <dd className="font-semibold">{String(v)}</dd>
-                        </div>
-                      ) : null,
-                    )}
-                  </dl>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="panel p-5">
         <h2 className="display text-xl font-semibold">
-          Manual due diligence · readiness {Number(score?.deal_readiness || 0).toFixed(0)}/100
+          Diligence for {String(parcel.apn || "this parcel")} · readiness{" "}
+          {Number(score?.deal_readiness || 0).toFixed(0)}/100
         </h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Tap each step for why it matters on this exact parcel and how to start.
-        </p>
         <div className="mt-4 grid gap-2">
           {dd.map((item) => {
             const label = String(item.label);
@@ -450,12 +387,9 @@ export default function ParcelIntelligencePage() {
                 </div>
                 {open && (
                   <div className="mt-2 space-y-1 text-sm text-[var(--muted)]">
+                    <p>{String(item.parcel_note || item.why_it_matters)}</p>
                     <p>
-                      <strong className="text-[var(--ink)]">For this property:</strong>{" "}
-                      {String(item.parcel_note || item.why_it_matters)}
-                    </p>
-                    <p>
-                      <strong className="text-[var(--ink)]">How to start:</strong> {String(item.how_to_start)}
+                      <strong className="text-[var(--ink)]">Start:</strong> {String(item.how_to_start)}
                     </p>
                   </div>
                 )}
@@ -487,13 +421,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function InteractiveList({
-  title,
-  items,
-}: {
-  title: string;
-  items: Array<{ title: string; body: string }>;
-}) {
+function InsightList({ title, items }: { title: string; items: AnyRec[] }) {
   const [open, setOpen] = useState(0);
   return (
     <div className="panel p-5">
@@ -501,18 +429,18 @@ function InteractiveList({
       <div className="mt-3 space-y-2">
         {items.map((item, i) => (
           <button
-            key={`${item.title}-${i}`}
+            key={`${String(item.headline || item)}-${i}`}
             type="button"
             className="w-full rounded-2xl bg-[var(--bg-soft)] p-3 text-left"
             onClick={() => setOpen(open === i ? -1 : i)}
           >
-            <div className="font-semibold">{item.title}</div>
-            {open === i && item.body && (
-              <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{item.body}</p>
-            )}
+            <div className="font-semibold">{String(item.headline || item)}</div>
+            {open === i && item.detail ? (
+              <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{String(item.detail)}</p>
+            ) : null}
           </button>
         ))}
-        {!items.length && <p className="text-sm text-[var(--muted)]">No narrative for this parcel yet.</p>}
+        {!items.length && <p className="text-sm text-[var(--muted)]">No parcel-specific narrative yet.</p>}
       </div>
     </div>
   );

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from landsignal.services.humanize import CATEGORY_HELP
 from landsignal.services.sourcing import build_sourcing_bundle
 
 
@@ -239,26 +238,8 @@ def build_return_thesis(
     return thesis, conviction
 
 
-def rating_breakdown(score) -> list[dict[str, Any]]:
-    out = []
-    for c in score.components or []:
-        key = c.get("category") or c.get("label")
-        help_row = CATEGORY_HELP.get(key, {})
-        val = float(c.get("value") or 0)
-        label = help_row.get("title") or str(key).replace("_", " ").title()
-        simple = help_row.get("simple") or ""
-        out.append(
-            {
-                "key": key,
-                "label": label,
-                "simple": simple,
-                "plain_english": f"{simple} Score {val:.0f}/100." if simple else f"Category score {val:.0f}/100.",
-                "score": val,
-                "score_display": f"{val:.0f} out of 100",
-                "weight_pct": int(round(float(c.get("weight") or 0) * 100)),
-                "weight_display": f"{int(round(float(c.get('weight') or 0) * 100))}% of the score",
-                "evidence": c.get("evidence") or [],
-                "knowledge_state": c.get("knowledge_state") or "UNKNOWN",
-            }
-        )
-    return out
+def rating_breakdown(score, parcel=None, listing=None) -> list[dict[str, Any]]:
+    """Parcel-bound justifications for every rating bar."""
+    from landsignal.services.justify import rating_breakdown_justified
+
+    return rating_breakdown_justified(score, parcel=parcel, listing=listing)

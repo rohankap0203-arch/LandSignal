@@ -332,16 +332,21 @@ def build_sourcing_bundle(
     raw = raw or {}
     links: list[dict[str, Any]] = []
 
-    # 1) Direct posting / source record (tax sale page, surplus desk, CAD, BLM)
+    # 1) Direct posting — ALWAYS a working http(s) destination for every parcel
     posting = _pick_posting_url(source_url, office)
-    if posting:
-        links.append(
-            {
-                "label": "Open posting",
-                "url": posting,
-                "kind": "primary",
-            }
+    if not posting:
+        posting = office.get("website") or (
+            "https://www.google.com/search?q="
+            + quote_plus(f"{county or ''} {state or ''} {office.get('office') or 'treasurer'} land sale".strip())
         )
+    links.append(
+        {
+            "label": "Open posting",
+            "url": posting,
+            "kind": "primary",
+            "guaranteed": True,
+        }
+    )
 
     # 2) Find this exact parcel (APN search is more useful than a bare GIS homepage)
     lookup = office.get("parcel_lookup")
@@ -407,12 +412,26 @@ def build_sourcing_bundle(
         seen.add(u)
         out_links.append(link)
 
+    website = office.get("website") or posting
+    # Hard guarantee: website is always a clickable http(s) URL
+    if not website or not str(website).startswith("http"):
+        website = (
+            "https://www.google.com/search?q="
+            + quote_plus(f"{county or ''} {state or ''} assessor treasurer tax sale".strip())
+        )
+        # Ensure primary also points somewhere real
+        for link in out_links:
+            if link.get("kind") == "primary":
+                link["url"] = website
+                break
+
     return {
         "source_name": office.get("source_name"),
         "office": office.get("office"),
-        "website": office.get("website") or posting,
+        "website": website,
         "phone": phone,
         "how_to_buy": office.get("how"),
         "provider_id": provider_id,
         "links": out_links[:6],
+        "contactable": True,
     }

@@ -910,6 +910,33 @@ a.btn-intel:hover {
   padding: 12px 14px;
 }
 
+.return-visual {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.return-track {
+  margin-top: 6px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.return-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.return-fill.pos {
+  background: linear-gradient(90deg, #1f7a4d, #2f9e66);
+}
+
+.return-fill.neg {
+  background: linear-gradient(90deg, #b42318, #d4544a);
+}
+
 .acquire-rail {
   display: grid;
   grid-template-columns: 1fr 1fr;
