@@ -1,17 +1,12 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
 import { LandAlertsLoader } from "@/components/land-alerts-loader";
+import { LandViewerModal, ViewLandButton } from "@/components/land-viewer-modal";
 import { LiveMagnifier } from "@/components/live-magnifier";
 import { landsignalApi, type LandAlertMatchCard } from "@/lib/api";
-
-const ParcelMap = dynamic(() => import("@/components/parcel-map").then((m) => m.ParcelMap), {
-  ssr: false,
-  loading: () => <div className="land-alert-map-fallback">Loading map…</div>,
-});
 
 type PrefMode = "must" | "prefer" | "flexible";
 
@@ -138,9 +133,10 @@ function MatchCard({
   const [flipped, setFlipped] = useState(false);
   const [animating, setAnimating] = useState(false);
   const [snapPose, setSnapPose] = useState(false);
-  const [mapLayoutKey, setMapLayoutKey] = useState(0);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const flipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const href = row.deep_link || `/parcels/${row.parcel_id}`;
+  const canViewLand = row.latitude != null && row.longitude != null;
 
   useEffect(() => {
     return () => {
@@ -149,9 +145,7 @@ function MatchCard({
   }, []);
 
   function flipToggle() {
-    if (animating) return;
-    // 3D transforms break Leaflet hit-testing — only use them during the flip,
-    // then settle to a flat face so the map matches intelligence-results behavior.
+    if (animating || viewerOpen) return;
     setSnapPose(true);
     setAnimating(true);
     requestAnimationFrame(() => {
@@ -166,7 +160,6 @@ function MatchCard({
     flipTimer.current = setTimeout(() => {
       setAnimating(false);
       setSnapPose(false);
-      setMapLayoutKey((k) => k + 1);
     }, 680);
   }
 
@@ -241,26 +234,14 @@ function MatchCard({
             </div>
           ) : null}
           <div
-            className="land-alert-map"
+            className="land-alert-view-land-wrap"
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
-            onDoubleClick={(e) => e.stopPropagation()}
           >
-            {row.latitude != null && row.longitude != null ? (
-              <ParcelMap
-                latitude={row.latitude}
-                longitude={row.longitude}
-                polygon={row.polygon}
-                title={row.property_name}
-                height={228}
-                compact
-                scrollWheelZoom={false}
-                layoutKey={mapLayoutKey}
-                className="land-alert-parcel-map"
-              />
-            ) : (
-              <div className="land-alert-map-fallback">No map pin yet</div>
-            )}
+            <ViewLandButton
+              disabled={!canViewLand}
+              onClick={() => setViewerOpen(true)}
+            />
           </div>
           <div className="land-alert-flip-hint">Tap to flip</div>
         </article>
@@ -305,6 +286,19 @@ function MatchCard({
           </div>
         </article>
       </div>
+
+      <LandViewerModal
+        open={viewerOpen}
+        onClose={() => setViewerOpen(false)}
+        title={row.property_name}
+        location={row.location || row.state}
+        acresDisplay={row.acres_display}
+        priceDisplay={row.asking_price_display}
+        latitude={row.latitude}
+        longitude={row.longitude}
+        polygon={row.polygon}
+        reportHref={href}
+      />
     </div>
   );
 }
