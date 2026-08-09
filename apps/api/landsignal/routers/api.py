@@ -285,6 +285,38 @@ def _sort_rows(rows: list[RadarRow], sort: str | None) -> list[RadarRow]:
     return rows
 
 
+def _hold_priority_boost(hold_years: int | None, strategy: str | None) -> float:
+    """Soft ranking nudge only — never excludes a parcel from the result set."""
+    if hold_years is None or not strategy:
+        return 0.0
+    s = strategy.upper()
+    boost = 0.0
+    if hold_years <= 5 and s in ("ENERGY", "FARMLAND", "RECREATIONAL"):
+        boost += 4.0
+    elif hold_years <= 15 and s in ("FARMLAND", "ENERGY", "RECREATIONAL"):
+        boost += 2.0
+    if hold_years >= 25 and s in ("LAND_BANK", "DEVELOPMENT", "TIMBER"):
+        boost += 5.0
+    elif hold_years >= 10 and s in ("LAND_BANK", "DEVELOPMENT", "TIMBER"):
+        boost += 3.0
+    return boost
+
+
+def _apply_hold_priority(rows: list[RadarRow], hold_years: int | None) -> list[RadarRow]:
+    """Re-rank within an already-selected result set using hold as one priority factor."""
+    if hold_years is None or not rows:
+        return rows
+    for r in rows:
+        strat = r.best_strategy.value if r.best_strategy else None
+        boost = _hold_priority_boost(hold_years, strat)
+        if boost:
+            base = r.fit_score if r.fit_score is not None else r.opportunity
+            nudged = max(0.0, min(100.0, float(base) + boost))
+            r.fit_score = nudged
+            r.personalized_opportunity = nudged
+    return rows
+
+
 @router.get("/radar", response_model=list[RadarRow])
 async def radar(
     state: str | None = None,
@@ -336,9 +368,7 @@ async def radar(
     }
 
     profile = dict(store.investor_profile)
-    if hold_years is not None:
-        profile["target_hold_years_min"] = hold_years
-        profile["target_hold_years_max"] = hold_years
+    # Hold period is ranking-only (never a hard filter / never shrinks the match set).
     if max_price is not None:
         profile["max_price_usd"] = max_price
     if min_acres is not None:
@@ -430,15 +460,6 @@ async def radar(
             )
             if strategy_soft_miss:
                 fit = max(0, fit - 12)
-            if hold_years is not None:
-                if hold_years <= 5 and score.best_strategy and score.best_strategy.value in ("ENERGY", "FARMLAND"):
-                    fit = min(100, fit + 4)
-                if hold_years >= 10 and score.best_strategy and score.best_strategy.value in (
-                    "LAND_BANK",
-                    "DEVELOPMENT",
-                    "TIMBER",
-                ):
-                    fit = min(100, fit + 5)
             enrichment = store.enrichments.get(parcel.id)
 
             auction_path = None
@@ -833,9 +854,15 @@ async def radar(
                 *r.match_reasons,
             ][:5]
 
+    # Cap the match set first (hold must not change *which* parcels make the cut),
+    # then apply hold as a soft priority nudge and re-order within that set.
     ranked = _sort_rows(rows, sort)
-    # Cap payload so the UI stays responsive; full inventory_count lives on /search/meta
-    return ranked[: max(1, min(limit, 500))]
+    capped = ranked[: max(1, min(limit, 500))]
+    if hold_years is not None:
+        capped = _apply_hold_priority(capped, hold_years)
+        if (sort or "fit_desc").lower() in ("fit_desc", ""):
+            capped = _sort_rows(capped, "fit_desc")
+    return capped
 
 
 @router.post("/rescore")

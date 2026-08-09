@@ -17,7 +17,7 @@ from landsignal.scoring.financial import irr as irr_solve
 from landsignal.services.market_trajectory import STATE_ANNUAL_APPRECIATION, CHANNEL_MULT, _cycle_shaper
 from landsignal.services.voice import place_phrase, this_property
 
-HOLD_WINDOWS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
+HOLD_WINDOWS = [1, 3, 5, 10, 15, 25, 40, 60, 80, 100]
 
 
 def _f(v: Any) -> float | None:

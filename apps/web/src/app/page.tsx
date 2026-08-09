@@ -45,28 +45,18 @@ const DEFAULT_FORM: FormState = {
   sort: "score_desc",
 };
 
-/** Hold-period filter steps — 5-year increments up to 100 (plus custom). */
+/** Hold-period presets — ranking hint only (plus custom). */
 const HOLD_YEAR_OPTIONS: Array<string | number> = [
   "Any",
+  1,
+  3,
   5,
   10,
   15,
-  20,
   25,
-  30,
-  35,
   40,
-  45,
-  50,
-  55,
   60,
-  65,
-  70,
-  75,
   80,
-  85,
-  90,
-  95,
   100,
 ];
 
@@ -395,7 +385,13 @@ export default function SearchPage() {
             ) : null}
           </FilterField>
 
-          <FilterField label="Hold period">
+          <FilterField
+            label="Hold period"
+            tip={{
+              title: "Hold period ranks priority",
+              body: "This does not drop parcels from your results. It only nudges which matches float higher when sorting by best match — short holds favor cash-flow uses; longer holds favor land-bank / development / timber.",
+            }}
+          >
             <select
               value={form.holdYears}
               onChange={(e) => {
