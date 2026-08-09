@@ -577,47 +577,84 @@ async def radar(
             else:
                 headline = f"{conviction or 'WATCH'} interest · opportunity score {score.opportunity:.0f}/100"
 
-            # One tailored scout line for the card — feedback, not metric soup
+            # One tailored scout line for the card — always parcel-specific
             scout_bits: list[str] = []
-            if enrichment:
-                def _nv(prov):
-                    if not prov:
-                        return {}
-                    return prov.normalized or prov.value or {}
 
+            def _nv(prov):
+                if not prov:
+                    return {}
+                return prov.normalized or prov.value or {}
+
+            sn = fn = wn = an = gn = cn = {}
+            if enrichment:
                 sn = _nv(enrichment.soil)
                 fn = _nv(enrichment.flood)
                 wn = _nv(enrichment.wetlands)
                 an = _nv(enrichment.access)
+                gn = _nv(enrichment.growth)
+                cn = _nv(enrichment.comps)
+            try:
+                prime_v = float(sn["prime_farmland_pct"]) if sn.get("prime_farmland_pct") is not None else None
+            except Exception:
+                prime_v = None
+            try:
+                flood_v = float(fn["flood_zone_pct"]) if fn.get("flood_zone_pct") is not None else None
+            except Exception:
+                flood_v = None
+            try:
+                wet_v = float(wn["wetland_pct"]) if wn.get("wetland_pct") is not None else None
+            except Exception:
+                wet_v = None
+            try:
+                access_v = (
+                    float(an["legal_access_confidence"]) if an.get("legal_access_confidence") is not None else None
+                )
+            except Exception:
+                access_v = None
+            try:
+                growth_v = float(gn["path_of_growth_score"]) if gn.get("path_of_growth_score") is not None else None
+            except Exception:
+                growth_v = None
+            if growth_v is None:
                 try:
-                    prime_v = float(sn["prime_farmland_pct"]) if sn.get("prime_farmland_pct") is not None else None
+                    growth_v = (
+                        float(cn["path_of_growth_score"]) if cn.get("path_of_growth_score") is not None else None
+                    )
                 except Exception:
-                    prime_v = None
-                try:
-                    flood_v = float(fn["flood_zone_pct"]) if fn.get("flood_zone_pct") is not None else None
-                except Exception:
-                    flood_v = None
-                try:
-                    wet_v = float(wn["wetland_pct"]) if wn.get("wetland_pct") is not None else None
-                except Exception:
-                    wet_v = None
-                try:
-                    access_v = float(an["legal_access_confidence"]) if an.get("legal_access_confidence") is not None else None
-                except Exception:
-                    access_v = None
-                if score.asking_discount_pct is not None and score.asking_discount_pct <= -25:
-                    scout_bits.append(f"Buy edge ~{abs(score.asking_discount_pct):.0f}% under our mark")
-                if prime_v is not None and prime_v >= 45:
-                    scout_bits.append(f"~{prime_v:.0f}% prime soil")
-                if flood_v is not None and flood_v >= 25:
-                    scout_bits.append(f"flood ~{flood_v:.0f}% — price that in")
-                elif wet_v is not None and wet_v >= 20:
-                    scout_bits.append(f"wetlands ~{wet_v:.0f}% trim usable acres")
-                if access_v is not None and access_v < 45:
-                    scout_bits.append("access not clear yet")
-                if not scout_bits and score.best_strategy:
-                    scout_bits.append(f"Best use screen: {_strategy_label(score.best_strategy)}")
-            scout_note = " · ".join(scout_bits[:3]) if scout_bits else None
+                    growth_v = None
+
+            edge_pct = settle_disc if settle_disc is not None else score.asking_discount_pct
+            if edge_pct is not None and edge_pct <= -20:
+                scout_bits.append(f"Buy edge ~{abs(edge_pct):.0f}% under our mark")
+            elif edge_pct is not None and edge_pct <= -8:
+                scout_bits.append(f"Modest edge ~{abs(edge_pct):.0f}% under our mark")
+            if listing.provider_id == "public_tax_sale":
+                scout_bits.append("tax-sale channel — process, not MLS")
+            elif listing.provider_id == "blm_lpad":
+                scout_bits.append("BLM disposal process")
+            elif listing.provider_id == "public_surplus":
+                scout_bits.append("public surplus inventory")
+            if prime_v is not None and prime_v >= 45:
+                scout_bits.append(f"~{prime_v:.0f}% prime soil")
+            if flood_v is not None and flood_v >= 25:
+                scout_bits.append(f"flood ~{flood_v:.0f}% — price that in")
+            elif wet_v is not None and wet_v >= 20:
+                scout_bits.append(f"wetlands ~{wet_v:.0f}% trim usable acres")
+            if access_v is not None and access_v < 45:
+                scout_bits.append("access not clear yet")
+            elif access_v is not None and access_v >= 75 and len(scout_bits) < 2:
+                scout_bits.append("access screen looks workable")
+            if growth_v is not None and growth_v >= 65 and len(scout_bits) < 3:
+                scout_bits.append(f"growth support ~{growth_v:.0f}/100")
+            if score.risk is not None and score.risk >= 55 and len(scout_bits) < 3:
+                scout_bits.append("higher map risk — dig in")
+            if not scout_bits and score.best_strategy:
+                scout_bits.append(f"Best use screen: {_strategy_label(score.best_strategy)}")
+            if not scout_bits:
+                scout_bits.append(
+                    f"{_provider_label(listing.provider_id, parcel.county)} in {parcel.county or 'this county'}"
+                )
+            scout_note = " · ".join(scout_bits[:3])
 
             out.append(
                 RadarRow(

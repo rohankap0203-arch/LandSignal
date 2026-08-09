@@ -97,26 +97,31 @@ def build_score_drivers(
     if prime is not None and prime >= 45:
         opp_bullets.append(f"Soil screen shows about {prime:.0f}% prime farmland — helps farm or rent plans.")
 
+    acres_note = f"{acres:,.1f} acres" if acres is not None else "this tract"
     if opp >= 72:
-        verdict = f"Strong candidate — this {size}file in {place} shows a real buy edge."
+        verdict = f"Strong candidate — {acres_note} in {place} shows a real buy edge for a scouted hold."
     elif opp >= 58:
-        verdict = f"Worth opening — solid enough to compare against your other shortlist."
+        verdict = f"Worth opening — {acres_note} in {place} is solid enough to shortlist."
     elif opp >= 45:
-        verdict = f"Only a maybe — keep it if the use fits; otherwise keep scanning."
+        verdict = f"Only a maybe — keep {acres_note} if the use fits; otherwise keep scanning."
     else:
-        verdict = f"Weak edge here — better files are likely ahead in the queue."
+        verdict = f"Weak edge on {acres_note} in {place} — better files are likely ahead."
 
     # --- Risk: what could bite you ---
     risk_bullets: list[str] = []
     if flood is not None and flood >= 25:
-        risk_bullets.append(f"Flood map covers about {flood:.0f}% of this pin — plan for insurance cost.")
+        risk_bullets.append(
+            f"Flood map covers about {flood:.0f}% of this pin — that slows the long path and adds carry."
+        )
     elif flood is not None and flood >= 10:
         risk_bullets.append(f"Some flood overlap (~{flood:.0f}%) — check before you bid hard.")
     elif flood is not None:
         risk_bullets.append("Flood overlap looks light on the map for this pin.")
 
     if wet is not None and wet >= 20:
-        risk_bullets.append(f"Wetlands (~{wet:.0f}%) may cut what you can build or farm.")
+        risk_bullets.append(
+            f"Wetlands (~{wet:.0f}%) may cut usable acres — exit and rent screens already bake that in."
+        )
     elif wet is not None and wet < 10:
         risk_bullets.append("Wetland screen looks limited on this shape.")
 
@@ -124,6 +129,11 @@ def build_score_drivers(
         risk_bullets.append("Legal road access is not clear yet — confirm before you spend.")
     elif access is not None and access >= 70:
         risk_bullets.append("Access screen looks workable for this parcel.")
+
+    if provider in ("public_tax_sale", "blm_lpad", "public_surplus"):
+        risk_bullets.append(
+            "Public process channel — title/clearing friction can step value down even when the map looks fine."
+        )
 
     if not risk_bullets:
         risk_bullets.append(f"Map checks for this {size}property in {place} are still thin — verify on the ground.")

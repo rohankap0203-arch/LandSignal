@@ -732,8 +732,9 @@ button.score-bar-click:disabled {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 6px;
-  width: 72px;
+  gap: 5px;
+  width: 64px;
+  align-self: stretch;
 }
 
 .traj-hitch-btn {
@@ -742,20 +743,25 @@ button.score-bar-click:disabled {
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  gap: 2px;
-  border-radius: 10px;
+  gap: 1px;
+  border-radius: 9px;
   border: 1px solid var(--line);
   background: var(--bg-elevated);
-  padding: 6px 7px;
+  padding: 5px 6px;
   text-align: left;
   cursor: pointer;
   min-height: 0;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
 }
 
 .traj-hitch-btn:hover,
 .traj-hitch-btn.active {
   border-color: var(--brand);
   background: color-mix(in srgb, var(--brand) 10%, var(--bg-elevated));
+}
+
+.traj-hitch-btn.active {
+  transform: translateX(-1px);
 }
 
 .traj-hitch-k {

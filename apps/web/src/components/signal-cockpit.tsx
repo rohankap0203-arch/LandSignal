@@ -179,13 +179,9 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
       <div className="source-card">
         <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Where we found this</div>
         <div className="font-semibold break-words">{String(source.source_name || "Public GIS")}</div>
-        <div className="mt-1 text-sm text-[var(--muted)] break-words">{String(source.office || "")}</div>
         {source.how_to_buy ? (
           <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{String(source.how_to_buy)}</p>
         ) : null}
-        <p className="mt-2 text-[11px] text-[var(--muted)]">
-          To call or open the office page, use <strong>How to reach the seller</strong> above.
-        </p>
       </div>
     </div>
   );

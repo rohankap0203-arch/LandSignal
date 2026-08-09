@@ -23,6 +23,7 @@ type Hitch = {
   label?: string;
   short?: string;
   plain?: string;
+  severity?: number;
   points?: Point[];
 };
 
@@ -261,7 +262,9 @@ export function PriceTrajectory({
             {windowMath.startYear} → today → {windowMath.endYear} · {knowledge}
           </p>
           <p className="mt-1 text-[11px] text-[var(--muted)] leading-snug">
-            Far years fade on purpose — not a straight rocket.{" "}
+            {horizon >= 50
+              ? "Far years fade hard — nominal screen, not generational wealth."
+              : "Far years fade on purpose — not a straight rocket."}{" "}
             {trajectory?.annual_rate_display
               ? `Near-term pace ~${trajectory.annual_rate_display}.`
               : null}
@@ -402,38 +405,34 @@ export function PriceTrajectory({
       </div>
 
       {!compact && hitches.length > 0 ? (
-        <div className="traj-hitch-rail" role="tablist" aria-label="What-if hitches">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={hitchId === "base"}
-            className={`traj-hitch-btn ${hitchId === "base" ? "active" : ""}`}
-            onClick={() => setHitchId("base")}
-            title="Base path for this property"
-          >
-            <span className="traj-hitch-k">Base</span>
-            <span className="traj-hitch-v">No hitch</span>
-          </button>
-          {hitches.slice(0, 3).map((h) => (
-            <button
-              key={h.id}
-              type="button"
-              role="tab"
-              aria-selected={hitchId === h.id}
-              className={`traj-hitch-btn ${hitchId === h.id ? "active" : ""}`}
-              onClick={() => setHitchId(h.id)}
-              title={h.plain || h.label}
-            >
-              <span className="traj-hitch-k">{h.short || h.label}</span>
-              <span className="traj-hitch-v">{h.label}</span>
-            </button>
-          ))}
+        <div className="traj-hitch-rail" role="tablist" aria-label="Chart hitches">
+          {hitches.slice(0, 3).map((h) => {
+            const on = hitchId === h.id;
+            return (
+              <button
+                key={h.id}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                className={`traj-hitch-btn ${on ? "active" : ""}`}
+                onClick={() => setHitchId(on ? "base" : h.id)}
+                title={h.plain || h.label}
+              >
+                <span className="traj-hitch-k">{h.short || h.label}</span>
+                <span className="traj-hitch-v">{on ? "On chart" : "Hitch"}</span>
+              </button>
+            );
+          })}
         </div>
       ) : null}
       </div>
 
       {activeHitch && hitchId !== "base" ? (
         <p className="traj-hitch-note">{activeHitch.plain}</p>
+      ) : !compact && hitches.length > 0 ? (
+        <p className="traj-hitch-note">
+          Tap Rates, Growth, or Site to bend the path — tap again for the base line.
+        </p>
       ) : null}
 
       {selected && (

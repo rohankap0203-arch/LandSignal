@@ -457,35 +457,52 @@ def build_case_path(
     flows = [-purchase]
     rent_series = []
 
+    case_u = case.upper()
     for y in range(1, hold_years + 1):
         # Cycle bend — not a straight diagonal
         shaper = _cycle_shaper(y)
         amp = scalars["cycle_amp"]
         shaped = 1.0 + (shaper - 1.0) * amp
-        # Mid-hold mean reversion / fatigue: long holds fade slightly after year 25
+        # Long-hold fatigue: near-term can track the ledger; century marks fade hard
+        # so $30M+ “generational” terminals only appear when the file truly earns them.
         fatigue = 1.0
-        if y > 25:
-            fatigue = max(0.82, 1.0 - (y - 25) * 0.0035)
+        if y > 15:
+            fatigue = max(0.70, 1.0 - (y - 15) * 0.006)
+        if y > 40:
+            fatigue = max(0.42, fatigue - (y - 40) * 0.0045)
+        if y > 70:
+            fatigue = max(0.28, fatigue - (y - 70) * 0.003)
+        # Bull cools on ultra-long holds (optimistic ≠ rocket forever)
+        if case_u in ("BULL", "UPSIDE") and y > 35:
+            fatigue *= max(0.75, 1.0 - (y - 35) * 0.004)
         # Flood/wetland “realization” years — occasional step downs in bear/base
         shock = 1.0
-        if y in (7, 14, 28, 42) and case.upper() in ("BEAR", "BASE", "DOWNSIDE", "STRESS"):
+        if y in (7, 14, 28, 42, 55) and case_u in ("BEAR", "BASE", "DOWNSIDE", "STRESS"):
             if (model.get("flood_pct") or 0) >= 25:
-                shock *= 0.985 if case.upper() == "BASE" else 0.97
+                shock *= 0.985 if case_u == "BASE" else 0.97
             if (model.get("wet_pct") or 0) >= 20:
                 shock *= 0.992
+        # Access / thin-channel friction years
+        if y in (5, 22, 48) and model.get("provider") in ("public_tax_sale", "blm_lpad", "public_surplus"):
+            shock *= 0.994 if case_u == "BASE" else (0.99 if case_u in ("BEAR", "DOWNSIDE", "STRESS") else 0.997)
 
         year_appr = appr0 * fatigue
-        # Conservative forward vs history (same spirit as trajectory)
-        land = land * (1.0 + year_appr * 0.92) * (0.985 + 0.015 * shaped) * shock
+        # Conservative forward vs history + soft structural drag on far years
+        drag = 0.988 if y <= 25 else 0.984 if y <= 50 else 0.980
+        land = land * (1.0 + year_appr * 0.88) * (drag + (1.0 - drag) * shaped) * shock
 
-        # Rent drifts with land quality + mild inflation, with usable-acre drag
-        rent_drift = 1.0 + max(-0.01, min(0.025, year_appr * 0.45))
+        # Rent drifts with land quality + mild inflation, with usable-acre drag;
+        # far years: rents don't compound as fast as a stock model
+        rent_cap = 0.022 if y <= 30 else 0.014 if y <= 60 else 0.009
+        rent_drift = 1.0 + max(-0.01, min(rent_cap, year_appr * 0.42))
         if y > 1:
             rent0 *= rent_drift
         egi = rent0 * (1.0 - vacancy)
         opex = egi * opex_frac
-        taxes = land * tax_frac
-        insure = land * insure_frac
+        # Tax/insurance creep slightly with time (reassessments, climate)
+        tax_creep = 1.0 + min(0.25, max(0.0, (y - 10) * 0.002))
+        taxes = land * tax_frac * tax_creep
+        insure = land * insure_frac * (1.0 + (0.15 if y > 40 else 0.0))
         mgmt = egi * mgmt_frac
         noi = egi - opex - taxes - insure - mgmt
         # Very small lots / land-bank: NOI can be near zero or slightly negative carry
@@ -500,6 +517,9 @@ def build_case_path(
         # Liquidity exit haircut rises for thin channels on short holds, fades on long holds
         if model.get("provider") in ("public_tax_sale", "blm_lpad", "public_surplus"):
             exit_haircut += max(0.0, 0.06 - y * 0.002)
+        # Ultra-long exits: buyer pool / estate friction haircut
+        if y >= 75:
+            exit_haircut += 0.04 if case_u in ("BEAR", "DOWNSIDE", "STRESS") else 0.02
 
         mark_exit = land * (1.0 - exit_haircut)
         total_back = mark_exit + cum_rent
@@ -514,6 +534,7 @@ def build_case_path(
                 "total_back_usd": round(total_back, 0),
                 "gain_usd": round(total_back - purchase, 0),
                 "year_appreciation": year_appr,
+                "fatigue": round(fatigue, 3),
             }
         )
         flows.append(noi)
@@ -675,6 +696,11 @@ def build_return_intelligence(
 
     top_factors = model["factors"][:8]
     base_case = cases["BASE"]
+    base_100 = endpoints["100"]["BASE"]
+    bull_100 = endpoints["100"]["BULL"]
+    mult_100 = (
+        (base_100["total_back_usd"] / purchase) if purchase and base_100.get("total_back_usd") else None
+    )
     summary = (
         f"For {this_property(parcel, listing, with_place=True, with_acres=True)}: "
         f"{model['factor_count']} screens bend the path (not a flat line). "
@@ -682,6 +708,19 @@ def build_return_intelligence(
         f"{base_case['irr_display'] if base_case.get('irr') is not None else 'n/a'}, "
         f"with exit near {_money(base_case.get('exit_usd'))} after rent and carry."
     )
+    horizon_notes = {
+        "10": "Decade holds mostly track this file’s near-term screens and cycle bends.",
+        "30": "By 30 years, fatigue and site realizations already slow the climb vs a flat compound.",
+        "50": "Half-century marks are faded on purpose — taxes, insurance, and buyer-pool friction stack up.",
+        "75": "75–100 year dollars are nominal screens with hard fade — not a promise of dynasty wealth.",
+        "100": (
+            f"At 100 years, typical total-back is about {mult_100:.1f}× buy "
+            f"(~{_money(base_100.get('total_back_usd'))}); optimistic tops near "
+            f"{_money(bull_100.get('total_back_usd'))}. Far years fade hard — not a straight rocket."
+            if mult_100 is not None
+            else "Century marks fade hard toward a slow real-land pace — not generational lottery math."
+        ),
+    }
 
     return {
         "available": True,
@@ -712,6 +751,7 @@ def build_return_intelligence(
             for case in ("BEAR", "BASE", "BULL")
         },
         "endpoints": endpoints,
+        "horizon_notes": horizon_notes,
         "summary": summary,
         "method": (
             "Year-by-year path uses area land pace, then bends it with soil, flood, wetlands, "

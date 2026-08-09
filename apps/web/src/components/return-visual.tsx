@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -76,6 +77,7 @@ type ReturnIntel = {
   >;
   summary?: string;
   method?: string;
+  horizon_notes?: Record<string, string>;
 };
 
 /** Legacy scenario shape — only used if return_intelligence is missing. */
@@ -263,6 +265,15 @@ export function ReturnVisual({
   const [openFactor, setOpenFactor] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [casesHelpOpen, setCasesHelpOpen] = useState(false);
+
+  useEffect(() => {
+    if (!casesHelpOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCasesHelpOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [casesHelpOpen]);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
   const available = intel?.available !== false && Boolean(intel?.endpoints || intel?.paths_100);
@@ -593,6 +604,14 @@ export function ReturnVisual({
         </div>
       )}
 
+      {holdYears >= 50 && intel?.horizon_notes ? (
+        <p className="mt-2 text-[11px] leading-snug text-[var(--muted)]">
+          {intel.horizon_notes[String(holdYears)] ||
+            intel.horizon_notes["100"] ||
+            "Far years fade on purpose — not a straight rocket."}
+        </p>
+      ) : null}
+
       <div className="mt-4 space-y-2">
         <div className="flex items-center justify-between gap-2">
           <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
@@ -624,7 +643,7 @@ export function ReturnVisual({
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-3">
-                <h4 className="display text-base font-semibold">What these three cases mean</h4>
+                <h4 className="display text-base font-semibold">3 cases · {holdYears} yr hold</h4>
                 <button
                   type="button"
                   className="help-q on"
@@ -634,26 +653,41 @@ export function ReturnVisual({
                   ×
                 </button>
               </div>
-              <p className="mt-2 text-sm text-[var(--muted)] leading-snug">
-                Same buy price. Same {holdYears}-year hold. Only the story changes.
+              <p className="mt-2 text-sm leading-snug">
+                Same buy
+                {intel?.purchase_usd ? ` (${money(intel.purchase_usd)})` : ""}. Same hold. Only the
+                story changes.
               </p>
               <ul className="help-modal-list">
-                <li>
-                  <strong>Cautious</strong>
-                  <span>Soft day — weaker rents, harder exit, more carry.</span>
-                </li>
-                <li>
-                  <strong>Typical</strong>
-                  <span>Base path for this property’s own screens.</span>
-                </li>
-                <li>
-                  <strong>Optimistic</strong>
-                  <span>Strong day — better rents and exit, still capped.</span>
-                </li>
+                {CASE_ORDER.map((k) => {
+                  const ep = endpointsAtHold[k];
+                  const pct = ep?.irr != null ? Number(ep.irr) * 100 : null;
+                  const blurb =
+                    k === "BEAR"
+                      ? "Soft day — weaker rents, harder exit, more carry."
+                      : k === "BULL"
+                        ? "Strong day — better rents & exit, still faded on long holds."
+                        : "Base path from this property’s own screens.";
+                  return (
+                    <li key={k}>
+                      <strong>
+                        {caseLabel(k)}
+                        {pct != null ? ` · ${pct.toFixed(1)}%/yr` : ""}
+                      </strong>
+                      <span>
+                        {blurb}
+                        {ep?.total_back_usd != null
+                          ? ` Total back ~${money(ep.total_back_usd)}.`
+                          : ""}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
               <p className="mt-3 text-xs text-[var(--muted)] leading-snug">
-                The %/yr is annualized if you buy, collect rent, and sell at that case’s exit after
-                exactly {holdYears} years. A screen — not a promise.
+                {holdYears >= 50
+                  ? "Long holds fade on purpose — century dollars are nominal screens, not dynasty math."
+                  : "Annualized if you buy, collect rent, and sell at that case’s exit. A screen — not a promise."}
               </p>
             </div>
           </div>

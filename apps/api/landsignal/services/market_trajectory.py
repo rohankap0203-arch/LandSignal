@@ -259,46 +259,95 @@ def _cycle_shaper(offset: int) -> float:
 def _forward_fade(year_k: int) -> float:
     """Long holds mean-revert — 100y is not the same % forever.
 
-    Near-term can track the parcel rate; after ~15y fade toward a slower
-    long-run real land pace so mega terminal values stay grounded.
+    Near-term can track the parcel rate; after ~15y fade hard toward a slow
+    long-run real land pace so terminals stay grounded (not generational rockets).
     """
-    if year_k <= 10:
+    if year_k <= 8:
         return 1.0
-    if year_k <= 25:
-        return max(0.62, 1.0 - (year_k - 10) * 0.025)
-    if year_k <= 50:
-        return max(0.42, 0.62 - (year_k - 25) * 0.008)
-    return max(0.28, 0.42 - (year_k - 50) * 0.003)
+    if year_k <= 20:
+        return max(0.55, 1.0 - (year_k - 8) * 0.035)
+    if year_k <= 40:
+        return max(0.34, 0.55 - (year_k - 20) * 0.010)
+    if year_k <= 70:
+        return max(0.22, 0.34 - (year_k - 40) * 0.004)
+    # Century mark: mostly real-land drift (~¼ of near-term pace)
+    return max(0.16, 0.22 - (year_k - 70) * 0.002)
 
 
-def _apply_hitch(offset: int, factor: float, hitch: str | None) -> float:
+def _hitch_severity(
+    hitch: str,
+    *,
+    flood: float | None,
+    wet: float | None,
+    access: float | None,
+    growth: float | None,
+    liquidity: float | None,
+) -> float:
+    """0.7–1.4 scale: how hard this hitch bites *this* pin."""
+    if hitch == "rate_shock":
+        thin = 1.0
+        if liquidity is not None and liquidity < 45:
+            thin += 0.25
+        if access is not None and access < 50:
+            thin += 0.1
+        return min(1.35, thin)
+    if hitch == "growth_surge":
+        g = 1.0
+        if growth is not None:
+            g += max(-0.2, min(0.35, (growth - 50) / 100))
+        return max(0.75, min(1.3, g))
+    if hitch == "site_hitch":
+        s = 1.0
+        if flood is not None and flood >= 20:
+            s += min(0.35, flood / 200)
+        if wet is not None and wet >= 15:
+            s += min(0.25, wet / 250)
+        if access is not None and access < 50:
+            s += 0.2
+        return min(1.4, s)
+    return 1.0
+
+
+def _apply_hitch(
+    offset: int,
+    factor: float,
+    hitch: str | None,
+    *,
+    severity: float = 1.0,
+) -> float:
     """One-time or multi-year hitch that bends the path (not the base case)."""
     if not hitch or hitch == "base":
         return factor
+    sev = max(0.7, min(1.4, severity))
     if hitch == "rate_shock":
-        # Past: 2022-style cool-off; future: rates bite years 1–6
+        # Past cool-off + near-term bite; mild catch-up — not a permanent new floor
         if offset in (-3, -2, -1):
-            return factor * 0.94
+            return factor * (1.0 - 0.055 * sev)
         if 1 <= offset <= 6:
-            return factor * (0.90 if offset <= 3 else 0.95)
-        if 7 <= offset <= 15:
-            return factor * 1.012  # mild catch-up window only
+            bite = 0.10 if offset <= 3 else 0.05
+            return factor * (1.0 - bite * sev)
+        if 7 <= offset <= 14:
+            return factor * (1.0 + 0.008 * sev)
         return factor
     if hitch == "growth_surge":
-        # Corridor boom — past mid window + future 5–20, then gentle fade
+        # Corridor boom window, then fade — capped so 100y isn't a lottery ticket
         if -12 <= offset <= -4:
-            return factor * 1.035
-        if 4 <= offset <= 20:
-            return factor * 1.04
-        if 21 <= offset <= 35:
-            return factor * 0.995
+            return factor * (1.0 + 0.022 * sev)
+        if 4 <= offset <= 18:
+            return factor * (1.0 + 0.028 * sev)
+        if 19 <= offset <= 32:
+            return factor * (1.0 - 0.006 * sev)
+        if offset >= 33:
+            return factor * (1.0 - 0.003 * sev)  # boom cools for far years
         return factor
     if hitch == "site_hitch":
-        # Flood/access/title realization — a few step-downs, not a permanent grind
+        # Discrete realization years — then slightly slower climb, not a death spiral
         if offset in (-8, -7):
-            return factor * 0.93
+            return factor * (1.0 - 0.06 * sev)
         if offset in (3, 4, 12, 13, 28, 29):
-            return factor * 0.94
+            return factor * (1.0 - 0.05 * sev)
+        if offset > 30:
+            return factor * (1.0 - 0.002 * sev)
         return factor
     return factor
 
@@ -310,6 +359,7 @@ def _series_from_anchor(
     years_back: int,
     years_forward: int,
     hitch: str | None = None,
+    hitch_severity: float = 1.0,
 ) -> dict[int, float]:
     """Build offset→value with cycle + long-run fade + optional hitch."""
     vals: dict[int, float] = {0: float(anchor)}
@@ -317,14 +367,15 @@ def _series_from_anchor(
         shaper = _cycle_shaper(-k)
         fade = _forward_fade(k)  # same fade logic for deep history realism
         factor = (1.0 + annual * fade) * shaper
-        factor = _apply_hitch(-k, factor, hitch)
+        factor = _apply_hitch(-k, factor, hitch, severity=hitch_severity)
         vals[-k] = vals[-k + 1] / max(factor, 0.82)
     for k in range(1, years_forward + 1):
         shaper = _cycle_shaper(k)
         fade = _forward_fade(k)
-        # Forward already conservative; fade kills runaway 100y terminals
-        factor = (1.0 + annual * 0.85 * fade) * (0.985 + 0.015 * shaper)
-        factor = _apply_hitch(k, factor, hitch)
+        # Forward already conservative; fade + soft drag kill runaway 100y terminals
+        drag = 0.988 if k <= 25 else 0.985 if k <= 50 else 0.982
+        factor = (1.0 + annual * 0.78 * fade) * (drag + (1.0 - drag) * shaper)
+        factor = _apply_hitch(k, factor, hitch, severity=hitch_severity)
         vals[k] = vals[k - 1] * max(factor, 0.82)
     return vals
 
@@ -420,12 +471,25 @@ def build_market_trajectory(
     now_y = datetime.now(timezone.utc).year
 
     def _points_for(hitch: str | None) -> list[dict[str, Any]]:
+        sev = (
+            _hitch_severity(
+                hitch,
+                flood=flood,
+                wet=wet,
+                access=access_score,
+                growth=growth_score,
+                liquidity=liquidity,
+            )
+            if hitch and hitch != "base"
+            else 1.0
+        )
         series = _series_from_anchor(
             anchor=float(anchor),
             annual=annual,
             years_back=years_back,
             years_forward=years_forward,
             hitch=hitch,
+            hitch_severity=sev,
         )
         out: list[dict[str, Any]] = []
         for offset in range(-years_back, years_forward + 1):
@@ -442,7 +506,7 @@ def build_market_trajectory(
                 note = (
                     "Estimated from similar land in this state and listing type (no deed sale found for this year)"
                     if hitch in (None, "base")
-                    else f"What-if path · {hitch.replace('_', ' ')} hitch applied on this parcel’s screens"
+                    else f"What-if path · {hitch.replace('_', ' ')} hitch on this pin (severity {sev:.2f}×)"
                 )
             out.append(
                 {
@@ -457,13 +521,26 @@ def build_market_trajectory(
         return out
 
     points = _points_for("base")
-    # Parcel-aware hitch labels
+    rate_sev = _hitch_severity(
+        "rate_shock", flood=flood, wet=wet, access=access_score, growth=growth_score, liquidity=liquidity
+    )
+    growth_sev = _hitch_severity(
+        "growth_surge", flood=flood, wet=wet, access=access_score, growth=growth_score, liquidity=liquidity
+    )
+    site_sev = _hitch_severity(
+        "site_hitch", flood=flood, wet=wet, access=access_score, growth=growth_score, liquidity=liquidity
+    )
+    # Parcel-aware hitch labels — exactly three stress cases for the chart rail
     hitch_catalog = [
         {
             "id": "rate_shock",
             "label": "Rate bite",
             "short": "Rates",
-            "plain": "Higher borrowing costs cool bids for a few years — then a mild catch-up.",
+            "plain": (
+                f"Higher borrowing costs cool bids for a few years on this {provider or 'listing'} channel"
+                f"{' (thin resale)' if (liquidity or 100) < 45 else ''} — then a mild catch-up."
+            ),
+            "severity": round(rate_sev, 2),
             "points": _points_for("rate_shock"),
         },
         {
@@ -471,8 +548,10 @@ def build_market_trajectory(
             "label": "Growth surge",
             "short": "Growth",
             "plain": (
-                f"Stronger corridor demand around {county or 'this county'} lifts the mid years, then fades."
+                f"Stronger corridor demand around {county or 'this county'} lifts the mid years, then fades — "
+                f"far years are not a boom forever."
             ),
+            "severity": round(growth_sev, 2),
             "points": _points_for("growth_surge"),
         },
         {
@@ -480,10 +559,13 @@ def build_market_trajectory(
             "label": "Site hitch",
             "short": "Site",
             "plain": (
-                "A flood, access, or title surprise steps value down — then the climb stays slower."
-                if (flood or 0) >= 15 or (wet or 0) >= 15 or (access_score is not None and access_score < 50)
-                else "A site/title surprise steps value down — then the climb stays slower on this channel."
+                (
+                    f"Flood (~{flood:.0f}%), wetlands, or access surprise steps value down — then a slower climb."
+                    if (flood or 0) >= 15
+                    else "A site/title/access surprise steps value down — then the climb stays slower on this channel."
+                )
             ),
+            "severity": round(site_sev, 2),
             "points": _points_for("site_hitch"),
         },
     ]
@@ -571,18 +653,28 @@ def build_market_trajectory(
         identity += f" · {acres:,.2f} acres"
     identity = f"This property · {identity}"
 
+    fwd_mult = (y_fwd["value_usd"] / y0["value_usd"]) if y_fwd and y0["value_usd"] else None
     headline = (
         f"{regime_label}. Today ~{_money(y0['value_usd'])}"
         + (f" · 10 years ago ~{_money(y_10['value_usd'])}" if y_10 else "")
-        + (f" · in {years_forward} years (outlook) ~{_money(y_fwd['value_usd'])}" if y_fwd else "")
+        + (
+            f" · in {years_forward} years (faded outlook) ~{_money(y_fwd['value_usd'])}"
+            if y_fwd
+            else ""
+        )
         + "."
     )
 
     summary_bullets = [
-        f"Yearly pace used for this listing: {annual*100:.1f}%.",
+        f"Near-term pace for this listing: {annual*100:.1f}%/yr — after ~20 years the path fades hard.",
         f"Highest in the full history: {_money(peak['value_usd'])} ({peak['year']}); "
         f"lowest: {_money(trough['value_usd'])} ({trough['year']}).",
     ]
+    if fwd_mult is not None and years_forward >= 50:
+        summary_bullets.append(
+            f"At {years_forward} years the faded path is about {fwd_mult:.1f}× today’s mark "
+            f"(~{_money(y_fwd['value_usd'])}) — nominal dollars, not a promise of generational wealth."
+        )
     if has_observed:
         summary_bullets.append(
             f"Folded in {len(observed)} tax-roll / sale figure(s) from this listing’s source."
@@ -591,6 +683,11 @@ def build_market_trajectory(
         summary_bullets.append(
             "No multi-year sale history on this public feed for this parcel ID, "
             "so the line follows similar land in this state and listing type — not recorded deeds."
+        )
+    if (flood or 0) >= 20 or (wet or 0) >= 15 or (access_score is not None and access_score < 45):
+        summary_bullets.append(
+            "Site screens (flood / wetlands / access) already slow this pin’s base path — "
+            "use the Site hitch to stress a sharper surprise."
         )
 
     # Card sparkline stays short (last ~10 years)
