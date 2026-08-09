@@ -56,12 +56,19 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           <div className="flex shrink-0 flex-col items-end gap-1">
             <div
               className={`conviction-pill ${conviction.toLowerCase()}`}
-              title="Acquisition desk conviction from LandSignal screen"
+              title="How interested we are after the first automated look (HIGH / MEDIUM / WATCH)"
             >
-              {conviction}
+              {conviction === "HIGH"
+                ? "Strong interest"
+                : conviction === "MEDIUM"
+                  ? "Moderate interest"
+                  : "Worth watching"}
             </div>
-            <div className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-sm font-semibold text-[var(--brand)] whitespace-nowrap">
-              Fit {Math.round(row.fit_score ?? row.opportunity)}
+            <div
+              className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-sm font-semibold text-[var(--brand)] whitespace-nowrap"
+              title="How well this matches your filters (0–100). Separate from the global opportunity score."
+            >
+              Match {Math.round(row.fit_score ?? row.opportunity)}/100
             </div>
           </div>
         </div>
@@ -94,7 +101,7 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             />
           </div>
           <div className="metric">
-            <div className="k">How complete</div>
+            <div className="k">File complete</div>
             <div className="v">{Math.round(row.confidence)} / 100</div>
           </div>
           <div className="metric">

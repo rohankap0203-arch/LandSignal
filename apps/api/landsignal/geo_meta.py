@@ -249,31 +249,31 @@ def search_meta_payload(inventory_regions: list[str] | None = None) -> dict:
             {"value": "unpriced_only", "label": "Unpriced process parcels only"},
         ],
         "sort_options": [
-            {"value": "fit_desc", "label": "Best fit for my criteria"},
-            {"value": "score_desc", "label": "Highest LandSignal score"},
-            {"value": "risk_asc", "label": "Lowest screened risk"},
-            {"value": "confidence_desc", "label": "Highest confidence"},
-            {"value": "price_asc", "label": "Lowest price / bid"},
-            {"value": "price_desc", "label": "Highest price / bid"},
-            {"value": "acres_desc", "label": "Largest acreage"},
-            {"value": "discount_asc", "label": "Biggest discount vs model"},
+            {"value": "fit_desc", "label": "Best match for my filters"},
+            {"value": "score_desc", "label": "Highest opportunity score (0–100)"},
+            {"value": "risk_asc", "label": "Lowest risk score first"},
+            {"value": "confidence_desc", "label": "Most complete files first"},
+            {"value": "price_asc", "label": "Lowest price / starting bid"},
+            {"value": "price_desc", "label": "Highest price / starting bid"},
+            {"value": "acres_desc", "label": "Largest acreage first"},
+            {"value": "discount_asc", "label": "Biggest gap under our estimated value"},
         ],
         "tooltips": {
             "max_risk": {
                 "title": "What is Max risk?",
-                "body": "Risk is a 0–100 screening score. Lower is safer on paper (flood, wetlands, thin data, access unknowns). Pick a max if you want calmer deals; choose higher if you can stomach more homework.",
+                "body": "Risk is 0–100 from map checks (flood, wetlands, missing data, access). 0 is calm; 100 is rough. Cap it if you want safer-looking deals.",
             },
             "min_confidence": {
                 "title": "What is Min confidence?",
-                "body": "Confidence shows how complete the evidence is (maps, soils, flood, listing facts). Higher means we saw more solid public data. Missing data lowers confidence — it does not invent a good score.",
+                "body": "How complete the file is (maps, soils, flood, listing facts), 0–100. Higher means we verified more. Missing data lowers this on purpose — it does not invent a good score.",
             },
             "include_unpriced": {
                 "title": "Unpriced federal / surplus?",
-                "body": "Some public lands (BLM disposals, surplus) have no retail asking price. Include them if you want process-driven opportunities. Choose priced-only if you need a number today.",
+                "body": "Some public lands have no retail asking price. Include them if you want those process deals. Choose priced-only if you need a number today.",
             },
             "market_channel": {
                 "title": "Market channel",
-                "body": "Where the opportunity comes from: federal disposal, tax sale, surplus auction, or a parcel you added yourself. Use this to narrow the pipeline.",
+                "body": "Where the listing comes from: federal BLM land, county tax sale, government surplus, or a parcel you added yourself.",
             },
         },
         "allows_custom": [

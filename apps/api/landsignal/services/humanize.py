@@ -23,15 +23,15 @@ def human_soil(prov: Any, *, apn: str | None = None, county: str | None = None, 
     where = f"{apn or 'This parcel'}" + (f" in {county}, {state}" if county and state else "")
     bullets = []
     if farm:
-        bullets.append(f"{where}: USDA farmland class mark = {farm}")
+        bullets.append(f"{where}: USDA farmland class = {farm}")
     if prime is not None:
-        bullets.append(f"{where}: prime farmland screen {float(prime):.0f}% of sampled area (SSURGO).")
+        bullets.append(f"{where}: about {float(prime):.0f}% of the sampled area looks like prime farmland (USDA).")
     else:
-        bullets.append(f"{where}: prime-farmland share not confirmed yet from USDA for this geometry.")
-    bullets.append("SSURGO screen only — order a soil test before farming underwrite.")
+        bullets.append(f"{where}: how much is prime farmland is not confirmed yet from USDA for this shape.")
+    bullets.append("Map soil data only — order a soil test before counting on farm income.")
     plain = (
         f"{where}: soil class {farm or 'not confirmed'}; "
-        f"prime screen {_pct(prime) or 'not confirmed'}."
+        f"prime farmland {_pct(prime) or 'not confirmed'}."
     )
     return {
         "title": "Soil quality",
@@ -57,18 +57,18 @@ def human_flood(prov: Any, *, apn: str | None = None) -> dict[str, Any]:
         plain = f"{who}: flood exposure not confirmed yet from FEMA."
         level = "Unknown"
     elif float(flood) < 10:
-        plain = f"{who}: FEMA screen shows low flood overlap ({float(flood):.0f}%)."
+        plain = f"{who}: FEMA map shows low flood overlap ({float(flood):.0f}%)."
         level = "Lower"
     elif float(flood) < 35:
-        plain = f"{who}: FEMA screen shows {float(flood):.0f}% flood overlap — insurance/financing friction likely."
+        plain = f"{who}: FEMA map shows {float(flood):.0f}% flood overlap — insurance and loans may be harder."
         level = "Moderate"
     else:
-        plain = f"{who}: FEMA screen shows high flood overlap ({float(flood):.0f}%) — major underwrite input."
+        plain = f"{who}: FEMA map shows high flood overlap ({float(flood):.0f}%) — plan for insurance and fill cost."
         level = "Higher"
     bullets = [
         f"{who}: flood overlap {_pct(flood) or 'not confirmed'}",
-        f"{who}: FEMA zone mark {zone or 'not returned at point sample'}",
-        "Not an elevation certificate — verify before bid.",
+        f"{who}: FEMA zone {zone or 'not returned for this pin'}",
+        "This is not an elevation certificate — confirm before you bid.",
     ]
     return {
         "title": "Flood exposure",
@@ -201,42 +201,42 @@ def human_dd_items(items: list[dict], score: Any, enrichment: Any) -> list[dict[
 CATEGORY_HELP = {
     "valuation_mispricing": {
         "title": "Price vs our estimate",
-        "simple": "How the realistic buy price for this listing compares to what we think the land is worth.",
+        "simple": "Compares what you’d likely pay today with what we think this land is worth. Higher = cheaper vs our estimate.",
     },
     "intrinsic_land_quality": {
         "title": "Land quality",
-        "simple": "How usable this exact land looks from soil and slope checks.",
+        "simple": "How usable this exact pin looks from soil and slope. Higher = more usable ground.",
     },
     "hbu_optionality": {
         "title": "Ways you could use it",
-        "simple": "Which money-making uses (farm, homes, energy, etc.) fit this listing best.",
+        "simple": "Which money-making uses (farm, homes, energy, etc.) fit this listing. Higher = more solid options.",
     },
     "growth_appreciation": {
         "title": "Area growth",
-        "simple": "Whether people and activity are moving toward this listing’s area.",
+        "simple": "Whether people and jobs are moving toward this area. Higher = stronger local growth signal.",
     },
     "infrastructure": {
         "title": "Roads & power",
-        "simple": "Road access and nearby power for this pin.",
+        "simple": "Road access and nearby power for this pin. Higher = easier to reach and serve.",
     },
     "liquidity": {
         "title": "Ease of resale",
-        "simple": "How hard this kind of listing usually is to sell later.",
+        "simple": "How quickly similar land here usually finds a buyer. Higher = easier to sell later.",
     },
     "scarcity": {
         "title": "How rare it is",
-        "simple": "How hard it is to find similar acreage nearby.",
+        "simple": "How hard it is to find similar acreage nearby. Higher = rarer tract.",
     },
     "catalysts": {
         "title": "Nearby projects",
-        "simple": "Known projects that could lift value near this parcel.",
+        "simple": "Known nearby projects that could lift value. Higher = clearer upside catalysts.",
     },
     "seller_dynamics": {
         "title": "Seller pressure",
-        "simple": "Signs this seller/channel may take a lower offer.",
+        "simple": "Signs this seller or channel may accept a lower offer. Higher = more negotiating room.",
     },
     "risk": {
         "title": "Risk cushion",
-        "simple": "Higher means fewer map red flags helping the opportunity score.",
+        "simple": "Higher here means fewer flood/wetland/access red flags helping the opportunity score.",
     },
 }

@@ -132,8 +132,8 @@ def value_display(estimated: float | None, knowledge: str | None) -> dict[str, A
     if estimated is None:
         return {
             "amount_usd": None,
-            "label": "Model value",
-            "display": "Insufficient data for value estimate",
+            "label": "Our estimated value",
+            "display": "Not enough data yet for a dollar estimate",
             "knowledge_state": knowledge or "UNKNOWN",
         }
     return {

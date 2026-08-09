@@ -90,8 +90,8 @@ export function ReturnVisual({
               <p className="mt-1 text-xs text-[var(--muted)] leading-relaxed">{r.note}</p>
               {(r.noi || r.npv) && (
                 <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-[var(--muted)]">
-                  {r.noi ? <span>NOI {r.noi}</span> : null}
-                  {r.npv ? <span>NPV {r.npv}</span> : null}
+                  {r.noi ? <span title="Net operating income — rent minus costs before debt">Yearly net income {r.noi}</span> : null}
+                  {r.npv ? <span title="Net present value — today’s value of future cash after your buy price">Today’s net value {r.npv}</span> : null}
                 </div>
               )}
             </div>

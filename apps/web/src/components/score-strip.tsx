@@ -39,11 +39,11 @@ export function ScoreStrip({
 }) {
   return (
     <div className="flex flex-wrap gap-3">
-      <Meter label="LandSignal" value={opportunity} tone="accent" />
+      <Meter label="Opportunity" value={opportunity} tone="accent" />
       <Meter label="Risk" value={risk} tone="danger" />
-      <Meter label="Confidence" value={confidence} />
-      <Meter label="Asymmetry" value={asymmetry} tone="accent" />
-      <Meter label="Deal Readiness" value={dealReadiness} />
+      <Meter label="File complete" value={confidence} />
+      <Meter label="Upside vs price" value={asymmetry} tone="accent" />
+      <Meter label="Ready to pursue" value={dealReadiness} />
     </div>
   );
 }

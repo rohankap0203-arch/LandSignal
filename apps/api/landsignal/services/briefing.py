@@ -97,17 +97,20 @@ def build_intelligence_brief(
         why.append(
             {
                 "headline": (
-                    f"Auction math: {_money(ask)} opener → ~{_money(settle_v)} settle "
-                    f"vs {_money(est)} model"
+                    f"Starting bid {_money(ask)} · likely finish ~{_money(settle_v)} · "
+                    f"our value {_money(est)}"
                 ),
                 "detail": (
-                    f"On {apn} in {county}, {state}, do not treat {_money(ask)} as the buy price — "
-                    f"tax/auction openers are floors. Screening applies ~{auction.get('bid_inflation_mult_base', 0):.1f}× "
-                    f"typical bid-up (band {auction.get('bid_inflation_mult_low', 0):.1f}×–"
-                    f"{auction.get('bid_inflation_mult_high', 0):.1f}×) → likely clear near {_money(settle_v)}. "
-                    f"Settle-adjusted gap vs model ≈ {_money(abs(gap))} "
-                    f"({abs(disc):.0f}% {'under' if (disc or 0) < 0 else 'over'}). "
-                    f"Teaser opener looked {abs(auction.get('opener_discount_pct') or 0):.0f}% under model — that was anchoring, not edge."
+                    f"On {apn} in {county}, {state}, the {_money(ask)} number is only the opening bid — "
+                    f"not what you should expect to pay. Similar auctions usually climb about "
+                    f"{auction.get('bid_inflation_mult_base', 0):.1f}× "
+                    f"(rough range {auction.get('bid_inflation_mult_low', 0):.1f}×–"
+                    f"{auction.get('bid_inflation_mult_high', 0):.1f}×), so a realistic finish is near "
+                    f"{_money(settle_v)}. Compared with our estimated value {_money(est)}, that is about "
+                    f"{_money(abs(gap))} "
+                    f"({abs(disc):.0f}% {'cheaper' if (disc or 0) < 0 else 'more expensive'}). "
+                    f"The opener looked {abs(auction.get('opener_discount_pct') or 0):.0f}% under our value — "
+                    f"that teaser is normal for auctions, not a guaranteed bargain."
                 ),
             }
         )
@@ -116,19 +119,19 @@ def build_intelligence_brief(
         why.append(
             {
                 "headline": (
-                    f"Model gap: ask {_money(ask)} vs screen {_money(est)} "
-                    f"({abs(disc):.0f}% {'under' if disc < 0 else 'over'})"
+                    f"Listed at {_money(ask)} · we think it’s worth {_money(est)} "
+                    f"({abs(disc):.0f}% {'cheaper' if disc < 0 else 'pricier'} than our estimate)"
                 ),
                 "detail": (
-                    f"On {apn} in {county}, {state}, the public ask is {_money(ask)}"
-                    + (f" ({_money(ppa)}/ac)" if ppa else "")
-                    + f" while the screening base is {_money(est)}"
-                    + (f" ({_money(model_ppa)}/ac)" if model_ppa else "")
-                    + f". Dollar gap ≈ {_money(abs(gap))}. "
+                    f"On {apn} in {county}, {state}, the public price is {_money(ask)}"
+                    + (f" ({_money(ppa)} per acre)" if ppa else "")
+                    + f". Our estimate for this land is {_money(est)}"
+                    + (f" ({_money(model_ppa)} per acre)" if model_ppa else "")
+                    + f" — a gap of about {_money(abs(gap))}. "
                     + (
-                        "That is the economic hook — still verify with a local broker, title, and a site walk before you treat it as equity."
+                        "That price difference is the main reason this listing ranks high — still confirm with a local broker, title search, and a site walk."
                         if disc < -8
-                        else "Gap is modest; treat price as one input, not the thesis."
+                        else "The price gap is small, so treat price as one factor among several before you bid."
                     )
                 ),
             }
@@ -137,12 +140,12 @@ def build_intelligence_brief(
         size_bit = f"{acres:,.2f} acres" if acres is not None else "this parcel"
         why.append(
             {
-                "headline": f"No retail ask — {provider_label} process pricing",
+                "headline": f"No public sale price yet · {provider_label.replace('_', ' ')}",
                 "detail": (
-                    f"{title[:90]} comes from {provider_label} with no Zillow-style list price. "
-                    f"Screening value sits near {_money(est)} for {size_bit} at {pin}. "
-                    f"Your edge is process access (agency, auction calendar, surplus office), "
-                    f"not outbidding a retail crowd."
+                    f"{title[:90]} is on a {provider_label.replace('_', ' ')} feed with no consumer-style asking price. "
+                    f"We estimate about {_money(est)} for {size_bit} at map pin {pin}. "
+                    f"Your advantage is knowing how to buy through the agency / auction / surplus process — "
+                    f"not racing a retail listing crowd."
                 ),
             }
         )
@@ -150,31 +153,30 @@ def build_intelligence_brief(
         if acres >= 80:
             why.append(
                 {
-                    "headline": f"Institutional-scale tract: {acres:,.1f} acres",
+                    "headline": f"Large tract: {acres:,.1f} acres",
                     "detail": (
-                        f"At {acres:,.1f} ac in {county}, {state}, this clears most farmland / land-bank / "
-                        f"energy minimums. One parcel can carry a multi-year hold without assembling neighbors."
+                        f"At {acres:,.1f} acres in {county}, {state}, this is big enough for farming, holding, "
+                        f"or energy-style uses without buying neighboring lots."
                     ),
                 }
             )
         elif acres >= 10:
             why.append(
                 {
-                    "headline": f"Workable rural scale: {acres:,.1f} acres",
+                    "headline": f"Mid-size rural tract: {acres:,.1f} acres",
                     "detail": (
-                        f"{acres:,.1f} acres is enough for cash-rent, recreation lease, or a land-bank pad "
-                        f"in {county}. Too big for a leftover city lot thesis; too small to ignore access and tillable %."
+                        f"{acres:,.1f} acres in {county} is enough to rent to a farmer, lease for recreation, "
+                        f"or hold. Bigger than a city lot, small enough that road access and usable acres still matter a lot."
                     ),
                 }
             )
         elif acres < 2:
             why.append(
                 {
-                    "headline": f"Small lot ({acres:,.2f} ac) — urban / tax-sale style play",
+                    "headline": f"Small lot ({acres:,.2f} acres) — city / tax-sale style",
                     "detail": (
-                        f"Size points to assemble, side-lot, flip, or hold — not row-crop. "
-                        f"Model value uses urban residual logic, not ag $/acre priors. "
-                        f"APN {apn}."
+                        f"This size usually fits assembling with a neighbor, flipping, or holding — not growing crops. "
+                        f"Our value estimate uses small-lot logic, not farm-per-acre pricing. Parcel ID {apn}."
                     ),
                 }
             )
@@ -185,86 +187,87 @@ def build_intelligence_brief(
         )
         why.append(
             {
-                "headline": f"Best screen: {strategy.replace('_', ' ').title()}",
+                "headline": f"Best use we see: {strategy.replace('_', ' ').title()}",
                 "detail": (
-                    f"Strategy matrix picks {strategy.replace('_', ' ').title()} first"
-                    f"{second_clause} for this parcel’s {size_clause}"
-                    f"location ({county}, {state}), and constraint screens. "
-                    f"Open the rating breakdown for the scored mix — secondary uses can still matter on exit."
+                    f"For this parcel’s {size_clause}location ({county}, {state}), "
+                    f"the strongest fit is {strategy.replace('_', ' ').title()}"
+                    f"{second_clause}. "
+                    f"Open the score breakdown below for the full mix — a second use can still help when you sell later."
                 ),
             }
         )
     if provider == "public_tax_sale":
         why.append(
             {
-                "headline": "Distressed / tax-sale / land-bank channel",
+                "headline": "County tax sale / land-bank listing",
                 "detail": (
-                    f"Inventory is from a public tax-sale, foreclosure, or land-bank layer in {county}. "
-                    f"These often clear below retail because of title risk, occupancy unknowns, and auction friction — "
-                    f"which is also why diligence must be heavier than an MLS farm listing."
+                    f"This came from a public tax sale, foreclosure, or land-bank list in {county}. "
+                    f"These often sell below normal asking prices because of title questions, unknown occupants, "
+                    f"and auction paperwork — so check those carefully before you bid."
                 ),
             }
         )
     elif provider == "blm_lpad":
         why.append(
             {
-                "headline": "Federal BLM disposal tract (not MLS)",
+                "headline": "Federal BLM land (not a normal MLS listing)",
                 "detail": (
-                    f"Sale/exchange follows BLM / FLPMA process at {pin}. Timelines, appraisals, and possible "
-                    f"use conditions apply. Fewer private buyers track LPAD — that can be the edge if you can wait."
+                    f"Buying follows the BLM government process at map pin {pin}. Expect longer timelines, "
+                    f"an appraisal step, and possible use rules. Fewer private buyers watch this channel — "
+                    f"that can help if you can wait."
                 ),
             }
         )
     elif provider == "public_surplus":
         why.append(
             {
-                "headline": "Government surplus / public disposal inventory",
+                "headline": "City or county surplus land",
                 "detail": (
-                    f"This is a municipal or county surplus-style parcel in {county}, {state}. "
-                    f"Procurement rules and surplus calendars matter more than Redfin traffic."
+                    f"This is surplus-style public land in {county}, {state}. "
+                    f"Government sale rules and calendars matter more than browsing sites like Zillow."
                 ),
             }
         )
     if prime is not None and prime >= 40 and acres and acres >= 10:
         why.append(
             {
-                "headline": f"Soil screen shows ~{prime:.0f}% prime farmland",
+                "headline": f"About {prime:.0f}% of the soil looks like prime farmland",
                 "detail": (
-                    f"USDA SSURGO mark at this geometry: {farm_class or 'class n/a'}, ~{prime:.0f}% prime. "
-                    f"For a {acres:,.1f}-ac position that supports cash-rent and resale to ag buyers — "
-                    f"still pull a soil test before you underwrite yield."
+                    f"USDA soil data for this shape: class {farm_class or 'not listed'}, about {prime:.0f}% prime. "
+                    f"On {acres:,.1f} acres that helps cash rent and selling later to a farmer — "
+                    f"still order a soil test before counting on crop yield."
                 ),
             }
         )
     if tx_m is not None and tx_m < 8000 and (strategy == "ENERGY" or (acres or 0) >= 20):
         why.append(
             {
-                "headline": f"Transmission screen ~{tx_m/1609:.1f} mi away",
+                "headline": f"Power line about {tx_m/1609:.1f} miles away",
                 "detail": (
-                    f"HIFLD mark puts nearest mapped line about {tx_m:,.0f} m from the pin. "
-                    f"That is a screening hint for energy optionality — not queue position, "
-                    f"interconnection rights, or substation capacity."
+                    f"The nearest mapped transmission line is about {tx_m:,.0f} meters from this pin. "
+                    f"That is only a first clue for energy uses — it does not mean you can connect, "
+                    f"or that a substation has spare capacity."
                 ),
             }
         )
     if conf < 45:
         why.append(
             {
-                "headline": f"Evidence file still thin (confidence {conf:.0f}/100)",
+                "headline": f"File is still incomplete ({conf:.0f}/100 how-complete)",
                 "detail": (
-                    f"LandSignal {opp:.0f}/100 is a screen, not a proven gem. "
-                    f"Missing map layers or listing facts lower confidence on purpose. "
-                    f"Use the due-diligence checklist before any bid on {apn}."
+                    f"Opportunity score {opp:.0f}/100 is a first look, not proof this is a great buy. "
+                    f"Missing maps or listing facts lower the completeness score on purpose. "
+                    f"Use the checklist below before bidding on {apn}."
                 ),
             }
         )
     if not why:
         why.append(
             {
-                "headline": "Passes stage-1 screens",
+                "headline": "Passes the first automated checks",
                 "detail": (
-                    f"At least one investment strategy remains open after automated gates for {apn} "
-                    f"in {county}, {state}."
+                    f"At least one use still looks possible for {apn} in {county}, {state} "
+                    f"after the first automated gates."
                 ),
             }
         )
@@ -292,77 +295,79 @@ def build_intelligence_brief(
         still.insert(
             0,
             {
-                "headline": "Teaser opener attracts browsers; settle price filters capital",
+                "headline": "Low starting bid draws browsers; real finish price weeds them out",
                 "detail": (
-                    f"Published {_money(ask)} looks like a steal next to {_money(est)} model value — "
-                    f"until you price ~{_money(settle)} expected clear. "
-                    f"Pros underwrite bid-up; novices get anchored. That gap in sophistication is why "
-                    f"the parcel can sit through a full auction calendar."
+                    f"The published {_money(ask)} looks cheap next to our {_money(est)} estimate — "
+                    f"until you plan on a likely finish near {_money(settle)}. "
+                    f"Experienced buyers already bake that climb into their max bid; casual bidders often don’t. "
+                    f"That mismatch is one reason parcels can sit through a whole auction cycle."
                 ),
             },
         )
     if flood_pct is not None and flood_pct >= 20:
         still.append(
             {
-                "headline": f"Flood screen ~{flood_pct:.0f}% (zone {flood_zone or 'n/a'})",
+                "headline": f"About {flood_pct:.0f}% flood overlap on the map (zone {flood_zone or 'not listed'})",
                 "detail": (
-                    f"FEMA overlap at {pin} looks material. Cash-flow and bank buyers often step back, "
-                    f"which can leave room for a patient buyer who prices insurance, fill, and elevation correctly."
+                    f"FEMA data at pin {pin} shows meaningful flood overlap. Banks and cash-flow buyers often pass, "
+                    f"which can leave room for someone who prices insurance, fill, and elevation correctly."
                 ),
             }
         )
     if wet_pct is not None and wet_pct >= 15:
         deed_bit = (
-            f"Buildable/tillable acres may be well below deeded {acres:,.2f} ac. "
+            f"Usable acres may be well below the deeded {acres:,.2f} acres. "
             if acres is not None
             else ""
         )
         still.append(
             {
-                "headline": f"Wetlands screen ~{wet_pct:.0f}% of the parcel",
+                "headline": f"About {wet_pct:.0f}% of the parcel looks like wetlands",
                 "detail": (
-                    f"{deed_bit}Speculative subdividers often pass; ag or recreation buyers may still "
-                    f"underwrite it after a delineation in {county}."
+                    f"{deed_bit}Quick flip / subdivision buyers often skip these. "
+                    f"A farmer or recreation buyer may still want it after a wetland survey in {county}."
                 ),
             }
         )
     if ask is None:
         still.append(
             {
-                "headline": "Harder for retail shoppers to find / price",
+                "headline": "Harder for casual buyers to find or price",
                 "detail": (
-                    f"Without a consumer ask, casual buyers never see {apn}. "
-                    f"“Available” often means process not finished — not automatically bad land."
+                    f"Without a normal asking price, most shoppers never see {apn}. "
+                    f"“Still available” often means the government / auction process is unfinished — "
+                    f"not that the land is automatically bad."
                 ),
             }
         )
     if risk >= 55:
         still.append(
             {
-                "headline": f"Screened risk elevated ({risk:.0f}/100)",
+                "headline": f"Higher risk on this file ({risk:.0f}/100)",
                 "detail": (
-                    f"Risk {risk:.0f} usually means flood/wetland/access/data gaps on this file. "
-                    f"That scares fast money and is exactly what a careful underwriter can turn into a negotiated price."
+                    f"Risk {risk:.0f}/100 usually means flood, wetlands, access issues, or missing data. "
+                    f"That scares fast buyers — and can create negotiating room if you do the homework."
                 ),
             }
         )
     if provider in ("public_tax_sale", "public_surplus") and readiness < 55:
         still.append(
             {
-                "headline": f"Deal readiness only {readiness:.0f}/100 — homework unfinished",
+                "headline": f"Not ready to bid yet ({readiness:.0f}/100 ready-to-pursue)",
                 "detail": (
-                    f"Title, access, and occupancy are not desktop-certified for this {provider_label} parcel. "
-                    f"Many institutions won’t bid until those are clean — which is why it can still be sitting."
+                    f"Title, road access, and whether anyone is on the land are not confirmed yet for this "
+                    f"{provider_label.replace('_', ' ')} parcel. Many bigger buyers won’t bid until those are clean — "
+                    f"which is why it can still be sitting."
                 ),
             }
         )
     if not still:
         still.append(
             {
-                "headline": "No single smoking-gun reason in the public file",
+                "headline": "No single clear red flag in the public file",
                 "detail": (
-                    f"Public layers on {apn} don’t show a clear poison pill at {pin}. "
-                    f"It may be early in marketing, poorly syndicated, or waiting on an agency/auction calendar."
+                    f"Public maps on {apn} don’t show an obvious deal-breaker at pin {pin}. "
+                    f"It may be early in marketing, hard to find online, or waiting on an agency / auction date."
                 ),
             }
         )
@@ -398,7 +403,7 @@ def build_intelligence_brief(
     ]
     tx_extra = [
         f"Nearest mapped transmission: {tx_m:,.0f} m ({tx_m/1609:.1f} mi)" if tx_m is not None else "Transmission distance not confirmed yet",
-        "Energy thesis only: proximity ≠ interconnection rights, queue position, or substation capacity.",
+        "Energy use only: being near a line does not mean you can connect or that the substation has spare capacity.",
         f"Strategy screen currently emphasizes {strategy.replace('_', ' ').title()}.",
     ]
 
@@ -410,14 +415,14 @@ def build_intelligence_brief(
         summary = s.get("plain_english")
         if acres and acres < 5:
             summary = (
-                f"{case}: farmland IRR math is a weak fit for a {acres:,.2f}-ac urban/tax-sale lot. "
-                f"Treat these numbers as a sanity check only — underwrite assemble/flip or lease instead."
+                f"{case}: yearly farm-return math is a weak fit for a {acres:,.2f}-acre city/tax-sale lot. "
+                f"Treat these numbers as a rough check only — think assemble, flip, or lease instead."
             )
         elif irr is not None and ask:
             summary = (
-                f"{case} for {acres:,.1f} ac in {county}: if you bought near {_money(ask)} and "
-                f"cash-rent assumptions hold, screen IRR ≈ {float(irr)*100:.1f}%/yr. "
-                f"Pull local rent comps before you believe it."
+                f"{case} for {acres:,.1f} acres in {county}: if you bought near {_money(ask)} and "
+                f"local cash rents hold, a simple return screen shows about {float(irr)*100:.1f}% per year. "
+                f"Confirm with local rent comps before you trust it."
             )
         scen_notes.append(
             {
@@ -436,8 +441,8 @@ def build_intelligence_brief(
             {
                 "case": "Not modeled yet",
                 "summary": (
-                    f"Farmland IRR screens need rent/yield assumptions. For this {state} parcel ({apn}), "
-                    f"open manual diligence and pull local cash-rent comps before trusting an IRR."
+                    f"Yearly return screens need local rent and yield numbers. For this {state} parcel ({apn}), "
+                    f"pull local cash-rent comps before trusting a percent-per-year figure."
                 ),
                 "numbers": {},
             }
@@ -552,7 +557,7 @@ def build_intelligence_brief(
         "bullets": thesis_bullets[:5],
         "desk_note": (
             f"For {apn}: opportunity {opp:.0f}/100, risk {risk:.0f}/100, "
-            f"how complete the file is {conf:.0f}/100, deal readiness {readiness:.0f}/100. "
+            f"how complete the file is {conf:.0f}/100, ready-to-pursue {readiness:.0f}/100. "
             f"This is a first look — not a buy order."
         ),
     }
@@ -579,7 +584,7 @@ def build_intelligence_brief(
                     if disc is not None and est is not None
                     else f"the best use we see is {strategy.replace('_', ' ').title()} and the main checks still pass"
                 )
-                + f". Deal readiness for this file: {readiness:.0f}/100."
+                + f". Ready-to-pursue for this file: {readiness:.0f}/100."
             ),
             "risk": (
                 f"Risk for {title[:50]} is {risk:.0f}/100 at map pin {pin} because "
@@ -603,7 +608,7 @@ def build_intelligence_brief(
         },
         "primary_cta": primary_cta,
         "watch_hint": (
-            "Add to watchlist to track LandSignal, risk, confidence, price, and status. "
-            "Set your email under My criteria → Watchlist email sync to receive change notices."
+            "Add to watchlist to track opportunity score, risk, how-complete, price, and status. "
+            "Set your email under My criteria → Watchlist email sync to get change notices."
         ),
     }

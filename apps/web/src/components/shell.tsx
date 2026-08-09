@@ -54,7 +54,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </header>
       <main className="mx-auto max-w-[1240px] px-4 py-6">{children}</main>
       <footer className="mx-auto max-w-[1240px] px-4 pb-10 text-sm text-[var(--muted)]">
-        LandSignal screens opportunities — it never buys land for you. Every score is explainable and sourced.
+        LandSignal ranks public land deals with plain-English scores — it never buys land for you. Every number is explained for that listing.
       </footer>
     </div>
   );

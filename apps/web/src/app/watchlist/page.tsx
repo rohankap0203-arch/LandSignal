@@ -52,7 +52,7 @@ export default function WatchlistPage() {
         <div>
           <h1 className="display text-3xl font-semibold">Watchlist</h1>
           <p className="mt-1 max-w-2xl text-sm text-[var(--muted)]">
-            Properties you pinned for metric tracking. LandSignal, risk, confidence, price, and status
+            Properties you pinned. Opportunity score, risk, how complete the file is, price, and status
             update here. Sync an email under My criteria to get change notices.
           </p>
         </div>
@@ -118,11 +118,11 @@ export default function WatchlistPage() {
               </button>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <ScoreBar label="LandSignal" value={Number(item.current.opportunity || 0)} />
+              <ScoreBar label="Opportunity score" value={Number(item.current.opportunity || 0)} />
               <ScoreBar label="Risk" value={Number(item.current.risk || 0)} invert />
             </div>
             <div className="mt-2 text-sm text-[var(--muted)]">
-              Confidence {Math.round(Number(item.current.confidence || 0))}/100
+              File complete {Math.round(Number(item.current.confidence || 0))}/100
             </div>
             {!!item.changes?.length && (
               <ul className="mt-3 space-y-1 text-sm">

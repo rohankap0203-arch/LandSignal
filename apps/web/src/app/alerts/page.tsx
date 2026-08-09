@@ -72,8 +72,8 @@ export default function AlertsPage() {
       <div>
         <h1 className="display text-3xl font-semibold">Alerts</h1>
         <p className="mt-1 max-w-2xl text-sm text-[var(--muted)]">
-          Tell LandSignal what “good enough” means. When a parcel clears your bars, you get a notice here
-          (email/SMS need SMTP/Twilio configured).
+          Set minimum bars for opportunity, risk, and file completeness. When a parcel clears them, you get
+          a notice here (email/SMS need SMTP/Twilio configured).
         </p>
       </div>
 
@@ -88,7 +88,7 @@ export default function AlertsPage() {
         </label>
 
         <Slider
-          label="LandSignal score must be at least"
+          label="Opportunity score must be at least"
           value={draft.opportunity_gt}
           onChange={(v) => setDraft((d) => ({ ...d, opportunity_gt: v }))}
         />
@@ -98,12 +98,12 @@ export default function AlertsPage() {
           onChange={(v) => setDraft((d) => ({ ...d, risk_lt: v }))}
         />
         <Slider
-          label="Confidence must be at least"
+          label="File-complete score must be at least"
           value={draft.confidence_gt}
           onChange={(v) => setDraft((d) => ({ ...d, confidence_gt: v }))}
         />
         <Slider
-          label="Asymmetry (upside skew) at least"
+          label="Upside vs price must be at least"
           value={draft.asymmetry_gt}
           onChange={(v) => setDraft((d) => ({ ...d, asymmetry_gt: v }))}
         />

@@ -218,10 +218,10 @@ export default function SearchPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="text-xs uppercase tracking-[0.14em] text-white/70">LandSignal</div>
-            <h1>Target the land that fits you</h1>
+            <h1>Find land that matches what you want</h1>
             <p>
-              Set your range, hone the filters, and the engine ranks live public opportunities with
-              plain-English scores — so you can see the best fit first.
+              Set price, acres, and location, then click Show matches. Each result shows an opportunity
+              score (0–100), risk, how complete the file is, and a match score for your filters.
             </p>
           </div>
         </div>
@@ -434,10 +434,10 @@ export default function SearchPage() {
 
       <div id="search-results" className="results-head scroll-mt-24">
         <div>
-          <h2 className="display text-2xl font-semibold">Opportunity results</h2>
+          <h2 className="display text-2xl font-semibold">Matching land</h2>
           <p className="mt-1 text-[var(--muted)]">
             {status ||
-              "Set your criteria above. Fit score personalizes ranking without hiding the global LandSignal score."}
+              "Match score (0–100) ranks how well each parcel fits your filters. Opportunity score is the same for everyone."}
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -451,13 +451,13 @@ export default function SearchPage() {
             >
               {(
                 meta?.sort_options || [
-                  { value: "fit_desc", label: "Best fit for my criteria" },
-                  { value: "score_desc", label: "Highest LandSignal score" },
-                  { value: "risk_asc", label: "Lowest screened risk" },
-                  { value: "confidence_desc", label: "Highest confidence" },
-                  { value: "price_asc", label: "Lowest price / bid" },
-                  { value: "acres_desc", label: "Largest acreage" },
-                  { value: "discount_asc", label: "Biggest discount vs model" },
+                  { value: "fit_desc", label: "Best match for my filters" },
+                  { value: "score_desc", label: "Highest opportunity score (0–100)" },
+                  { value: "risk_asc", label: "Lowest risk score first" },
+                  { value: "confidence_desc", label: "Most complete files first" },
+                  { value: "price_asc", label: "Lowest price / starting bid" },
+                  { value: "acres_desc", label: "Largest acreage first" },
+                  { value: "discount_asc", label: "Biggest gap under our estimated value" },
                 ]
               ).map((o) => (
                 <option key={o.value} value={o.value}>
@@ -468,10 +468,11 @@ export default function SearchPage() {
           </label>
           {topFit && (
             <div className="panel px-4 py-3 text-sm">
-              <div className="text-[var(--muted)]">Top fit right now</div>
+              <div className="text-[var(--muted)]">Best match right now</div>
               <div className="font-semibold">{topFit.property_name}</div>
               <div className="text-xs text-[var(--muted)]">
-                Fit {Math.round(topFit.fit_score ?? 0)} · LandSignal {Math.round(topFit.opportunity)}
+                Match {Math.round(topFit.fit_score ?? 0)}/100 · Opportunity{" "}
+                {Math.round(topFit.opportunity)}/100
               </div>
             </div>
           )}
@@ -483,7 +484,7 @@ export default function SearchPage() {
       {loading && (
         <LandLoader
           label="Surveying matches…"
-          detail="Ranking live public parcels against your filters — settle-adjusted prices, risk, and fit."
+          detail="Ranking live public parcels against your filters — likely buy price, risk, and match score."
         />
       )}
 

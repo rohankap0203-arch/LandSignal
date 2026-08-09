@@ -532,7 +532,7 @@ async def radar(
                 )
             summary = thesis or (
                 f"{_strategy_label(score.best_strategy)} · "
-                f"LandSignal {score.opportunity:.0f} · Risk {score.risk:.0f} · {pd['display']}"
+                f"Opportunity {score.opportunity:.0f} · Risk {score.risk:.0f} · {pd['display']}"
             )
             headline_disc = settle_disc if settle_disc is not None else score.asking_discount_pct
             if headline_disc is not None and headline_disc < -8:
@@ -547,7 +547,7 @@ async def radar(
                     f"likely ~${auction_path.get('expected_settle_usd', 0):,.0f}"
                 )
             else:
-                headline = f"{conviction or 'WATCH'} interest · opportunity {score.opportunity:.0f}"
+                headline = f"{conviction or 'WATCH'} interest · opportunity score {score.opportunity:.0f}/100"
 
             out.append(
                 RadarRow(
@@ -767,11 +767,11 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         case_name = case_labels.get(case_key, case_key)
         if s.get("irr") is not None:
             plain = (
-                f"{case_name}: about {float(s['irr']) * 100:.1f}% IRR on the farmland screen "
-                f"if cash-rent and exit assumptions hold for this parcel."
+                f"{case_name}: about {float(s['irr']) * 100:.1f}% per year on a simple farm-rent screen "
+                f"if cash rents and a later sale hold for this parcel."
             )
         else:
-            plain = "This case needs more crop/rent inputs before an IRR can be shown."
+            plain = "This case needs more crop/rent numbers before a yearly return can be shown."
         scenarios_human.append(
             {
                 **s,
@@ -826,17 +826,17 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     settle_hi = float((auction_path or {}).get("settle_high_usd") or settle_v)
     if auction_path and opener_v > 0 and model_v > 0:
             chart_points = [
-            {"x": opener_v, "y": 100, "label": "Open", "note": "Published floor — almost everyone still in"},
-            {"x": settle_lo, "y": 72, "label": "Low", "note": "Thin auction / weak day"},
-            {"x": settle_v, "y": 48, "label": "Settle", "note": "Typical contested clear"},
-            {"x": settle_hi, "y": 28, "label": "High", "note": "Hot room / retail spillover"},
-            {"x": model_v, "y": 12, "label": "Mark", "note": "Screening retail — few tax-sale buyers pay here"},
+            {"x": opener_v, "y": 100, "label": "Start", "note": "Published starting bid — almost every bidder is still in"},
+            {"x": settle_lo, "y": 72, "label": "Soft day", "note": "Quiet auction — finishes on the low side"},
+            {"x": settle_v, "y": 48, "label": "Likely finish", "note": "Typical contested finish for this kind of sale"},
+            {"x": settle_hi, "y": 28, "label": "Hot day", "note": "Busy auction — price climbs higher"},
+            {"x": model_v, "y": 12, "label": "Our value", "note": "What we think the land is worth — few tax-sale buyers pay full retail"},
         ]
     elif model_v > 0:
         chart_points = [
-            {"x": model_v * 0.55, "y": 80, "label": "Distress", "note": "Where process buyers often land"},
-            {"x": model_v * 0.75, "y": 45, "label": "Negotiate", "note": "Brokered / surplus outcomes"},
-            {"x": model_v, "y": 18, "label": "Mark", "note": "Screening retail mark"},
+            {"x": model_v * 0.55, "y": 80, "label": "Deep discount", "note": "Where distressed / process buyers often land"},
+            {"x": model_v * 0.75, "y": 45, "label": "Negotiated", "note": "Common brokered or surplus outcome"},
+            {"x": model_v, "y": 18, "label": "Our value", "note": "Our estimated full value for this land"},
         ]
     else:
         chart_points = []
@@ -844,7 +844,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     unsold = ((enrichment.narratives or {}).get("why_unsold") if enrichment else None) or {}
     hypotheses = (unsold.get("hypotheses") if isinstance(unsold, dict) else None) or []
     cockpit = {
-        "title": "Bid clearing chart",
+        "title": "Who’s still bidding at each price",
         "subtitle": f"{parcel.apn or 'Parcel'} · {parcel.county}, {parcel.state}",
         "auction_path": auction_path,
         "price": price,
@@ -919,9 +919,9 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         "rating_breakdown": rating_breakdown(score, parcel=parcel, listing=listing) if score else [],
         "score_explained": brief.get("score_story")
         or {
-            "landsignal": "Overall opportunity score from 0–100 after weighing price, quality, options, and risk.",
-            "risk": "Higher means more things that can go wrong on a desktop screen (flood, wetlands, thin data).",
-            "confidence": "How complete the evidence file is. Thin files get lower confidence, not fake quality.",
+            "landsignal": "Overall opportunity score from 0–100 after weighing price, land quality, future uses, and risk.",
+            "risk": "Higher means more things that can go wrong on the map checks (flood, wetlands, missing data).",
+            "confidence": "How complete the file is. Thin files score lower on purpose — this is not a quality grade.",
         },
         "watched": watched,
         "disclaimer": "Screening intelligence only — not an appraisal, legal opinion, or purchase authorization.",

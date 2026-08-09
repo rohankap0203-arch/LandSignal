@@ -34,8 +34,8 @@ export default function ProfilePage() {
       <div>
         <h1 className="display text-3xl font-semibold">My criteria</h1>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          These toggles personalize the Fit score on Search. The global LandSignal score stays the same for
-          everyone — Fit is “how well this matches you.”
+          These settings personalize the Match score on Search (0–100 for how well a parcel fits you).
+          The Opportunity score stays the same for everyone.
         </p>
       </div>
 
@@ -45,7 +45,7 @@ export default function ProfilePage() {
             ["capital_available_usd", "Capital I can deploy ($)", "number"],
             ["min_acres", "Minimum acres", "number"],
             ["max_price_usd", "Maximum price ($)", "number"],
-            ["min_target_irr", "Minimum target IRR (0.12 = 12%)", "number"],
+            ["min_target_irr", "Minimum yearly return target (0.12 = 12%)", "number"],
             ["target_hold_years_min", "Hold years (min)", "number"],
             ["target_hold_years_max", "Hold years (max)", "number"],
             ["risk_tolerance", "Risk tolerance (0–100)", "number"],
@@ -65,8 +65,8 @@ export default function ProfilePage() {
       <section className="panel grid gap-4 p-5">
         <h2 className="display text-xl font-semibold">Watchlist email sync</h2>
         <p className="text-sm text-[var(--muted)]">
-          When you tap Add to watchlist on a property, we track LandSignal, risk, confidence, price, and
-          status. Enter an email to receive change notices (requires SMTP configured on the server).
+          When you watch a property, we track opportunity score, risk, how complete the file is, price, and
+          status. Enter an email to receive change notices (requires SMTP on the server).
         </p>
         <label className="text-xs uppercase tracking-wide text-[var(--muted)]">
           Notification email

@@ -58,7 +58,7 @@ export default function ParcelIntelligencePage() {
     return (
       <LandLoader
         label="Building land intelligence…"
-        detail="Soils, flood, wetlands, settle math, and return screens for this exact pin."
+        detail="Soils, flood, wetlands, likely buy price, and yearly-return screens for this exact pin."
       />
     );
   }
@@ -189,7 +189,10 @@ export default function ParcelIntelligencePage() {
 
             <div className="mt-5 grid grid-cols-2 gap-3">
               <Stat label={String(price?.label || "Price")} value={String(price?.display || "No public price yet")} />
-              <Stat label="Ready to pursue?" value={`${Number(score?.deal_readiness || 0).toFixed(0)}/100`} />
+              <Stat
+                label="Ready to pursue? (0–100)"
+                value={`${Number(score?.deal_readiness || 0).toFixed(0)}/100`}
+              />
             </div>
 
             {returnCase.headline ? (
@@ -199,7 +202,11 @@ export default function ParcelIntelligencePage() {
                     Buy case for this listing
                   </div>
                   <span className={`conviction-pill ${String(returnCase.conviction || "watch").toLowerCase()}`}>
-                    {String(returnCase.conviction || "WATCH")}
+                    {String(returnCase.conviction || "WATCH") === "HIGH"
+                      ? "Strong interest"
+                      : String(returnCase.conviction || "WATCH") === "MEDIUM"
+                        ? "Moderate interest"
+                        : "Worth watching"}
                   </span>
                 </div>
                 <div className="mt-1 font-semibold leading-snug break-words">{String(returnCase.headline)}</div>
@@ -313,9 +320,9 @@ export default function ParcelIntelligencePage() {
       </section>
 
       <section className="panel p-5">
-        <h2 className="display text-xl font-semibold">Score breakdown · {identity}</h2>
+        <h2 className="display text-xl font-semibold">What makes up the opportunity score · {identity}</h2>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          Each score below is explained for this listing only. Tap any bar to see the exact inputs.
+          Each number below is 0–100 for this listing only. Tap any bar to see the exact inputs behind it.
         </p>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {ratings.map((r) => {
@@ -383,7 +390,12 @@ export default function ParcelIntelligencePage() {
               <div className="flex items-center justify-between gap-2">
                 <h3 className="font-semibold">{String(card.title || key)}</h3>
                 <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
-                  {String(card.level || card.knowledge_state || "")}
+                  {String(card.level || card.knowledge_state || "")
+                    .replace(/UNKNOWN/gi, "Not confirmed")
+                    .replace(/ESTIMATED/gi, "Estimate")
+                    .replace(/OBSERVED/gi, "From source")
+                    .replace(/BLENDED/gi, "Mixed sources")
+                    .replace(/_/g, " ")}
                 </span>
               </div>
               <p className="mt-2 text-sm leading-relaxed">{String(card.plain_english || "No reading for this pin yet.")}</p>
