@@ -496,10 +496,8 @@ export default function ParcelIntelligencePage() {
 
       {askYourself?.question ? (
         <section id="sec-ask" className="panel ask-yourself scroll-mt-20 p-5 md:p-7">
-          <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
-            {String(askYourself.label || "Ask yourself")}
-          </div>
           <AskYourselfTypewriter
+            label={String(askYourself.label || "Ask yourself")}
             question={String(askYourself.question)}
             because={
               askYourself.because

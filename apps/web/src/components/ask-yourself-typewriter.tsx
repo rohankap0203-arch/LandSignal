@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 type Props = {
+  label?: string;
   question: string;
   /** "Because…" reality line that follows the question */
   because?: string | null;
@@ -14,6 +15,7 @@ type Props = {
 };
 
 export function AskYourselfTypewriter({
+  label = "Ask yourself",
   question,
   because,
   aftertaste,
@@ -25,6 +27,7 @@ export function AskYourselfTypewriter({
   const [qLen, setQLen] = useState(0);
   const [aLen, setALen] = useState(0);
   const [phase, setPhase] = useState<"question" | "aftertaste" | "hold">("question");
+  const [paused, setPaused] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
 
   useEffect(() => {
@@ -39,6 +42,7 @@ export function AskYourselfTypewriter({
     setQLen(0);
     setALen(0);
     setPhase("question");
+    setPaused(false);
   }, [fullQuestion, fullAfter]);
 
   useEffect(() => {
@@ -48,6 +52,8 @@ export function AskYourselfTypewriter({
       setPhase("hold");
       return;
     }
+
+    if (paused) return;
 
     if (phase === "question") {
       if (qLen >= fullQuestion.length) {
@@ -74,14 +80,28 @@ export function AskYourselfTypewriter({
       setPhase("question");
     }, holdMs);
     return () => window.clearTimeout(t);
-  }, [phase, qLen, aLen, fullQuestion, fullAfter, charMs, holdMs, reducedMotion]);
+  }, [phase, qLen, aLen, fullQuestion, fullAfter, charMs, holdMs, reducedMotion, paused]);
 
   const qShown = fullQuestion.slice(0, qLen);
   const aShown = fullAfter.slice(0, aLen);
-  const typing = phase === "question" || phase === "aftertaste";
+  const typing = !paused && (phase === "question" || phase === "aftertaste");
 
   return (
     <div className="ask-yourself-typewriter" aria-live="polite">
+      <div className="ask-yourself-head">
+        <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">{label}</div>
+        {!reducedMotion ? (
+          <button
+            type="button"
+            className="ask-pause-btn"
+            aria-pressed={paused}
+            aria-label={paused ? "Resume typewriter" : "Pause typewriter"}
+            onClick={() => setPaused((p) => !p)}
+          >
+            {paused ? "Resume" : "Pause"}
+          </button>
+        ) : null}
+      </div>
       <p className="ask-yourself-q display mt-3 text-2xl font-semibold leading-snug md:text-[1.85rem]">
         <span className="sr-only">{fullQuestion}</span>
         <span aria-hidden="true">

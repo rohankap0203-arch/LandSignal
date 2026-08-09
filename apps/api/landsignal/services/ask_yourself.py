@@ -51,6 +51,26 @@ def _join(parts: list[str | None], sep: str = "; ") -> str:
     return sep.join(p for p in parts if p)
 
 
+def _access_plain(access: float | None) -> str | None:
+    if access is None:
+        return None
+    if access < 45:
+        return "the way in still isn’t clear on paper"
+    if access < 70:
+        return "legal access still feels unsettled"
+    return "access looks reasonably supported on the public read"
+
+
+def _growth_plain(growth: float | None) -> str | None:
+    if growth is None:
+        return None
+    if growth < 40:
+        return "growth here looks like a long, quiet wait"
+    if growth < 65:
+        return "growth here looks like a multi-year clock"
+    return "growth here has some forward pull"
+
+
 def build_ask_yourself(
     *,
     parcel,
@@ -61,7 +81,7 @@ def build_ask_yourself(
 ) -> dict[str, str]:
     """
     Question keeps a calm emotional fork; Because… checkmates gently by naming
-    the land’s full shape and the thought pattern it invites.
+    the land’s full shape and the thought pattern it invites — no score jargon.
     """
     acres = _n(getattr(parcel, "acreage", None))
     state = (getattr(parcel, "state", None) or "US").upper()
@@ -144,35 +164,60 @@ def build_ask_yourself(
 
     flood_bit = None
     if flood_pct is not None:
-        flood_bit = f"{flood_pct:.0f}% flood overlap" + (
+        flood_bit = f"about {flood_pct:.0f}% of the checked ground touches flood" + (
             f" (zone {flood_zone})" if flood_zone else ""
         )
-    wet_bit = f"{wet_pct:.0f}% wetlands" if wet_pct is not None else None
-    access_bit = f"access confidence {access:.0f}/100" if access is not None else None
+    wet_bit = f"about {wet_pct:.0f}% reads as wetlands" if wet_pct is not None else None
+    access_plain = _access_plain(access)
+    access_bit = access_plain
+    growth_plain = _growth_plain(growth)
     soil_bit = None
     if prime is not None:
         soil_bit = f"{prime:.0f}% prime-farmland signal"
         if farm_class:
             soil_bit += f" (“{farm_class}”)"
     elif farm_class:
-        soil_bit = f"soil class “{farm_class}”"
+        soil_bit = f"soil marked “{farm_class}”"
 
-    # Shared reality line used to ground Because… paragraphs
+    file_feel = (
+        "the buy path still has open questions"
+        if conf < 45
+        else "the file is only partly filled in"
+        if conf < 65
+        else "the public file looks fairly filled in"
+    )
+    risk_feel = (
+        "this pin asks for more homework before it feels simple"
+        if risk >= 55
+        else "the risk picture is more middling than scary"
+        if risk >= 40
+        else "the risk picture looks relatively settled"
+    )
+    opp_feel = (
+        "the opportunity screens look encouraging"
+        if opp >= 70
+        else "the opportunity screens are mixed"
+        if opp >= 50
+        else "the opportunity screens are modest"
+    )
+
     reality_core = _join(
         [
             f"{acres_s} in {place}",
             channel.replace("a ", "", 1) if channel.startswith("a ") else channel,
-            f"best-use lean {strat_label}",
-            f"{buy_m} buy path" if buy_m else None,
-            f"our mark {est_m}" if est_m else None,
-            f"{disc:+.0f}% vs value" if disc is not None and est_m else None,
-            f"{buy_ppa} vs {est_ppa}" if buy_ppa and est_ppa else None,
+            f"leaning {strat_label.lower()}",
+            f"money path near {buy_m}" if buy_m else None,
+            f"our mark near {est_m}" if est_m else None,
+            f"about {abs(disc):.0f}% {'under' if (disc or 0) < 0 else 'over'} that mark"
+            if disc is not None and est_m
+            else None,
+            f"{buy_ppa} versus {est_ppa}" if buy_ppa and est_ppa else None,
             flood_bit,
             wet_bit,
             soil_bit,
             access_bit,
-            f"avg slope {slope:.1f}%" if slope is not None else None,
-            f"opportunity {opp:.0f} · risk {risk:.0f} · file {conf:.0f}" ,
+            f"average slope around {slope:.1f}%" if slope is not None else None,
+            file_feel,
         ]
     )
 
@@ -193,28 +238,32 @@ def build_ask_yourself(
             f"The soil read says {prime:.0f}% prime-farmland signal on {acres_s} in {place}. "
             f"Does that dirt match the farmland story you came looking for — "
             f"or are you noticing you’d rather admire good soil than operate it?",
-            f"Because {prime:.0f}% prime also means roughly {rest:.0f}% of the signal isn’t carrying that grade, "
-            f"so the warm feeling of ‘good dirt’ can outrun the usable picture"
+            f"Because {prime:.0f}% prime also means roughly {rest:.0f}% of that signal isn’t carrying that grade, "
+            f"so the warm feeling of ‘good dirt’ can outrun what you’d actually work day to day"
             + (f" at about {buy_ppa}" if buy_ppa else "")
             + (f" against our {est_ppa} mark" if est_ppa and buy_ppa else "")
-            + (f", with {flood_bit} still on the map" if flood_bit else "")
-            + (f" and {access_bit}" if access_bit else "")
-            + f". A true {strat_label.lower()} yes needs the whole acreage story, not only the flattering slice.",
+            + (f", while {flood_bit}" if flood_bit else "")
+            + (f", and {access_plain}" if access is not None and access < 70 else "")
+            + f". A true yes for you needs the whole acreage story, not only the flattering slice.",
         )
 
     if auction and settle_m and opener_m and est_m:
         add(
             5,
-            f"Picture owning {acres_s} in {place} after {channel} — not at the {opener_m} opener, "
+            f"Picture yourself owning {acres_s} in {place} after {channel} — not at the {opener_m} opener, "
             f"but near the more likely {settle_m} finish (our mark is {est_m}). "
-            f"Does that version still feel like {niche} for you, or does naming the real number "
+            f"Does that version still feel like your kind of land, or does naming the real number "
             f"let the excitement settle into something quieter and clearer?",
-            f"Because the opener is a doorway, not the deed price"
+            f"Because the opener is how the story starts, not what you should emotionally bond to"
             + (f" — finishes like this often run near {infl:.1f}× the start" if infl else "")
-            + f", and your nervous system will try to bond with {opener_m} while the file actually clears around {settle_m}"
-            + (f" ({disc:+.0f}% vs our {est_m})" if disc is not None else f" versus our {est_m}")
-            + (f", with {flood_bit}" if flood_bit else "")
-            + (f" and {wet_bit}" if wet_bit else "")
+            + f". Your gut may fall in love with {opener_m} while the file more honestly clears around {settle_m}"
+            + (
+                f", about {abs(disc):.0f}% {'under' if disc < 0 else 'over'} our {est_m}"
+                if disc is not None
+                else f" versus our {est_m}"
+            )
+            + (f", and {flood_bit}" if flood_bit else "")
+            + (f", plus {wet_bit}" if wet_bit else "")
             + ". Comfort comes from deciding at the finish, not the teaser.",
         )
 
@@ -222,15 +271,15 @@ def build_ask_yourself(
         water = _join([flood_bit, wet_bit], " and ")
         add(
             5,
-            f"This pin screens roughly {abs(disc):.0f}% "
-            f"{'under' if disc < 0 else 'over'} our {est_m} mark, with {water} on the map. "
+            f"This pin sits roughly {abs(disc):.0f}% "
+            f"{'under' if disc < 0 else 'over'} our {est_m} mark, and {water}. "
             f"When you hold both truths at once — the price story and the water story — "
-            f"does your body lean toward ‘this is my kind of {strat_label.lower()} risk,’ "
+            f"does your body lean toward ‘I can live with this,’ "
             f"or toward relief that you noticed before you chased it?",
-            f"Because a {abs(disc):.0f}% gap only helps if the constrained ground still does the job you need — "
-            f"on {acres_s}, {water} reshapes what you can use, insure, and exit"
-            + (f", while {access_bit} still sits open" if access_bit else "")
-            + f". The discount is real; so is the haircut your plan has to absorb.",
+            f"Because a {abs(disc):.0f}% gap only helps if the constrained ground still does the job you need. "
+            f"On {acres_s}, that water reshapes what you can use, insure, and someday hand to someone else"
+            + (f" — and {access_plain}" if access is not None and access < 70 else "")
+            + ". The discount is real; so is the haircut your plan has to absorb.",
         )
 
     if flood_pct is not None and flood_pct >= 15:
@@ -239,10 +288,10 @@ def build_ask_yourself(
             f"Roughly {flood_pct:.0f}% of the checked ground on this {acres_s} in {place} touches flood"
             + (f" (zone {flood_zone})" if flood_zone else "")
             + ". "
-            f"If you bought tomorrow, would that water be a constraint you already know how to live with "
-            f"in a {strat_label.lower()} plan — or the detail that lets you breathe and pass without regret?",
-            f"Because flood on {flood_pct:.0f}% of the check is not a footnote — it changes where buildings, "
-            f"crops, and peace of mind can sit on {acres_s}"
+            f"If your name were on it tomorrow, would that water be something you already know how to live with — "
+            f"or the detail that lets you breathe and pass without regret?",
+            f"Because flood on that share of the check isn’t a small print line — it changes where buildings, "
+            f"crops, and peace of mind can sit on your {acres_s}"
             + (f", next to a money path near {buy_m}" if buy_m else "")
             + (f" and our mark of {est_m}" if est_m else "")
             + (f", plus {wet_bit}" if wet_bit else "")
@@ -253,26 +302,25 @@ def build_ask_yourself(
         add(
             4,
             f"About {wet_pct:.0f}% wetlands show up on {acres_s} in {place}. "
-            f"Does ‘usable for what I actually do’ still feel honest after that number — "
+            f"Does ‘usable for what I actually do’ still feel honest after that — "
             f"or is this the moment the map gives you permission to want a drier pin?",
-            f"Because wetlands at {wet_pct:.0f}% quietly redefine the acreage you can count on — "
+            f"Because wetlands at {wet_pct:.0f}% quietly redefine the acres you can count on — "
             f"the map can still look wide while the workable piece shrinks"
-            + (f", especially with {flood_bit}" if flood_bit else "")
-            + (f" and a {strat_label.lower()} lean that needs dry, usable ground" if strategy in ("FARMLAND", "DEVELOPMENT", "RECREATIONAL") else "")
-            + ". Clarity here is kindness to your future self.",
+            + (f", especially when {flood_bit}" if flood_bit else "")
+            + ". Clarity here is kindness to the you who would have to live with it.",
         )
 
     if access is not None and access < 70:
         add(
             4,
-            f"Legal-access confidence sits around {access:.0f}/100 on this {place} file. "
-            f"Can you picture yourself calm owning land while that question is still open — "
+            f"On this {place} file, {access_plain}. "
+            f"Can you picture yourself calm owning the land while that question is still open — "
             f"or does comfort for you start only after the road and deed path feel settled?",
-            f"Because access at {access:.0f}/100 means the pin can be beautiful and still hard to reach, prove, or resell — "
+            f"Because unsettled access means a pin can be beautiful and still hard to reach, prove, or resell — "
             f"on {acres_s}"
-            + (f" with a buy path near {buy_m}" if buy_m else "")
-            + (f", {flood_bit}" if flood_bit else "")
-            + f", risk {risk:.0f}/100. Wanting that settled before you feel at ease isn’t hesitation; it’s how ownership stays quiet in your chest.",
+            + (f" with a money path near {buy_m}" if buy_m else "")
+            + (f", while {flood_bit}" if flood_bit else "")
+            + f". Wanting that settled before you feel at ease isn’t hesitation; it’s how ownership stays quiet in your chest.",
         )
 
     if slope is not None and slope >= 8:
@@ -281,42 +329,42 @@ def build_ask_yourself(
             f"Average slope reads about {slope:.1f}% across {acres_s} in {place}. "
             f"In your mind’s eye, is that rolling land you want to walk and hold — "
             f"or steeper than the {strat_label.lower()} use you quietly assumed?",
-            f"Because {slope:.1f}% average grade changes equipment, build pads, water flow, and what ‘easy land’ means day to day"
-            + (f", alongside {flood_bit}" if flood_bit else "")
-            + (f" and {wet_bit}" if wet_bit else "")
-            + f". The feeling of ‘pretty hills’ and the work of {strat_label.lower()} are not always the same purchase.",
+            f"Because that kind of grade changes equipment, build pads, water flow, and what ‘easy land’ means on an ordinary Tuesday"
+            + (f", alongside the fact that {flood_bit}" if flood_bit else "")
+            + (f", and {wet_bit}" if wet_bit else "")
+            + ". The feeling of ‘pretty hills’ and the work you’d actually do are not always the same purchase.",
         )
 
     if tx_m is not None and (strategy == "ENERGY" or tx_m < 2500):
         add(
             4,
             f"Transmission sits roughly {tx_m:,.0f} meters from this pin on {acres_s} in {place}. "
-            f"Does that proximity feel like optional upside you understand — "
+            f"Does that proximity feel like optional upside you truly understand — "
             f"or like a story that isn’t really why you’d sleep well owning this ground?",
-            f"Because {tx_m:,.0f} m to the line is a distance, not a deal — interconnect is process, timing, and capital, "
-            f"while this file still carries "
+            f"Because distance to a line is not a deal by itself — interconnect is process, timing, and capital — "
+            f"while you would still be living with "
             + _join(
                 [
-                    f"a {strat_label} lean",
-                    f"buy path {buy_m}" if buy_m else None,
+                    f"a {strat_label.lower()} lean",
+                    f"a money path near {buy_m}" if buy_m else None,
                     flood_bit,
-                    access_bit,
+                    access_plain if access is not None and access < 70 else None,
                 ],
                 ", ",
             )
             + ". If power isn’t your real reason, let the land win or lose on the land.",
         )
 
-    if growth is not None and strategy in ("DEVELOPMENT", "LAND_BANK"):
+    if growth is not None and strategy in ("DEVELOPMENT", "LAND_BANK") and growth_plain:
         add(
             3,
-            f"Path-of-growth screens around {growth:.0f}/100 for {acres_s} in {place}. "
+            f"For {acres_s} in {place}, {growth_plain}. "
             f"Are you someone who feels steady waiting on that kind of clock — "
-            f"or does saying it out loud remind you that patience isn’t the niche you’re in right now?",
-            f"Because a {growth:.0f}/100 growth read is a years-long bet, not a weekend win — "
-            f"your comfort depends on whether {place} time matches your capital’s patience"
-            + (f", at roughly {buy_m} in versus {est_m} mark" if buy_m and est_m else "")
-            + (f", with {flood_bit} still in the physical picture" if flood_bit else "")
+            f"or does saying it out loud remind you that patience isn’t where you are right now?",
+            f"Because that growth read is a years-long bet, not a weekend win — "
+            f"your comfort depends on whether {place} time matches the patience you actually have"
+            + (f", at roughly {buy_m} in versus our {est_m} mark" if buy_m and est_m else "")
+            + (f", with {flood_bit}" if flood_bit else "")
             + ". A clean no on timing is as helpful as a calm yes.",
         )
 
@@ -328,10 +376,10 @@ def build_ask_yourself(
             + ". "
             f"Does the work of confirming a real buy path feel like your kind of hunt — "
             f"or does comfort for you mean waiting for a file that’s already clearer?",
-            f"Because a GIS pin can feel like discovery while buyability is still unproven — "
-            f"completeness is {conf:.0f}/100"
+            f"Because a map pin can feel like discovery while buyability is still unproven — "
+            f"{file_feel}"
             + (f", {flood_bit}" if flood_bit else "")
-            + (f", {access_bit}" if access_bit else "")
+            + (f", and {access_plain}" if access is not None and access < 70 else "")
             + (f", our mark {est_m} with no firm ask" if est_m else "")
             + ". Relief is knowing whether you enjoy that fog or need a clearer door.",
         )
@@ -343,52 +391,59 @@ def build_ask_yourself(
             + (f" against our {est_m}" if est_m else "")
             + ". "
             f"When the process stress and the land itself are both in the frame, "
-            f"does this still feel like a property you’d be glad to explain to a partner — "
+            f"does this still feel like a property you’d be glad to explain to someone you love — "
             f"or is the helpful answer that it’s interesting, but not yours?",
             f"Because process buys recruit you with urgency while the land still has a body"
             + (
-                f" — {_join([flood_bit, wet_bit, access_bit, soil_bit], ', ')}"
-                if _join([flood_bit, wet_bit, access_bit, soil_bit], ", ")
+                f" — {_join([flood_bit, wet_bit, access_bit if access is not None and access < 70 else None, soil_bit], ', ')}"
+                if _join([flood_bit, wet_bit, access_bit if access is not None and access < 70 else None, soil_bit], ", ")
                 else ""
             )
-            + f"; opportunity {opp:.0f}, risk {risk:.0f}. "
+            + f". {risk_feel.capitalize()}. "
             f"Holding process and parcel together keeps you from confusing winning the sale with wanting the ground.",
         )
 
     if risk >= 55:
-        bits = _join([flood_bit, wet_bit, access_bit], ", ")
+        bits = _join(
+            [
+                flood_bit,
+                wet_bit,
+                access_plain if access is not None and access < 70 else None,
+            ],
+            ", ",
+        )
         add(
             4,
-            f"Risk on this pin reads {risk:.0f}/100"
-            + (f", with {bits} in the mix" if bits else "")
+            f"On {acres_s} in {place}, {risk_feel}"
+            + (f" — {bits}" if bits else "")
             + ". "
-            f"That’s not a verdict — it’s a mirror. Does knowing that make you feel more oriented "
-            f"toward a deliberate {strat_label.lower()} yes, or gently steered toward something simpler?",
-            f"Because {risk:.0f}/100 risk is the scoreboard catching up to the map: "
+            f"Does naming that make you feel more oriented toward a deliberate yes, "
+            f"or gently steered toward something that would sit easier in your life?",
+            f"Because the heavier homework isn’t an insult to the land — it’s the map asking you to be honest: "
             + (f"{bits}. " if bits else "")
-            + f"On {acres_s} in {place}"
+            + f"On this pin"
             + (f" near {buy_m}" if buy_m else "")
-            + ", orientation beats optimism — you get to choose comfort with eyes open.",
+            + ", orientation beats optimism. You get to choose comfort with your eyes open.",
         )
 
     if opp >= 70 and conf >= 50 and risk < 50:
         add(
             4,
-            f"The screens are relatively friendly here: opportunity {opp:.0f}, risk {risk:.0f}, "
-            f"file completeness {conf:.0f}, best-use leaning {strat_label} on {acres_s} in {place}"
+            f"This one reads calmer than most: {opp_feel}, {risk_feel}, {file_feel}, "
+            f"leaning {strat_label.lower()} on {acres_s} in {place}"
             + (f", money path near {buy_m}" if buy_m else "")
             + ". "
-            f"If you let yourself trust a calmer read for a moment — does this feel like land "
-            f"you’d be comfortable owning, or still not quite the niche you came for?",
-            f"Because a calmer file can still be the wrong niche — friendly scores don’t invent "
+            f"If you let yourself trust that quieter read for a moment — does this feel like land "
+            f"you’d be comfortable owning, or still not quite what you came for?",
+            f"Because a calmer file can still be the wrong land for you — ease doesn’t invent "
             f"{niche} if that isn’t what you want to wake up owning. "
-            f"Use the ease as permission to tell the truth, not pressure to say yes.",
+            f"Use the calm as permission to tell the truth, not pressure to say yes.",
         )
 
     add(
         2,
-        f"Forget the scoreboard for a breath. You’re looking at {acres_s} in {place}, via {channel}, "
-        f"reading best as {strat_label} — {niche}. "
+        f"Forget the charts for a breath. You’re looking at {acres_s} in {place}, via {channel}, "
+        f"leaning {strat_label.lower()} — {niche}. "
         f"When you imagine your name on it, do you feel a quiet yes, or a quiet thank-you for looking closely enough to walk away?",
         f"Because the full light on this pin is: {reality_core}. "
         f"Either feeling — yes or not this one — means you understood the land instead of negotiating with hope.",
@@ -402,16 +457,16 @@ def build_ask_yourself(
             + f", on {acres_s} in {place}. "
             f"Does that math leave you feeling grounded enough to keep going — "
             f"or relieved that the numbers talked you out of forcing a fit?",
-            f"Because price only comforts you after it survives the land"
+            f"Because price only comforts you after it survives the land you would actually live with"
             + (
-                f" — {_join([flood_bit, wet_bit, access_bit, soil_bit], ', ')}"
-                if _join([flood_bit, wet_bit, access_bit, soil_bit], ", ")
+                f" — {_join([flood_bit, wet_bit, access_plain if access is not None and access < 70 else None, soil_bit], ', ')}"
+                if _join([flood_bit, wet_bit, access_plain if access is not None and access < 70 else None, soil_bit], ", ")
                 else ""
             )
             + (
-                f". A {abs(disc):.0f}% gap vs our mark is meaningful only if the ground still matches how you actually use and hold land."
+                f". A gap of about {abs(disc):.0f}% versus our mark only helps if the ground still matches how you use and hold land."
                 if disc is not None
-                else ". That spread is meaningful only if the ground still matches how you actually use and hold land."
+                else ". That spread only helps if the ground still matches how you use and hold land."
             ),
         )
 
