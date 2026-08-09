@@ -80,7 +80,7 @@ export default function WatchlistPage() {
         <div className="panel empty-state">
           <div className="display text-2xl">Nothing watched yet</div>
           <p className="mx-auto mt-2 max-w-lg">
-            Open any result → tap <strong>Add to watchlist</strong> at the top. We’ll keep the major
+            Open any result → tap the <strong>eye</strong> on the intelligence panel. We’ll keep the major
             metrics and listing status here.
           </p>
           <Link href="/" className="btn btn-dark mt-4 inline-flex">

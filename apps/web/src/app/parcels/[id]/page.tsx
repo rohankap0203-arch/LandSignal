@@ -121,32 +121,57 @@ export default function ParcelIntelligencePage() {
         <Link href="/" className="text-sm text-[var(--muted)] hover:text-[var(--brand)]">
           ← Back to results
         </Link>
-        <div className="flex flex-wrap items-center gap-2">
-          <Link href="/watchlist" className="text-sm text-[var(--muted)] hover:text-[var(--brand)]">
-            Open watchlist
-          </Link>
-          <button type="button" className={`btn ${watched ? "btn-dark" : "btn-primary"}`} onClick={toggleWatch}>
-            {watched ? "Watching ✓" : "Add to watchlist"}
-          </button>
-        </div>
+        <Link href="/watchlist" className="text-sm text-[var(--muted)] hover:text-[var(--brand)]">
+          Open watchlist
+        </Link>
       </div>
-      {(watchMsg || brief.watch_hint) && (
-        <div className="panel px-4 py-3 text-sm text-[var(--muted)]">{watchMsg || String(brief.watch_hint)}</div>
-      )}
 
       <section className="panel overflow-hidden">
         <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="p-6">
-            <div className="flex flex-wrap items-center gap-2">
-              {score && <SignalBadge signal={score.signal as string} />}
-              <span className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-xs font-semibold">
-                {String(sourcing.source_name || "Public source")}
-              </span>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {score && <SignalBadge signal={score.signal as string} />}
+                <span className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-xs font-semibold">
+                  {String(sourcing.source_name || "Public source")}
+                </span>
+              </div>
+              <button
+                type="button"
+                className={`watch-eye ${watched ? "on" : ""}`}
+                onClick={toggleWatch}
+                title={watched ? "Remove from watchlist" : "Add to watchlist"}
+                aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+                aria-pressed={watched}
+              >
+                <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+                  {watched ? (
+                    <>
+                      <path
+                        fill="currentColor"
+                        d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"
+                      />
+                      <circle fill="var(--bg-elevated)" cx="12" cy="12" r="2.2" />
+                    </>
+                  ) : (
+                    <path
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"
+                    />
+                  )}
+                  {!watched && <circle fill="currentColor" cx="12" cy="12" r="2.5" />}
+                </svg>
+              </button>
             </div>
             <h1 className="display mt-3 text-3xl font-semibold leading-tight break-words">
               {(listing?.title as string) || (parcel.apn as string)}
             </h1>
             <p className="mt-2 text-[var(--muted)] break-words">{identity}</p>
+            {watchMsg ? <p className="mt-2 text-xs text-[var(--muted)]">{watchMsg}</p> : null}
 
             <div className="mt-5 grid gap-4">
               <ScoreBar label="LandSignal" value={Number(score?.opportunity || 0)} hint={story.landsignal} />
@@ -284,9 +309,9 @@ export default function ParcelIntelligencePage() {
       </section>
 
       <section className="panel p-5">
-        <h2 className="display text-xl font-semibold">Rating breakdown · {identity}</h2>
+        <h2 className="display text-xl font-semibold">Why these scores · {identity}</h2>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          Each score below explains the exact inputs for this parcel — tap for drivers.
+          Each number is explained for this listing only — tap a bar for the input drivers.
         </p>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {ratings.map((r) => {

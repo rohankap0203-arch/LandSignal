@@ -566,22 +566,34 @@ def build_intelligence_brief(
         "dd_focus": dd_focus,
         "score_story": {
             "landsignal": (
-                f"LandSignal {opp:.0f}/100 is the weighted screen of price, land quality, options, "
-                f"growth, and risk for {apn} in {county}, {state}. "
+                f"«{title[:70]}» ({apn}, {county} {state}"
+                + (f", {acres:,.2f} ac" if acres is not None else "")
+                + f") scores LandSignal {opp:.0f}/100 because "
                 + (
-                    f"Price-vs-value is doing heavy lifting ({disc:.0f}% vs model)."
-                    if disc is not None and disc < -10
-                    else "No single category should be read alone — open each rating bar."
+                    f"settle/ask sits {disc:.0f}% vs mark {_money(est)} under a {strategy.replace('_', ' ').title()} lead"
+                    if disc is not None and est is not None
+                    else f"its {strategy.replace('_', ' ').title()} screen and category stack clear stage-1 gates"
                 )
+                + f" with readiness {readiness:.0f}/100 at {pin}."
             ),
             "risk": (
-                f"Risk {risk:.0f}/100 is the desktop trouble score (flood, wetlands, thin data, access) "
-                f"at {pin}. "
-                + ("Lower is calmer." if risk < 40 else "Budget more diligence before you bid.")
+                f"«{title[:70]}» risk is {risk:.0f}/100 at {pin} because "
+                + (
+                    f"flood screen ~{flood_pct:.0f}%"
+                    if flood_pct is not None
+                    else "flood not confirmed"
+                )
+                + (
+                    f", wetlands ~{wet_pct:.0f}%"
+                    if wet_pct is not None
+                    else ", wetlands not confirmed"
+                )
+                + f" on this geometry — that is why diligence weight sits here for {apn}."
             ),
             "confidence": (
-                f"Confidence {conf:.0f}/100 is how complete the evidence file is — not how “good” the land is. "
-                f"Missing layers lower confidence instead of inventing green checks."
+                f"Evidence confidence for {apn} is {conf:.0f}/100 based on how complete "
+                f"this listing’s soils/flood/value/geometry file is at {pin} — "
+                f"missing layers cut confidence on purpose for this parcel, not a quality judgment."
             ),
         },
         "primary_cta": primary_cta,

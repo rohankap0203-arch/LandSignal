@@ -1,6 +1,6 @@
 "use client";
 
-/** Horizontal red→green meter for LandSignal / inverse for Risk */
+/** Horizontal red→green meter — hint must be listing-specific (no generic band copy). */
 export function ScoreBar({
   label,
   value,
@@ -14,20 +14,8 @@ export function ScoreBar({
   invert?: boolean;
 }) {
   const v = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
-  // LandSignal: low=red, high=green. Risk: low=green, high=red.
   const hue = invert ? 120 - v * 1.2 : v * 1.2;
   const fill = `hsl(${Math.max(0, Math.min(120, hue))} 65% 42%)`;
-  const meaning = invert
-    ? v < 35
-      ? "Lower risk on the desktop screen"
-      : v < 55
-        ? "Moderate risk — dig into flood/wetlands/access"
-        : "Elevated risk — budget more diligence"
-    : v >= 70
-      ? "Strong opportunity screen"
-      : v >= 50
-        ? "Moderate opportunity — compare a few peers"
-        : "Weak screen so far — keep looking or loosen filters";
 
   return (
     <div className="score-bar">
@@ -40,7 +28,7 @@ export function ScoreBar({
       <div className="score-bar-track" aria-hidden>
         <div className="score-bar-fill" style={{ width: `${v}%`, background: fill }} />
       </div>
-      <p className="mt-1.5 text-sm text-[var(--muted)]">{hint || meaning}</p>
+      {hint ? <p className="mt-1.5 text-sm leading-relaxed text-[var(--muted)]">{hint}</p> : null}
     </div>
   );
 }

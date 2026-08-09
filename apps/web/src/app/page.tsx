@@ -128,6 +128,10 @@ export default function SearchPage() {
       setLoading(true);
       setError(null);
       setHasSearched(true);
+      // Smooth-scroll to results as soon as search starts
+      requestAnimationFrame(() => {
+        document.getElementById("search-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
       try {
         const active = override ?? form;
         const data = await landsignalApi.radar(filtersFromForm(active));
@@ -140,6 +144,10 @@ export default function SearchPage() {
             ? `Showing top ${data.length.toLocaleString()} matches · ${total.toLocaleString()} live parcels indexed`
             : "No matches for these filters. Try Reset to Any, then Show matches again.",
         );
+        // Re-align after results paint
+        requestAnimationFrame(() => {
+          document.getElementById("search-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Search failed");
       } finally {
@@ -424,7 +432,7 @@ export default function SearchPage() {
         </div>
       </section>
 
-      <div className="results-head">
+      <div id="search-results" className="results-head scroll-mt-24">
         <div>
           <h2 className="display text-2xl font-semibold">Opportunity results</h2>
           <p className="mt-1 text-[var(--muted)]">

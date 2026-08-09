@@ -1004,6 +1004,32 @@ a.btn-intel:hover {
   font-size: 0.85rem;
 }
 
+.watch-eye {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.watch-eye:hover {
+  color: var(--brand);
+  border-color: var(--brand);
+  transform: translateY(-1px);
+}
+
+.watch-eye.on {
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 14%, var(--bg-elevated));
+  border-color: var(--brand);
+}
+
 .acquire-rail {
   display: grid;
   grid-template-columns: 1fr 1fr;
