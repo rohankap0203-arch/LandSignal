@@ -52,6 +52,8 @@ type NearbyChip = {
   overpassParts: string[];
   radiiM: number[];
   maxMiles: number;
+  /** center = fast area/POI lookup; geom = needed for accurate linear features */
+  outMode: "center" | "geom";
 };
 
 const NEARBY_CHIPS: NearbyChip[] = [
@@ -66,28 +68,31 @@ const NEARBY_CHIPS: NearbyChip[] = [
       'nwr["flood:zone"]',
       'way["waterway"~"^(river|stream|canal)$"]',
     ],
-    radiiM: [800, 2500, 8000, 20000],
+    radiiM: [1200, 5000, 14000],
     maxMiles: 12.4,
+    outMode: "geom",
   },
   {
     kind: "wetland",
     label: "Wetland",
     color: "#14b8a6",
-    overpassParts: ['nwr["natural"="wetland"]', 'nwr["wetland"]'],
-    radiiM: [600, 2000, 7000, 16000],
+    // Tight wetland tag only — broad ["wetland"] + full geom was stalling Overpass.
+    overpassParts: ['nwr["natural"="wetland"]'],
+    radiiM: [1500, 6000, 15000],
     maxMiles: 10,
+    outMode: "center",
   },
   {
     kind: "road",
     label: "Paved road",
     color: "#a16207",
-    // Higher-class roads are paved; residential only when surface is explicitly paved.
     overpassParts: [
       'way["highway"~"^(motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link)$"]',
       'way["highway"~"^(residential|unclassified)$"]["surface"~"^(paved|asphalt|concrete|chipseal|paving_stones)$"]',
     ],
-    radiiM: [400, 1500, 5000, 12000],
+    radiiM: [800, 3000, 10000],
     maxMiles: 7.5,
+    outMode: "geom",
   },
   {
     kind: "power",
@@ -97,32 +102,36 @@ const NEARBY_CHIPS: NearbyChip[] = [
       'way["power"~"^(line|minor_line|cable)$"]',
       'nwr["power"~"^(substation|transformer|tower|pole)$"]',
     ],
-    radiiM: [600, 2500, 8000, 18000],
+    radiiM: [1200, 5000, 14000],
     maxMiles: 11,
+    outMode: "geom",
   },
   {
     kind: "town",
     label: "Town / services",
     color: "#b45309",
     overpassParts: ['node["place"~"^(city|town|village)$"]'],
-    radiiM: [2000, 8000, 20000, 40000],
+    radiiM: [3000, 12000, 30000],
     maxMiles: 25,
+    outMode: "center",
   },
   {
     kind: "school",
     label: "School",
     color: "#7c3aed",
     overpassParts: ['nwr["amenity"="school"]', 'nwr["amenity"="kindergarten"]'],
-    radiiM: [800, 3000, 10000, 20000],
+    radiiM: [1500, 6000, 16000],
     maxMiles: 12.4,
+    outMode: "center",
   },
   {
     kind: "hospital",
     label: "Hospital",
     color: "#dc2626",
     overpassParts: ['nwr["amenity"="hospital"]', 'nwr["amenity"="clinic"]["emergency"="yes"]'],
-    radiiM: [1500, 6000, 15000, 35000],
+    radiiM: [2500, 10000, 28000],
     maxMiles: 22,
+    outMode: "center",
   },
   {
     kind: "water",
@@ -133,8 +142,9 @@ const NEARBY_CHIPS: NearbyChip[] = [
       'nwr["water"~"^(lake|pond|reservoir|basin)$"]',
       'nwr["landuse"="reservoir"]',
     ],
-    radiiM: [600, 2500, 8000, 18000],
+    radiiM: [1500, 6000, 15000],
     maxMiles: 11,
+    outMode: "center",
   },
 ];
 
@@ -315,30 +325,31 @@ function closestOnElement(
   return { lat, lon, meters: haversineMeters(origin, [lat, lon]) };
 }
 
-async function overpassQuery(query: string): Promise<OverpassElement[]> {
-  let lastErr: unknown;
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    try {
-      const ctrl = new AbortController();
-      const timer = window.setTimeout(() => ctrl.abort(), 14000);
-      const res = await fetch(endpoint, {
-        method: "POST",
-        body: query,
-        headers: { "Content-Type": "text/plain" },
-        signal: ctrl.signal,
-      });
-      window.clearTimeout(timer);
-      if (!res.ok) {
-        lastErr = new Error(`Overpass ${res.status}`);
-        continue;
-      }
-      const data = (await res.json()) as { elements?: OverpassElement[] };
-      return data.elements || [];
-    } catch (e) {
-      lastErr = e;
-    }
+async function overpassQuery(query: string, timeoutMs = 8000): Promise<OverpassElement[]> {
+  // Race public Overpass mirrors — first valid payload wins (wetland geom used to stall for 14s+).
+  const controllers = OVERPASS_ENDPOINTS.map(() => new AbortController());
+  const timer = window.setTimeout(() => controllers.forEach((c) => c.abort()), timeoutMs);
+  try {
+    const elements = await Promise.any(
+      OVERPASS_ENDPOINTS.map(async (endpoint, i) => {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          body: query,
+          headers: { "Content-Type": "text/plain" },
+          signal: controllers[i].signal,
+        });
+        if (!res.ok) throw new Error(`Overpass ${res.status}`);
+        const data = (await res.json()) as { elements?: OverpassElement[] };
+        return data.elements || [];
+      }),
+    );
+    controllers.forEach((c) => c.abort());
+    return elements;
+  } catch (e) {
+    throw e instanceof Error ? e : new Error("Overpass unavailable");
+  } finally {
+    window.clearTimeout(timer);
   }
-  throw lastErr instanceof Error ? lastErr : new Error("Overpass unavailable");
 }
 
 function pickTopHits(
@@ -452,26 +463,32 @@ async function fetchNearby(
     onPartial(verified);
   };
 
+  const outClause = meta.outMode === "center" ? "out center;" : "out geom;";
+
   // Progressive radii: surface the first hit ASAP, then keep going for up to 3.
-  for (const radius of meta.radiiM) {
-    if (isCancelled?.()) return verifyNearbyHits(origin, best);
+  for (let i = 0; i < meta.radiiM.length; i++) {
+    const radius = meta.radiiM[i];
+    if (isCancelled?.()) break;
     const union = meta.overpassParts.map((part) => `  ${part}(around:${radius},${lat},${lon});`).join("\n");
     const query = `
-[out:json][timeout:12];
+[out:json][timeout:8];
 (
 ${union}
 );
-out geom;
+${outClause}
 `.trim();
     try {
-      const elements = await overpassQuery(query);
-      if (isCancelled?.()) return verifyNearbyHits(origin, best);
+      // First radius: fail fast. Later radii get a bit more time.
+      const elements = await overpassQuery(query, i === 0 ? 7000 : 9000);
+      if (isCancelled?.()) break;
       const hits = pickTopHits(kind, meta.label, origin, elements, NEARBY_RESULT_LIMIT).filter(
         (h) => h.meters / 1609.344 <= meta.maxMiles,
       );
       if (hits.length) {
         best = hits;
         emit(best);
+        // Cache partial success so a remount doesn't wait again.
+        nearbyCache.set(cacheKey, verifyNearbyHits(origin, best));
         const farthestKept = hits[hits.length - 1];
         if (hits.length >= NEARBY_RESULT_LIMIT && farthestKept.meters <= radius * 1.05) break;
       }

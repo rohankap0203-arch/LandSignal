@@ -121,28 +121,50 @@ function ModeSelect({
   );
 }
 
-/** One card per parcel — newest first input assumed; drop boundary-less leftovers. */
+/** One card per parcel / property — newest first; drop boundary-less leftovers. */
 function dedupeRecentLandAlerts(alerts: Record<string, unknown>[]): Record<string, unknown>[] {
-  const seen = new Set<string>();
+  const seenParcel = new Set<string>();
+  const seenProp = new Set<string>();
   const out: Record<string, unknown>[] = [];
   for (const alert of alerts) {
     if (String(alert.severity || "") !== "LAND_ALERT") continue;
     const body = (alert.body || {}) as Record<string, unknown>;
     if (body.has_boundary === false) continue;
-    const key = String(alert.parcel_id || "");
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
+    const parcelKey = String(alert.parcel_id || "");
+    const propKey = `${String(body.property || "")
+      .trim()
+      .toLowerCase()}|${String(body.location || "")
+      .trim()
+      .toLowerCase()}`;
+    if (!parcelKey || seenParcel.has(parcelKey)) continue;
+    if (propKey !== "|" && seenProp.has(propKey)) continue;
+    seenParcel.add(parcelKey);
+    if (propKey !== "|") seenProp.add(propKey);
     out.push(alert);
   }
   return out;
 }
 
+function parseScoutedDate(raw: unknown): Date | null {
+  if (raw == null || raw === "") return null;
+  let text = String(raw).trim();
+  if (!text) return null;
+  // Naive ISO from the API is UTC — force Z so browsers don't treat it as local.
+  if (/^\d{4}-\d{2}-\d{2}T/.test(text) && !/(Z|[+-]\d{2}:?\d{2})$/.test(text)) {
+    text = `${text}Z`;
+  }
+  const d = new Date(text);
+  if (Number.isNaN(d.getTime())) return null;
+  const now = Date.now();
+  // Never show a future "retrieved" time.
+  if (d.getTime() > now + 15_000) return new Date(now);
+  return d;
+}
+
 function formatScoutedAt(alert: Record<string, unknown>): string | null {
   const body = (alert.body || {}) as Record<string, unknown>;
-  const raw = body.scouted_at || body.retrieved_at || alert.created_at;
-  if (!raw) return null;
-  const d = new Date(String(raw));
-  if (Number.isNaN(d.getTime())) return null;
+  const d = parseScoutedDate(body.scouted_at || body.retrieved_at || alert.created_at);
+  if (!d) return null;
   return d.toLocaleString(undefined, {
     month: "short",
     day: "numeric",

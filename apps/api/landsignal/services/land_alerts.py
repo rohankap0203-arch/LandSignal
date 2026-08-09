@@ -568,32 +568,49 @@ def _existing_land_alert(
     profile_id: UUID,
     update_kind: str | None = None,
 ) -> AlertRecord | None:
-    """One in-app notification per parcel/profile — any prior alert counts as already sent."""
-    del update_kind  # kept for call-site compatibility; bucket no longer splits duplicates
+    """One in-app notification per parcel — any prior alert for that land counts as sent."""
+    del update_kind  # kept for call-site compatibility; no longer splits duplicates
+    del profile_id
     for alert in store.alerts:
-        if alert.severity != "LAND_ALERT" or alert.parcel_id != parcel_id:
-            continue
-        body = alert.body or {}
-        pid = str(body.get("profile_id") or "")
-        if pid and pid != str(profile_id):
-            continue
-        return alert
+        if alert.severity == "LAND_ALERT" and alert.parcel_id == parcel_id:
+            return alert
     return None
 
 
+def _as_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _clamp_not_future(dt: datetime) -> datetime:
+    now = _utcnow()
+    aware = _as_utc(dt) or now
+    # Never surface a scouted/retrieved time ahead of real UTC now.
+    return aware if aware <= now else now
+
+
 def dedupe_land_alert_records(alerts: list[AlertRecord]) -> list[AlertRecord]:
-    """Keep newest LAND_ALERT per parcel (and pass through non-land alerts)."""
-    seen: set[str] = set()
+    """Keep newest LAND_ALERT per parcel + per property/location identity."""
+    seen_parcel: set[str] = set()
+    seen_prop: set[str] = set()
     out: list[AlertRecord] = []
     for alert in alerts:
         if alert.severity != "LAND_ALERT":
             out.append(alert)
             continue
         body = alert.body or {}
-        key = f"{alert.parcel_id}:{body.get('profile_id') or ''}"
-        if key in seen:
+        parcel_key = str(alert.parcel_id)
+        prop_key = f"{_norm(body.get('property'))}|{_norm(body.get('location'))}"
+        if parcel_key in seen_parcel:
             continue
-        seen.add(key)
+        if prop_key != "|" and prop_key in seen_prop:
+            continue
+        seen_parcel.add(parcel_key)
+        if prop_key != "|":
+            seen_prop.add(prop_key)
         out.append(alert)
     return out
 
@@ -608,7 +625,7 @@ def curate_land_alert_feed(store: MemoryStore) -> list[AlertRecord]:
         parcel = store.parcels.get(alert.parcel_id)
         if not _parcel_is_mappable(parcel):
             continue
-        body = alert.body or {}
+        body = dict(alert.body or {})
         profile_id = str(body.get("profile_id") or "")
         # Must still be a live qualifying match for that profile (or any profile if unset).
         live = False
@@ -622,16 +639,49 @@ def curate_land_alert_feed(store: MemoryStore) -> list[AlertRecord]:
                 break
         if not live:
             continue
-        curated.append(alert)
+        # Normalize scouted timestamps to real UTC, never in the future.
+        scouted = _clamp_not_future(
+            _as_utc(_parse_iso(body.get("scouted_at")) or alert.created_at) or _utcnow()
+        )
+        body["scouted_at"] = scouted.isoformat().replace("+00:00", "Z")
+        body["retrieved_at"] = body["scouted_at"]
+        body["has_boundary"] = True
+        curated.append(alert.model_copy(update={"body": body, "created_at": _clamp_not_future(_as_utc(alert.created_at) or scouted)}))
     return curated
 
 
+def _parse_iso(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
 def _listing_scouted_at(listing: ListingRecord | None, match: LandAlertMatch) -> datetime:
-    if listing:
-        for value in (listing.last_seen_at, listing.listed_at, listing.created_at):
-            if value is not None:
-                return value
-    return match.created_at or match.updated_at or _utcnow()
+    """When LandSignal actually retrieved/scouted this land for the alert — not vendor listed_at."""
+    now = _utcnow()
+    # Prefer our ingest/seen time; never trust listed_at alone (often wrong/future in feeds).
+    for value in (
+        (listing.last_seen_at if listing else None),
+        (listing.created_at if listing else None),
+        match.created_at,
+        match.updated_at,
+        now,
+    ):
+        aware = _as_utc(value)
+        if aware is None:
+            continue
+        return _clamp_not_future(aware)
+    return now
 
 
 def _maybe_notify(
@@ -715,7 +765,9 @@ def _maybe_notify(
         "new_data": "New data",
         "new_listing": "New listing",
     }.get(match.update_kind or "", "New Land Signal")
-    scouted_at = _listing_scouted_at(listing, match)
+    # Scouted = when we are issuing this real notification (UTC), not a vendor clock.
+    scouted_at = _clamp_not_future(_listing_scouted_at(listing, match))
+    scouted_iso = scouted_at.isoformat().replace("+00:00", "Z")
     title = f"{kind_label} — {match.preference_match_pct:.0f}% Match"
     body = {
         "property": (listing.title if listing else None) or parcel.apn or str(parcel.id),
@@ -731,8 +783,8 @@ def _maybe_notify(
         "profile_id": str(profile.id),
         "match_id": str(match.id),
         "update_kind": match.update_kind,
-        "scouted_at": scouted_at.isoformat(),
-        "retrieved_at": scouted_at.isoformat(),
+        "scouted_at": scouted_iso,
+        "retrieved_at": scouted_iso,
         "has_boundary": True,
         "delivery": {
             "in_app": "delivered" if any(c.startswith("IN_APP") for c in channels) else "skipped",
