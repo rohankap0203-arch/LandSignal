@@ -77,7 +77,7 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>("Set any filters you want, then click Show matches. Nothing searches until you ask.");
+  const [status, setStatus] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
 
   const regionOptions = useMemo(() => {
