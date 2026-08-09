@@ -441,10 +441,8 @@ export default function SearchPage() {
               >
                 {loading ? "Searching…" : "Show matches"}
               </button>
-              <div className="land-alerts-cta-rail" aria-hidden="true" />
-              <Link href="/alerts" className="land-alerts-cta">
-                <span className="land-alerts-cta-kicker">Always on</span>
-                <span className="land-alerts-cta-label">Land Alerts</span>
+              <Link href="/alerts" className="btn btn-primary btn-search-primary">
+                Land Alerts
               </Link>
             </div>
             <div className="filter-actions-secondary">

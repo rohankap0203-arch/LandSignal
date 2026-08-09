@@ -365,67 +365,6 @@ select {
   gap: 10px;
 }
 
-.land-alerts-cta-rail {
-  width: 1px;
-  height: 2.4rem;
-  margin: 0 0.15rem 0 0.35rem;
-  background: rgba(255, 255, 255, 0.28);
-  flex: 0 0 auto;
-}
-
-.land-alerts-cta {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 0.1rem;
-  min-width: 9.5rem;
-  padding: 0.55rem 1.15rem 0.6rem;
-  border-radius: 4px;
-  background: #0a0a0a;
-  color: #ffffff;
-  text-decoration: none;
-  border: 1px solid #0a0a0a;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset;
-  transition: background 160ms ease, transform 160ms ease, border-color 160ms ease;
-  line-height: 1.15;
-}
-
-.land-alerts-cta:hover {
-  background: #000000;
-  border-color: #000000;
-  transform: translateY(-1px);
-  color: #ffffff;
-}
-
-.land-alerts-cta-kicker {
-  font-size: 0.62rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.62);
-}
-
-.land-alerts-cta-label {
-  font-family: var(--font-display, inherit);
-  font-size: 0.98rem;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-  color: #ffffff;
-}
-
-@media (max-width: 720px) {
-  .land-alerts-cta-rail {
-    display: none;
-  }
-
-  .land-alerts-cta {
-    width: 100%;
-    align-items: center;
-    text-align: center;
-  }
-}
-
 .filter-actions-secondary {
   display: flex;
   flex-wrap: wrap;
@@ -2694,6 +2633,21 @@ a.acquire-block:hover {
 }
 
 /* ——— Land Alerts ——— */
+.land-alerts-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  font-weight: 550;
+  color: var(--muted);
+  text-decoration: none;
+  width: fit-content;
+}
+
+.land-alerts-back:hover {
+  color: var(--ink);
+}
+
 .land-alerts-hero {
   display: flex;
   flex-wrap: wrap;
@@ -2706,6 +2660,17 @@ a.acquire-block:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.land-alerts-hero-actions .btn-ghost {
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+.land-alerts-hero-actions .btn-ghost:hover {
+  background: var(--bg-soft);
+  border-color: color-mix(in srgb, var(--brand) 35%, var(--line));
 }
 
 .land-alerts-msg {

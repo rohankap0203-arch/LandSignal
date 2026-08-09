@@ -374,7 +374,10 @@ export default function LandAlertsPage() {
 
   if (loading) {
     return (
-      <div className="space-y-4">
+      <div className="land-alerts-page space-y-4">
+        <Link href="/" className="land-alerts-back">
+          ← Back
+        </Link>
         <h1 className="display text-3xl font-semibold">Land Alerts</h1>
         <p className="text-sm text-[var(--muted)]">Loading your acquisition profile…</p>
       </div>
@@ -383,6 +386,9 @@ export default function LandAlertsPage() {
 
   return (
     <div className="land-alerts-page space-y-6">
+      <Link href="/" className="land-alerts-back">
+        ← Back
+      </Link>
       <div className="land-alerts-hero">
         <div>
           <h1 className="display text-3xl font-semibold">Land Alerts</h1>
@@ -394,16 +400,16 @@ export default function LandAlertsPage() {
         </div>
         {hasProfile ? (
           <div className="land-alerts-hero-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setEditing((e) => !e)}>
+            <button type="button" className="btn btn-ghost" onClick={() => setEditing((e) => !e)}>
               {editing ? "Close editor" : "Edit Preferences"}
             </button>
-            <button type="button" className="btn btn-secondary" onClick={() => void togglePause()}>
+            <button type="button" className="btn btn-ghost" onClick={() => void togglePause()}>
               {paused ? "Resume Alerts" : "Pause Alerts"}
             </button>
             {counts.new > 0 ? (
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn btn-ghost"
                 onClick={() =>
                   void landsignalApi.markAllLandAlertsSeen(profileId || undefined).then(loadMatches)
                 }
@@ -711,11 +717,11 @@ export default function LandAlertsPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn btn-primary" disabled={saving} onClick={() => void saveProfile()}>
+            <button type="button" className="btn btn-dark" disabled={saving} onClick={() => void saveProfile()}>
               {saving ? "Saving & matching…" : hasProfile ? "Save & recalculate matches" : "Start Land Alerts"}
             </button>
             {hasProfile ? (
-              <button type="button" className="btn btn-secondary" onClick={() => setEditing(false)}>
+              <button type="button" className="btn btn-ghost" onClick={() => setEditing(false)}>
                 Cancel
               </button>
             ) : null}
