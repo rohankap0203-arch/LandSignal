@@ -438,6 +438,13 @@ def upsert_match(
         )
     else:
         status = "new" if is_new_discovery else "unseen"
+        kind = update_kind or ("new_listing" if is_new_discovery else None)
+        prior_alert = _existing_land_alert(
+            store,
+            parcel_id=parcel.id,
+            profile_id=profile.id,
+            update_kind=kind,
+        )
         match = LandAlertMatch(
             profile_id=profile.id,
             user_id=profile.user_id,
@@ -449,8 +456,11 @@ def upsert_match(
             status=status,
             origin=origin,
             is_new_discovery=is_new_discovery,
-            update_kind=update_kind or ("new_listing" if is_new_discovery else None),
+            update_kind=kind,
             qualified_for_alert=True,
+            notified=bool(prior_alert),
+            notified_at=prior_alert.created_at if prior_alert else None,
+            notification_channels=list(prior_alert.delivered_channels) if prior_alert else [],
             created_at=now,
             updated_at=now,
         )
@@ -515,6 +525,69 @@ def _sensitivity_threshold(level: str) -> float:
     return {"exceptional": 90.0, "strong": 75.0, "all": 55.0}.get(_norm(level), 75.0)
 
 
+def _notify_bucket(update_kind: str | None) -> str:
+    """Collapse redundant discovery-style kinds; keep price moves distinct."""
+    kind = _norm(update_kind or "new_listing")
+    if kind in ("price_drop", "price_increase", "status_change"):
+        return kind
+    return "discovery"
+
+
+def _land_alert_dedupe_key(parcel_id: UUID, profile_id: str | None, update_kind: str | None) -> str:
+    return f"{parcel_id}:{profile_id or ''}:{_notify_bucket(update_kind)}"
+
+
+def _existing_land_alert(
+    store: MemoryStore,
+    *,
+    parcel_id: UUID,
+    profile_id: UUID,
+    update_kind: str | None,
+) -> AlertRecord | None:
+    want = _land_alert_dedupe_key(parcel_id, str(profile_id), update_kind)
+    for alert in store.alerts:
+        if alert.severity != "LAND_ALERT" or alert.parcel_id != parcel_id:
+            continue
+        body = alert.body or {}
+        got = _land_alert_dedupe_key(
+            alert.parcel_id,
+            str(body.get("profile_id") or ""),
+            str(body.get("update_kind") or "") or None,
+        )
+        if got == want:
+            return alert
+    return None
+
+
+def dedupe_land_alert_records(alerts: list[AlertRecord]) -> list[AlertRecord]:
+    """Keep newest legitimate LAND_ALERT per parcel/profile/event bucket."""
+    seen: set[str] = set()
+    out: list[AlertRecord] = []
+    for alert in alerts:
+        if alert.severity != "LAND_ALERT":
+            out.append(alert)
+            continue
+        body = alert.body or {}
+        key = _land_alert_dedupe_key(
+            alert.parcel_id,
+            str(body.get("profile_id") or ""),
+            str(body.get("update_kind") or "") or None,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(alert)
+    return out
+
+
+def _listing_scouted_at(listing: ListingRecord | None, match: LandAlertMatch) -> datetime:
+    if listing:
+        for value in (listing.last_seen_at, listing.listed_at, listing.created_at):
+            if value is not None:
+                return value
+    return match.created_at or match.updated_at or _utcnow()
+
+
 def _maybe_notify(
     store: MemoryStore,
     profile: LandAlertProfile,
@@ -527,6 +600,24 @@ def _maybe_notify(
     # Preference-change / inventory rescan must not spam "new property" notifications
     if match.origin not in ("new_discovery", "price_update"):
         return
+    # Full legitimacy gate: never re-emit the same parcel/event if history already has it
+    # (covers match drop/recreate cycles that reset match.notified).
+    prior = _existing_land_alert(
+        store,
+        parcel_id=parcel.id,
+        profile_id=profile.id,
+        update_kind=match.update_kind,
+    )
+    if prior:
+        store.land_alert_matches[_match_key(profile.id, parcel.id)] = match.model_copy(
+            update={
+                "notified": True,
+                "notified_at": prior.created_at or match.notified_at or _utcnow(),
+                "notification_channels": list(prior.delivered_channels or match.notification_channels),
+            }
+        )
+        return
+
     notify = profile.notify or LandAlertNotify()
     if match.preference_match_pct < _sensitivity_threshold(notify.sensitivity):
         return
@@ -568,6 +659,7 @@ def _maybe_notify(
         "new_data": "New data",
         "new_listing": "New listing",
     }.get(match.update_kind or "", "New Land Signal")
+    scouted_at = _listing_scouted_at(listing, match)
     title = f"{kind_label} — {match.preference_match_pct:.0f}% Match"
     body = {
         "property": (listing.title if listing else None) or parcel.apn or str(parcel.id),
@@ -583,6 +675,8 @@ def _maybe_notify(
         "profile_id": str(profile.id),
         "match_id": str(match.id),
         "update_kind": match.update_kind,
+        "scouted_at": scouted_at.isoformat(),
+        "retrieved_at": scouted_at.isoformat(),
         "delivery": {
             "in_app": "delivered" if any(c.startswith("IN_APP") for c in channels) else "skipped",
             "email": (
@@ -606,6 +700,8 @@ def _maybe_notify(
         delivered_channels=channels,
     )
     store.alerts.insert(0, alert)
+    # Prune historical duplicates so the feed stays accurate
+    store.alerts[:] = dedupe_land_alert_records(store.alerts)
     store.land_alert_matches[_match_key(profile.id, parcel.id)] = match.model_copy(
         update={
             "notified": True,

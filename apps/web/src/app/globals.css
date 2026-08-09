@@ -4397,6 +4397,28 @@ a.acquire-block:hover {
   border-color: color-mix(in srgb, var(--brand) 40%, var(--line));
 }
 
+.land-alert-notif-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.land-alert-notif-head .font-medium {
+  min-width: 0;
+}
+
+.land-alert-notif-time {
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  white-space: nowrap;
+  text-align: right;
+}
+
 /* Auth */
 .shell-header-actions {
   display: flex;

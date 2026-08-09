@@ -121,6 +121,46 @@ function ModeSelect({
   );
 }
 
+function notifyBucket(updateKind: unknown): string {
+  const kind = String(updateKind || "new_listing").toLowerCase();
+  if (kind === "price_drop" || kind === "price_increase" || kind === "status_change") return kind;
+  return "discovery";
+}
+
+/** One legitimate card per parcel/profile/event — newest first input assumed. */
+function dedupeRecentLandAlerts(alerts: Record<string, unknown>[]): Record<string, unknown>[] {
+  const seen = new Set<string>();
+  const out: Record<string, unknown>[] = [];
+  for (const alert of alerts) {
+    if (String(alert.severity || "") !== "LAND_ALERT") continue;
+    const body = (alert.body || {}) as Record<string, unknown>;
+    const key = [
+      String(alert.parcel_id || ""),
+      String(body.profile_id || ""),
+      notifyBucket(body.update_kind),
+    ].join(":");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(alert);
+  }
+  return out;
+}
+
+function formatScoutedAt(alert: Record<string, unknown>): string | null {
+  const body = (alert.body || {}) as Record<string, unknown>;
+  const raw = body.scouted_at || body.retrieved_at || alert.created_at;
+  if (!raw) return null;
+  const d = new Date(String(raw));
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function MatchCard({
   row,
   dimmed,
@@ -406,9 +446,7 @@ export default function LandAlertsPage() {
       ]);
       setMatches(m.matches || []);
       setCounts(m.counts || { new: 0, unseen: 0, viewed: 0, total: 0 });
-      setInAppAlerts(
-        (alerts || []).filter((a) => String((a as { severity?: string }).severity) === "LAND_ALERT").slice(0, 12),
-      );
+      setInAppAlerts(dedupeRecentLandAlerts(alerts || []).slice(0, 12));
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Could not load Land Alerts");
     } finally {
@@ -1045,9 +1083,17 @@ export default function LandAlertsPage() {
           {inAppAlerts.map((a) => {
             const body = (a.body || {}) as Record<string, unknown>;
             const link = String(body.deep_link || (a.parcel_id ? `/parcels/${a.parcel_id}` : "/alerts"));
+            const scouted = formatScoutedAt(a);
             return (
               <Link key={String(a.id)} href={link} className="land-alert-notif panel block p-4">
-                <div className="font-medium">{String(a.title || "Land Alert")}</div>
+                <div className="land-alert-notif-head">
+                  <div className="font-medium">{String(a.title || "Land Alert")}</div>
+                  {scouted ? (
+                    <time className="land-alert-notif-time" dateTime={String(body.scouted_at || body.retrieved_at || a.created_at || "")}>
+                      {scouted}
+                    </time>
+                  ) : null}
+                </div>
                 <div className="mt-1 text-sm text-[var(--muted)]">
                   {String(body.summary || "")}
                 </div>
