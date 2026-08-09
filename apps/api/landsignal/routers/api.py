@@ -1488,6 +1488,17 @@ async def mark_all_land_alerts_seen(profile_id: UUID | None = None) -> dict[str,
     return {"updated": n}
 
 
+@router.post("/land-alerts/mark-all-unseen")
+async def mark_all_land_alerts_unseen(profile_id: UUID | None = None) -> dict[str, Any]:
+    from landsignal.services.land_alerts import DEMO_USER_ID, mark_all_unseen
+    from landsignal.store import persist_store
+
+    store = get_store(get_settings().demo_seed)
+    n = mark_all_unseen(store, DEMO_USER_ID, profile_id)
+    persist_store(store)
+    return {"updated": n}
+
+
 @router.put("/land-alerts/notify")
 async def update_land_alert_notify(body: LandAlertNotify) -> dict[str, Any]:
     from landsignal.services.land_alerts import DEMO_USER_ID

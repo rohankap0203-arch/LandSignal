@@ -246,6 +246,10 @@ export const landsignalApi = {
     const q = profileId ? `?profile_id=${profileId}` : "";
     return api<{ updated: number }>(`/land-alerts/mark-all-seen${q}`, { method: "POST" });
   },
+  markAllLandAlertsUnseen: (profileId?: string) => {
+    const q = profileId ? `?profile_id=${profileId}` : "";
+    return api<{ updated: number }>(`/land-alerts/mark-all-unseen${q}`, { method: "POST" });
+  },
   updateLandAlertNotify: (body: Record<string, unknown>) =>
     api("/land-alerts/notify", { method: "PUT", body: JSON.stringify(body) }),
   rescanLandAlerts: () =>

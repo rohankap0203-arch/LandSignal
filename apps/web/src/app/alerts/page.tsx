@@ -371,6 +371,42 @@ export default function LandAlertsPage() {
     }
   }
 
+  const markAllTargets = useMemo(() => {
+    const ids = matches
+      .filter((m) => m.status === "new" || m.status === "unseen" || pendingSeen.has(m.parcel_id))
+      .map((m) => m.parcel_id);
+    return Array.from(new Set(ids));
+  }, [matches, pendingSeen]);
+
+  const allMarkedPending =
+    markAllTargets.length > 0 && markAllTargets.every((id) => pendingSeen.has(id));
+
+  async function toggleMarkAllSeen() {
+    if (allMarkedPending) {
+      const ids = [...pendingSeen];
+      setPendingSeen(new Set());
+      try {
+        await landsignalApi.markAllLandAlertsUnseen(profileId || undefined);
+      } catch {
+        await Promise.all(ids.map((id) => landsignalApi.unmarkLandAlertViewed(id).catch(() => null)));
+      }
+      return;
+    }
+    const ids = matches
+      .filter((m) => m.status === "new" || m.status === "unseen")
+      .map((m) => m.parcel_id);
+    setPendingSeen((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+    try {
+      await landsignalApi.markAllLandAlertsSeen(profileId || undefined);
+    } catch {
+      await Promise.all(ids.map((id) => landsignalApi.markLandAlertViewed(id).catch(() => null)));
+    }
+  }
+
   async function saveProfile() {
     setSaving(true);
     setMsg("");
@@ -512,12 +548,10 @@ export default function LandAlertsPage() {
             <button
               type="button"
               className="btn btn-ghost"
-              disabled={counts.new + counts.unseen === 0}
-              onClick={() =>
-                void landsignalApi.markAllLandAlertsSeen(profileId || undefined).then(loadMatches)
-              }
+              disabled={!allMarkedPending && markAllTargets.length === 0}
+              onClick={() => void toggleMarkAllSeen()}
             >
-              Mark all as seen
+              {allMarkedPending ? "Undo mark all" : "Mark all as seen"}
             </button>
           </div>
         ) : null}
