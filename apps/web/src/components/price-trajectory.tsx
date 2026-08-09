@@ -70,39 +70,48 @@ export function PriceTrajectory({
   const [dragging, setDragging] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
-  // Exact window: history from -horizon…0, plus short outlook (not counted in window CAGR)
-  const forwardYears = Math.min(5, Math.max(1, Math.round(horizon / 10) || 1));
-
+  // Exact window: N years back AND N years forward (symmetric around today)
   const points = useMemo(() => {
     if (!allPoints.length) return [];
     const byOff = new Map(allPoints.map((p) => [Number(p.offset ?? 0), p]));
     const out: Point[] = [];
-    for (let o = -horizon; o <= forwardYears; o++) {
+    for (let o = -horizon; o <= horizon; o++) {
       const hit = byOff.get(o);
       if (hit) out.push(hit);
     }
     return out;
-  }, [allPoints, horizon, forwardYears]);
+  }, [allPoints, horizon]);
 
   const windowMath = useMemo(() => {
     const start = points.find((p) => Number(p.offset) === -horizon);
     const today = points.find((p) => Number(p.offset) === 0);
-    if (!start || !today) return null;
-    const years = horizon;
-    const rate = cagr(Number(start.value_usd), Number(today.value_usd), years);
-    const changePct =
+    const future = points.find((p) => Number(p.offset) === horizon);
+    if (!start || !today || !future) return null;
+    const pastRate = cagr(Number(start.value_usd), Number(today.value_usd), horizon);
+    const fwdRate = cagr(Number(today.value_usd), Number(future.value_usd), horizon);
+    const pastChange =
       Number(start.value_usd) > 0
         ? ((Number(today.value_usd) - Number(start.value_usd)) / Number(start.value_usd)) * 100
         : null;
+    const fwdChange =
+      Number(today.value_usd) > 0
+        ? ((Number(future.value_usd) - Number(today.value_usd)) / Number(today.value_usd)) * 100
+        : null;
     return {
       startYear: start.year,
-      endYear: today.year,
+      todayYear: today.year,
+      endYear: future.year,
       startUsd: Number(start.value_usd),
+      todayUsd: Number(today.value_usd),
       endUsd: Number(today.value_usd),
-      years,
-      rate,
-      changePct,
-      cagrDisplay: rate != null ? `${rate >= 0 ? "+" : ""}${(rate * 100).toFixed(1)}%/yr` : "—",
+      futureUsd: Number(future.value_usd),
+      years: horizon,
+      pastRate,
+      fwdRate,
+      pastChange,
+      fwdChange,
+      cagrDisplay: pastRate != null ? `${pastRate >= 0 ? "+" : ""}${(pastRate * 100).toFixed(1)}%/yr` : "—",
+      forwardCagrDisplay: fwdRate != null ? `${fwdRate >= 0 ? "+" : ""}${(fwdRate * 100).toFixed(1)}%/yr` : "—",
     };
   }, [points, horizon]);
 
@@ -237,18 +246,24 @@ export function PriceTrajectory({
         <div className="min-w-0">
           <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Value over time</div>
           <h3 className="display text-lg font-semibold leading-snug">
-            {horizon}-year window · {windowMath.startYear}→{windowMath.endYear}
+            {horizon} yr back · {horizon} yr ahead
           </h3>
-          <p className="mt-1 text-xs text-[var(--muted)] break-words">{knowledge}</p>
+          <p className="mt-1 text-xs text-[var(--muted)] break-words">
+            {windowMath.startYear} → today → {windowMath.endYear} · {knowledge}
+          </p>
         </div>
         <div className="traj-stats">
           <div>
-            <span>{horizon} yr pace</span>
+            <span>Past {horizon} yr</span>
             <strong>{windowMath.cagrDisplay}</strong>
           </div>
           <div>
+            <span>Next {horizon} yr</span>
+            <strong>{windowMath.forwardCagrDisplay}</strong>
+          </div>
+          <div>
             <span>Today</span>
-            <strong>{money(windowMath.endUsd)}</strong>
+            <strong>{money(windowMath.todayUsd)}</strong>
           </div>
         </div>
       </div>
@@ -269,8 +284,7 @@ export function PriceTrajectory({
       </div>
 
       <p className="text-[11px] text-[var(--muted)]">
-        Showing exactly {horizon} years back to today
-        {forwardYears ? ` (+ ${forwardYears} yr outlook)` : ""}. Drag to read any year.
+        Chart spans {horizon} years ago through {horizon} years ahead. Drag to read any year.
       </p>
 
       <div className="traj-chart-wrap">
@@ -286,7 +300,7 @@ export function PriceTrajectory({
           onPointerUp={onPointerUp}
           onPointerLeave={() => setDragging(false)}
         >
-          <title>{horizon}-year land value window</title>
+          <title>{horizon} years back and {horizon} years forward</title>
           <defs>
             <linearGradient id="trajFill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--brand)" stopOpacity="0.22" />
@@ -340,7 +354,7 @@ export function PriceTrajectory({
             const show =
               o === -horizon ||
               o === 0 ||
-              o === forwardYears ||
+              o === horizon ||
               i === 0 ||
               i === layout.mapped.length - 1;
             if (!show) return null;
@@ -382,17 +396,18 @@ export function PriceTrajectory({
               {selected.year}
               {Number(selected.offset) > 0 ? " · outlook" : ""}
               {Number(selected.offset) === 0 ? " · today" : ""}
-              {Number(selected.offset) === -horizon ? ` · start of ${horizon} yr window` : ""}
+              {Number(selected.offset) === -horizon ? ` · ${horizon} yr ago` : ""}
+              {Number(selected.offset) === horizon ? ` · ${horizon} yr ahead` : ""}
             </strong>
             <span className="traj-readout-value">{money(selected.value_usd)}</span>
           </div>
           <span>
             {Number(selected.offset) === 0
-              ? `${money(windowMath.startUsd)} → ${money(windowMath.endUsd)} over ${horizon} yrs (${windowMath.cagrDisplay})`
+              ? `${money(windowMath.startUsd)} → ${money(windowMath.todayUsd)} → ${money(windowMath.futureUsd)} (${horizon} yr each way)`
               : Number(selected.offset) < 0 && scrubCagr != null
                 ? `${scrubCagr >= 0 ? "+" : ""}${(scrubCagr * 100).toFixed(1)}%/yr from ${windowMath.startYear} → ${selected.year}`
                 : Number(selected.offset) > 0
-                  ? `Outlook beyond today · window pace still ${windowMath.cagrDisplay}`
+                  ? `Outlook · ${money(windowMath.todayUsd)} today → ${money(selected.value_usd)} in ${selected.year} (${windowMath.forwardCagrDisplay} over ${horizon} yr)`
                   : null}
           </span>
         </div>

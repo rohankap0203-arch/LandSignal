@@ -20,7 +20,7 @@ type Case = {
 };
 
 /** Hold lengths that drive both the %/yr math and future land value. */
-const HOLD_YEARS = [1, 3, 5, 10, 15, 30] as const;
+const HOLD_YEARS = [1, 3, 5, 10, 15, 30, 50, 75, 100] as const;
 
 function money(v: unknown): string {
   const n = Number(v);
@@ -162,7 +162,7 @@ export function ReturnVisual({
       </div>
       <h3 className="display text-lg font-semibold">If you hold this property</h3>
       <p className="mt-1 text-sm text-[var(--muted)]">
-        Case + hold length reset the %/yr and the future land value for that exact span.
+        Same time spans as Value over time (1–100 yr). Hold length resets %/yr and future land value.
         {entry ? ` Buy near ${money(entry)}.` : ""}
       </p>
 
@@ -248,9 +248,8 @@ export function ReturnVisual({
               </div>
             </div>
             <p className="mt-2 text-[11px] text-[var(--muted)] leading-relaxed">
-              Land = {money(selectedProj.purchase)} × (1 + {selectedProj.apprDisplay.replace("/yr", "")})
-              ^{holdYears}. Rent = yearly net × {holdYears}. %/yr is the IRR of those cashflows for this
-              hold only.
+              Land = {money(selectedProj.purchase)} × (1 + {(selectedProj.appr * 100).toFixed(1)}%)^
+              {holdYears}. Rent = yearly net × {holdYears}. The %/yr is IRR for this hold length only.
             </p>
           </div>
 

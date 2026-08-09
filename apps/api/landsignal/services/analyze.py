@@ -491,7 +491,7 @@ async def analyze_parcel(
     traj_rate = float(trajectory.get("annual_rate") or 0.03)
     scenarios = []
     if purchase and parcel.acreage:
-        hold_options = [1, 3, 5, 10, 15, 30]
+        hold_options = [1, 3, 5, 10, 15, 30, 50, 75, 100]
         for case, rent, appr in (
             ("BEAR", 140, max(0.0, traj_rate - 0.02)),
             ("BASE", 200, traj_rate),

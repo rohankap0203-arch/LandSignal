@@ -244,9 +244,9 @@ def build_market_trajectory(
     score=None,
     enrichment=None,
     years_back: int = 100,
-    years_forward: int = 10,
+    years_forward: int = 100,
 ) -> dict[str, Any]:
-    """Always returns a parcel-bound path (up to 100y history + forward outlook)."""
+    """Always returns a parcel-bound path (up to 100y history + 100y forward)."""
     state = getattr(parcel, "state", None)
     county = getattr(parcel, "county", None)
     apn = getattr(parcel, "apn", None) or "parcel"
@@ -369,18 +369,30 @@ def build_market_trajectory(
     windows = [1, 3, 5, 10, 15, 30, 50, 75, 100]
     window_stats: dict[str, Any] = {}
     for w in windows:
-        start = next((p for p in points if p["offset"] == -w), points[0] if points else None)
-        c = _cagr(start, y0)
+        start = next((p for p in points if p["offset"] == -w), None)
+        fut = next((p for p in points if p["offset"] == w), None)
+        c_past = _cagr(start, y0)
+        c_fwd = _cagr(y0, fut)
         window_stats[str(w)] = {
             "years": w,
             "start_year": start["year"] if start else None,
+            "end_year": fut["year"] if fut else None,
             "start_usd": start["value_usd"] if start else None,
+            "today_usd": y0["value_usd"],
             "end_usd": y0["value_usd"],
-            "cagr": c,
-            "cagr_display": f"{c*100:+.1f}%/yr" if c is not None else "n/a",
+            "forward_usd": fut["value_usd"] if fut else None,
+            "cagr": c_past,
+            "cagr_display": f"{c_past*100:+.1f}%/yr" if c_past is not None else "n/a",
+            "forward_cagr": c_fwd,
+            "forward_cagr_display": f"{c_fwd*100:+.1f}%/yr" if c_fwd is not None else "n/a",
             "change_pct": (
                 ((y0["value_usd"] - start["value_usd"]) / start["value_usd"]) * 100
                 if start and start["value_usd"]
+                else None
+            ),
+            "forward_change_pct": (
+                ((fut["value_usd"] - y0["value_usd"]) / y0["value_usd"]) * 100
+                if fut and y0["value_usd"]
                 else None
             ),
         }
