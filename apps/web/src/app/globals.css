@@ -4264,8 +4264,75 @@ a.acquire-block:hover {
 }
 
 .land-viewer-hud .land-viewer-nearby-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: min(100%, 34rem);
   border-color: color-mix(in srgb, #60a5fa 50%, transparent);
   color: #dbeafe;
+}
+
+.land-viewer-nearby-status-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.land-viewer-nearby-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0.08rem 0.32rem 0.08rem 0.35rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #93c5fd 55%, transparent);
+  background: color-mix(in srgb, #1d4ed8 42%, rgba(15, 23, 42, 0.55));
+  color: #eff6ff;
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.land-viewer-nearby-next.is-done {
+  cursor: default;
+  opacity: 0.78;
+  background: color-mix(in srgb, #334155 55%, rgba(15, 23, 42, 0.45));
+  border-color: color-mix(in srgb, #94a3b8 40%, transparent);
+}
+
+.land-viewer-nearby-next:hover:not(.is-done) {
+  background: color-mix(in srgb, #2563eb 55%, rgba(15, 23, 42, 0.4));
+}
+
+.land-viewer-nearby-next-arrow {
+  display: inline-block;
+  font-size: 0.78rem;
+  line-height: 1;
+  transform: translateX(0);
+}
+
+.land-viewer-nearby-next.is-pulse .land-viewer-nearby-next-arrow {
+  animation: land-viewer-nearby-nudge 0.7s ease-out 1;
+}
+
+@keyframes land-viewer-nearby-nudge {
+  0% {
+    transform: translateX(0);
+    opacity: 0.55;
+  }
+  40% {
+    transform: translateX(3px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 @media (max-width: 720px) {

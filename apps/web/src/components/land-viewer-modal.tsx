@@ -39,7 +39,10 @@ type NearbyHit = {
   meters: number;
   source: "live";
   detail?: string;
+  osmKey?: string;
 };
+
+const NEARBY_RESULT_LIMIT = 3;
 
 type NearbyChip = {
   kind: NearbyKind;
@@ -151,7 +154,7 @@ const OVERPASS_ENDPOINTS = [
   "https://overpass.kumi.systems/api/interpreter",
 ];
 
-const nearbyCache = new Map<string, NearbyHit | null>();
+const nearbyCache = new Map<string, NearbyHit[]>();
 
 function haversineMeters(a: [number, number], b: [number, number]) {
   const R = 6371000;
@@ -219,12 +222,21 @@ function ringAreaAcres(ring: [number, number][]) {
 
 type OverpassElement = {
   type?: string;
+  id?: number;
   lat?: number;
   lon?: number;
   center?: { lat: number; lon: number };
   geometry?: Array<{ lat: number; lon: number }>;
   tags?: Record<string, string>;
 };
+
+function elementKey(el: OverpassElement): string {
+  if (el.type && el.id != null) return `${el.type}/${el.id}`;
+  const lat = el.lat ?? el.center?.lat ?? el.geometry?.[0]?.lat;
+  const lon = el.lon ?? el.center?.lon ?? el.geometry?.[0]?.lon;
+  if (lat == null || lon == null) return `anon:${Math.random()}`;
+  return `pt:${lat.toFixed(5)}:${lon.toFixed(5)}`;
+}
 
 function elementName(el: OverpassElement, fallback: string) {
   const t = el.tags || {};
@@ -303,19 +315,18 @@ async function overpassQuery(query: string): Promise<OverpassElement[]> {
   throw lastErr instanceof Error ? lastErr : new Error("Overpass unavailable");
 }
 
-function pickBestHit(
+function pickTopHits(
   kind: NearbyKind,
   label: string,
   origin: [number, number],
   elements: OverpassElement[],
-): NearbyHit | null {
-  let best: NearbyHit | null = null;
-  let bestFlood: NearbyHit | null = null;
+  limit = NEARBY_RESULT_LIMIT,
+): NearbyHit[] {
+  const byKey = new Map<string, NearbyHit & { floodTagged: boolean }>();
 
   for (const el of elements) {
     const pt = closestOnElement(origin, el);
     if (!pt) continue;
-    // Triple-check: recompute haversine from chosen point
     const meters = haversineMeters(origin, [pt.lat, pt.lon]);
     if (!Number.isFinite(meters) || meters < 0) continue;
 
@@ -328,38 +339,62 @@ function pickBestHit(
           : "Nearest mapped waterway (flood-adjacency)"
         : "OpenStreetMap";
 
-    const hit: NearbyHit = {
+    const key = elementKey(el);
+    const hit = {
       kind,
       label,
       name,
       lat: pt.lat,
       lon: pt.lon,
       meters,
-      source: "live",
+      source: "live" as const,
       detail,
+      osmKey: key,
+      floodTagged,
     };
-
-    if (kind === "flood" && floodTagged) {
-      if (!bestFlood || meters < bestFlood.meters) bestFlood = hit;
-    }
-    if (!best || meters < best.meters) best = hit;
+    const prev = byKey.get(key);
+    if (!prev || meters < prev.meters) byKey.set(key, hit);
   }
 
+  const all = [...byKey.values()];
+  const floodFirst = all.filter((h) => h.floodTagged).sort((a, b) => a.meters - b.meters);
+  const rest = all.filter((h) => !h.floodTagged).sort((a, b) => a.meters - b.meters);
   // Prefer explicit flood tags when present (accuracy > nearest arbitrary waterway).
-  return bestFlood || best;
+  const ranked = floodFirst.length ? [...floodFirst, ...rest] : rest;
+
+  const out: NearbyHit[] = [];
+  for (const raw of ranked) {
+    const { floodTagged: _flood, ...hit } = raw;
+    const nearDup = out.some(
+      (o) =>
+        haversineMeters([o.lat, o.lon], [hit.lat, hit.lon]) < 55 &&
+        o.name.trim().toLowerCase() === hit.name.trim().toLowerCase(),
+    );
+    if (nearDup) continue;
+    out.push(hit);
+    if (out.length >= limit) break;
+  }
+  return out;
 }
 
-async function fetchNearby(kind: NearbyKind, lat: number, lon: number): Promise<NearbyHit | null> {
+function ordinalClosest(index: number) {
+  if (index <= 0) return "Closest";
+  if (index === 1) return "2nd closest";
+  if (index === 2) return "3rd closest";
+  return `${index + 1}th closest`;
+}
+
+async function fetchNearby(kind: NearbyKind, lat: number, lon: number): Promise<NearbyHit[]> {
   const meta = NEARBY_CHIPS.find((c) => c.kind === kind);
-  if (!meta) return null;
+  if (!meta) return [];
 
   const cacheKey = `${kind}:${lat.toFixed(4)}:${lon.toFixed(4)}`;
-  if (nearbyCache.has(cacheKey)) return nearbyCache.get(cacheKey) ?? null;
+  if (nearbyCache.has(cacheKey)) return nearbyCache.get(cacheKey) ?? [];
 
   const origin: [number, number] = [lat, lon];
-  let best: NearbyHit | null = null;
+  let best: NearbyHit[] = [];
 
-  // Progressive radii: small first → faster + prefers truly local features.
+  // Progressive radii: expand until we have up to 3 distinct hits (or radii exhausted).
   for (const radius of meta.radiiM) {
     const union = meta.overpassParts.map((part) => `  ${part}(around:${radius},${lat},${lon});`).join("\n");
     const query = `
@@ -371,15 +406,13 @@ out geom;
 `.trim();
     try {
       const elements = await overpassQuery(query);
-      const hit = pickBestHit(kind, meta.label, origin, elements);
-      if (hit) {
-        // Accept immediately when found inside this radius (already the closest in-set).
-        // Re-verify it is within the searched radius (+small tolerance for geom snap).
-        if (hit.meters <= radius * 1.05) {
-          best = hit;
-          break;
-        }
-        if (!best || hit.meters < best.meters) best = hit;
+      const hits = pickTopHits(kind, meta.label, origin, elements, NEARBY_RESULT_LIMIT).filter(
+        (h) => h.meters / 1609.344 <= meta.maxMiles,
+      );
+      if (hits.length) {
+        best = hits;
+        const farthestKept = hits[hits.length - 1];
+        if (hits.length >= NEARBY_RESULT_LIMIT && farthestKept.meters <= radius * 1.05) break;
       }
     } catch {
       // Try next radius / endpoint path; do not invent a fake location.
@@ -387,18 +420,11 @@ out geom;
     }
   }
 
-  // Final legitimacy gate: never return a hit beyond chip max range.
-  if (best && best.meters / 1609.344 > meta.maxMiles) {
-    best = null;
-  }
-
-  // Second pass verification for accepted hit (distance consistency).
-  if (best) {
-    const again = haversineMeters(origin, [best.lat, best.lon]);
-    if (Math.abs(again - best.meters) > 25) {
-      best = { ...best, meters: again };
-    }
-  }
+  best = best.slice(0, NEARBY_RESULT_LIMIT).map((hit) => {
+    const again = haversineMeters(origin, [hit.lat, hit.lon]);
+    if (Math.abs(again - hit.meters) > 25) return { ...hit, meters: again };
+    return hit;
+  });
 
   nearbyCache.set(cacheKey, best);
   return best;
@@ -486,7 +512,9 @@ export function LandViewerModal({
   const [nearbyActive, setNearbyActive] = useState<NearbyKind | null>(null);
   const [nearbyStatus, setNearbyStatus] = useState<string>("");
   const [nearbyLoading, setNearbyLoading] = useState(false);
-  const [activeHit, setActiveHit] = useState<NearbyHit | null>(null);
+  const [nearbyHits, setNearbyHits] = useState<NearbyHit[]>([]);
+  const [nearbyHitIndex, setNearbyHitIndex] = useState(0);
+  const [nearbyNextPulse, setNearbyNextPulse] = useState(false);
 
   const hasGeo = latitude != null && longitude != null;
   const center = useMemo<[number, number]>(
@@ -509,7 +537,9 @@ export function LandViewerModal({
     setCopied(false);
     setNearbyActive(null);
     setNearbyStatus("");
-    setActiveHit(null);
+    setNearbyHits([]);
+    setNearbyHitIndex(0);
+    setNearbyNextPulse(false);
     setElevationFt(null);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -672,47 +702,17 @@ export function LandViewerModal({
     }
   }, []);
 
-  const showNearby = useCallback(
-    async (kind: NearbyKind) => {
-      if (!hasGeo || !mapRef.current) return;
-      if (nearbyActive === kind) {
-        layersRef.current.nearby?.clearLayers();
-        setNearbyActive(null);
-        setActiveHit(null);
-        setNearbyStatus("");
-        return;
-      }
-      const chip = NEARBY_CHIPS.find((c) => c.kind === kind);
-      setNearbyLoading(true);
-      setNearbyStatus(`Finding closest ${chip?.label ?? "feature"}…`);
-      setNearbyActive(kind);
-      setActiveHit(null);
-      const group = layersRef.current.nearby;
-      group?.clearLayers();
-
-      let hit: NearbyHit | null = null;
-      try {
-        hit = await fetchNearby(kind, latitude!, longitude!);
-      } catch {
-        hit = null;
-      }
-      setNearbyLoading(false);
-
+  const paintNearbyHit = useCallback(
+    async (hit: NearbyHit, index: number, total: number) => {
+      const chip = NEARBY_CHIPS.find((c) => c.kind === hit.kind);
       const L = await import("leaflet");
       const map = mapRef.current;
       const layer = layersRef.current.nearby;
       if (!map || !layer) return;
 
-      if (!hit) {
-        setActiveHit(null);
-        setNearbyStatus(
-          `No mapped ${chip?.label?.toLowerCase() ?? "feature"} within ~${chip?.maxMiles ?? 10} mi (OpenStreetMap)`,
-        );
-        return;
-      }
-
-      setActiveHit(hit);
+      layer.clearLayers();
       const color = chip?.color || "#d6a243";
+      const rank = ordinalClosest(index);
       L.polyline([center, [hit.lat, hit.lon]], {
         color,
         weight: 2.5,
@@ -726,8 +726,9 @@ export function LandViewerModal({
         fillOpacity: 1,
       })
         .bindPopup(
-          `<strong>${hit.label}</strong><br/>${hit.name}<br/>${formatDistance(hit.meters)} away` +
-            (hit.detail ? `<br/><span style="opacity:.8">${hit.detail}</span>` : ""),
+          `<strong>${rank} ${hit.label}</strong><br/>${hit.name}<br/>${formatDistance(hit.meters)} away` +
+            (hit.detail ? `<br/><span style="opacity:.8">${hit.detail}</span>` : "") +
+            (total > 1 ? `<br/><span style="opacity:.75">${index + 1} of ${total}</span>` : ""),
         )
         .addTo(layer)
         .openPopup();
@@ -736,12 +737,74 @@ export function LandViewerModal({
         maxZoom: 14,
       });
       setNearbyStatus(
-        `${hit.label}: ${formatDistance(hit.meters)} · ${hit.name}` +
+        `${rank} ${hit.label}: ${formatDistance(hit.meters)} · ${hit.name}` +
           (hit.detail ? ` · ${hit.detail}` : ""),
       );
     },
-    [center, hasGeo, latitude, longitude, nearbyActive],
+    [center],
   );
+
+  const showNearby = useCallback(
+    async (kind: NearbyKind) => {
+      if (!hasGeo || !mapRef.current) return;
+      if (nearbyActive === kind) {
+        layersRef.current.nearby?.clearLayers();
+        setNearbyActive(null);
+        setNearbyHits([]);
+        setNearbyHitIndex(0);
+        setNearbyStatus("");
+        return;
+      }
+      const chip = NEARBY_CHIPS.find((c) => c.kind === kind);
+      setNearbyLoading(true);
+      setNearbyStatus(`Finding closest ${chip?.label ?? "feature"}…`);
+      setNearbyActive(kind);
+      setNearbyHits([]);
+      setNearbyHitIndex(0);
+      const group = layersRef.current.nearby;
+      group?.clearLayers();
+
+      let hits: NearbyHit[] = [];
+      try {
+        hits = await fetchNearby(kind, latitude!, longitude!);
+      } catch {
+        hits = [];
+      }
+      setNearbyLoading(false);
+
+      if (!mapRef.current || !layersRef.current.nearby) return;
+
+      if (!hits.length) {
+        setNearbyHits([]);
+        setNearbyHitIndex(0);
+        setNearbyStatus(
+          `No mapped ${chip?.label?.toLowerCase() ?? "feature"} within ~${chip?.maxMiles ?? 10} mi (OpenStreetMap)`,
+        );
+        return;
+      }
+
+      setNearbyHits(hits);
+      setNearbyHitIndex(0);
+      await paintNearbyHit(hits[0], 0, hits.length);
+      if (hits.length > 1) {
+        setNearbyNextPulse(true);
+        window.setTimeout(() => setNearbyNextPulse(false), 900);
+      }
+    },
+    [hasGeo, latitude, longitude, nearbyActive, paintNearbyHit],
+  );
+
+  const showNextNearby = useCallback(() => {
+    if (nearbyHitIndex >= nearbyHits.length - 1) return;
+    if (nearbyHitIndex >= NEARBY_RESULT_LIMIT - 1) return;
+    const next = nearbyHitIndex + 1;
+    const hit = nearbyHits[next];
+    if (!hit) return;
+    setNearbyHitIndex(next);
+    void paintNearbyHit(hit, next, nearbyHits.length);
+    setNearbyNextPulse(true);
+    window.setTimeout(() => setNearbyNextPulse(false), 700);
+  }, [nearbyHitIndex, nearbyHits, paintNearbyHit]);
 
   // Mount / tear down map when modal opens
   useEffect(() => {
@@ -1095,7 +1158,31 @@ export function LandViewerModal({
               {parcelAcres ? <span>{parcelAcres}</span> : null}
               {elevationFt ? <span>{elevationFt}</span> : null}
               {tool === "measure" ? <span className="land-viewer-measure">{measureInfo}</span> : null}
-              {nearbyStatus ? <span className="land-viewer-nearby-status">{nearbyStatus}</span> : null}
+              {nearbyStatus ? (
+                <span className="land-viewer-nearby-status">
+                  <span className="land-viewer-nearby-status-text">{nearbyStatus}</span>
+                  {nearbyHits.length > 1 && nearbyHitIndex < nearbyHits.length - 1 ? (
+                    <button
+                      type="button"
+                      className={`land-viewer-nearby-next${nearbyNextPulse ? " is-pulse" : ""}`}
+                      onClick={showNextNearby}
+                      aria-label={`Show next closest (${nearbyHitIndex + 2} of ${nearbyHits.length})`}
+                      title={`Next closest (${nearbyHitIndex + 2}/${nearbyHits.length})`}
+                    >
+                      <span className="land-viewer-nearby-next-count">
+                        {nearbyHitIndex + 1}/{nearbyHits.length}
+                      </span>
+                      <span className="land-viewer-nearby-next-arrow" aria-hidden>
+                        →
+                      </span>
+                    </button>
+                  ) : nearbyHits.length > 1 ? (
+                    <span className="land-viewer-nearby-next is-done" title="Furthest of nearby results">
+                      {nearbyHitIndex + 1}/{nearbyHits.length}
+                    </span>
+                  ) : null}
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
