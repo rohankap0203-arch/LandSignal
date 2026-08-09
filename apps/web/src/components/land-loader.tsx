@@ -1,17 +1,11 @@
 "use client";
 
-/** Map-pin scatter loading state for search and parcel intelligence. */
+/** Sparse map-pin loading state for search and parcel intelligence. */
 const PINS: { left: string; top: string; delay: string; duration: string; scale: number }[] = [
-  { left: "12%", top: "58%", delay: "0s", duration: "2.4s", scale: 1 },
-  { left: "28%", top: "32%", delay: "0.35s", duration: "2.1s", scale: 0.85 },
-  { left: "41%", top: "64%", delay: "0.8s", duration: "2.6s", scale: 1.1 },
-  { left: "55%", top: "28%", delay: "0.15s", duration: "2.3s", scale: 0.9 },
-  { left: "63%", top: "52%", delay: "1.1s", duration: "2.5s", scale: 1 },
-  { left: "74%", top: "38%", delay: "0.55s", duration: "2.2s", scale: 0.8 },
-  { left: "82%", top: "66%", delay: "1.4s", duration: "2.7s", scale: 1.05 },
-  { left: "18%", top: "44%", delay: "1.7s", duration: "2.0s", scale: 0.75 },
-  { left: "48%", top: "46%", delay: "0.95s", duration: "2.8s", scale: 1.15 },
-  { left: "88%", top: "48%", delay: "0.4s", duration: "2.35s", scale: 0.88 },
+  { left: "18%", top: "54%", delay: "0s", duration: "4.2s", scale: 1 },
+  { left: "46%", top: "34%", delay: "1.4s", duration: "4.6s", scale: 0.9 },
+  { left: "68%", top: "58%", delay: "2.6s", duration: "4.4s", scale: 1.05 },
+  { left: "82%", top: "40%", delay: "0.8s", duration: "4.8s", scale: 0.85 },
 ];
 
 function PinIcon() {
