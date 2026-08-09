@@ -286,8 +286,8 @@ select {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 8px;
-  margin-top: 14px;
+  gap: 6px;
+  margin-top: 10px;
   overflow: visible;
 }
 
@@ -298,7 +298,7 @@ select {
   min-width: 0;
   /* Compact to the button row — logo overlays without adding blank space */
   min-height: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .filter-actions-buttons {
@@ -314,35 +314,35 @@ select {
   position: absolute;
   top: 50%;
   right: 0;
-  left: 30%;
+  left: 36%;
   z-index: 0;
-  height: 72px;
+  height: 100%;
   transform: translateY(-50%);
   pointer-events: none;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  overflow: visible;
+  overflow: hidden;
   opacity: 0.12;
 }
 
 .filter-map-hero-svg {
   display: block;
   width: auto;
-  height: 96px;
-  max-width: min(220px, 36vw);
+  height: 52px;
+  max-width: min(160px, 28vw);
   object-fit: contain;
   object-position: right center;
   margin-right: 0;
-  transform: translateX(-6%);
+  transform: translateX(-4%);
   flex-shrink: 0;
 }
 
 .filter-inventory-note {
   position: relative;
   z-index: 1;
-  font-size: 0.875rem;
-  line-height: 1.35;
+  font-size: 0.8125rem;
+  line-height: 1.3;
   color: rgba(247, 250, 248, 0.7);
 }
 
@@ -359,8 +359,8 @@ select {
   height: 1.48rem;
   color: var(--brand);
   flex: 0 0 auto;
-  /* Optical center with LandSignal wordmark (pin mass sits high) */
-  transform: translateY(2px);
+  /* Optical lift — pin mass sits a bit high relative to the wordmark */
+  transform: translateY(-5px);
 }
 
 .shell-brand-tagline {
@@ -384,43 +384,32 @@ select {
 }
 
 @media (min-width: 1100px) {
-  .filter-actions-main {
-    min-height: 200px;
-  }
-
   .filter-map-hero {
-    left: 32%;
-    height: 220px;
+    left: 40%;
   }
 
   .filter-map-hero-svg {
-    height: 200px;
-    max-width: 340px;
-    transform: translateX(-4%);
+    height: 56px;
+    max-width: 180px;
+    transform: translateX(-2%);
   }
 }
 
 @media (max-width: 720px) {
-  .filter-actions-main {
-    overflow: hidden;
-    min-height: 120px;
-  }
-
   .filter-map-hero {
-    left: 18%;
-    height: 140px;
+    left: 24%;
   }
 
   .filter-map-hero-svg {
-    height: 130px;
-    max-width: min(200px, 55vw);
-    transform: translateX(-4%);
+    height: 46px;
+    max-width: min(140px, 42vw);
+    transform: translateX(-2%);
   }
 
   .shell-brand-mark {
     width: 1.5rem;
     height: 1.26rem;
-    transform: translateY(1px);
+    transform: translateY(-4px);
   }
 }
 
