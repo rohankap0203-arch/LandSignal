@@ -4084,16 +4084,6 @@ a.acquire-block:hover {
   cursor: not-allowed;
 }
 
-/* Keep Water body + working spinner on one unbreakable unit */
-.land-viewer-nearby-tail {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  gap: var(--nearby-chip-gap, 0.5rem);
-  white-space: nowrap;
-  max-width: 100%;
-}
-
 .land-viewer-nearby-loading,
 .land-viewer-nearby-next {
   display: inline-flex;

@@ -1096,51 +1096,43 @@ export function LandViewerModal({
 
         <div className="land-viewer-nearby" aria-label="Closest landmarks">
           <span className="land-viewer-nearby-label">Closest</span>
-          {NEARBY_CHIPS.map((chip) => {
-            const isLast = chip.kind === "water";
-            const button = (
-              <button
-                type="button"
-                className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
-                style={{ ["--chip" as string]: chip.color }}
-                disabled={!hasGeo || nearbyLoading}
-                onClick={() => void showNearby(chip.kind)}
-              >
-                {chip.label}
-              </button>
-            );
-            if (!isLast) return <span key={chip.kind}>{button}</span>;
-            return (
-              <span key={chip.kind} className="land-viewer-nearby-tail">
-                {button}
-                {nearbyLoading ? (
-                  <span className="land-viewer-nearby-loading" role="status" aria-live="polite">
-                    <LiveMagnifier size={14} label="Finding closest landmark" />
-                    <span>Working</span>
-                  </span>
-                ) : nearbyHits.length > 1 && nearbyHitIndex < nearbyHits.length - 1 ? (
-                  <button
-                    type="button"
-                    className={`land-viewer-nearby-next${nearbyNextPulse ? " is-pulse" : ""}`}
-                    onClick={showNextNearby}
-                    aria-label={`Show next closest (${nearbyHitIndex + 2} of ${nearbyHits.length})`}
-                    title={`Next closest (${nearbyHitIndex + 2}/${nearbyHits.length})`}
-                  >
-                    <span className="land-viewer-nearby-next-count">
-                      {nearbyHitIndex + 1}/{nearbyHits.length}
-                    </span>
-                    <span className="land-viewer-nearby-next-arrow" aria-hidden>
-                      →
-                    </span>
-                  </button>
-                ) : nearbyHits.length > 1 ? (
-                  <span className="land-viewer-nearby-next is-done" title="Furthest of nearby results">
-                    {nearbyHitIndex + 1}/{nearbyHits.length}
-                  </span>
-                ) : null}
+          {NEARBY_CHIPS.map((chip) => (
+            <button
+              key={chip.kind}
+              type="button"
+              className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
+              style={{ ["--chip" as string]: chip.color }}
+              disabled={!hasGeo || nearbyLoading}
+              onClick={() => void showNearby(chip.kind)}
+            >
+              {chip.label}
+            </button>
+          ))}
+          {nearbyLoading ? (
+            <span className="land-viewer-nearby-loading" role="status" aria-live="polite">
+              <LiveMagnifier size={14} label="Finding closest landmark" />
+              <span>Working</span>
+            </span>
+          ) : nearbyHits.length > 1 && nearbyHitIndex < nearbyHits.length - 1 ? (
+            <button
+              type="button"
+              className={`land-viewer-nearby-next${nearbyNextPulse ? " is-pulse" : ""}`}
+              onClick={showNextNearby}
+              aria-label={`Show next closest (${nearbyHitIndex + 2} of ${nearbyHits.length})`}
+              title={`Next closest (${nearbyHitIndex + 2}/${nearbyHits.length})`}
+            >
+              <span className="land-viewer-nearby-next-count">
+                {nearbyHitIndex + 1}/{nearbyHits.length}
               </span>
-            );
-          })}
+              <span className="land-viewer-nearby-next-arrow" aria-hidden>
+                →
+              </span>
+            </button>
+          ) : nearbyHits.length > 1 ? (
+            <span className="land-viewer-nearby-next is-done" title="Furthest of nearby results">
+              {nearbyHitIndex + 1}/{nearbyHits.length}
+            </span>
+          ) : null}
         </div>
 
         <div className="land-viewer-stage">
