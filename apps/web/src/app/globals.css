@@ -3950,13 +3950,13 @@ a.acquire-block:hover {
   display: inline-flex;
   align-items: center;
   flex: 0 1 auto;
-  min-height: 1.7rem;
-  padding: 0.2rem 0.55rem;
+  min-height: 1.85rem;
+  padding: 0.25rem 0.65rem;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(12, 16, 14, 0.72);
   color: #f4f1e8;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-variant-numeric: tabular-nums;
   backdrop-filter: blur(4px);
   white-space: nowrap;
