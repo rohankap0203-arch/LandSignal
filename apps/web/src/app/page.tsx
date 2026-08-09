@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ComboFilter, FilterField } from "@/components/filter-field";
 import { LandLoader } from "@/components/land-loader";
-import { MapPinMark } from "@/components/map-pin-mark";
 import { PropertyCard } from "@/components/property-card";
 import {
   landsignalApi,
@@ -378,45 +377,40 @@ export default function SearchPage() {
         </div>
 
         <div className="filter-actions">
-          <div className="filter-actions-main">
-            <div className="filter-map-hero" aria-hidden title="Map scout">
-              <MapPinMark className="filter-map-hero-svg" tone="light" />
-            </div>
-            <div className="filter-actions-buttons">
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => void runSearch()}
-                disabled={loading}
-              >
-                {loading ? "Searching…" : "Show matches"}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={loading}
-                onClick={() => {
-                  const next = { ...DEFAULT_FORM, sort: "score_desc" };
-                  setForm(next);
-                  void runSearch(next);
-                }}
-              >
-                Top opportunities
-              </button>
-              <button type="button" className="btn btn-secondary" onClick={scanFresh} disabled={scanning}>
-                {scanning ? "Starting refresh…" : "Refresh live inventory"}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => {
-                  setForm(DEFAULT_FORM);
-                  setStatus("Filters reset to Any. Click Show matches when you want results.");
-                }}
-              >
-                Reset to Any
-              </button>
-            </div>
+          <div className="filter-actions-buttons">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => void runSearch()}
+              disabled={loading}
+            >
+              {loading ? "Searching…" : "Show matches"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={loading}
+              onClick={() => {
+                const next = { ...DEFAULT_FORM, sort: "score_desc" };
+                setForm(next);
+                void runSearch(next);
+              }}
+            >
+              Top opportunities
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={scanFresh} disabled={scanning}>
+              {scanning ? "Starting refresh…" : "Refresh live inventory"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setForm(DEFAULT_FORM);
+                setStatus("Filters reset to Any. Click Show matches when you want results.");
+              }}
+            >
+              Reset to Any
+            </button>
           </div>
           {meta?.inventory_count != null && (
             <div className="filter-inventory-note">

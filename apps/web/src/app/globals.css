@@ -286,61 +286,18 @@ select {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
-  margin-top: 10px;
-  overflow: visible;
-}
-
-.filter-actions-main {
-  position: relative;
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  /* Compact to the button row — logo overlays without adding blank space */
-  min-height: 0;
-  overflow: hidden;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 .filter-actions-buttons {
-  position: relative;
-  z-index: 1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
 
-.filter-map-hero {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  left: 36%;
-  z-index: 0;
-  height: 100%;
-  transform: translateY(-50%);
-  pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  overflow: hidden;
-  opacity: 0.12;
-}
-
-.filter-map-hero-svg {
-  display: block;
-  width: auto;
-  height: 52px;
-  max-width: min(160px, 28vw);
-  object-fit: contain;
-  object-position: right center;
-  margin-right: 0;
-  transform: translateX(-4%);
-  flex-shrink: 0;
-}
-
 .filter-inventory-note {
-  position: relative;
-  z-index: 1;
   font-size: 0.8125rem;
   line-height: 1.3;
   color: rgba(247, 250, 248, 0.7);
@@ -360,7 +317,7 @@ select {
   color: var(--brand);
   flex: 0 0 auto;
   /* Optical lift — pin mass sits a bit high relative to the wordmark */
-  transform: translateY(-5px);
+  transform: translateY(-4px);
 }
 
 .shell-brand-tagline {
@@ -383,33 +340,11 @@ select {
   mask-mode: luminance;
 }
 
-@media (min-width: 1100px) {
-  .filter-map-hero {
-    left: 40%;
-  }
-
-  .filter-map-hero-svg {
-    height: 56px;
-    max-width: 180px;
-    transform: translateX(-2%);
-  }
-}
-
 @media (max-width: 720px) {
-  .filter-map-hero {
-    left: 24%;
-  }
-
-  .filter-map-hero-svg {
-    height: 46px;
-    max-width: min(140px, 42vw);
-    transform: translateX(-2%);
-  }
-
   .shell-brand-mark {
     width: 1.5rem;
     height: 1.26rem;
-    transform: translateY(-4px);
+    transform: translateY(-3px);
   }
 }
 
@@ -455,7 +390,7 @@ select {
   justify-content: space-between;
   gap: 12px;
   align-items: end;
-  margin: 28px 0 14px;
+  margin: 22px 0 14px;
 }
 
 .results-grid {
