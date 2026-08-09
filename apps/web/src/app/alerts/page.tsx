@@ -650,7 +650,7 @@ export default function LandAlertsPage() {
           <p className="mt-1 max-w-2xl text-sm text-[var(--muted)]">
             Tell LandSignal what kind of land you want once. We watch public markets in the background,
             score opportunities, and alert you when something deserves attention — even when this tab is
-            closed.
+            closed. This is separate from homepage <strong>Show matches</strong> search filters.
           </p>
         </div>
         {hasProfile ? (

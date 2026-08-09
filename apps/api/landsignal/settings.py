@@ -21,7 +21,9 @@ class Settings(BaseSettings):
     # Always-on Land Alerts monitor (seconds between discovery cycles; respects source rate limits)
     land_alerts_monitor_enabled: bool = True
     land_alerts_poll_seconds: int = 900
-    land_alerts_discover_limit: int = 2500
+    # Keep in step with discover_limit so the always-on monitor rebuilds full inventory
+    # after restarts (memory store) instead of capping around ~2.5k parcels.
+    land_alerts_discover_limit: int = 10000
     http_timeout_seconds: float = 20.0
     mapbox_token: str | None = None
     smtp_url: str | None = None
