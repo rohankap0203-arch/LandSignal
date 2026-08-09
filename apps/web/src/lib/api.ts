@@ -42,6 +42,7 @@ export type LandAlertMatchCard = {
   landsignal_score: number;
   why_matched: string[];
   watch_flags: string[];
+  intel_notes?: string[];
   property_name: string;
   location: string;
   state?: string | null;

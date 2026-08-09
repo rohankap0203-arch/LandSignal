@@ -332,6 +332,42 @@ def score_parcel_against_profile(
     if hard_fail and pref > 35:
         pref = min(pref, 35.0)
 
+    # Dynamic acquisition intel (always useful under Watch)
+    intel: list[str] = []
+    if listing and listing.days_on_market is not None:
+        dom = int(listing.days_on_market)
+        if dom <= 14:
+            intel.append(f"Fresh to market · {dom} days listed")
+        elif dom >= 120:
+            intel.append(f"Long exposure · {dom} days on market — possible seller fatigue")
+        else:
+            intel.append(f"{dom} days on market")
+    if listing and listing.price_per_acre_usd and parcel.acreage:
+        intel.append(f"${listing.price_per_acre_usd:,.0f}/acre asking screen")
+    elif ask and parcel.acreage:
+        intel.append(f"${ask / parcel.acreage:,.0f}/acre implied")
+    if score:
+        if score.asking_discount_pct is not None:
+            d = score.asking_discount_pct
+            if d >= 15:
+                intel.append(f"~{d:.0f}% under LandSignal value screen")
+            elif d <= -10:
+                intel.append(f"Asking ~{abs(d):.0f}% above LandSignal value screen")
+        if score.confidence is not None:
+            if score.confidence < 45:
+                intel.append(f"Thin file confidence ({score.confidence:.0f}) — verify before capital")
+            elif score.confidence >= 70:
+                intel.append(f"Solid file confidence ({score.confidence:.0f})")
+        if score.deal_readiness is not None and score.deal_readiness < 40:
+            intel.append("Deal readiness is early — expect diligence friction")
+        for kill in (score.what_could_kill or [])[:2]:
+            if kill:
+                watches.append(str(kill))
+        if score.best_strategy:
+            intel.append(f"Engine leans {score.best_strategy.value.replace('_', ' ').title()}")
+    if listing and listing.status and _norm(listing.status) not in ("active", ""):
+        intel.append(f"Listing status: {listing.status}")
+
     seen: set[str] = set()
     clean_reasons: list[str] = []
     for r in reasons:
@@ -343,6 +379,11 @@ def score_parcel_against_profile(
         if w and w not in seen:
             seen.add(w)
             clean_watches.append(w)
+    clean_intel: list[str] = []
+    for line in intel:
+        if line and line not in seen:
+            seen.add(line)
+            clean_intel.append(line)
 
     qualifies = (not hard_fail and pref >= 55) or (pref >= 70 and ls_score >= 65)
     return {
@@ -350,6 +391,7 @@ def score_parcel_against_profile(
         "landsignal_score": round(ls_score, 1),
         "why_matched": clean_reasons[:6],
         "watch_flags": clean_watches[:4],
+        "intel_notes": clean_intel[:5],
         "qualifies": qualifies,
         "hard_fail": hard_fail,
     }
@@ -742,6 +784,46 @@ def match_card(store: MemoryStore, match: LandAlertMatch) -> dict[str, Any]:
         listing.source_url if listing else None
     )
     phone = source.get("phone")
+    # Live acquisition intel for the Watch block
+    intel_notes: list[str] = []
+    if listing and listing.days_on_market is not None:
+        dom = int(listing.days_on_market)
+        if dom <= 14:
+            intel_notes.append(f"Fresh to market · {dom} days listed")
+        elif dom >= 120:
+            intel_notes.append(f"Long exposure · {dom} days on market")
+        else:
+            intel_notes.append(f"{dom} days on market")
+    if ppa is not None:
+        intel_notes.append(f"${ppa:,.0f}/acre asking screen")
+    if score:
+        if score.asking_discount_pct is not None:
+            d = float(score.asking_discount_pct)
+            if d >= 15:
+                intel_notes.append(f"~{d:.0f}% under LandSignal value screen")
+            elif d <= -10:
+                intel_notes.append(f"Asking ~{abs(d):.0f}% above value screen")
+        if score.confidence is not None:
+            if score.confidence < 45:
+                intel_notes.append(f"Thin file confidence ({score.confidence:.0f})")
+            elif score.confidence >= 70:
+                intel_notes.append(f"Solid file confidence ({score.confidence:.0f})")
+        if score.deal_readiness is not None and score.deal_readiness < 40:
+            intel_notes.append("Early deal readiness — diligence friction likely")
+        if score.risk is not None:
+            intel_notes.append(f"Risk screen {score.risk:.0f}/100")
+        if score.best_strategy:
+            intel_notes.append(f"Engine leans {score.best_strategy.value.replace('_', ' ').title()}")
+        if score.signal:
+            intel_notes.append(f"Signal: {score.signal.value.title()}")
+    if listing and listing.last_seen_at:
+        try:
+            age_h = (datetime.now(timezone.utc) - listing.last_seen_at).total_seconds() / 3600.0
+            if age_h <= 48:
+                intel_notes.append("Seen in feed within 48 hours")
+        except Exception:
+            pass
+
     return {
         "id": str(match.id),
         "profile_id": str(match.profile_id),
@@ -754,6 +836,7 @@ def match_card(store: MemoryStore, match: LandAlertMatch) -> dict[str, Any]:
         "landsignal_score": match.landsignal_score,
         "why_matched": match.why_matched,
         "watch_flags": match.watch_flags,
+        "intel_notes": intel_notes[:5],
         "viewed_at": match.viewed_at.isoformat() if match.viewed_at else None,
         "created_at": match.created_at.isoformat() if match.created_at else None,
         "updated_at": match.updated_at.isoformat() if match.updated_at else None,

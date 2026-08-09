@@ -204,7 +204,21 @@ function MatchCard({
           {row.watch_flags?.length ? (
             <div className="land-alert-watch">
               <strong>Watch:</strong> {row.watch_flags[0]}
+              {row.watch_flags.length > 1 ? (
+                <ul className="land-alert-watch-list">
+                  {row.watch_flags.slice(1, 3).map((w) => (
+                    <li key={w}>{w}</li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
+          ) : null}
+          {row.intel_notes?.length ? (
+            <ul className="land-alert-intel">
+              {row.intel_notes.slice(0, 4).map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
           ) : null}
           <div className="land-alert-flip-hint">Tap to flip</div>
         </article>
@@ -414,7 +428,7 @@ export default function LandAlertsPage() {
       setMatches(data.matches || []);
       setCounts(data.counts || { new: 0, unseen: 0, viewed: 0, total: 0 });
       setTab("current");
-      setMsg("Mark all undone — matches restored to New / Current.");
+      setMsg("");
       return;
     }
 
@@ -580,11 +594,12 @@ export default function LandAlertsPage() {
             </button>
             <button
               type="button"
-              className="btn btn-ghost"
+              className={`btn btn-ghost${showUndoMarkAll ? " is-mark-all-on" : ""}`}
               disabled={!showUndoMarkAll && markAllTargetCount === 0}
               onClick={() => void toggleMarkAllSeen()}
+              aria-pressed={showUndoMarkAll}
             >
-              {showUndoMarkAll ? "Undo mark all" : "Mark all as seen"}
+              Mark all as seen
             </button>
           </div>
         ) : null}

@@ -2963,6 +2963,18 @@ a.acquire-block:hover {
   cursor: not-allowed;
 }
 
+.land-alerts-hero-actions .btn-ghost.is-mark-all-on {
+  background: color-mix(in srgb, var(--muted) 16%, var(--bg-soft));
+  color: var(--muted);
+  border-color: color-mix(in srgb, var(--muted) 35%, var(--line));
+}
+
+.land-alerts-hero-actions .btn-ghost.is-mark-all-on:hover {
+  background: color-mix(in srgb, var(--muted) 22%, var(--bg-soft));
+  border-color: color-mix(in srgb, var(--muted) 45%, var(--line));
+  color: var(--ink);
+}
+
 .land-alerts-msg {
   padding: 0.75rem 1rem;
   border-radius: 8px;
@@ -3498,9 +3510,27 @@ a.acquire-block:hover {
 }
 
 .land-alert-watch {
-  margin-top: 0.5rem;
-  font-size: 0.82rem;
+  margin-top: 0.45rem;
+  font-size: 0.78rem;
   color: color-mix(in srgb, #a65b1a 80%, var(--ink));
+  line-height: 1.35;
+}
+
+.land-alert-watch-list {
+  margin: 0.2rem 0 0;
+  padding-left: 1rem;
+}
+
+.land-alert-intel {
+  margin: 0.4rem 0 0;
+  padding-left: 1rem;
+  font-size: 0.74rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.land-alert-intel li::marker {
+  color: color-mix(in srgb, var(--brand) 55%, var(--muted));
 }
 
 .land-alert-indicators {
