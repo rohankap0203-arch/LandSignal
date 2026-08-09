@@ -217,7 +217,7 @@ async function fetchNearby(kind: NearbyKind, lat: number, lon: number): Promise<
   }
 }
 
-function ImageIcon({ className = "" }: { className?: string }) {
+function MagnifierIcon({ className = "" }: { className?: string }) {
   return (
     <svg
       className={`land-alert-view-land-icon ${className}`.trim()}
@@ -227,14 +227,15 @@ function ImageIcon({ className = "" }: { className?: string }) {
       fill="none"
       aria-hidden
     >
-      <rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.75" />
-      <circle cx="8.5" cy="10" r="1.6" fill="currentColor" />
-      <path
-        d="M4.5 16.5 9 12l3.2 3.2L16 11.5l3.5 5"
+      <circle cx="10.5" cy="10.5" r="6.25" stroke="currentColor" strokeWidth="2" />
+      <line
+        x1="15.2"
+        y1="15.2"
+        x2="20.5"
+        y2="20.5"
         stroke="currentColor"
-        strokeWidth="1.75"
+        strokeWidth="2.25"
         strokeLinecap="round"
-        strokeLinejoin="round"
       />
     </svg>
   );
@@ -887,14 +888,6 @@ export function LandViewerModal({
               {parcelAcres ? <span>{parcelAcres}</span> : null}
               {elevationFt ? <span>{elevationFt}</span> : null}
               {tool === "measure" ? <span className="land-viewer-measure">{measureInfo}</span> : null}
-              {nearbyStatus ? (
-                <span className="land-viewer-nearby-status">
-                  {nearbyLoading ? "Searching…" : nearbyStatus}
-                  {activeHit && !nearbyLoading
-                    ? ` · ${activeHit.lat.toFixed(4)}, ${activeHit.lon.toFixed(4)}`
-                    : ""}
-                </span>
-              ) : null}
             </div>
           </div>
         </div>
@@ -918,7 +911,7 @@ export function ViewLandButton({
       onClick={onClick}
       disabled={disabled}
     >
-      <ImageIcon />
+      <MagnifierIcon />
       <span>View land</span>
     </button>
   );
