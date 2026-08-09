@@ -443,8 +443,8 @@ export default function SearchPage() {
                 {loading ? "Searching…" : "Show matches"}
               </button>
               <Link href="/alerts" className="btn btn-land-alerts btn-search-primary">
-                <span className="btn-land-alerts-text">Land Alerts</span>
-                <LiveMagnifier size={18} className="btn-land-alerts-mag" />
+                <span>Land Alerts</span>
+                <LiveMagnifier size={16} animated={false} label="Land Alerts" className="btn-land-alerts-mag" />
               </Link>
             </div>
             <div className="filter-actions-secondary">

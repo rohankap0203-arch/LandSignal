@@ -1,16 +1,18 @@
-/** Animated magnifying glass — signals always-on land scanning. */
+/** Magnifying glass — animated for live scanning, or static for button chrome. */
 export function LiveMagnifier({
   className = "",
   size = 22,
   label = "Scanning live",
+  animated = true,
 }: {
   className?: string;
   size?: number;
   label?: string;
+  animated?: boolean;
 }) {
   return (
     <span
-      className={`live-magnifier ${className}`.trim()}
+      className={`live-magnifier${animated ? "" : " is-static"} ${className}`.trim()}
       style={{ width: size, height: size }}
       role="img"
       aria-label={label}
@@ -28,9 +30,9 @@ export function LiveMagnifier({
           strokeWidth="2.25"
           strokeLinecap="round"
         />
-        <circle className="live-magnifier-glint" cx="8.2" cy="8.2" r="1.15" fill="currentColor" />
+        {animated ? <circle className="live-magnifier-glint" cx="8.2" cy="8.2" r="1.15" fill="currentColor" /> : null}
       </svg>
-      <span className="live-magnifier-pulse" aria-hidden="true" />
+      {animated ? <span className="live-magnifier-pulse" aria-hidden="true" /> : null}
     </span>
   );
 }

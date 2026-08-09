@@ -360,9 +360,17 @@ select {
 
 .filter-actions-primary {
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
-  flex-wrap: wrap;
   gap: 10px;
+}
+
+.filter-actions-primary > .btn,
+.filter-actions-primary > a.btn {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: none;
 }
 
 .filter-actions-secondary {
@@ -378,9 +386,10 @@ select {
 
 .btn-land-alerts {
   display: inline-flex;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 0.55rem;
+  gap: 0.45rem;
   background: #0a0a0a;
   color: #ffffff;
   font-weight: 600;
@@ -394,14 +403,14 @@ select {
   color: #ffffff;
 }
 
-.btn-land-alerts-text {
-  flex: 1 1 auto;
-  text-align: center;
+.btn-land-alerts-mag {
+  color: #ffffff;
 }
 
-.btn-land-alerts-mag {
-  flex: 0 0 auto;
-  color: #ffffff;
+@media (max-width: 520px) {
+  .filter-actions-primary {
+    flex-wrap: wrap;
+  }
 }
 
 /* Live scanning magnifier */
@@ -416,8 +425,11 @@ select {
 
 .live-magnifier-svg {
   display: block;
-  animation: live-mag-sweep 2.4s ease-in-out infinite;
   transform-origin: 42% 42%;
+}
+
+.live-magnifier:not(.is-static) .live-magnifier-svg {
+  animation: live-mag-sweep 2.4s ease-in-out infinite;
 }
 
 .live-magnifier-glint {
@@ -433,6 +445,12 @@ select {
   opacity: 0;
   animation: live-mag-ring 2.4s ease-out infinite;
   pointer-events: none;
+}
+
+.live-magnifier.is-static .live-magnifier-svg,
+.live-magnifier.is-static .live-magnifier-glint,
+.live-magnifier.is-static .live-magnifier-pulse {
+  animation: none;
 }
 
 @keyframes live-mag-sweep {
