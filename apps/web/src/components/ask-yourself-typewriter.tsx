@@ -95,10 +95,19 @@ export function AskYourselfTypewriter({
             type="button"
             className="ask-pause-btn"
             aria-pressed={paused}
-            aria-label={paused ? "Resume typewriter" : "Pause typewriter"}
+            aria-label={paused ? "Play typewriter" : "Pause typewriter"}
+            title={paused ? "Play" : "Pause"}
             onClick={() => setPaused((p) => !p)}
           >
-            {paused ? "Resume" : "Pause"}
+            {paused ? (
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path fill="currentColor" d="M8 5v14l11-7L8 5z" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path fill="currentColor" d="M7 5h3v14H7V5zm7 0h3v14h-3V5z" />
+              </svg>
+            )}
           </button>
         ) : null}
       </div>
