@@ -168,7 +168,7 @@ export default function ParcelIntelligencePage() {
                 aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
                 aria-pressed={watched}
               >
-                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
+                <svg viewBox="0 0 24 24" aria-hidden>
                   {watched ? (
                     <>
                       <path
@@ -299,6 +299,30 @@ export default function ParcelIntelligencePage() {
           </div>
 
           <div className="flex flex-col border-t border-[var(--line)] lg:border-l lg:border-t-0">
+            <nav className="scroll-to" aria-label="Scroll to">
+              <div className="scroll-to-label">Scroll-to</div>
+              <div className="scroll-to-row">
+                {[
+                  { id: "sec-value", label: "Value path" },
+                  { id: "sec-return", label: "Return" },
+                  { id: "sec-why", label: "Why it stands out" },
+                  { id: "sec-score", label: "Score parts" },
+                  { id: "sec-land", label: "Land checks" },
+                  { id: "sec-checklist", label: "Checklist" },
+                ].map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className="scroll-to-btn"
+                    onClick={() =>
+                      document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    }
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </nav>
             <ParcelMap
               latitude={parcel.latitude as number}
               longitude={parcel.longitude as number}
@@ -313,7 +337,7 @@ export default function ParcelIntelligencePage() {
         </div>
       </section>
 
-      <section className="panel p-5">
+      <section id="sec-value" className="panel p-5 scroll-mt-20">
         <PriceTrajectory
           trajectory={
             (data.market_trajectory as Parameters<typeof PriceTrajectory>[0]["trajectory"]) ||
@@ -322,7 +346,7 @@ export default function ParcelIntelligencePage() {
         />
       </section>
 
-      <section className="panel p-5">
+      <section id="sec-return" className="panel p-5 scroll-mt-20">
         <ReturnVisual
           intel={(data.return_intelligence as AnyRec) || null}
           cases={
@@ -341,18 +365,15 @@ export default function ParcelIntelligencePage() {
         />
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2">
+      <section id="sec-why" className="grid gap-4 md:grid-cols-2 scroll-mt-20">
         <InsightList title="Why this property stands out" items={whyOpp} />
         <InsightList title="Why it might still be available" items={whyStill} />
       </section>
 
-      <section className="panel p-5">
+      <section id="sec-score" className="panel p-5 scroll-mt-20">
         <h2 className="display text-xl font-semibold">What makes up the opportunity score</h2>
         <p className="mt-0.5 text-sm text-[var(--muted)]">{identity}</p>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Each number below is 0–100 for this listing only. Tap any bar to see the exact inputs behind it.
-        </p>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="mt-3 grid gap-2 md:grid-cols-2">
           {ratings.map((r) => {
             const scoreN = Number(r.score || 0);
             const key = String(r.key);
@@ -361,16 +382,16 @@ export default function ParcelIntelligencePage() {
               <button
                 key={key}
                 type="button"
-                className="rounded-2xl bg-[var(--bg-soft)] p-4 text-left transition hover:ring-1 hover:ring-[var(--brand-soft)]"
+                className={`rounded-xl bg-[var(--bg-soft)] p-3 text-left transition hover:ring-1 hover:ring-[var(--brand-soft)] ${open ? "ring-1 ring-[var(--brand-soft)]" : ""}`}
                 onClick={() => setOpenRating(open ? null : key)}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <div className="font-semibold">{String(r.label)}</div>
+                  <div className="font-semibold text-sm">{String(r.label)}</div>
                   <div className="text-sm font-semibold whitespace-nowrap">
                     {String(r.score_display || `${scoreN.toFixed(0)}/100`)}
                   </div>
                 </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
                   <div
                     className="h-full rounded-full transition-all"
                     style={{
@@ -379,20 +400,17 @@ export default function ParcelIntelligencePage() {
                     }}
                   />
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
+                <p className="mt-1.5 text-xs leading-snug text-[var(--muted)]">
                   {open
                     ? String(r.why_this_number || r.plain_english || r.simple || "")
-                    : firstSentence(r.why_this_number || r.plain_english || r.simple || "", 160)}
+                    : firstSentence(r.why_this_number || r.plain_english || r.simple || "", 110)}
                 </p>
                 {open && (
-                  <div className="mt-2 space-y-1 text-sm text-[var(--muted)]">
-                    <div className="text-xs">{String(r.weight_display || "")}</div>
-                    <ul className="space-y-1">
-                      {((r.drivers as string[]) || (r.evidence as string[]) || []).slice(0, 4).map((e) => (
-                        <li key={e}>• {e}</li>
-                      ))}
-                    </ul>
-                  </div>
+                  <ul className="mt-1.5 space-y-0.5 text-xs text-[var(--muted)]">
+                    {((r.drivers as string[]) || (r.evidence as string[]) || []).slice(0, 3).map((e) => (
+                      <li key={e}>• {e}</li>
+                    ))}
+                  </ul>
                 )}
               </button>
             );
@@ -400,54 +418,45 @@ export default function ParcelIntelligencePage() {
         </div>
       </section>
 
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <section id="sec-land" className="grid gap-2 md:grid-cols-2 xl:grid-cols-4 scroll-mt-20">
         {(["soil", "flood", "wetlands", "transmission"] as const).map((key) => {
           const card = land[key] || {};
-          const addKey =
-            key === "soil"
-              ? "soil_addendum"
-              : key === "flood"
-                ? "flood_addendum"
-                : key === "wetlands"
-                  ? "wetlands_addendum"
-                  : "transmission_addendum";
-          // Prefer addenda that mention this APN; skip generic duplicates of plain_english
-          const addenda = ((brief[addKey] as string[]) || []).filter(
-            (a) => a && !String(card.plain_english || "").includes(a.slice(0, 24)),
-          );
+          const level = String(card.level || card.knowledge_state || "")
+            .replace(/KnowledgeState\./gi, "")
+            .replace(/UNKNOWN/gi, "Not confirmed")
+            .replace(/KNOWN/gi, "Known")
+            .replace(/ESTIMATED/gi, "Estimate")
+            .replace(/OBSERVED/gi, "From source")
+            .replace(/BLENDED/gi, "Mixed")
+            .replace(/TEMPORARILY_UNAVAILABLE/gi, "Unavailable")
+            .replace(/_/g, " ");
           return (
-            <div key={key} className="panel p-4 text-left">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="font-semibold">{String(card.title || key)}</h3>
-                <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
-                  {String(card.level || card.knowledge_state || "")
-                    .replace(/UNKNOWN/gi, "Not confirmed")
-                    .replace(/ESTIMATED/gi, "Estimate")
-                    .replace(/OBSERVED/gi, "From source")
-                    .replace(/BLENDED/gi, "Mixed sources")
-                    .replace(/_/g, " ")}
-                </span>
-              </div>
-              <p className="mt-2 text-sm leading-relaxed">{String(card.plain_english || "No reading for this pin yet.")}</p>
-              <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
+            <details key={key} className="panel land-compact group">
+              <summary className="cursor-pointer list-none">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="font-semibold text-sm">{String(card.title || key)}</h3>
+                  <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">{level}</span>
+                </div>
+                <p className="mt-1 text-[var(--ink)]">
+                  {firstSentence(card.plain_english || "No reading for this pin yet.", 120)}
+                </p>
+              </summary>
+              <ul className="mt-1 space-y-0.5">
                 {((card.bullets as string[]) || []).slice(0, 2).map((b) => (
                   <li key={b}>• {b}</li>
                 ))}
-                {addenda.slice(0, 1).map((a) => (
-                  <li key={a}>• {a}</li>
-                ))}
               </ul>
-            </div>
+            </details>
           );
         })}
       </section>
 
-      <section className="panel p-5">
-        <h2 className="display text-xl font-semibold">
+      <section id="sec-checklist" className="panel p-4 scroll-mt-20 dd-compact">
+        <h2 className="display text-lg font-semibold">
           Checklist before you bid · readiness{" "}
           {Number(score?.deal_readiness || 0).toFixed(0)}/100
         </h2>
-        <div className="mt-4 grid gap-2">
+        <div className="mt-3 grid gap-1.5">
           {dd.map((item) => {
             const label = String(item.label);
             const open = ddOpen[label];
@@ -455,19 +464,19 @@ export default function ParcelIntelligencePage() {
               <button
                 key={label}
                 type="button"
-                className="rounded-2xl border border-[var(--line)] bg-[var(--bg-soft)] p-3 text-left"
+                className="border border-[var(--line)] bg-[var(--bg-soft)] text-left"
                 onClick={() => setDdOpen((s) => ({ ...s, [label]: !s[label] }))}
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="font-semibold">
                     {item.completed ? "☑" : "☐"} {label}
                   </div>
-                  <span className="rounded-full bg-[var(--bg-elevated)] px-2 py-0.5 text-xs font-semibold">
+                  <span className="rounded-full bg-[var(--bg-elevated)] px-2 py-0.5 text-[10px] font-semibold">
                     {String(item.priority || "Soon")}
                   </span>
                 </div>
                 {open && (
-                  <div className="mt-2 space-y-1 text-sm text-[var(--muted)]">
+                  <div className="mt-1.5 space-y-1 text-xs text-[var(--muted)]">
                     <p>{String(item.parcel_note || item.why_it_matters)}</p>
                     <p>
                       <strong className="text-[var(--ink)]">Start:</strong> {String(item.how_to_start)}
@@ -496,22 +505,30 @@ function Stat({ label, value }: { label: string; value: string }) {
 function InsightList({ title, items }: { title: string; items: AnyRec[] }) {
   const [open, setOpen] = useState(0);
   return (
-    <div className="panel p-5">
-      <h2 className="display text-xl font-semibold">{title}</h2>
-      <div className="mt-3 space-y-2">
-        {items.map((item, i) => (
-          <button
-            key={`${String(item.headline || item)}-${i}`}
-            type="button"
-            className="w-full rounded-2xl bg-[var(--bg-soft)] p-3 text-left"
-            onClick={() => setOpen(open === i ? -1 : i)}
-          >
-            <div className="font-semibold">{String(item.headline || item)}</div>
-            {open === i && item.detail ? (
-              <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{String(item.detail)}</p>
-            ) : null}
-          </button>
-        ))}
+    <div className="panel p-4 insight-interactive">
+      <h2 className="display text-lg font-semibold">{title}</h2>
+      <div className="mt-2 space-y-1.5">
+        {items.map((item, i) => {
+          const active = open === i;
+          return (
+            <button
+              key={`${String(item.headline || item)}-${i}`}
+              type="button"
+              className={`w-full rounded-xl bg-[var(--bg-soft)] p-2.5 text-left ${active ? "active" : ""}`}
+              onClick={() => setOpen(active ? -1 : i)}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="font-semibold text-sm leading-snug">{String(item.headline || item)}</div>
+                <span className="text-[10px] text-[var(--muted)] shrink-0">{active ? "−" : "+"}</span>
+              </div>
+              {active && item.detail ? (
+                <p className="mt-1.5 text-xs leading-relaxed text-[var(--muted)]">{String(item.detail)}</p>
+              ) : !active && item.detail ? (
+                <p className="mt-1 text-xs text-[var(--muted)] line-clamp-1">{String(item.detail)}</p>
+              ) : null}
+            </button>
+          );
+        })}
         {!items.length && <p className="text-sm text-[var(--muted)]">No parcel-specific narrative yet.</p>}
       </div>
     </div>

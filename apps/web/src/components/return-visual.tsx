@@ -123,6 +123,118 @@ function caseTone(key: string): string {
   return "base";
 }
 
+function FactorIcon({ name }: { name?: string }) {
+  const k = (name || "").toLowerCase();
+  const common = {
+    className: "return-factor-icon",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true as const,
+  };
+  if (k.includes("flood") || k.includes("water")) {
+    return (
+      <svg {...common}>
+        <path d="M12 3c-3 5-7 8-7 12a7 7 0 0 0 14 0c0-4-4-7-7-12z" />
+      </svg>
+    );
+  }
+  if (k.includes("soil") || k.includes("farm")) {
+    return (
+      <svg {...common}>
+        <path d="M4 18c2-4 5-6 8-6s6 2 8 6" />
+        <path d="M12 12V5" />
+        <path d="M9 7c1 1 2 2 3 2s2-1 3-2" />
+      </svg>
+    );
+  }
+  if (k.includes("wet")) {
+    return (
+      <svg {...common}>
+        <path d="M3 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2" />
+        <path d="M3 18c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2" />
+      </svg>
+    );
+  }
+  if (k.includes("growth") || k.includes("area") || k.includes("pace")) {
+    return (
+      <svg {...common}>
+        <path d="M4 18V10" />
+        <path d="M10 18V6" />
+        <path d="M16 18v-8" />
+        <path d="M20 18V4" />
+      </svg>
+    );
+  }
+  if (k.includes("power") || k.includes("line") || k.includes("energy")) {
+    return (
+      <svg {...common}>
+        <path d="M13 2 6 13h5l-1 9 8-12h-5l0-8z" />
+      </svg>
+    );
+  }
+  if (k.includes("access") || k.includes("road")) {
+    return (
+      <svg {...common}>
+        <path d="M4 19 12 4l8 15" />
+        <path d="M9 14h6" />
+      </svg>
+    );
+  }
+  if (k.includes("risk")) {
+    return (
+      <svg {...common}>
+        <path d="M12 3 3 20h18L12 3z" />
+        <path d="M12 9v5" />
+        <path d="M12 17h.01" />
+      </svg>
+    );
+  }
+  if (k.includes("channel") || k.includes("sold") || k.includes("seller")) {
+    return (
+      <svg {...common}>
+        <path d="M4 7h16" />
+        <path d="M4 12h10" />
+        <path d="M4 17h13" />
+        <circle cx="18" cy="12" r="2" />
+      </svg>
+    );
+  }
+  if (k.includes("strateg") || k.includes("use") || k.includes("fit")) {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="8" />
+        <path d="M12 8v4l3 2" />
+      </svg>
+    );
+  }
+  if (k.includes("liquid") || k.includes("scarce") || k.includes("rare") || k.includes("resale")) {
+    return (
+      <svg {...common}>
+        <path d="M7 7h10v10H7z" />
+        <path d="M3 12h4M17 12h4" />
+      </svg>
+    );
+  }
+  if (k.includes("complete") || k.includes("file")) {
+    return (
+      <svg {...common}>
+        <path d="M7 3h7l4 4v14H7z" />
+        <path d="M14 3v4h4" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M8 12h8" />
+    </svg>
+  );
+}
+
 /** Interactive multi-factor return path — curved year-by-year, not a flat diagonal. */
 export function ReturnVisual({
   intel,
@@ -148,6 +260,7 @@ export function ReturnVisual({
   const [scrubYear, setScrubYear] = useState(holdYears);
   const [dragging, setDragging] = useState(false);
   const [showAllFactors, setShowAllFactors] = useState(false);
+  const [openFactor, setOpenFactor] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
   const available = intel?.available !== false && Boolean(intel?.endpoints || intel?.paths_100);
@@ -279,10 +392,10 @@ export function ReturnVisual({
         Multi-factor return path
       </div>
       <h3 className="display text-lg font-semibold">If you hold this property</h3>
-      <p className="mt-1 text-sm text-[var(--muted)] leading-relaxed">
-        {intel?.summary ||
-          `${factorCount} screens bend this path — soil, flood, growth, channel, carry, and more — not a flat diagonal.`}
-        {intel?.purchase_usd ? ` Buy near ${money(intel.purchase_usd)}.` : ""}
+      <p className="mt-1 text-sm text-[var(--muted)] leading-snug">
+        {factorCount} local screens shape the curve
+        {intel?.purchase_usd ? ` · buy near ${money(intel.purchase_usd)}` : ""}.
+        Pick a case and hold length.
       </p>
 
       <div className="traj-windows mt-3" role="tablist" aria-label="Return case">
@@ -437,14 +550,6 @@ export function ReturnVisual({
               </strong>
             </div>
           </div>
-          <p className="mt-2 text-[11px] text-[var(--muted)] leading-relaxed">
-            Path bends year-by-year with cycles, carry, usable acres, and an exit haircut — not
-            buy × (1 + r)^{holdYears}. Pace used ~{" "}
-            {endpoint.effective_annual_used != null
-              ? `${(Number(endpoint.effective_annual_used) * 100).toFixed(1)}%/yr`
-              : intel?.model?.effective_annual_display || "—"}{" "}
-            before case stress.
-          </p>
         </div>
       )}
 
@@ -502,28 +607,36 @@ export function ReturnVisual({
             )}
           </div>
           <div className="return-factor-grid mt-2">
-            {factors.map((f) => (
-              <div key={f.key || f.label} className={`return-factor dir-${f.direction || "neutral"}`}>
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="font-semibold">{f.label}</span>
-                  <span className="tabular-nums text-[11px]">
-                    {f.bps != null && f.bps !== 0
-                      ? `${f.bps > 0 ? "+" : ""}${(Number(f.bps) / 100).toFixed(2)} pts`
-                      : f.kind === "entry"
-                        ? "entry"
-                        : "—"}
-                  </span>
-                </div>
-                <p>{f.plain}</p>
-              </div>
-            ))}
+            {factors.map((f) => {
+              const id = String(f.key || f.label);
+              const open = openFactor === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className={`return-factor dir-${f.direction || "neutral"} text-left ${open ? "ring-1 ring-[var(--brand-soft)]" : ""}`}
+                  onClick={() => setOpenFactor(open ? null : id)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="return-factor-head">
+                      <FactorIcon name={f.key || f.label} />
+                      <span className="font-semibold">{f.label}</span>
+                    </span>
+                    <span className="tabular-nums text-[11px]">
+                      {f.bps != null && f.bps !== 0
+                        ? `${f.bps > 0 ? "+" : ""}${(Number(f.bps) / 100).toFixed(2)} pts`
+                        : f.kind === "entry"
+                          ? "entry"
+                          : "—"}
+                    </span>
+                  </div>
+                  {open ? <p>{f.plain}</p> : <p className="truncate">{f.plain}</p>}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
-
-      {intel?.method ? (
-        <p className="mt-3 text-[10px] text-[var(--muted)] leading-relaxed">{intel.method}</p>
-      ) : null}
     </div>
   );
 }

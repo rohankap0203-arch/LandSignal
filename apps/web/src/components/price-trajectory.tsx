@@ -232,14 +232,6 @@ export function PriceTrajectory({
     " ",
   );
 
-  // CAGR from window start → scrubbed year (history only)
-  const scrubCagr = (() => {
-    if (!selected || Number(selected.offset) > 0) return null;
-    const span = Number(selected.year) - windowMath.startYear;
-    if (span <= 0) return null;
-    return cagr(windowMath.startUsd, Number(selected.value_usd), span);
-  })();
-
   return (
     <div className={`price-trajectory ${compact ? "compact" : ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -282,10 +274,6 @@ export function PriceTrajectory({
           </button>
         ))}
       </div>
-
-      <p className="text-[11px] text-[var(--muted)]">
-        Chart spans {horizon} years ago through {horizon} years ahead. Drag to read any year.
-      </p>
 
       <div className="traj-chart-wrap">
         <svg
@@ -394,31 +382,31 @@ export function PriceTrajectory({
           <div>
             <strong>
               {selected.year}
-              {Number(selected.offset) > 0 ? " · outlook" : ""}
-              {Number(selected.offset) === 0 ? " · today" : ""}
-              {Number(selected.offset) === -horizon ? ` · ${horizon} yr ago` : ""}
-              {Number(selected.offset) === horizon ? ` · ${horizon} yr ahead` : ""}
+              {Number(selected.offset) === 0
+                ? " · today"
+                : Number(selected.offset) < 0
+                  ? ` · ${Math.abs(Number(selected.offset))} yr ago`
+                  : ` · ${Number(selected.offset)} yr ahead`}
             </strong>
             <span className="traj-readout-value">{money(selected.value_usd)}</span>
           </div>
-          <span>
-            {Number(selected.offset) === 0
-              ? `${money(windowMath.startUsd)} → ${money(windowMath.todayUsd)} → ${money(windowMath.futureUsd)} (${horizon} yr each way)`
-              : Number(selected.offset) < 0 && scrubCagr != null
-                ? `${scrubCagr >= 0 ? "+" : ""}${(scrubCagr * 100).toFixed(1)}%/yr from ${windowMath.startYear} → ${selected.year}`
-                : Number(selected.offset) > 0
-                  ? `Outlook · ${money(windowMath.todayUsd)} today → ${money(selected.value_usd)} in ${selected.year} (${windowMath.forwardCagrDisplay} over ${horizon} yr)`
-                  : null}
-          </span>
         </div>
       )}
 
-      {!compact && (
-        <p className="mt-1 text-[11px] text-[var(--muted)] leading-relaxed">
-          {trajectory.disclaimer ||
-            "First look only. Missing deed history uses similar land in this state and listing type."}
-        </p>
-      )}
+      <div className="traj-year-boxes">
+        <div className="traj-year-box">
+          <span>
+            {horizon} year{horizon === 1 ? "" : "s"} back
+          </span>
+          <strong>{money(windowMath.startUsd)}</strong>
+        </div>
+        <div className="traj-year-box">
+          <span>
+            {horizon} year{horizon === 1 ? "" : "s"} ahead
+          </span>
+          <strong>{money(windowMath.futureUsd)}</strong>
+        </div>
+      </div>
     </div>
   );
 }

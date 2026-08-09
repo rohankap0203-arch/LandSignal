@@ -198,12 +198,26 @@ async def reanalyze(parcel_id: UUID) -> dict[str, Any]:
 
 
 PROVIDER_LABELS = {
-    "blm_lpad": "Federal BLM disposal",
-    "public_tax_sale": "County tax sale",
-    "public_surplus": "Public surplus",
+    "blm_lpad": "Federal BLM land",
+    "public_tax_sale": "County tax-delinquent sale",
+    "public_surplus": "Public surplus land",
     "manual": "Manual entry",
     "csv": "CSV import",
 }
+
+
+def _provider_label(provider_id: str | None, county: str | None = None) -> str:
+    """Human channel label — tax sale is only for public_tax_sale rows."""
+    pid = provider_id or ""
+    if pid == "public_tax_sale":
+        co = (county or "").strip()
+        return f"{co} County tax sale" if co else "County tax-delinquent sale"
+    if pid == "blm_lpad":
+        return "Federal BLM land"
+    if pid == "public_surplus":
+        co = (county or "").strip()
+        return f"{co} surplus land" if co else "Public surplus land"
+    return PROVIDER_LABELS.get(pid, pid or "Public source")
 
 
 def _strategy_label(s) -> str:
@@ -605,7 +619,7 @@ async def radar(
                     latitude=parcel.latitude,
                     longitude=parcel.longitude,
                     provider_id=listing.provider_id,
-                    provider_label=PROVIDER_LABELS.get(listing.provider_id, listing.provider_id or "Public source"),
+                    provider_label=_provider_label(listing.provider_id, parcel.county),
                     headline_metric=headline,
                     risk_label=risk_label,
                     confidence_label=conf_label,

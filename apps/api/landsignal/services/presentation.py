@@ -374,15 +374,13 @@ def build_return_thesis(
         if conviction == "MEDIUM"
         else "Worth watching"
     )
-    nuance = _card_nuance(enrichment)
+    # Keep card thesis to 1 tight line (detail page carries the multi-factor path)
     if entry and est and gap_pct is not None:
         thesis = f"{interest} · ~${entry:,.0f} buy vs ${est:,.0f} value ({gap_pct:+.0f}%)"
     elif est:
         thesis = f"{interest} · value ~${est:,.0f} · {strat}"
     else:
         thesis = f"{interest} · {strat} possible"
-    if nuance:
-        thesis = f"{thesis} · {nuance}"
     return thesis, conviction
 
 

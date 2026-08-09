@@ -64,7 +64,6 @@ export function AcquireRail({
         <a className="acquire-block find" href={findUrl} target="_blank" rel="noreferrer">
           <span className="acquire-kicker">Find this parcel</span>
           <span className="acquire-value">{findLabel || "Look up the parcel ID"}</span>
-          <span className="acquire-hint">County assessor / parcel search</span>
         </a>
       ) : null}
     </div>

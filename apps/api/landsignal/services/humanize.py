@@ -16,26 +16,40 @@ def human_soil(prov: Any, *, apn: str | None = None, county: str | None = None, 
     n = (getattr(prov, "normalized", None) or getattr(prov, "value", None) or {}) if prov else {}
     if isinstance(prov, dict):
         n = prov.get("normalized") or prov.get("value") or {}
-    state = getattr(prov, "knowledge_state", None)
-    state_s = state.value if hasattr(state, "value") else (prov.get("knowledge_state") if isinstance(prov, dict) else "UNKNOWN")
+    ks = getattr(prov, "knowledge_state", None)
+    if hasattr(ks, "value"):
+        state_s = str(ks.value)
+    elif isinstance(prov, dict) and prov.get("knowledge_state") is not None:
+        state_s = str(prov.get("knowledge_state"))
+    else:
+        state_s = "UNKNOWN"
+    # Strip enum class prefixes if a raw enum leaked into storage
+    state_s = state_s.replace("KnowledgeState.", "").strip()
     prime = n.get("prime_farmland_pct")
     farm = n.get("farmland_classification")
-    where = ("This property" + (f" in {county}, {state}" if county and state else ""))
+    place = f"{county}, {state}" if county and state else (county or state or "")
+    where = f"This property in {place}" if place else "This property"
     bullets = []
     if farm:
-        bullets.append(f"{where}: USDA farmland class = {farm}")
+        bullets.append(f"USDA farmland class: {farm}")
     if prime is not None:
-        bullets.append(f"{where}: about {float(prime):.0f}% of the sampled area looks like prime farmland (USDA).")
+        bullets.append(f"About {float(prime):.0f}% of the sampled area looks like prime farmland.")
     else:
-        bullets.append(f"{where}: how much is prime farmland is not confirmed yet from USDA for this shape.")
-    bullets.append("Map soil data only — order a soil test before counting on farm income.")
-    plain = (
-        f"{where}: soil class {farm or 'not confirmed'}; "
-        f"prime farmland {_pct(prime) or 'not confirmed'}."
-    )
+        bullets.append("Prime farmland share not confirmed yet from USDA for this shape.")
+    bullets.append("Map soil only — order a soil test before counting on farm income.")
+    if farm or prime is not None:
+        plain = (
+            f"{where}: soil class {farm or 'not confirmed'}; "
+            f"prime farmland {_pct(prime) or 'not confirmed'}."
+        )
+        level = "Known" if state_s.upper() == "KNOWN" else "Estimate"
+    else:
+        plain = f"{where}: soil class and prime farmland not confirmed yet."
+        level = "Not confirmed"
     return {
         "title": "Soil quality",
         "plain_english": plain,
+        "level": level,
         "bullets": bullets,
         "knowledge_state": state_s,
         "source": getattr(prov, "source", None) or (prov.get("source") if isinstance(prov, dict) else "ssurgo"),
@@ -48,27 +62,30 @@ def human_flood(prov: Any, *, apn: str | None = None) -> dict[str, Any]:
     n = (getattr(prov, "normalized", None) or getattr(prov, "value", None) or {}) if prov else {}
     if isinstance(prov, dict):
         n = prov.get("normalized") or prov.get("value") or {}
-    state = getattr(prov, "knowledge_state", None)
-    state_s = state.value if hasattr(state, "value") else (prov.get("knowledge_state") if isinstance(prov, dict) else "UNKNOWN")
+    ks = getattr(prov, "knowledge_state", None)
+    state_s = (
+        str(ks.value)
+        if hasattr(ks, "value")
+        else str(prov.get("knowledge_state") if isinstance(prov, dict) else "UNKNOWN")
+    ).replace("KnowledgeState.", "")
     flood = n.get("flood_zone_pct")
     zone = n.get("zone")
-    who = "This property"
     if flood is None:
-        plain = f"{who}: flood exposure not confirmed yet from FEMA."
+        plain = "Flood exposure not confirmed yet from FEMA."
         level = "Unknown"
     elif float(flood) < 10:
-        plain = f"{who}: FEMA map shows low flood overlap ({float(flood):.0f}%)."
+        plain = f"FEMA map shows low flood overlap ({float(flood):.0f}%)."
         level = "Lower"
     elif float(flood) < 35:
-        plain = f"{who}: FEMA map shows {float(flood):.0f}% flood overlap — insurance and loans may be harder."
+        plain = f"FEMA map shows {float(flood):.0f}% flood overlap — insurance and loans may be harder."
         level = "Moderate"
     else:
-        plain = f"{who}: FEMA map shows high flood overlap ({float(flood):.0f}%) — plan for insurance and fill cost."
+        plain = f"FEMA map shows high flood overlap ({float(flood):.0f}%) — plan for insurance and fill cost."
         level = "Higher"
     bullets = [
-        f"{who}: flood overlap {_pct(flood) or 'not confirmed'}",
-        f"{who}: FEMA zone {zone or 'not returned for this pin'}",
-        "This is not an elevation certificate — confirm before you bid.",
+        f"Flood overlap {_pct(flood) or 'not confirmed'}"
+        + (f" · zone {zone}" if zone else ""),
+        "Not an elevation certificate — confirm before you bid.",
     ]
     return {
         "title": "Flood exposure",
@@ -86,8 +103,12 @@ def human_wetlands(prov: Any) -> dict[str, Any]:
     n = (getattr(prov, "normalized", None) or getattr(prov, "value", None) or {}) if prov else {}
     if isinstance(prov, dict):
         n = prov.get("normalized") or prov.get("value") or {}
-    state = getattr(prov, "knowledge_state", None)
-    state_s = state.value if hasattr(state, "value") else (prov.get("knowledge_state") if isinstance(prov, dict) else "UNKNOWN")
+    ks = getattr(prov, "knowledge_state", None)
+    state_s = (
+        str(ks.value)
+        if hasattr(ks, "value")
+        else str(prov.get("knowledge_state") if isinstance(prov, dict) else "UNKNOWN")
+    ).replace("KnowledgeState.", "")
     wet = n.get("wetland_pct")
     if wet is None:
         plain = "Wetland share is not confirmed yet from the National Wetlands Inventory."
@@ -107,8 +128,7 @@ def human_wetlands(prov: Any) -> dict[str, Any]:
         "level": level,
         "bullets": [
             f"Wetland screen: {_pct(wet) or 'not confirmed'}",
-            "NWI is a screening layer, not a jurisdictional delineation.",
-            "If wetlands matter to your plan, hire a qualified wetland scientist.",
+            "NWI is a screen, not a jurisdictional delineation.",
         ],
         "knowledge_state": state_s,
         "source": getattr(prov, "source", None) or "nwi",
@@ -121,23 +141,27 @@ def human_transmission(prov: Any) -> dict[str, Any]:
     n = (getattr(prov, "normalized", None) or getattr(prov, "value", None) or {}) if prov else {}
     if isinstance(prov, dict):
         n = prov.get("normalized") or prov.get("value") or {}
-    state = getattr(prov, "knowledge_state", None)
-    state_s = state.value if hasattr(state, "value") else (prov.get("knowledge_state") if isinstance(prov, dict) else "UNKNOWN")
+    ks = getattr(prov, "knowledge_state", None)
+    state_s = (
+        str(ks.value)
+        if hasattr(ks, "value")
+        else str(prov.get("knowledge_state") if isinstance(prov, dict) else "UNKNOWN")
+    ).replace("KnowledgeState.", "")
     meters = n.get("nearest_transmission_m")
     if meters is None:
         plain = "No nearby transmission line was confirmed in the search window."
-        level = "Unknown / distant"
+        level = "Unknown"
         miles = None
     else:
         miles = float(meters) / 1609.34
         if miles < 1:
-            plain = f"A transmission line appears about {miles:.1f} miles away — useful for energy optionality screening only."
+            plain = f"A transmission line appears about {miles:.1f} miles away — energy optionality screen only."
             level = "Nearby"
         elif miles < 5:
             plain = f"Nearest screened transmission line is about {miles:.1f} miles away."
-            level = "Moderate distance"
+            level = "Moderate"
         else:
-            plain = f"Nearest screened transmission line is about {miles:.1f} miles away — interconnection may be harder."
+            plain = f"Nearest screened line ~{miles:.1f} miles away — interconnection may be harder."
             level = "Farther"
     return {
         "title": "Power line proximity",
@@ -145,8 +169,7 @@ def human_transmission(prov: Any) -> dict[str, Any]:
         "level": level,
         "bullets": [
             f"Distance screen: {miles:.1f} miles" if miles is not None else "Distance not confirmed",
-            "Important: being near a line does NOT mean you can connect to the grid.",
-            "Utility queue, capacity, and permits must be checked separately.",
+            "Near a line does not mean you can connect to the grid.",
         ],
         "knowledge_state": state_s,
         "source": getattr(prov, "source", None) or "hifld_transmission",
