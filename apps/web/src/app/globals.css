@@ -3953,10 +3953,10 @@ a.acquire-block:hover {
 }
 
 .land-viewer-tools {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  padding: 0.35rem 0.75rem 0.4rem;
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: 0.22rem;
+  padding: 0.28rem 0.55rem 0.32rem;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-soft) 80%, var(--bg-elevated));
   overflow: visible;
@@ -3964,35 +3964,41 @@ a.acquire-block:hover {
 
 .land-viewer-tools-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 0.3rem 0.4rem;
+  gap: 0.22rem;
   min-width: 0;
+  width: 100%;
 }
 
 .land-viewer-tool-group {
   display: inline-flex;
-  flex-wrap: wrap;
-  flex: 0 1 auto;
-  gap: 0.18rem;
-  padding: 0.08rem;
+  flex-wrap: nowrap;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  min-width: 0;
+  padding: 0.05rem;
   border-radius: 8px;
   background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
   border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
-  max-width: 100%;
 }
 
 .land-viewer-tool-group button {
-  min-height: 1.45rem;
-  padding: 0.12rem 0.5rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 1.35rem;
+  padding: 0.1rem 0.28rem;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--ink);
-  font-size: 0.7rem;
+  font-size: clamp(0.58rem, 2.15vw, 0.7rem);
   font-weight: 600;
   cursor: pointer;
-  line-height: 1.15;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 
 .land-viewer-tool-group button:hover:not(:disabled) {
@@ -4013,14 +4019,18 @@ a.acquire-block:hover {
 .land-viewer-tool-link {
   display: inline-flex;
   align-items: center;
-  min-height: 1.45rem;
-  padding: 0.12rem 0.5rem;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 1.35rem;
+  padding: 0.1rem 0.28rem;
   border-radius: 6px;
   color: var(--ink);
-  font-size: 0.7rem;
+  font-size: clamp(0.58rem, 2.15vw, 0.7rem);
   font-weight: 600;
   text-decoration: none;
-  line-height: 1.15;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 
 .land-viewer-tool-link:hover {
@@ -4028,20 +4038,14 @@ a.acquire-block:hover {
 }
 
 .land-viewer-nearby {
+  --nearby-chip-gap: 0.4rem;
   display: flex;
-  flex-direction: column;
-  gap: 0.28rem;
-  padding: 0.28rem 0.6rem 0.35rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem var(--nearby-chip-gap);
+  padding: 0.28rem 0.6rem 0.3rem;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-elevated) 90%, var(--bg-soft));
-}
-
-.land-viewer-nearby-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.45rem;
-  min-height: 1.15rem;
 }
 
 .land-viewer-nearby-label {
@@ -4050,35 +4054,20 @@ a.acquire-block:hover {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
-}
-
-.land-viewer-nearby-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(0, auto));
-  gap: 0.28rem;
-  width: 100%;
+  margin-right: 0.05rem;
 }
 
 .land-viewer-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-width: 0;
-  min-height: 1.55rem;
-  padding: 0.18rem 0.2rem;
+  min-height: 1.4rem;
+  padding: 0.1rem 0.45rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--chip, var(--brand)) 45%, var(--line));
   background: color-mix(in srgb, var(--chip, var(--brand)) 10%, var(--bg-elevated));
   color: var(--ink);
-  font-size: clamp(0.62rem, 2.5vw, 0.72rem);
-  font-weight: 650;
-  line-height: 1.1;
+  font-size: 0.66rem;
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .land-viewer-chip:hover:not(:disabled) {
@@ -4095,12 +4084,22 @@ a.acquire-block:hover {
   cursor: not-allowed;
 }
 
+/* Keep Water body + working spinner on one unbreakable unit */
+.land-viewer-nearby-tail {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: var(--nearby-chip-gap, 0.5rem);
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 .land-viewer-nearby-loading {
   display: inline-flex;
   align-items: center;
   gap: 0.18rem;
-  min-height: 1.15rem;
-  padding: 0.05rem 0.28rem 0.05rem 0.18rem;
+  min-height: 1.4rem;
+  padding: 0.08rem 0.22rem 0.08rem 0.2rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line));
   background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
@@ -4109,7 +4108,6 @@ a.acquire-block:hover {
   font-weight: 650;
   line-height: 1;
   white-space: nowrap;
-  flex: 0 0 auto;
 }
 
 .land-viewer-nearby-loading .live-magnifier {

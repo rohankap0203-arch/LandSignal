@@ -57,7 +57,7 @@ type NearbyChip = {
 const NEARBY_CHIPS: NearbyChip[] = [
   {
     kind: "flood",
-    label: "Flood",
+    label: "Flood zone",
     color: "#3b82f6",
     // Prefer explicit flood tags; waterways are a legitimate flood-adjacency proxy when flood polygons are unmapped.
     overpassParts: [
@@ -79,7 +79,7 @@ const NEARBY_CHIPS: NearbyChip[] = [
   },
   {
     kind: "road",
-    label: "Road",
+    label: "Paved road",
     color: "#a16207",
     // Higher-class roads are paved; residential only when surface is explicitly paved.
     overpassParts: [
@@ -91,7 +91,7 @@ const NEARBY_CHIPS: NearbyChip[] = [
   },
   {
     kind: "power",
-    label: "Power",
+    label: "Power line",
     color: "#ca8a04",
     overpassParts: [
       'way["power"~"^(line|minor_line|cable)$"]',
@@ -102,7 +102,7 @@ const NEARBY_CHIPS: NearbyChip[] = [
   },
   {
     kind: "town",
-    label: "Town",
+    label: "Town / services",
     color: "#b45309",
     overpassParts: ['node["place"~"^(city|town|village)$"]'],
     radiiM: [2000, 8000, 20000, 40000],
@@ -126,7 +126,7 @@ const NEARBY_CHIPS: NearbyChip[] = [
   },
   {
     kind: "water",
-    label: "Water",
+    label: "Water body",
     color: "#0ea5e9",
     overpassParts: [
       'nwr["natural"="water"]',
@@ -137,17 +137,6 @@ const NEARBY_CHIPS: NearbyChip[] = [
     maxMiles: 11,
   },
 ];
-
-const NEARBY_CHIP_TITLES: Record<NearbyKind, string> = {
-  flood: "Closest flood zone / flood-adjacent waterway",
-  wetland: "Closest wetland",
-  road: "Closest paved road",
-  power: "Closest power line or substation",
-  town: "Closest town / village",
-  school: "Closest school",
-  hospital: "Closest hospital",
-  water: "Closest water body",
-};
 
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
@@ -1077,10 +1066,10 @@ export function LandViewerModal({
             </div>
 
             <div className="land-viewer-tool-group" aria-label="View">
-              <button type="button" onClick={fitParcel} disabled={!hasGeo}>
+              <button type="button" onClick={fitParcel} disabled={!hasGeo} title="Fit land">
                 Fit land
               </button>
-              <button type="button" onClick={copyCoords} disabled={!hasGeo}>
+              <button type="button" onClick={copyCoords} disabled={!hasGeo} title="Copy pin coordinates">
                 {copied ? "Copied" : "Copy pin"}
               </button>
             </div>
@@ -1106,31 +1095,34 @@ export function LandViewerModal({
         </div>
 
         <div className="land-viewer-nearby" aria-label="Closest landmarks">
-          <div className="land-viewer-nearby-head">
-            <span className="land-viewer-nearby-label">Closest</span>
-            {nearbyLoading ? (
-              <span className="land-viewer-nearby-loading" role="status" aria-live="polite">
-                <LiveMagnifier size={14} label="Finding closest landmark" />
-                <span>Working</span>
-              </span>
-            ) : null}
-          </div>
-          <div className="land-viewer-nearby-grid">
-            {NEARBY_CHIPS.map((chip) => (
+          <span className="land-viewer-nearby-label">Closest</span>
+          {NEARBY_CHIPS.map((chip) => {
+            const isLast = chip.kind === "water";
+            const button = (
               <button
                 key={chip.kind}
                 type="button"
                 className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
                 style={{ ["--chip" as string]: chip.color }}
-                title={NEARBY_CHIP_TITLES[chip.kind]}
-                aria-label={NEARBY_CHIP_TITLES[chip.kind]}
                 disabled={!hasGeo || nearbyLoading}
                 onClick={() => void showNearby(chip.kind)}
               >
                 {chip.label}
               </button>
-            ))}
-          </div>
+            );
+            if (!isLast) return button;
+            return (
+              <span key={chip.kind} className="land-viewer-nearby-tail">
+                {button}
+                {nearbyLoading ? (
+                  <span className="land-viewer-nearby-loading" role="status" aria-live="polite">
+                    <LiveMagnifier size={14} label="Finding closest landmark" />
+                    <span>Working</span>
+                  </span>
+                ) : null}
+              </span>
+            );
+          })}
         </div>
 
         <div className="land-viewer-stage">
