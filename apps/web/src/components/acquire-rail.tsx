@@ -91,16 +91,16 @@ function fallbackFulfills(tone: "source" | "call", step: Step): string {
   if (step.fulfills?.trim()) return step.fulfills.trim();
   const k = step.kicker.toLowerCase();
   if (tone === "call") {
-    if (k.includes("first")) return "Opens the call as a real buyer on this exact file.";
-    if (k.includes("ask")) return "Gets a yes/no that changes whether you keep spending time.";
-    if (k.includes("watch")) return "Flags the trap before it eats the deal.";
-    if (k.includes("close")) return "Leaves a clean reason to call back with facts.";
-    return "Advances the buy path — status, price, or who can sell it.";
+    if (k.includes("first")) return "Why this opener: they hear a real buyer on this exact file, not a general info call.";
+    if (k.includes("ask")) return "Why ask: a yes/no here changes whether you keep spending time on this pin.";
+    if (k.includes("watch")) return "Why it matters: flags the local trap before it eats this deal.";
+    if (k.includes("close")) return "Why close this way: leaves a clean reason to call back with facts.";
+    return "Why say this: advances status, price, or who can sell this exact pin.";
   }
-  if (k.includes("start")) return "Confirms the file is live before you dig deeper.";
-  if (k.includes("do next")) return "Turns the page dig into facts you can use on the call.";
-  if (k.includes("watch")) return "Stops a dead-end dig on a pin that isn’t buyable.";
-  return "Pulls the fact you need before you dial or bid.";
+  if (k.includes("start")) return "Why first: live status decides if this pin is obtainable at all.";
+  if (k.includes("do next")) return "Why next: turns the page dig into facts for What to say.";
+  if (k.includes("watch")) return "Why it matters: stops a dead-end dig on a pin that isn’t buyable.";
+  return "Why this check: pulls the fact you need before you dial or bid.";
 }
 
 /** Compact animated reveal — clearer than a bare V for “open the guide”. */
@@ -229,7 +229,7 @@ function ActionCard({
   onToggle: () => void;
 }) {
   const hasGuide = stepCount > 0;
-  const revealLabel = tone === "call" ? "Talk track" : "Look-for";
+  const revealLabel = tone === "call" ? "What to say" : "Look-for";
   return (
     <div className={`acquire-card tone-${tone} ${open ? "open" : ""}`}>
       {href ? (
