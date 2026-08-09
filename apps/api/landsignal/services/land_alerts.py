@@ -820,6 +820,7 @@ def match_card(store: MemoryStore, match: LandAlertMatch) -> dict[str, Any]:
         "imagery_url": imagery_url,
         "latitude": parcel.latitude if parcel else None,
         "longitude": parcel.longitude if parcel else None,
+        "polygon": parcel.polygon if parcel else None,
         "viewed_at": match.viewed_at.isoformat() if match.viewed_at else None,
         "created_at": match.created_at.isoformat() if match.created_at else None,
         "updated_at": match.updated_at.isoformat() if match.updated_at else None,

@@ -45,6 +45,7 @@ export type LandAlertMatchCard = {
   imagery_url?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  polygon?: number[][][] | null;
   property_name: string;
   location: string;
   state?: string | null;

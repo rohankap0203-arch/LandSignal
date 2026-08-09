@@ -3295,7 +3295,7 @@ a.acquire-block:hover {
 }
 
 .land-alert-card {
-  padding: 0.7rem 0.8rem;
+  padding: 0.35rem 0.5rem 0.2rem;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel, var(--bg-elevated));
@@ -3319,7 +3319,7 @@ a.acquire-block:hover {
   overflow: visible;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.3rem;
 }
 
 .land-alert-flip.is-new .land-alert-card-front,
@@ -3329,10 +3329,13 @@ a.acquire-block:hover {
 }
 
 .land-alert-flip-hint {
-  margin-top: 0.45rem;
-  font-size: 0.68rem;
+  margin-top: 0.05rem;
+  margin-bottom: 0;
+  padding: 0;
+  font-size: 0.62rem;
   color: var(--muted);
   letter-spacing: 0.02em;
+  line-height: 1;
 }
 
 .land-alert-back-head {
@@ -3496,55 +3499,87 @@ a.acquire-block:hover {
 .land-alert-card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem 0.85rem;
-  margin-top: 0.35rem;
-  font-size: 0.82rem;
+  gap: 0.2rem 0.6rem;
+  margin-top: 0.1rem;
+  font-size: 0.8rem;
   color: var(--muted);
 }
 
 .land-alert-why {
-  margin: 0.4rem 0 0;
-  padding-left: 1rem;
-  font-size: 0.78rem;
+  margin: 0.2rem 0 0;
+  padding-left: 0.9rem;
+  font-size: 0.72rem;
   color: var(--ink);
+  line-height: 1.25;
 }
 
 .land-alert-watch {
-  margin-top: 0.45rem;
-  font-size: 0.78rem;
+  margin-top: 0.15rem;
+  margin-bottom: 0.1rem;
+  font-size: 0.72rem;
   color: color-mix(in srgb, #a65b1a 80%, var(--ink));
-  line-height: 1.35;
+  line-height: 1.2;
 }
 
-/* Fixed strip — replaces prior intel lines without growing the card */
-.land-alert-imagery {
-  margin-top: 0.4rem;
-  height: 52px;
-  max-height: 52px;
-  border-radius: 6px;
+.land-alert-map {
+  margin: 0.1rem 0 0;
+  border-radius: 8px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
-  background: color-mix(in srgb, var(--brand) 8%, var(--bg-soft));
-  flex: 0 0 52px;
+  cursor: grab;
+  /* Keep Leaflet interactive inside flip/3D card faces */
+  transform: translateZ(0);
+  touch-action: none;
 }
 
-.land-alert-imagery img {
-  display: block;
-  width: 100%;
-  height: 52px;
-  max-height: 52px;
-  object-fit: cover;
-  object-position: center;
-  pointer-events: none;
+.land-alert-map:active {
+  cursor: grabbing;
 }
 
-.land-alert-imagery-empty {
+.land-alert-parcel-map.parcel-map-shell,
+.land-alert-map .parcel-map-shell {
+  border-radius: 8px;
+  border-color: color-mix(in srgb, var(--line) 85%, transparent);
+}
+
+.land-alert-map .leaflet-container {
+  font: inherit;
+  background: #1a1f24;
+}
+
+.land-alert-map .parcel-map-shell.is-compact .leaflet-control-zoom {
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  margin: 8px;
+}
+
+.land-alert-map .parcel-map-shell.is-compact .leaflet-control-zoom a {
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #111;
+  background: #fff;
+}
+
+.land-alert-map-fallback {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.7rem;
+  height: 228px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-soft));
+  font-size: 0.72rem;
   color: var(--muted);
-  letter-spacing: 0.02em;
+}
+
+.land-alert-card-title {
+  margin-top: 0;
+}
+
+.land-alert-card-top {
+  margin-bottom: 0.1rem;
 }
 
 .land-alert-indicators {

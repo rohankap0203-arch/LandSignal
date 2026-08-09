@@ -1,11 +1,17 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
 import { LandAlertsLoader } from "@/components/land-alerts-loader";
 import { LiveMagnifier } from "@/components/live-magnifier";
 import { landsignalApi, type LandAlertMatchCard } from "@/lib/api";
+
+const ParcelMap = dynamic(() => import("@/components/parcel-map").then((m) => m.ParcelMap), {
+  ssr: false,
+  loading: () => <div className="land-alert-map-fallback">Loading map…</div>,
+});
 
 type PrefMode = "must" | "prefer" | "flexible";
 
@@ -206,22 +212,27 @@ function MatchCard({
               <strong>Watch:</strong> {row.watch_flags[0]}
             </div>
           ) : null}
-          {row.imagery_url ? (
-            <div className="land-alert-imagery" aria-hidden={false}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={row.imagery_url}
-                alt={`Satellite view near ${row.location || "parcel"}`}
-                loading="lazy"
-                decoding="async"
-                draggable={false}
+          <div
+            className="land-alert-map"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+          >
+            {row.latitude != null && row.longitude != null ? (
+              <ParcelMap
+                latitude={row.latitude}
+                longitude={row.longitude}
+                polygon={row.polygon}
+                title={row.property_name}
+                height={228}
+                compact
+                className="land-alert-parcel-map"
               />
-            </div>
-          ) : (
-            <div className="land-alert-imagery land-alert-imagery-empty" aria-hidden>
-              <span>No map pin yet</span>
-            </div>
-          )}
+            ) : (
+              <div className="land-alert-map-fallback">No map pin yet</div>
+            )}
+          </div>
           <div className="land-alert-flip-hint">Tap to flip</div>
         </article>
 
