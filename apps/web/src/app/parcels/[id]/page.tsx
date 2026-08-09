@@ -207,47 +207,70 @@ export default function ParcelIntelligencePage() {
             ) : null}
             {watchMsg ? <p className="mt-2 text-xs text-[var(--muted)]">{watchMsg}</p> : null}
 
-            <div className="next-process mt-3">
-              <ol className="next-process-list">
+            <div className="next-process mt-4">
+              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+                Three steps from here
+              </div>
+              <ol className="next-process-list mt-2">
                 <li className="next-process-step">
                   <span className="next-process-num" aria-hidden>
                     1
                   </span>
-                  <button
-                    type="button"
-                    className="next-process-action"
-                    onClick={() =>
-                      document
-                        .getElementById("sec-scroll-to")
-                        ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                    }
-                  >
-                    Learn this page
-                  </button>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm">Learn this page</div>
+                    <p className="next-process-note">
+                      Skim value, return, land checks, and Ask yourself.
+                    </p>
+                    <button
+                      type="button"
+                      className="next-process-action"
+                      onClick={() =>
+                        document
+                          .getElementById("sec-scroll-to")
+                          ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                      }
+                    >
+                      Start reading ↓
+                    </button>
+                  </div>
                 </li>
                 <li className="next-process-step">
                   <span className="next-process-num" aria-hidden>
                     2
                   </span>
-                  <button type="button" className="next-process-action" onClick={toggleWatch}>
-                    {watched ? "On watchlist" : "Watchlist if interested"}
-                  </button>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm">
+                      {watched ? "On your watchlist" : "Watchlist if interested"}
+                    </div>
+                    <p className="next-process-note">
+                      {watched ? "Saved — come back anytime." : "Save it if it still feels like a fit."}
+                    </p>
+                    <button type="button" className="next-process-action" onClick={toggleWatch}>
+                      {watched ? "Remove" : "Add to watchlist"}
+                    </button>
+                  </div>
                 </li>
                 <li className="next-process-step">
                   <span className="next-process-num" aria-hidden>
                     3
                   </span>
-                  <button
-                    type="button"
-                    className="next-process-action"
-                    onClick={() =>
-                      document
-                        .getElementById("sec-reach")
-                        ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                    }
-                  >
-                    Contact + advice
-                  </button>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm">Contact the seller</div>
+                    <p className="next-process-note">
+                      Reach out, then open What to say / Look-for.
+                    </p>
+                    <button
+                      type="button"
+                      className="next-process-action"
+                      onClick={() =>
+                        document
+                          .getElementById("sec-reach")
+                          ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                      }
+                    >
+                      Contact & advice ↓
+                    </button>
+                  </div>
                 </li>
               </ol>
             </div>
