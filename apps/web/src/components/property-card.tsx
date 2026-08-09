@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type MouseEvent, type KeyboardEvent } from "react";
+import { useEffect, useState, type MouseEvent, type KeyboardEvent } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
 import { TrajectorySpark } from "@/components/price-trajectory";
 import { SignalBadge } from "@/components/signal-badge";
@@ -31,6 +31,7 @@ function shortPrice(display: string): string {
 export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
   const router = useRouter();
   const [intelPending, setIntelPending] = useState(false);
+  const [gapHelpOpen, setGapHelpOpen] = useState(false);
   const posting =
     row.links.find((l) => l.kind === "primary" && l.available !== false) ||
     (row.contact_website
@@ -44,6 +45,15 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
   const conviction = row.conviction || "WATCH";
   const blurb = shortLine(row.return_thesis || row.summary || "", 140);
   const href = `/parcels/${row.parcel_id}`;
+  const gapHelp =
+    row.discount_help?.trim() ||
+    (row.discount_pct != null && row.estimated_value != null
+      ? `Our desktop value for this ${row.acres_display} tract in ${row.location} is about ${row.estimated_value_display}. The public price screen (${row.price_display}) is ${Math.abs(row.discount_pct).toFixed(0)}% ${row.discount_pct < 0 ? "under" : "over"} that mark. That gap is a buy-edge screen — not a guaranteed close price.`
+      : null);
+  const showGapHelp =
+    Boolean(gapHelp) &&
+    (/under our value|vs our value/i.test(row.headline_metric || "") ||
+      /vs our value|under our/i.test(row.discount_display || ""));
 
   function openIntel(e?: MouseEvent | KeyboardEvent) {
     if (e) {
@@ -84,7 +94,23 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           >
             {row.provider_label}
           </div>
-          <div className="display mt-1 text-2xl font-semibold leading-snug break-words">{row.headline_metric}</div>
+          <div className="headline-with-help mt-1">
+            <div className="display text-2xl font-semibold leading-snug break-words">{row.headline_metric}</div>
+            {showGapHelp ? (
+              <button
+                type="button"
+                className={`help-q headline-help-q ${gapHelpOpen ? "on" : ""}`}
+                aria-label="What under our value means"
+                aria-expanded={gapHelpOpen}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setGapHelpOpen(true);
+                }}
+              >
+                ?
+              </button>
+            ) : null}
+          </div>
         </div>
         <div>
           <div className="text-sm text-white/80 break-words">{row.location}</div>
@@ -196,6 +222,44 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           </Link>
         </div>
       </div>
+
+      {gapHelpOpen && gapHelp ? (
+        <div
+          className="help-modal-backdrop"
+          role="presentation"
+          onClick={(e) => {
+            e.stopPropagation();
+            setGapHelpOpen(false);
+          }}
+        >
+          <div
+            className="help-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="What under our value means"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <strong className="display text-lg leading-snug">What “under our value” means here</strong>
+              <button
+                type="button"
+                className="help-q on"
+                aria-label="Close"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setGapHelpOpen(false);
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{gapHelp}</p>
+            <p className="mt-3 text-xs text-[var(--muted)]">
+              {row.property_name} · {row.location}
+            </p>
+          </div>
+        </div>
+      ) : null}
     </article>
   );
 }

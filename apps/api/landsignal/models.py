@@ -224,6 +224,7 @@ class RadarRow(BaseModel):
     value_knowledge: str
     discount_pct: float | None
     discount_display: str
+    discount_help: str | None = None
     opportunity: float
     asymmetry: float
     risk: float

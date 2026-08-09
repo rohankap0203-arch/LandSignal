@@ -96,7 +96,9 @@ type LegacyCase = {
   cash_rent_per_acre?: number;
 };
 
-const HOLD_YEARS = [1, 3, 5, 10, 15, 30, 50, 75, 100] as const;
+const HOLD_YEARS = [
+  5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100,
+] as const;
 const CASE_ORDER = ["BEAR", "BASE", "BULL"] as const;
 
 function money(v: unknown): string {

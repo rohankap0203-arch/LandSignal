@@ -64,6 +64,7 @@ export type RadarRow = {
   value_knowledge: string;
   discount_pct: number | null;
   discount_display: string;
+  discount_help?: string | null;
   opportunity: number;
   asymmetry: number;
   risk: number;

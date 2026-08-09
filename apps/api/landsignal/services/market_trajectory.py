@@ -608,7 +608,7 @@ def build_market_trajectory(
         yrs = max(1, end["year"] - start["year"])
         return (end["value_usd"] / start["value_usd"]) ** (1 / yrs) - 1
 
-    windows = [1, 3, 5, 10, 15, 30, 50, 75, 100]
+    windows = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
     window_stats: dict[str, Any] = {}
     for w in windows:
         start = next((p for p in points if p["offset"] == -w), None)

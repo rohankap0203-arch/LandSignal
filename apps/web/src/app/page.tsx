@@ -12,7 +12,6 @@ import {
 } from "@/lib/api";
 
 type FormState = {
-  q: string;
   state: string;
   region: string;
   regionCustom: string;
@@ -26,12 +25,10 @@ type FormState = {
   strategyCustom: string;
   holdYears: string;
   holdCustom: string;
-  unpricedMode: string;
   sort: string;
 };
 
 const DEFAULT_FORM: FormState = {
-  q: "",
   state: "Any",
   region: "Any",
   regionCustom: "",
@@ -45,9 +42,23 @@ const DEFAULT_FORM: FormState = {
   strategyCustom: "",
   holdYears: "Any",
   holdCustom: "",
-  unpricedMode: "include",
   sort: "score_desc",
 };
+
+/** Hold-period filter steps — 5-year increments (plus custom). */
+const HOLD_YEAR_OPTIONS: Array<string | number> = [
+  "Any",
+  5,
+  10,
+  15,
+  20,
+  25,
+  30,
+  35,
+  40,
+  45,
+  50,
+];
 
 function stateCode(label: string): string {
   if (!label || label === "Any") return "Any";
@@ -105,7 +116,6 @@ export default function SearchPage() {
             : f.strategy;
 
       return {
-        q: f.q || undefined,
         state: stateCode(f.state),
         region,
         min_price: customPrice ? parseMoney(f.priceMin) : price?.min ?? undefined,
@@ -114,8 +124,9 @@ export default function SearchPage() {
         max_acres: customAcres ? parseMoney(f.acreMax) : acres?.max ?? undefined,
         strategy,
         hold_years: Number.isFinite(hold as number) ? hold : undefined,
-        unpriced_mode: f.unpricedMode,
-        include_unpriced: f.unpricedMode !== "priced",
+        // Always include unpriced federal / surplus — no UI filter for this
+        unpriced_mode: "include",
+        include_unpriced: true,
         sort: f.sort,
         broaden: true,
       };
@@ -209,7 +220,6 @@ export default function SearchPage() {
   }, [rows, form.sort]);
 
   const topFit = useMemo(() => sortedRows[0], [sortedRows]);
-  const tips = meta?.tooltips || {};
   const inventoryStates = meta?.inventory_states || [];
 
   return (
@@ -229,14 +239,6 @@ export default function SearchPage() {
         </div>
 
         <div className="filter-grid filter-grid-12">
-          <FilterField label="Keywords">
-            <input
-              value={form.q}
-              placeholder="County, APN, keywords"
-              onChange={(e) => setForm((f) => ({ ...f, q: e.target.value }))}
-            />
-          </FilterField>
-
           <FilterField label="State">
             <select
               value={form.state}
@@ -358,7 +360,7 @@ export default function SearchPage() {
               value={form.holdYears}
               onChange={(e) => setForm((f) => ({ ...f, holdYears: e.target.value }))}
             >
-              {(meta?.hold_years || ["Any"]).map((s) => (
+              {(meta?.hold_years?.length ? meta.hold_years : HOLD_YEAR_OPTIONS).map((s) => (
                 <option key={String(s)} value={String(s)}>
                   {s === "Any" ? "Any" : `${s} years`}
                 </option>
@@ -369,37 +371,10 @@ export default function SearchPage() {
               <input
                 className="mt-1.5"
                 value={form.holdCustom}
-                placeholder="Years (e.g. 8)"
+                placeholder="Years (e.g. 10)"
                 onChange={(e) => setForm((f) => ({ ...f, holdCustom: e.target.value, holdYears: "__custom__" }))}
               />
             )}
-          </FilterField>
-
-          <FilterField
-            label="Unpriced federal / surplus"
-            tip={
-              tips.include_unpriced || {
-                title: "Unpriced parcels",
-                body: "Federal/surplus deals may have no retail ask. Include them for process opportunities.",
-              }
-            }
-          >
-            <select
-              value={form.unpricedMode}
-              onChange={(e) => setForm((f) => ({ ...f, unpricedMode: e.target.value }))}
-            >
-              {(
-                meta?.unpriced_options || [
-                  { value: "include", label: "Include unpriced federal / surplus" },
-                  { value: "priced", label: "Priced / bids only" },
-                  { value: "unpriced_only", label: "Unpriced process parcels only" },
-                ]
-              ).map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
           </FilterField>
         </div>
 
@@ -417,7 +392,7 @@ export default function SearchPage() {
             className="btn btn-secondary"
             disabled={loading}
             onClick={() => {
-              const next = { ...DEFAULT_FORM, sort: "score_desc", unpricedMode: "include" };
+              const next = { ...DEFAULT_FORM, sort: "score_desc" };
               setForm(next);
               void runSearch(next);
             }}
@@ -517,8 +492,7 @@ export default function SearchPage() {
         <div className="panel empty-state">
           <div className="display text-2xl text-[var(--ink)]">No matches for this search</div>
           <p className="mx-auto mt-2 max-w-lg">
-            Try Reset to Any, widen price/acres, or include unpriced federal / surplus parcels — then click
-            Show matches again.
+            Try Reset to Any, widen price/acres, or pick another state — then click Show matches again.
           </p>
         </div>
       )}

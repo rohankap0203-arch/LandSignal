@@ -46,7 +46,7 @@ def _step(kicker: str, body: str, fulfills: str) -> dict[str, str]:
         "Why screenshot:",
         "Why follow this:",
         "Why this check:",
-        "Why copy",
+        "Why copy:",
         "Why these three:",
         "Why switch now:",
         "Why say this:",
