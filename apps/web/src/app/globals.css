@@ -3095,10 +3095,9 @@ a.acquire-block:hover {
 }
 
 .land-alert-flip-inner {
-  position: relative;
+  display: grid;
   transform-style: preserve-3d;
   transition: transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
-  /* Height is set in JS to active face and held until flip-back */
 }
 
 .land-alert-flip.is-flipped .land-alert-flip-inner {
@@ -3112,30 +3111,25 @@ a.acquire-block:hover {
   background: var(--panel, var(--bg-elevated));
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-}
-
-.land-alert-card-front {
-  cursor: pointer;
-}
-
-.land-alert-card-front,
-.land-alert-card-back {
-  height: 100%;
   box-sizing: border-box;
 }
 
+/* Stack faces in one cell so height = taller face; nothing gets clipped */
+.land-alert-card-front,
 .land-alert-card-back {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  bottom: 0;
+  grid-area: 1 / 1;
+  width: 100%;
+  height: auto;
+  min-height: 100%;
+  cursor: pointer;
+}
+
+.land-alert-card-back {
   transform: rotateY(180deg);
   overflow: visible;
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
-  cursor: pointer;
 }
 
 .land-alert-flip.is-new .land-alert-card-front,
@@ -3175,8 +3169,9 @@ a.acquire-block:hover {
 }
 
 .land-alert-back-actions {
-  margin-top: 0.15rem;
-  padding-top: 0;
+  margin-top: auto;
+  padding-top: 0.35rem;
+  flex: 0 0 auto;
 }
 
 .land-alert-back-actions .btn-intel {

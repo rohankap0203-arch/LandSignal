@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
 import { LiveMagnifier } from "@/components/live-magnifier";
 import { landsignalApi, type LandAlertMatchCard } from "@/lib/api";
@@ -130,25 +130,6 @@ function MatchCard({
 }) {
   const [flipped, setFlipped] = useState(false);
   const href = row.deep_link || `/parcels/${row.parcel_id}`;
-  const innerRef = useRef<HTMLDivElement | null>(null);
-  const frontRef = useRef<HTMLElement | null>(null);
-  const backRef = useRef<HTMLElement | null>(null);
-
-  useLayoutEffect(() => {
-    const inner = innerRef.current;
-    const front = frontRef.current;
-    const back = backRef.current;
-    if (!inner || !front || !back) return;
-    const apply = () => {
-      if (!innerRef.current || !frontRef.current || !backRef.current) return;
-      // Keep front and back the same size (tallest face)
-      const h = Math.max(frontRef.current.scrollHeight, backRef.current.scrollHeight);
-      innerRef.current.style.height = `${h}px`;
-    };
-    apply();
-    const t = window.setTimeout(apply, 40);
-    return () => window.clearTimeout(t);
-  }, [flipped, row, dimmed]);
 
   function flipToggle() {
     setFlipped((v) => !v);
@@ -158,9 +139,8 @@ function MatchCard({
     <div
       className={`land-alert-flip${flipped ? " is-flipped" : ""}${row.status === "new" && !dimmed ? " is-new" : ""}${dimmed ? " is-dimmed" : ""}`}
     >
-      <div className="land-alert-flip-inner" ref={innerRef}>
+      <div className="land-alert-flip-inner">
         <article
-          ref={frontRef}
           className="land-alert-card land-alert-card-front"
           onClick={flipToggle}
           onKeyDown={(e) => {
@@ -229,7 +209,6 @@ function MatchCard({
         </article>
 
         <article
-          ref={backRef}
           className="land-alert-card land-alert-card-back"
           onClick={flipToggle}
           role="button"
