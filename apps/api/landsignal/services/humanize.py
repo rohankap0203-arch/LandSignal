@@ -200,43 +200,43 @@ def human_dd_items(items: list[dict], score: Any, enrichment: Any) -> list[dict[
 
 CATEGORY_HELP = {
     "valuation_mispricing": {
-        "title": "Price vs value",
-        "simple": "Does the asking/bid price look cheap or expensive versus our screening model?",
+        "title": "Price vs our estimate",
+        "simple": "How the realistic buy price for this listing compares to what we think the land is worth.",
     },
     "intrinsic_land_quality": {
         "title": "Land quality",
-        "simple": "How usable/productive does the land look from soils and slope screens?",
+        "simple": "How usable this exact land looks from soil and slope checks.",
     },
     "hbu_optionality": {
-        "title": "Future use options",
-        "simple": "How many realistic ways could this land make money (farm, energy, homes, etc.)?",
+        "title": "Ways you could use it",
+        "simple": "Which money-making uses (farm, homes, energy, etc.) fit this listing best.",
     },
     "growth_appreciation": {
-        "title": "Growth path",
-        "simple": "Is activity and population pressure moving toward this area over time?",
+        "title": "Area growth",
+        "simple": "Whether people and activity are moving toward this listing’s area.",
     },
     "infrastructure": {
-        "title": "Access & infrastructure",
-        "simple": "Roads, power proximity, and basic infrastructure support.",
+        "title": "Roads & power",
+        "simple": "Road access and nearby power for this pin.",
     },
     "liquidity": {
         "title": "Ease of resale",
-        "simple": "If plans change, how hard might it be to sell this parcel later?",
+        "simple": "How hard this kind of listing usually is to sell later.",
     },
     "scarcity": {
-        "title": "Scarcity",
-        "simple": "How replaceable is a parcel like this nearby?",
+        "title": "How rare it is",
+        "simple": "How hard it is to find similar acreage nearby.",
     },
     "catalysts": {
-        "title": "Nearby catalysts",
-        "simple": "Known projects/events that could change value (highways, plants, etc.).",
+        "title": "Nearby projects",
+        "simple": "Known projects that could lift value near this parcel.",
     },
     "seller_dynamics": {
-        "title": "Seller / listing pressure",
-        "simple": "Listing behavior that may indicate negotiation room (from property facts only).",
+        "title": "Seller pressure",
+        "simple": "Signs this seller/channel may take a lower offer.",
     },
     "risk": {
         "title": "Risk cushion",
-        "simple": "Higher here means lower screened risk contributing positively to opportunity.",
+        "simple": "Higher means fewer map red flags helping the opportunity score.",
     },
 }

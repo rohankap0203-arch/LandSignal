@@ -174,25 +174,29 @@ export default function ParcelIntelligencePage() {
             {watchMsg ? <p className="mt-2 text-xs text-[var(--muted)]">{watchMsg}</p> : null}
 
             <div className="mt-5 grid gap-4">
-              <ScoreBar label="LandSignal" value={Number(score?.opportunity || 0)} hint={story.landsignal} />
+              <ScoreBar
+                label="Opportunity score"
+                value={Number(score?.opportunity || 0)}
+                hint={story.landsignal}
+              />
               <ScoreBar label="Risk" value={Number(score?.risk || 0)} invert hint={story.risk} />
               <ScoreBar
-                label="Confidence"
+                label="How complete the file is"
                 value={Number(score?.confidence || 0)}
                 hint={story.confidence}
               />
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <Stat label={String(price?.label || "Price")} value={String(price?.display || "No public ask")} />
-              <Stat label="Deal readiness" value={`${Number(score?.deal_readiness || 0).toFixed(0)}/100`} />
+              <Stat label={String(price?.label || "Price")} value={String(price?.display || "No public price yet")} />
+              <Stat label="Ready to pursue?" value={`${Number(score?.deal_readiness || 0).toFixed(0)}/100`} />
             </div>
 
             {returnCase.headline ? (
               <div className="return-case mt-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-                    Acquisition return case
+                    Buy case for this listing
                   </div>
                   <span className={`conviction-pill ${String(returnCase.conviction || "watch").toLowerCase()}`}>
                     {String(returnCase.conviction || "WATCH")}
@@ -208,7 +212,7 @@ export default function ParcelIntelligencePage() {
             ) : null}
 
             <div className="source-card mt-5">
-              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Contact this land</div>
+              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">How to reach the seller</div>
               <div className="font-semibold break-words">{String(sourcing.office || "County office")}</div>
               <AcquireRail
                 className="mt-3"
@@ -253,7 +257,7 @@ export default function ParcelIntelligencePage() {
                     .finally(() => setMemoLoading(false));
                 }}
               >
-                {memoLoading ? "Writing memo…" : "Generate investment memo"}
+                {memoLoading ? "Writing memo…" : "Write a plain-English memo"}
               </button>
             </div>
           </div>
@@ -304,14 +308,14 @@ export default function ParcelIntelligencePage() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
-        <InsightList title={`Why ${parcel.apn || "this parcel"}`} items={whyOpp} />
-        <InsightList title="Why it may still be available" items={whyStill} />
+        <InsightList title={`Why ${parcel.apn || "this parcel"} stands out`} items={whyOpp} />
+        <InsightList title="Why it might still be available" items={whyStill} />
       </section>
 
       <section className="panel p-5">
-        <h2 className="display text-xl font-semibold">Why these scores · {identity}</h2>
+        <h2 className="display text-xl font-semibold">Score breakdown · {identity}</h2>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          Each number is explained for this listing only — tap a bar for the input drivers.
+          Each score below is explained for this listing only. Tap any bar to see the exact inputs.
         </p>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {ratings.map((r) => {
@@ -398,7 +402,7 @@ export default function ParcelIntelligencePage() {
 
       <section className="panel p-5">
         <h2 className="display text-xl font-semibold">
-          Diligence for {String(parcel.apn || "this parcel")} · readiness{" "}
+          Checklist before you bid on {String(parcel.apn || "this parcel")} · readiness{" "}
           {Number(score?.deal_readiness || 0).toFixed(0)}/100
         </h2>
         <div className="mt-4 grid gap-2">

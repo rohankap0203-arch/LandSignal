@@ -69,8 +69,8 @@ def price_display(
             if settle:
                 return {
                     "amount_usd": ask,
-                    "label": "Opening bid → expected settle",
-                    "display": f"${ask:,.0f} opener · ~${settle:,.0f} settle",
+            "label": "Starting bid → likely finish",
+            "display": f"${ask:,.0f} start · ~${settle:,.0f} likely finish",
                     "kind": "minimum_bid",
                     "opening_bid_usd": ask,
                     "expected_settle_usd": settle,
@@ -80,8 +80,8 @@ def price_display(
                 }
             return {
                 "amount_usd": ask,
-                "label": "Minimum / opening bid",
-                "display": f"${ask:,.0f} opener (not settle)",
+                "label": "Starting bid (not final price)",
+                "display": f"${ask:,.0f} start (usually finishes higher)",
                 "kind": "minimum_bid",
                 "opening_bid_usd": ask,
             }
@@ -94,11 +94,11 @@ def price_display(
     if provider_id == "blm_lpad":
         return {
             "amount_usd": None,
-            "label": "Price process",
+            "label": "No public price yet",
             "display": (
-                f"Federal disposal · model ${model_value:,.0f}"
+                f"Federal land · our estimate ${model_value:,.0f}"
                 if model_value
-                else "Federal disposal (no retail ask)"
+                else "Federal land (no public price yet)"
             ),
             "kind": "process",
             "model_value_usd": model_value,
@@ -106,22 +106,22 @@ def price_display(
     if provider_id in ("public_tax_sale", "public_surplus"):
         return {
             "amount_usd": None,
-            "label": "No published ask",
+            "label": "No public price yet",
             "display": (
-                f"No public ask · model ${model_value:,.0f}"
+                f"No public price · our estimate ${model_value:,.0f}"
                 if model_value
-                else "No public ask on this feed"
+                else "No public price on this feed"
             ),
             "kind": "unpriced_inventory",
             "model_value_usd": model_value,
         }
     return {
         "amount_usd": None,
-        "label": "No published ask",
+        "label": "No public price yet",
         "display": (
-            f"No public ask · model ${model_value:,.0f}"
+            f"No public price · our estimate ${model_value:,.0f}"
             if model_value
-            else "No public ask on this feed"
+            else "No public price on this feed"
         ),
         "kind": "inquiry",
         "model_value_usd": model_value,
@@ -138,10 +138,10 @@ def value_display(estimated: float | None, knowledge: str | None) -> dict[str, A
         }
     return {
         "amount_usd": estimated,
-        "label": "Screening model value",
-        "display": f"${estimated:,.0f}",
-        "knowledge_state": knowledge or "ESTIMATED",
-    }
+            "label": "Our estimated value",
+            "display": f"${estimated:,.0f}",
+            "knowledge_state": knowledge or "ESTIMATED",
+        }
 
 
 def match_reasons(
@@ -152,10 +152,11 @@ def match_reasons(
     filters: dict[str, Any],
     enrichment=None,
 ) -> list[str]:
-    """Acquisition-desk bullets — concrete, not filler."""
+    """Short, plain reasons unique to this listing."""
     reasons: list[str] = []
     est = getattr(score, "estimated_value_usd", None)
     ask = listing.asking_price_usd if listing else None
+    apn = getattr(parcel, "apn", None) or "this parcel"
     auction = None
     if enrichment and enrichment.comps:
         auction = (enrichment.comps.normalized or {}).get("auction_path")
@@ -163,34 +164,35 @@ def match_reasons(
         settle = float(auction["expected_settle_usd"])
         gap = ((est - settle) / settle) * 100 if settle else 0
         reasons.append(
-            f"Clear ~${settle:,.0f} vs mark ${est:,.0f} → {gap:+.0f}% underwrite gap"
+            f"Likely auction finish ~${settle:,.0f} vs our value ${est:,.0f} "
+            f"({gap:+.0f}% room on {apn})"
         )
     elif score.asking_discount_pct is not None and score.asking_discount_pct < -10:
         reasons.append(
-            f"Ask/settle sits {abs(score.asking_discount_pct):.0f}% under screening mark"
+            f"Buy price looks about {abs(score.asking_discount_pct):.0f}% under our value estimate"
         )
     elif ask is None and est:
-        reasons.append(f"Unpriced process channel · screen mark ${est:,.0f}")
+        reasons.append(f"No public price yet · our value estimate is ${est:,.0f}")
     if score.best_strategy:
         reasons.append(
-            f"Use fit: {score.best_strategy.value.replace('_', ' ').title()} "
-            f"(LandSignal {score.opportunity:.0f}/100)"
+            f"Best use we see: {score.best_strategy.value.replace('_', ' ').title()} "
+            f"(opportunity {score.opportunity:.0f}/100)"
         )
     if score.risk <= 35:
-        reasons.append(f"Risk contained at {score.risk:.0f}/100 on desktop screens")
+        reasons.append(f"Lower risk on the map checks ({score.risk:.0f}/100)")
     elif score.risk >= 55:
-        reasons.append(f"Risk {score.risk:.0f}/100 — price the friction, don’t ignore it")
+        reasons.append(f"Higher risk ({score.risk:.0f}/100) — budget extra homework")
     if score.confidence >= 55:
-        reasons.append(f"Evidence file {score.confidence:.0f}/100 — usable for desk triage")
+        reasons.append(f"File looks fairly complete ({score.confidence:.0f}/100)")
     if listing and listing.provider_id == "blm_lpad":
-        reasons.append("BLM disposal — thin retail competition, process timeline risk")
+        reasons.append("Federal BLM land — fewer retail buyers, slower process")
     if listing and listing.provider_id == "public_tax_sale":
-        reasons.append("Tax-sale / land-bank channel — diligence-heavy, less MLS noise")
+        reasons.append("County tax-sale listing — more paperwork, often less competition")
     acres = getattr(parcel, "acreage", None)
     if acres and acres >= 40:
-        reasons.append(f"Institutional scale ({acres:,.0f} ac) — hold without assembling neighbors")
+        reasons.append(f"Large tract ({acres:,.0f} acres) — big enough to hold on its own")
     if not reasons:
-        reasons.append("Clears stage-1 gates for acquisition review")
+        reasons.append(f"{apn} passes the first automated checks for a closer look")
     return reasons[:5]
 
 
@@ -200,7 +202,7 @@ def build_return_thesis(
     listing,
     auction_path: dict[str, Any] | None = None,
 ) -> tuple[str | None, str | None]:
-    """One-line institutional thesis + conviction for radar cards."""
+    """One plain line for cards: buy price vs our value + conviction."""
     est = getattr(score, "estimated_value_usd", None)
     ask = listing.asking_price_usd if listing else None
     settle = None
@@ -228,13 +230,13 @@ def build_return_thesis(
     )
     if entry and est and gap_pct is not None:
         thesis = (
-            f"{conviction}: underwrite ~${entry:,.0f} vs mark ${est:,.0f} "
-            f"({gap_pct:+.0f}%) · {strat}"
+            f"{conviction} interest · plan on ~${entry:,.0f} vs our value ${est:,.0f} "
+            f"({gap_pct:+.0f}%) · best use {strat}"
         )
     elif est:
-        thesis = f"{conviction}: screen mark ${est:,.0f} · {strat} desk fit"
+        thesis = f"{conviction} interest · our value ~${est:,.0f} · best use {strat}"
     else:
-        thesis = f"{conviction}: {strat} screen — confirm local comps"
+        thesis = f"{conviction} interest · {strat} looks possible — confirm local prices"
     return thesis, conviction
 
 

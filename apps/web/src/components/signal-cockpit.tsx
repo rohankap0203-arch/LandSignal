@@ -63,9 +63,9 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
     <div className="signal-cockpit">
       <div>
         <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
-          Price (X) × % still competing (Y)
+          Price going up → fewer buyers still bidding
         </div>
-        <h3 className="display text-lg font-semibold">Clearing curve</h3>
+        <h3 className="display text-lg font-semibold">Who’s still in at each price</h3>
         <p className="mt-0.5 text-xs text-[var(--muted)]">{String(cockpit.subtitle || "")}</p>
       </div>
 
@@ -77,7 +77,7 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
             role="img"
             preserveAspectRatio="xMidYMid meet"
           >
-            <title>Bid clearing chart</title>
+            <title>Buyers left at each price</title>
             {[0, 25, 50, 75, 100].map((y) => {
               const gy = layout.yScale(y);
               return (
@@ -143,7 +143,7 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
               textAnchor="middle"
               className="chart-axis"
             >
-              Price ($)
+              Price
             </text>
             <text
               x={14}
@@ -152,7 +152,7 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
               className="chart-axis"
               transform={`rotate(-90 14 ${layout.h / 2})`}
             >
-              Buyers left (%)
+              % buyers left
             </text>
           </svg>
 
@@ -174,7 +174,7 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
             <div className="chart-readout">
               <strong>{String(selected.label)}</strong>
               <span>
-                {money(selected.x)} · {Number(selected.y).toFixed(0)}% still competing
+                {money(selected.x)} · about {Number(selected.y).toFixed(0)}% of buyers still bidding
               </span>
               <p>{String(selected.note || "")}</p>
             </div>
@@ -185,7 +185,7 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
       )}
 
       <div className="source-card">
-        <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Retrieved from</div>
+        <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Where we found this</div>
         <div className="font-semibold break-words">{String(source.source_name || "Public GIS")}</div>
         <div className="mt-1 text-sm text-[var(--muted)] break-words">{String(source.office || "")}</div>
         <AcquireRail

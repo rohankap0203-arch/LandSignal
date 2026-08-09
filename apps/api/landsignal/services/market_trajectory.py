@@ -362,18 +362,23 @@ def build_market_trajectory(
 
     if from_peak < -0.03:
         regime = "DEPRECIATING_FROM_PEAK"
-        regime_label = f"Soft vs {peak['year']} peak ({from_peak*100:.1f}%)"
+        regime_label = f"Down {abs(from_peak)*100:.0f}% from the {peak['year']} high"
     elif cagr_5 is not None and cagr_5 >= 0.03:
         regime = "APPRECIATING"
-        regime_label = f"Appreciating · 5y path ~{cagr_5*100:.1f}%/yr"
+        regime_label = f"Rising about {cagr_5*100:.1f}% per year over 5 years"
     elif cagr_5 is not None and cagr_5 <= 0:
         regime = "FLAT_TO_DOWN"
-        regime_label = f"Flat/soft · 5y path ~{cagr_5*100:.1f}%/yr"
+        regime_label = f"Flat to soft · about {cagr_5*100:.1f}% per year over 5 years"
     else:
         regime = "MODEST_GROWTH"
-        regime_label = f"Modest growth · 5y path ~{(cagr_5 or 0)*100:.1f}%/yr"
+        regime_label = f"Slow rise · about {(cagr_5 or 0)*100:.1f}% per year over 5 years"
 
     knowledge = "BLENDED" if has_observed else "TREND_PROXY"
+    knowledge_label = (
+        "Mixed: tax-roll marks + local trend"
+        if has_observed
+        else "Estimate from similar land in this area"
+    )
     confidence = 55 if has_observed else 38
     if growth_score is not None:
         confidence += 8
@@ -383,43 +388,50 @@ def build_market_trajectory(
 
     identity = f"{apn} · {county or 'County'}, {(state or 'US').upper()}"
     if acres is not None:
-        identity += f" · {acres:,.2f} ac"
+        identity += f" · {acres:,.2f} acres"
 
     headline = (
-        f"{identity}: {regime_label}. "
-        f"Now ~{_money(y0['value_usd'])}"
-        + (f" · 10y path from {_money(y_10['value_usd'])}" if y_10 else "")
-        + (f" · {years_forward}y outlook ~{_money(y_fwd['value_usd'])}" if y_fwd else "")
+        f"For {identity}: {regime_label}. "
+        f"Today’s path value ~{_money(y0['value_usd'])}"
+        + (f". Ten years ago on this path: {_money(y_10['value_usd'])}" if y_10 else "")
+        + (
+            f". In about {years_forward} years (outlook): {_money(y_fwd['value_usd'])}"
+            if y_fwd
+            else ""
+        )
         + "."
     )
 
     summary_bullets = [
-        f"Modeled annual land rate for this file: {annual*100:.1f}%/yr ({knowledge.replace('_', ' ').title()}).",
+        f"Typical yearly change we use for this listing: {annual*100:.1f}% ({knowledge_label}).",
         (
-            f"5-year compound path: {cagr_5*100:+.1f}%/yr"
+            f"Last 5 years on this path: about {cagr_5*100:+.1f}% per year"
             if cagr_5 is not None
-            else "5-year path unavailable"
+            else "5-year path not available"
         ),
         (
-            f"10-year compound path: {cagr_10*100:+.1f}%/yr"
+            f"Last 10 years on this path: about {cagr_10*100:+.1f}% per year"
             if cagr_10 is not None
-            else "10-year path unavailable"
+            else "10-year path not available"
         ),
         (
-            f"{years_forward}-year outlook CAGR ~{cagr_fwd*100:+.1f}%/yr (conservative vs history)"
+            f"Next {years_forward} years (cautious outlook): about {cagr_fwd*100:+.1f}% per year"
             if cagr_fwd is not None
-            else "Outlook not modeled"
+            else "Forward outlook not modeled"
         ),
-        f"Peak in window: {_money(peak['value_usd'])} ({peak['year']}); trough {_money(trough['value_usd'])} ({trough['year']}).",
+        (
+            f"Highest point in the window: {_money(peak['value_usd'])} in {peak['year']}. "
+            f"Lowest: {_money(trough['value_usd'])} in {trough['year']}."
+        ),
     ]
     if has_observed:
         summary_bullets.append(
-            f"Blended {len(observed)} observed tax-roll/sale mark(s) from the source feed into the path."
+            f"We folded in {len(observed)} tax-roll / sale figure(s) from this listing’s source feed."
         )
     else:
         summary_bullets.append(
-            "No multi-year sale tape on this public feed — path is a parcel-class trend proxy, "
-            "not a recorded deed history."
+            "This public feed has no multi-year sale history for this parcel, "
+            "so the chart follows similar land in this state and listing type — not recorded deeds."
         )
 
     spark = [p["value_usd"] for p in points if p["kind"] == "history"]
@@ -430,6 +442,7 @@ def build_market_trajectory(
         "regime": regime,
         "regime_label": regime_label,
         "knowledge_state": knowledge,
+        "knowledge_label": knowledge_label,
         "confidence": confidence,
         "annual_rate": annual,
         "annual_rate_display": f"{annual*100:.1f}%/yr",
@@ -451,7 +464,7 @@ def build_market_trajectory(
         "method_notes": method_notes,
         "summary_bullets": summary_bullets,
         "disclaimer": (
-            "Screening trajectory for capital triage. TREND_PROXY paths follow state/channel/"
-            "parcel-class regimes when deed history is absent. Not an appraisal or guarantee."
+            "First-look value path for this listing. When deed history is missing, we estimate "
+            "from similar land in this state and listing type. Not an appraisal or guarantee."
         ),
     }

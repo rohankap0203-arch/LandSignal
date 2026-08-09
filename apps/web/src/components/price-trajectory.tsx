@@ -17,6 +17,7 @@ type Trajectory = {
   regime?: string;
   regime_label?: string;
   knowledge_state?: string;
+  knowledge_label?: string;
   confidence?: number;
   annual_rate_display?: string;
   cagr_5y_display?: string;
@@ -84,17 +85,19 @@ export function PriceTrajectory({
   }
 
   const selected = points[Math.min(Math.max(0, active), points.length - 1)];
-  const knowledge = String(trajectory.knowledge_state || "TREND_PROXY").replace(/_/g, " ");
+  const knowledge = String(
+    trajectory.knowledge_label || trajectory.knowledge_state || "Estimate from similar land",
+  ).replace(/_/g, " ");
 
   return (
     <div className={`price-trajectory ${compact ? "compact" : ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-            Appreciation / depreciation · {knowledge}
+            Value over time · {knowledge}
           </div>
           <h3 className="display text-lg font-semibold leading-snug">
-            {trajectory.regime_label || "Market trajectory"}
+            {trajectory.regime_label || "How this land’s value has been moving"}
           </h3>
           {!compact && (
             <p className="mt-1 text-xs text-[var(--muted)] break-words">{trajectory.headline}</p>
@@ -102,15 +105,15 @@ export function PriceTrajectory({
         </div>
         <div className="traj-stats">
           <div>
-            <span>5y</span>
+            <span>5 years</span>
             <strong>{trajectory.cagr_5y_display || "—"}</strong>
           </div>
           <div>
-            <span>10y</span>
+            <span>10 years</span>
             <strong>{trajectory.cagr_10y_display || "—"}</strong>
           </div>
           <div>
-            <span>Fwd</span>
+            <span>Next few yrs</span>
             <strong>{trajectory.cagr_forward_display || "—"}</strong>
           </div>
         </div>
@@ -162,11 +165,13 @@ export function PriceTrajectory({
         <div className="chart-readout">
           <strong>
             {selected.year}
-            {selected.kind === "outlook" ? " outlook" : ""}
+            {selected.kind === "outlook" ? " (outlook)" : ""}
           </strong>
           <span>
             {money(selected.value_usd)}
-            {selected.source === "blended_observed" ? " · blended with observed mark" : " · trend path"}
+            {selected.source === "blended_observed"
+              ? " · includes a tax-roll / sale figure from the source"
+              : " · estimated path for this listing"}
           </span>
           {!compact && <p>{selected.note}</p>}
         </div>

@@ -505,40 +505,43 @@ def build_intelligence_brief(
     thesis_bullets: list[str] = []
     if entry and est:
         thesis_bullets.append(
-            f"Underwrite entry ~{_money(entry)} against screening mark {_money(est)}"
-            + (f" ({gap_pct:+.0f}% equity gap)" if gap_pct is not None else "")
-            + "."
+            f"Plan to buy near {_money(entry)}. We think this land is worth about {_money(est)}"
+            + (f" ({gap_pct:+.0f}% difference)" if gap_pct is not None else "")
+            + f" for {apn}."
         )
     if auction and settle:
         thesis_bullets.append(
-            f"Do not underwrite the {_money(ask)} opener — expected clear ~{_money(settle)} "
-            f"after ~{auction.get('bid_inflation_mult_base', 0):.1f}× bid-up."
+            f"Ignore the {_money(ask)} starting bid as the real price — auctions like this "
+            f"usually finish near {_money(settle)} (about {auction.get('bid_inflation_mult_base', 0):.1f}× the opener)."
         )
     if strategy != "UNDETERMINED":
         strat = strategy.replace("_", " ").title()
-        sec = f" · secondary {secondary.replace('_', ' ').title()}" if secondary else ""
-        size = f" on {acres:,.1f} ac in {county}, {state}" if acres is not None else f" in {county}, {state}"
-        thesis_bullets.append(f"Primary use screen: {strat}{sec}{size}.")
+        sec = f"; next-best use {secondary.replace('_', ' ').title()}" if secondary else ""
+        size = f" on {acres:,.1f} acres in {county}, {state}" if acres is not None else f" in {county}, {state}"
+        thesis_bullets.append(f"Best use we see for this listing: {strat}{sec}{size}.")
     if irr_best is not None and irr_best > -900:
         thesis_bullets.append(
-            f"Hold-case screen IRR ≈ {irr_best * 100:.1f}%/yr if rent/exit assumptions survive local comps."
+            f"If you hold it and local rents hold up, a simple return screen shows about "
+            f"{irr_best * 100:.1f}% per year — confirm with local rent comps before trusting it."
         )
     if prime is not None and prime >= 35 and acres and acres >= 10:
-        thesis_bullets.append(f"Soil screen ~{prime:.0f}% prime — supports cash-rent and ag-buyer exit.")
+        thesis_bullets.append(
+            f"Soil check shows about {prime:.0f}% prime farmland — helpful for cash rent or selling to a farmer later."
+        )
     if flood_pct is not None and flood_pct >= 25:
         thesis_bullets.append(
-            f"Flood overlap ~{flood_pct:.0f}% — price insurance/fill; many desks will pass, creating access."
+            f"About {flood_pct:.0f}% flood overlap on the map — budget insurance/fill; many buyers will skip it."
         )
     if not thesis_bullets:
         thesis_bullets.append(
-            f"Stage-1 flag only: {apn} in {county}, {state} clears automated gates for desk review."
+            f"{apn} in {county}, {state} passes the first automated checks for a closer look."
         )
     return_case = {
         "conviction": conviction,
         "headline": (
-            f"{conviction} conviction · entry ~{_money(entry)} → mark {_money(est)}"
+            f"{conviction} interest · buy near {_money(entry)} · our value {_money(est)}"
             if entry and est
-            else f"{conviction} conviction · {strategy.replace('_', ' ').title()} screen"
+            else f"{conviction} interest · best use {strategy.replace('_', ' ').title()}"
         ),
         "entry_usd": entry,
         "mark_usd": est,
@@ -548,9 +551,9 @@ def build_intelligence_brief(
         "irr_screen": irr_best if irr_best is not None and irr_best > -900 else None,
         "bullets": thesis_bullets[:5],
         "desk_note": (
-            f"Acquisition-style screen for {apn}: fit LandSignal {opp:.0f}, risk {risk:.0f}, "
-            f"confidence {conf:.0f}, readiness {readiness:.0f}. "
-            f"This is desktop triage for capital allocation — not a purchase order."
+            f"For {apn}: opportunity {opp:.0f}/100, risk {risk:.0f}/100, "
+            f"how complete the file is {conf:.0f}/100, deal readiness {readiness:.0f}/100. "
+            f"This is a first look — not a buy order."
         ),
     }
 
@@ -566,34 +569,36 @@ def build_intelligence_brief(
         "dd_focus": dd_focus,
         "score_story": {
             "landsignal": (
-                f"«{title[:70]}» ({apn}, {county} {state}"
-                + (f", {acres:,.2f} ac" if acres is not None else "")
-                + f") scores LandSignal {opp:.0f}/100 because "
+                f"{title[:70]} ({apn}, {county} {state}"
+                + (f", {acres:,.2f} acres" if acres is not None else "")
+                + f") scores {opp:.0f}/100 for opportunity because "
                 + (
-                    f"settle/ask sits {disc:.0f}% vs mark {_money(est)} under a {strategy.replace('_', ' ').title()} lead"
+                    f"the realistic buy price sits {abs(disc):.0f}% "
+                    f"{'under' if (disc or 0) < 0 else 'over'} our estimated value {_money(est)}, "
+                    f"and the best use we see is {strategy.replace('_', ' ').title()}"
                     if disc is not None and est is not None
-                    else f"its {strategy.replace('_', ' ').title()} screen and category stack clear stage-1 gates"
+                    else f"the best use we see is {strategy.replace('_', ' ').title()} and the main checks still pass"
                 )
-                + f" with readiness {readiness:.0f}/100 at {pin}."
+                + f". Deal readiness for this file: {readiness:.0f}/100."
             ),
             "risk": (
-                f"«{title[:70]}» risk is {risk:.0f}/100 at {pin} because "
+                f"Risk for {title[:50]} is {risk:.0f}/100 at map pin {pin} because "
                 + (
-                    f"flood screen ~{flood_pct:.0f}%"
+                    f"about {flood_pct:.0f}% of the checked area looks flood-exposed"
                     if flood_pct is not None
-                    else "flood not confirmed"
+                    else "flood data is not confirmed yet"
                 )
                 + (
-                    f", wetlands ~{wet_pct:.0f}%"
+                    f", and about {wet_pct:.0f}% looks like wetlands"
                     if wet_pct is not None
-                    else ", wetlands not confirmed"
+                    else ", and wetlands are not confirmed yet"
                 )
-                + f" on this geometry — that is why diligence weight sits here for {apn}."
+                + f". That’s why {apn} needs extra homework before a bid."
             ),
             "confidence": (
-                f"Evidence confidence for {apn} is {conf:.0f}/100 based on how complete "
-                f"this listing’s soils/flood/value/geometry file is at {pin} — "
-                f"missing layers cut confidence on purpose for this parcel, not a quality judgment."
+                f"How complete the file is for {apn}: {conf:.0f}/100. "
+                f"This tracks soils, flood, value, and map data at {pin} — "
+                f"missing pieces lower this number on purpose (it is not a quality grade)."
             ),
         },
         "primary_cta": primary_cta,

@@ -502,18 +502,18 @@ async def radar(
             else:
                 discount_display = "No retail ask to compare"
             risk_label = (
-                "Lower screened risk"
+                "Lower risk on the map checks"
                 if score.risk < 30
-                else "Moderate screened risk"
+                else "Medium risk — dig into flood/wetlands"
                 if score.risk < 55
-                else "Elevated screened risk"
+                else "Higher risk — budget more homework"
             )
             conf_label = (
-                "Strong evidence base"
+                "File looks fairly complete"
                 if score.confidence >= 70
-                else "Moderate evidence base"
+                else "Some data still missing"
                 if score.confidence >= 45
-                else "Thin evidence — verify manually"
+                else "Thin file — double-check before bidding"
             )
             thesis, conviction = build_return_thesis(
                 score=score,
@@ -537,17 +537,17 @@ async def radar(
             headline_disc = settle_disc if settle_disc is not None else score.asking_discount_pct
             if headline_disc is not None and headline_disc < -8:
                 headline = (
-                    f"Settle ~{abs(headline_disc):.0f}% under mark"
+                    f"Likely finish ~{abs(headline_disc):.0f}% under our value"
                     if isinstance(auction_path, dict)
-                    else f"{abs(headline_disc):.0f}% below mark"
+                    else f"About {abs(headline_disc):.0f}% under our value"
                 )
             elif isinstance(auction_path, dict):
                 headline = (
-                    f"Open ${auction_path.get('opening_bid_usd', 0):,.0f} → "
-                    f"~${auction_path.get('expected_settle_usd', 0):,.0f}"
+                    f"Starts ${auction_path.get('opening_bid_usd', 0):,.0f} → "
+                    f"likely ~${auction_path.get('expected_settle_usd', 0):,.0f}"
                 )
             else:
-                headline = f"{conviction or 'WATCH'} · asym {score.asymmetry:.0f}"
+                headline = f"{conviction or 'WATCH'} interest · opportunity {score.opportunity:.0f}"
 
             out.append(
                 RadarRow(

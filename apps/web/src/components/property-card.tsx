@@ -72,11 +72,11 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             <div className="v">{row.price_display}</div>
           </div>
           <div className="metric">
-            <div className="k">Model value</div>
+            <div className="k">Our estimated value</div>
             <div className="v">{row.estimated_value_display}</div>
           </div>
           <div className="metric metric-span">
-            <div className="k">LandSignal {Math.round(row.opportunity)} / 100</div>
+            <div className="k">Opportunity {Math.round(row.opportunity)} / 100</div>
             <div
               className="mini-bar"
               style={{
@@ -94,11 +94,11 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             />
           </div>
           <div className="metric">
-            <div className="k">Confidence</div>
+            <div className="k">How complete</div>
             <div className="v">{Math.round(row.confidence)} / 100</div>
           </div>
           <div className="metric">
-            <div className="k">Strategy</div>
+            <div className="k">Best use</div>
             <div className="v">{row.best_strategy_label}</div>
           </div>
         </div>
@@ -136,7 +136,7 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             className={`btn-intel ${intelPending ? "pending" : ""}`}
             onClick={() => setIntelPending(true)}
           >
-            {intelPending ? "Opening intelligence…" : "Full intelligence"}
+            {intelPending ? "Opening details…" : "See full details"}
           </Link>
         </div>
       </div>

@@ -35,36 +35,36 @@ export function AcquireRail({
     <div className={`acquire-rail ${className}`.trim()}>
       {postingUrl ? (
         <a className="acquire-block source" href={postingUrl} target="_blank" rel="noreferrer">
-          <span className="acquire-kicker">Source posting</span>
+          <span className="acquire-kicker">Official page</span>
           <span className="acquire-value">Open {host}</span>
-          <span className="acquire-hint">Official feed / sale page</span>
+          <span className="acquire-hint">Sale / inventory page for this listing</span>
         </a>
       ) : (
         <div className="acquire-block source muted">
-          <span className="acquire-kicker">Source posting</span>
-          <span className="acquire-value">Not linked</span>
+          <span className="acquire-kicker">Official page</span>
+          <span className="acquire-value">No link yet</span>
         </div>
       )}
 
       {tel ? (
         <a className="acquire-block call" href={tel}>
-          <span className="acquire-kicker">Call office</span>
+          <span className="acquire-kicker">Call the office</span>
           <span className="acquire-value">{phoneDisplay}</span>
-          <span className="acquire-hint">{office || "Seller / agency desk"}</span>
+          <span className="acquire-hint">{office || "County / agency desk"}</span>
         </a>
       ) : (
         <div className="acquire-block call muted">
-          <span className="acquire-kicker">Call office</span>
-          <span className="acquire-value">No public line</span>
-          <span className="acquire-hint">{office || "Use source site contact form"}</span>
+          <span className="acquire-kicker">Call the office</span>
+          <span className="acquire-value">No public phone listed</span>
+          <span className="acquire-hint">{office || "Use the official page to contact them"}</span>
         </div>
       )}
 
       {findUrl ? (
         <a className="acquire-block find" href={findUrl} target="_blank" rel="noreferrer">
-          <span className="acquire-kicker">Parcel record</span>
-          <span className="acquire-value">{findLabel || "Find APN"}</span>
-          <span className="acquire-hint">Assessor / PIN lookup</span>
+          <span className="acquire-kicker">Find this parcel</span>
+          <span className="acquire-value">{findLabel || "Look up the parcel ID"}</span>
+          <span className="acquire-hint">County assessor / parcel search</span>
         </a>
       ) : null}
     </div>
