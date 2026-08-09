@@ -4113,27 +4113,27 @@ a.acquire-block:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.12rem;
+  gap: 0.2rem;
   box-sizing: border-box;
   flex: 0 0 auto;
+  min-width: 4.35rem;
   min-height: 1.4rem;
-  padding: 0.05rem 0.18rem;
+  padding: 0.08rem 0.38rem;
   border-radius: 999px;
-  border: 1px solid #0a0a0a;
-  background: #111;
-  color: #fff;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+  border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line));
+  background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
+  color: color-mix(in srgb, var(--brand) 55%, var(--ink));
   white-space: nowrap;
 }
 
 .land-viewer-nearby-next-count {
-  min-width: 1.55rem;
+  min-width: 1.7rem;
   text-align: center;
   font-size: 0.62rem;
-  font-weight: 700;
+  font-weight: 650;
   letter-spacing: 0.02em;
   line-height: 1;
-  color: #fff;
+  color: inherit;
 }
 
 .land-viewer-nearby-nav-arrow {
@@ -4147,116 +4147,27 @@ a.acquire-block:hover {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #fff;
+  color: inherit;
   font: inherit;
   line-height: 1;
   cursor: pointer;
 }
 
 .land-viewer-nearby-nav-arrow:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, var(--brand) 18%, transparent);
 }
 
 .land-viewer-nearby-nav-arrow:disabled {
-  color: rgba(255, 255, 255, 0.28);
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+  opacity: 0.45;
   cursor: default;
 }
 
 .land-viewer-nearby-next-arrow {
-  position: relative;
   display: inline-block;
-  overflow: hidden;
   font-size: 0.74rem;
   line-height: 1;
   color: inherit;
-}
-
-.land-viewer-nearby-nav-arrow:not(:disabled) .land-viewer-nearby-next-arrow {
-  animation: land-viewer-nearby-arrow-glide 1.05s ease-in-out infinite;
-}
-
-.land-viewer-nearby-nav-arrow.is-back:not(:disabled) .land-viewer-nearby-next-arrow {
-  animation-name: land-viewer-nearby-arrow-glide-back;
-}
-
-.land-viewer-nearby-nav-arrow:not(:disabled) .land-viewer-nearby-next-arrow::after {
-  content: "";
-  position: absolute;
-  top: -20%;
-  bottom: -20%;
-  left: -60%;
-  width: 45%;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.15) 35%,
-    rgba(255, 255, 255, 0.95) 50%,
-    rgba(255, 255, 255, 0.15) 65%,
-    transparent 100%
-  );
-  transform: skewX(-18deg);
-  animation: land-viewer-nearby-arrow-gleam 1.6s ease-in-out infinite;
-  pointer-events: none;
-}
-
-.land-viewer-nearby-nav-arrow.is-back:not(:disabled) .land-viewer-nearby-next-arrow::after {
-  animation-name: land-viewer-nearby-arrow-gleam-back;
-}
-
-.land-viewer-nearby-nav-arrow:disabled .land-viewer-nearby-next-arrow {
-  animation: none;
-}
-
-@keyframes land-viewer-nearby-arrow-glide {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  50% {
-    transform: translateX(2px);
-  }
-}
-
-@keyframes land-viewer-nearby-arrow-glide-back {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  50% {
-    transform: translateX(-2px);
-  }
-}
-
-@keyframes land-viewer-nearby-arrow-gleam {
-  0%,
-  25% {
-    left: -70%;
-    opacity: 0;
-  }
-  40% {
-    opacity: 1;
-  }
-  70%,
-  100% {
-    left: 130%;
-    opacity: 0;
-  }
-}
-
-@keyframes land-viewer-nearby-arrow-gleam-back {
-  0%,
-  25% {
-    left: 130%;
-    opacity: 0;
-  }
-  40% {
-    opacity: 1;
-  }
-  70%,
-  100% {
-    left: -70%;
-    opacity: 0;
-  }
 }
 
 .land-viewer-stage {
