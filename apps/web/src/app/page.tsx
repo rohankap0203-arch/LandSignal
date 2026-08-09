@@ -223,7 +223,6 @@ export default function SearchPage() {
     return list;
   }, [rows, form.sort]);
 
-  const topFit = useMemo(() => sortedRows[0], [sortedRows]);
   const inventoryStates = meta?.inventory_states || [];
 
   return (
@@ -513,16 +512,6 @@ export default function SearchPage() {
               ))}
             </select>
           </label>
-          {topFit && (
-            <div className="panel px-4 py-3 text-sm">
-              <div className="text-[var(--muted)]">Strongest file in this set</div>
-              <div className="font-semibold">{topFit.property_name}</div>
-              <div className="text-xs text-[var(--muted)]">
-                Opportunity {Math.round(topFit.opportunity)}/100 · Risk {Math.round(topFit.risk)}/100
-                {topFit.signal ? ` · ${topFit.signal}` : ""}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

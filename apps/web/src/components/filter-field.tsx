@@ -12,17 +12,20 @@ export function HelpTip({ title, body }: { title: string; body: string }) {
         className="help-tip-btn"
         aria-describedby={open ? id : undefined}
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onClick={(e) => {
+          e.preventDefault();
+          setOpen((v) => !v);
+        }}
         onBlur={() => setOpen(false)}
       >
         ?
       </button>
-      {open && (
+      {open ? (
         <span id={id} role="tooltip" className="help-tip-pop">
           <strong>{title}</strong>
           <span>{body}</span>
         </span>
-      )}
+      ) : null}
     </span>
   );
 }
@@ -37,7 +40,7 @@ export function FilterField({
   children: React.ReactNode;
 }) {
   return (
-    <div className="filter-field">
+    <div className={`filter-field${tip ? " has-tip" : ""}`}>
       <label>
         {label}
         {tip ? <HelpTip title={tip.title} body={tip.body} /> : null}

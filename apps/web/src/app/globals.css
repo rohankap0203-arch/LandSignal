@@ -466,7 +466,8 @@ select {
 .property-card {
   display: grid;
   grid-template-columns: 220px 1fr;
-  overflow: visible;
+  overflow: hidden;
+  border-radius: var(--radius);
   transition: transform 180ms ease, box-shadow 180ms ease;
   animation: rise 420ms ease both;
 }
@@ -565,6 +566,13 @@ select {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+@media (max-width: 720px) {
+  .card-media {
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
 }
 
 .headline-with-help {
