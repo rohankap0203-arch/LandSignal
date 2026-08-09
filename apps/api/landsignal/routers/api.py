@@ -546,13 +546,18 @@ async def radar(
             from landsignal.services.market_trajectory import build_market_trajectory
 
             traj = ((enrichment.narratives or {}).get("market_trajectory") if enrichment else None) or None
-            if not isinstance(traj, dict) or not traj.get("sparkline"):
+            if not isinstance(traj, dict) or not traj.get("sparkline") or not traj.get("hitches"):
                 traj = build_market_trajectory(
                     parcel=parcel,
                     listing=listing,
                     score=score,
                     enrichment=enrichment,
                 )
+                if enrichment is not None:
+                    enrichment.narratives = {
+                        **(enrichment.narratives or {}),
+                        "market_trajectory": traj,
+                    }
             summary = thesis or (
                 f"{_strategy_label(score.best_strategy)} · "
                 f"Opportunity {score.opportunity:.0f} · Risk {score.risk:.0f} · {pd['display']}"
@@ -571,6 +576,48 @@ async def radar(
                 )
             else:
                 headline = f"{conviction or 'WATCH'} interest · opportunity score {score.opportunity:.0f}/100"
+
+            # One tailored scout line for the card — feedback, not metric soup
+            scout_bits: list[str] = []
+            if enrichment:
+                def _nv(prov):
+                    if not prov:
+                        return {}
+                    return prov.normalized or prov.value or {}
+
+                sn = _nv(enrichment.soil)
+                fn = _nv(enrichment.flood)
+                wn = _nv(enrichment.wetlands)
+                an = _nv(enrichment.access)
+                try:
+                    prime_v = float(sn["prime_farmland_pct"]) if sn.get("prime_farmland_pct") is not None else None
+                except Exception:
+                    prime_v = None
+                try:
+                    flood_v = float(fn["flood_zone_pct"]) if fn.get("flood_zone_pct") is not None else None
+                except Exception:
+                    flood_v = None
+                try:
+                    wet_v = float(wn["wetland_pct"]) if wn.get("wetland_pct") is not None else None
+                except Exception:
+                    wet_v = None
+                try:
+                    access_v = float(an["legal_access_confidence"]) if an.get("legal_access_confidence") is not None else None
+                except Exception:
+                    access_v = None
+                if score.asking_discount_pct is not None and score.asking_discount_pct <= -25:
+                    scout_bits.append(f"Buy edge ~{abs(score.asking_discount_pct):.0f}% under our mark")
+                if prime_v is not None and prime_v >= 45:
+                    scout_bits.append(f"~{prime_v:.0f}% prime soil")
+                if flood_v is not None and flood_v >= 25:
+                    scout_bits.append(f"flood ~{flood_v:.0f}% — price that in")
+                elif wet_v is not None and wet_v >= 20:
+                    scout_bits.append(f"wetlands ~{wet_v:.0f}% trim usable acres")
+                if access_v is not None and access_v < 45:
+                    scout_bits.append("access not clear yet")
+                if not scout_bits and score.best_strategy:
+                    scout_bits.append(f"Best use screen: {_strategy_label(score.best_strategy)}")
+            scout_note = " · ".join(scout_bits[:3]) if scout_bits else None
 
             out.append(
                 RadarRow(
@@ -630,6 +677,7 @@ async def radar(
                     how_to_buy=source.get("how_to_buy"),
                     return_thesis=thesis,
                     conviction=conviction,
+                    scout_note=scout_note,
                     trajectory_regime=traj.get("regime"),
                     trajectory_label=traj.get("regime_label"),
                     trajectory_cagr_5y=traj.get("cagr_5y_display"),

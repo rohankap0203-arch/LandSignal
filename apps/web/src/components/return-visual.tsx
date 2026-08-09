@@ -602,31 +602,60 @@ export function ReturnVisual({
             type="button"
             className={`help-q ${casesHelpOpen ? "on" : ""}`}
             aria-label="What these cases mean"
+            aria-haspopup="dialog"
             aria-expanded={casesHelpOpen}
             title="What these cases mean"
-            onClick={() => setCasesHelpOpen((v) => !v)}
+            onClick={() => setCasesHelpOpen(true)}
           >
             ?
           </button>
         </div>
         {casesHelpOpen ? (
-          <div className="help-panel">
-            <p>Three ways the same hold can finish — tap a row to focus that path on the chart.</p>
-            <ul>
-              <li>
-                <strong>Cautious</strong> — slower rents, softer sale price, more carry cost
-              </li>
-              <li>
-                <strong>Typical</strong> — the base path for this property’s screens
-              </li>
-              <li>
-                <strong>Optimistic</strong> — stronger rents and exit, still capped by the model
-              </li>
-            </ul>
-            <p>
-              The %/yr is the annualized return if you buy near the entry, collect rent, and sell at
-              that case’s exit after exactly {holdYears} years. Not a promise — a screen.
-            </p>
+          <div
+            className="help-modal-backdrop"
+            role="presentation"
+            onClick={() => setCasesHelpOpen(false)}
+          >
+            <div
+              className="help-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="What these cases mean"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <h4 className="display text-base font-semibold">What these three cases mean</h4>
+                <button
+                  type="button"
+                  className="help-q on"
+                  aria-label="Close"
+                  onClick={() => setCasesHelpOpen(false)}
+                >
+                  ×
+                </button>
+              </div>
+              <p className="mt-2 text-sm text-[var(--muted)] leading-snug">
+                Same buy price. Same {holdYears}-year hold. Only the story changes.
+              </p>
+              <ul className="help-modal-list">
+                <li>
+                  <strong>Cautious</strong>
+                  <span>Soft day — weaker rents, harder exit, more carry.</span>
+                </li>
+                <li>
+                  <strong>Typical</strong>
+                  <span>Base path for this property’s own screens.</span>
+                </li>
+                <li>
+                  <strong>Optimistic</strong>
+                  <span>Strong day — better rents and exit, still capped.</span>
+                </li>
+              </ul>
+              <p className="mt-3 text-xs text-[var(--muted)] leading-snug">
+                The %/yr is annualized if you buy, collect rent, and sell at that case’s exit after
+                exactly {holdYears} years. A screen — not a promise.
+              </p>
+            </div>
           </div>
         ) : null}
         {CASE_ORDER.map((k) => {

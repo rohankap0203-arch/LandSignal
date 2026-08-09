@@ -18,6 +18,14 @@ type Point = {
   offset?: number;
 };
 
+type Hitch = {
+  id: string;
+  label?: string;
+  short?: string;
+  plain?: string;
+  points?: Point[];
+};
+
 type Trajectory = {
   identity?: string;
   headline?: string;
@@ -27,6 +35,7 @@ type Trajectory = {
   annual_rate_display?: string;
   now_usd?: number;
   points?: Point[];
+  hitches?: Hitch[];
   summary_bullets?: string[];
   method_notes?: string[];
   disclaimer?: string;
@@ -62,13 +71,21 @@ export function PriceTrajectory({
   trajectory: Trajectory | null | undefined;
   compact?: boolean;
 }) {
-  const allPoints = (trajectory?.points || []).filter((p) => Number.isFinite(Number(p.value_usd)));
+  const hitches = trajectory?.hitches || [];
   const windows = (trajectory?.windows?.length ? trajectory.windows : [...TIMEFRAMES]).filter((w) =>
     TIMEFRAMES.includes(w as (typeof TIMEFRAMES)[number]),
   );
   const [horizon, setHorizon] = useState(10);
+  const [hitchId, setHitchId] = useState<string>("base");
   const [dragging, setDragging] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
+
+  const activeHitch = hitches.find((h) => h.id === hitchId) || null;
+  const sourcePoints =
+    hitchId !== "base" && activeHitch?.points?.length
+      ? activeHitch.points
+      : trajectory?.points || [];
+  const allPoints = sourcePoints.filter((p) => Number.isFinite(Number(p.value_usd)));
 
   // Exact window: N years back AND N years forward (symmetric around today)
   const points = useMemo(() => {
@@ -243,6 +260,12 @@ export function PriceTrajectory({
           <p className="mt-1 text-xs text-[var(--muted)] break-words">
             {windowMath.startYear} → today → {windowMath.endYear} · {knowledge}
           </p>
+          <p className="mt-1 text-[11px] text-[var(--muted)] leading-snug">
+            Far years fade on purpose — not a straight rocket.{" "}
+            {trajectory?.annual_rate_display
+              ? `Near-term pace ~${trajectory.annual_rate_display}.`
+              : null}
+          </p>
         </div>
         <div className="traj-stats">
           <div>
@@ -275,9 +298,10 @@ export function PriceTrajectory({
         ))}
       </div>
 
+      <div className="traj-chart-row">
       <div className="traj-chart-wrap">
         <svg
-          key={`traj-${horizon}-${layout.minYear}-${layout.maxYear}`}
+          key={`traj-${horizon}-${hitchId}-${layout.minYear}-${layout.maxYear}`}
           ref={svgRef}
           className="traj-chart interactive"
           viewBox={`0 0 ${layout.w} ${layout.h}`}
@@ -376,6 +400,41 @@ export function PriceTrajectory({
           )}
         </svg>
       </div>
+
+      {!compact && hitches.length > 0 ? (
+        <div className="traj-hitch-rail" role="tablist" aria-label="What-if hitches">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={hitchId === "base"}
+            className={`traj-hitch-btn ${hitchId === "base" ? "active" : ""}`}
+            onClick={() => setHitchId("base")}
+            title="Base path for this property"
+          >
+            <span className="traj-hitch-k">Base</span>
+            <span className="traj-hitch-v">No hitch</span>
+          </button>
+          {hitches.slice(0, 3).map((h) => (
+            <button
+              key={h.id}
+              type="button"
+              role="tab"
+              aria-selected={hitchId === h.id}
+              className={`traj-hitch-btn ${hitchId === h.id ? "active" : ""}`}
+              onClick={() => setHitchId(h.id)}
+              title={h.plain || h.label}
+            >
+              <span className="traj-hitch-k">{h.short || h.label}</span>
+              <span className="traj-hitch-v">{h.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      </div>
+
+      {activeHitch && hitchId !== "base" ? (
+        <p className="traj-hitch-note">{activeHitch.plain}</p>
+      ) : null}
 
       {selected && (
         <div className={`chart-readout traj-readout ${dragging ? "live" : ""}`}>

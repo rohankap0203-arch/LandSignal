@@ -721,6 +721,126 @@ button.score-bar-click:disabled {
   padding: 10px 12px;
 }
 
+.traj-chart-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.traj-hitch-rail {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  width: 72px;
+}
+
+.traj-hitch-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  padding: 6px 7px;
+  text-align: left;
+  cursor: pointer;
+  min-height: 0;
+}
+
+.traj-hitch-btn:hover,
+.traj-hitch-btn.active {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 10%, var(--bg-elevated));
+}
+
+.traj-hitch-k {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.traj-hitch-v {
+  font-size: 9px;
+  line-height: 1.2;
+  color: var(--muted);
+}
+
+.traj-hitch-note {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .traj-chart-row {
+    grid-template-columns: 1fr;
+  }
+
+  .traj-hitch-rail {
+    width: 100%;
+    flex-direction: row;
+  }
+
+  .traj-hitch-btn {
+    flex: 1;
+  }
+}
+
+.help-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(12, 18, 16, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.help-modal {
+  width: min(420px, 100%);
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  padding: 16px 18px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.22);
+}
+
+.help-modal-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+}
+
+.help-modal-list li {
+  display: grid;
+  gap: 2px;
+  border-radius: 10px;
+  background: var(--bg-soft);
+  padding: 8px 10px;
+}
+
+.help-modal-list strong {
+  font-size: 0.9rem;
+}
+
+.help-modal-list span {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 .mini-bar {
   margin-top: 6px;
   height: 8px;

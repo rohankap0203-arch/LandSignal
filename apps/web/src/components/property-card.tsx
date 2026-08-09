@@ -108,6 +108,12 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
         {blurb ? (
           <p className="card-thesis mt-1.5 text-sm leading-snug text-[var(--muted)] break-words">{blurb}</p>
         ) : null}
+        {row.scout_note ? (
+          <p className="mt-1 text-xs leading-snug text-[var(--ink)] break-words">
+            <span className="text-[var(--muted)]">Why this file · </span>
+            {row.scout_note}
+          </p>
+        ) : null}
 
         <div className="card-meta-line mt-2" title="Interest · filter match · listed price">
           <span className={`conviction-pill ${conviction.toLowerCase()}`}>{convictionLabel(conviction)}</span>

@@ -96,6 +96,7 @@ export type RadarRow = {
   how_to_buy?: string | null;
   return_thesis?: string | null;
   conviction?: string | null;
+  scout_note?: string | null;
   trajectory_regime?: string | null;
   trajectory_label?: string | null;
   trajectory_cagr_5y?: string | null;

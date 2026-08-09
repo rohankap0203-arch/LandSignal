@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AcquireRail } from "@/components/acquire-rail";
 
 type AnyRec = Record<string, unknown>;
 
@@ -11,24 +10,13 @@ function money(v: unknown): string {
   return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
-/** X–Y bid clearing chart + distinct source/call under the map. */
+/** X–Y bid clearing chart + source note (contact CTAs live under How to reach the seller). */
 export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
   const chart = (cockpit.chart as AnyRec) || {};
   const points = ((chart.points as AnyRec[]) || []).filter(
     (p) => Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)),
   );
   const source = (cockpit.source as AnyRec) || {};
-  const links = ((source.links as AnyRec[]) || []) as Array<{
-    kind?: string;
-    url?: string;
-    label?: string;
-  }>;
-  const find =
-    links.find((l) => l.kind === "lookup") ||
-    links.find((l) => String(l.label || "").toLowerCase().includes("parcel"));
-  const posting =
-    links.find((l) => l.kind === "primary")?.url ||
-    (source.website ? String(source.website) : null);
   const [active, setActive] = useState(0);
 
   const layout = useMemo(() => {
@@ -192,17 +180,12 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
         <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Where we found this</div>
         <div className="font-semibold break-words">{String(source.source_name || "Public GIS")}</div>
         <div className="mt-1 text-sm text-[var(--muted)] break-words">{String(source.office || "")}</div>
-        <AcquireRail
-          className="mt-3"
-          postingUrl={posting}
-          phone={source.phone ? String(source.phone) : null}
-          office={source.office ? String(source.office) : null}
-          findUrl={find?.url ? String(find.url) : null}
-          findLabel={find?.label ? String(find.label) : null}
-        />
         {source.how_to_buy ? (
           <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{String(source.how_to_buy)}</p>
         ) : null}
+        <p className="mt-2 text-[11px] text-[var(--muted)]">
+          To call or open the office page, use <strong>How to reach the seller</strong> above.
+        </p>
       </div>
     </div>
   );

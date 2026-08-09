@@ -180,6 +180,10 @@ def _base_annual_rate(
     prime_pct: float | None,
     flood_pct: float | None,
     wet_pct: float | None,
+    access_score: float | None = None,
+    slope_pct: float | None = None,
+    liquidity: float | None = None,
+    scarcity: float | None = None,
 ) -> tuple[float, list[str]]:
     st = (state or "").upper()
     base = STATE_ANNUAL_APPRECIATION.get(st, 0.028)
@@ -223,9 +227,24 @@ def _base_annual_rate(
     if wet_pct is not None and wet_pct >= 25:
         rate -= 0.004
         notes.append(f"About {wet_pct:.0f}% wetlands on the map subtracts −0.4 percentage points per year.")
+    if access_score is not None and access_score < 40:
+        rate -= 0.005
+        notes.append(f"Weak access screen ({access_score:.0f}/100) slows the path (−0.5 pts/yr).")
+    elif access_score is not None and access_score >= 75:
+        rate += 0.002
+        notes.append(f"Clearer access ({access_score:.0f}/100) adds a small lift (+0.2 pts/yr).")
+    if slope_pct is not None and slope_pct >= 15:
+        rate -= 0.003
+        notes.append(f"Steeper ground (avg slope ~{slope_pct:.0f}%) softens long-run pace (−0.3 pts/yr).")
+    if liquidity is not None and liquidity < 40:
+        rate -= 0.003
+        notes.append(f"Thin resale ease ({liquidity:.0f}/100) trims the path (−0.3 pts/yr).")
+    if scarcity is not None and scarcity >= 70:
+        rate += 0.002
+        notes.append(f"Higher scarcity ({scarcity:.0f}/100) adds a small support (+0.2 pts/yr).")
 
-    # Clamp to sane land ranges
-    rate = max(-0.04, min(0.12, rate))
+    # Clamp to sane land ranges — long-run land rarely compounds at stock-like rates
+    rate = max(-0.04, min(0.08, rate))
     return rate, notes
 
 
@@ -235,6 +254,79 @@ def _cycle_shaper(offset: int) -> float:
         return CYCLE_SHAPERS[offset]
     # Longer history: soft multi-year cycle (±3%)
     return 1.0 + 0.03 * math.sin(offset * 0.55)
+
+
+def _forward_fade(year_k: int) -> float:
+    """Long holds mean-revert — 100y is not the same % forever.
+
+    Near-term can track the parcel rate; after ~15y fade toward a slower
+    long-run real land pace so mega terminal values stay grounded.
+    """
+    if year_k <= 10:
+        return 1.0
+    if year_k <= 25:
+        return max(0.62, 1.0 - (year_k - 10) * 0.025)
+    if year_k <= 50:
+        return max(0.42, 0.62 - (year_k - 25) * 0.008)
+    return max(0.28, 0.42 - (year_k - 50) * 0.003)
+
+
+def _apply_hitch(offset: int, factor: float, hitch: str | None) -> float:
+    """One-time or multi-year hitch that bends the path (not the base case)."""
+    if not hitch or hitch == "base":
+        return factor
+    if hitch == "rate_shock":
+        # Past: 2022-style cool-off; future: rates bite years 1–6
+        if offset in (-3, -2, -1):
+            return factor * 0.94
+        if 1 <= offset <= 6:
+            return factor * (0.90 if offset <= 3 else 0.95)
+        if 7 <= offset <= 15:
+            return factor * 1.012  # mild catch-up window only
+        return factor
+    if hitch == "growth_surge":
+        # Corridor boom — past mid window + future 5–20, then gentle fade
+        if -12 <= offset <= -4:
+            return factor * 1.035
+        if 4 <= offset <= 20:
+            return factor * 1.04
+        if 21 <= offset <= 35:
+            return factor * 0.995
+        return factor
+    if hitch == "site_hitch":
+        # Flood/access/title realization — a few step-downs, not a permanent grind
+        if offset in (-8, -7):
+            return factor * 0.93
+        if offset in (3, 4, 12, 13, 28, 29):
+            return factor * 0.94
+        return factor
+    return factor
+
+
+def _series_from_anchor(
+    *,
+    anchor: float,
+    annual: float,
+    years_back: int,
+    years_forward: int,
+    hitch: str | None = None,
+) -> dict[int, float]:
+    """Build offset→value with cycle + long-run fade + optional hitch."""
+    vals: dict[int, float] = {0: float(anchor)}
+    for k in range(1, years_back + 1):
+        shaper = _cycle_shaper(-k)
+        fade = _forward_fade(k)  # same fade logic for deep history realism
+        factor = (1.0 + annual * fade) * shaper
+        factor = _apply_hitch(-k, factor, hitch)
+        vals[-k] = vals[-k + 1] / max(factor, 0.82)
+    for k in range(1, years_forward + 1):
+        shaper = _cycle_shaper(k)
+        fade = _forward_fade(k)
+        # Forward already conservative; fade kills runaway 100y terminals
+        factor = (1.0 + annual * 0.85 * fade) * (0.985 + 0.015 * shaper)
+        factor = _apply_hitch(k, factor, hitch)
+        vals[k] = vals[k - 1] * max(factor, 0.82)
+    return vals
 
 
 def build_market_trajectory(
@@ -262,6 +354,8 @@ def build_market_trajectory(
     flood_n = {}
     wet_n = {}
     comps_n = {}
+    access_n = {}
+    terr_n = {}
     if enrichment:
         if enrichment.growth:
             growth_n = enrichment.growth.normalized or enrichment.growth.value or {}
@@ -273,6 +367,10 @@ def build_market_trajectory(
             wet_n = enrichment.wetlands.normalized or enrichment.wetlands.value or {}
         if enrichment.comps:
             comps_n = enrichment.comps.normalized or enrichment.comps.value or {}
+        if enrichment.access:
+            access_n = enrichment.access.normalized or enrichment.access.value or {}
+        if enrichment.terrain:
+            terr_n = enrichment.terrain.normalized or enrichment.terrain.value or {}
 
     growth_score = _f(growth_n.get("path_of_growth_score"))
     if growth_score is None:
@@ -280,6 +378,10 @@ def build_market_trajectory(
     prime = _f(soil_n.get("prime_farmland_pct"))
     flood = _f(flood_n.get("flood_zone_pct"))
     wet = _f(wet_n.get("wetland_pct"))
+    access_score = _f(access_n.get("legal_access_confidence"))
+    slope_pct = _f(terr_n.get("avg_slope_pct"))
+    liquidity = _f(comps_n.get("liquidity_score"))
+    scarcity = _f(comps_n.get("scarcity_score"))
 
     annual, method_notes = _base_annual_rate(
         state=state,
@@ -289,6 +391,13 @@ def build_market_trajectory(
         prime_pct=prime,
         flood_pct=flood,
         wet_pct=wet,
+        access_score=access_score,
+        slope_pct=slope_pct,
+        liquidity=liquidity,
+        scarcity=scarcity,
+    )
+    method_notes.append(
+        "Long horizons fade toward a slower real land pace — 100 years is not the near-term % forever."
     )
 
     # Anchor: screening mark preferred; else ask; else synthetic prior
@@ -309,51 +418,75 @@ def build_market_trajectory(
     has_observed = len(observed) >= 2
 
     now_y = datetime.now(timezone.utc).year
-    points: list[dict[str, Any]] = []
 
-    # Walk backward then forward from today using compounded annual + cycle shaper
-    # Value_t = anchor / Π(1+r_eff) for past years
-    # Calibrate so year 0 = anchor
-    past_vals: dict[int, float] = {0: float(anchor)}
-    for k in range(1, years_back + 1):
-        shaper = _cycle_shaper(-k)
-        factor = (1.0 + annual) * shaper
-        past_vals[-k] = past_vals[-k + 1] / max(factor, 0.85)
-
-    future_vals: dict[int, float] = {0: float(anchor)}
-    for k in range(1, years_forward + 1):
-        shaper = _cycle_shaper(k)
-        # Forward slightly conservative vs history
-        future_vals[k] = future_vals[k - 1] * (1.0 + annual * 0.9) * (0.98 + 0.02 * shaper)
-
-    for offset in range(-years_back, years_forward + 1):
-        year = now_y + offset
-        if offset <= 0:
-            val = past_vals[offset]
-            kind = "history"
-        else:
-            val = future_vals[offset]
-            kind = "outlook"
-        # Blend observed marks when present in that year
-        obs = next((m for m in observed if m["year"] == year), None)
-        if obs:
-            # Pull series toward observed mark (70% observed / 30% trend)
-            val = 0.7 * obs["value_usd"] + 0.3 * val
-            point_src = "blended_observed"
-            note = f"Includes a real {obs['label'].lower()} figure from the source, blended with the local trend"
-        else:
-            point_src = "trend_proxy"
-            note = "Estimated from similar land in this state and listing type (no deed sale found for this year)"
-        points.append(
-            {
-                "year": year,
-                "offset": offset,
-                "value_usd": round(val, 0),
-                "kind": kind,
-                "source": point_src,
-                "note": note,
-            }
+    def _points_for(hitch: str | None) -> list[dict[str, Any]]:
+        series = _series_from_anchor(
+            anchor=float(anchor),
+            annual=annual,
+            years_back=years_back,
+            years_forward=years_forward,
+            hitch=hitch,
         )
+        out: list[dict[str, Any]] = []
+        for offset in range(-years_back, years_forward + 1):
+            year = now_y + offset
+            val = series[offset]
+            kind = "history" if offset <= 0 else "outlook"
+            obs = next((m for m in observed if m["year"] == year), None)
+            if obs and hitch in (None, "base"):
+                val = 0.7 * obs["value_usd"] + 0.3 * val
+                point_src = "blended_observed"
+                note = f"Includes a real {obs['label'].lower()} figure from the source, blended with the local trend"
+            else:
+                point_src = "trend_proxy" if hitch in (None, "base") else f"hitch_{hitch}"
+                note = (
+                    "Estimated from similar land in this state and listing type (no deed sale found for this year)"
+                    if hitch in (None, "base")
+                    else f"What-if path · {hitch.replace('_', ' ')} hitch applied on this parcel’s screens"
+                )
+            out.append(
+                {
+                    "year": year,
+                    "offset": offset,
+                    "value_usd": round(val, 0),
+                    "kind": kind,
+                    "source": point_src,
+                    "note": note,
+                }
+            )
+        return out
+
+    points = _points_for("base")
+    # Parcel-aware hitch labels
+    hitch_catalog = [
+        {
+            "id": "rate_shock",
+            "label": "Rate bite",
+            "short": "Rates",
+            "plain": "Higher borrowing costs cool bids for a few years — then a mild catch-up.",
+            "points": _points_for("rate_shock"),
+        },
+        {
+            "id": "growth_surge",
+            "label": "Growth surge",
+            "short": "Growth",
+            "plain": (
+                f"Stronger corridor demand around {county or 'this county'} lifts the mid years, then fades."
+            ),
+            "points": _points_for("growth_surge"),
+        },
+        {
+            "id": "site_hitch",
+            "label": "Site hitch",
+            "short": "Site",
+            "plain": (
+                "A flood, access, or title surprise steps value down — then the climb stays slower."
+                if (flood or 0) >= 15 or (wet or 0) >= 15 or (access_score is not None and access_score < 50)
+                else "A site/title surprise steps value down — then the climb stays slower on this channel."
+            ),
+            "points": _points_for("site_hitch"),
+        },
+    ]
 
     # Stats
     y0 = next(p for p in points if p["offset"] == 0)
@@ -491,13 +624,18 @@ def build_market_trajectory(
         "windows": windows,
         "window_stats": window_stats,
         "points": points,
+        "hitches": hitch_catalog,
         "sparkline": spark,
         "observed_marks": observed,
         "method_notes": method_notes,
-        "summary_bullets": summary_bullets,
+        "summary_bullets": summary_bullets
+        + [
+            "Far-out years fade toward a slower real land pace — not a straight rocket to generational millions.",
+            "Use the hitch buttons to stress rate bites, growth surges, or a site surprise on this same pin.",
+        ],
         "interaction_hint": "Each button shows that many years back and the same span ahead. Drag to read any year.",
         "disclaimer": (
-            "First look only. When deed history is missing, dollars follow similar land in this state "
-            "and listing type. Not an appraisal or a promise of future prices."
+            "First look only. Long outlooks are faded on purpose. When deed history is missing, dollars "
+            "follow similar land in this state and listing type. Not an appraisal or a promise of future prices."
         ),
     }
