@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AccountMenu } from "@/components/account-menu";
 import { MapPinMark } from "@/components/map-pin-mark";
 
 const NAV = [
@@ -17,16 +18,21 @@ const NAV = [
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const isAuthPage = pathname === "/login";
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
+  if (isAuthPage) {
+    return <div className="min-h-screen">{children}</div>;
+  }
+
   return (
     <div className="min-h-screen">
       <header className="shell-header">
         <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-4 px-4 py-3.5">
-          <div className="flex items-center gap-8">
+          <div className="flex min-w-0 items-center gap-8">
             <Link href="/" className="shell-brand">
               <MapPinMark className="shell-brand-mark" />
               <span className="display text-2xl font-semibold text-[var(--brand)]">LandSignal</span>
@@ -51,9 +57,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
               ))}
             </nav>
           </div>
-          <button type="button" className="btn btn-ghost text-sm" onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}>
-            {theme === "light" ? "Dark" : "Light"}
-          </button>
+          <div className="shell-header-actions">
+            <AccountMenu />
+            <button
+              type="button"
+              className="btn btn-ghost text-sm"
+              onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
+            >
+              {theme === "light" ? "Dark" : "Light"}
+            </button>
+          </div>
         </div>
       </header>
       <main className="mx-auto max-w-[1240px] px-4 py-6">{children}</main>

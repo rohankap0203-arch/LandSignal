@@ -14,3 +14,4 @@ pgdata/
 .idea/
 .vscode/
 apps/web/public/mapbox*
+apps/web/.data/
