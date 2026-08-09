@@ -4275,6 +4275,10 @@ a.acquire-block:hover {
   font: inherit;
 }
 
+.land-viewer-map .leaflet-control-attribution {
+  display: none !important;
+}
+
 .land-viewer-map .leaflet-control-zoom {
   border: none !important;
   margin: 12px !important;
