@@ -194,7 +194,7 @@ function MatchCard({
             <div className="land-alert-card-badges">
               <label
                 className={`land-alert-checkseen${dimmed ? " on" : ""}`}
-                title="Mark as seen — moves to Viewed after refresh"
+                title="Save match — moves to Saved"
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
               >
@@ -202,7 +202,7 @@ function MatchCard({
                   type="checkbox"
                   checked={dimmed}
                   onChange={(e) => onToggleSeen(row.parcel_id, e.target.checked)}
-                  aria-label="Mark match as seen"
+                  aria-label="Save match"
                 />
                 <span className="land-alert-checkseen-box" aria-hidden>
                   {dimmed ? "✓" : ""}
@@ -317,13 +317,13 @@ export default function LandAlertsPage() {
   const [editing, setEditing] = useState(true);
   const [matches, setMatches] = useState<LandAlertMatchCard[]>([]);
   const [counts, setCounts] = useState({ new: 0, unseen: 0, viewed: 0, total: 0 });
-  const [tab, setTab] = useState<"new" | "current" | "viewed">("current");
+  const [tab, setTab] = useState<"matches" | "saved">("matches");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [inAppAlerts, setInAppAlerts] = useState<Record<string, unknown>[]>([]);
-  /** Checked this session — grey out now; move to Viewed on refresh / return */
-  const [pendingSeen, setPendingSeen] = useState<Set<string>>(() => new Set());
+  /** Checked this session — grey in Matches; also listed under Saved */
+  const [pendingSaved, setPendingSaved] = useState<Set<string>>(() => new Set());
   const [markAllActive, setMarkAllActive] = useState(false);
   const [bootReady, setBootReady] = useState(false);
 
@@ -331,7 +331,7 @@ export default function LandAlertsPage() {
     const data = await landsignalApi.landAlertMatches(profileId || undefined);
     setMatches(data.matches || []);
     setCounts(data.counts || { new: 0, unseen: 0, viewed: 0, total: 0 });
-    setPendingSeen(new Set());
+    setPendingSaved(new Set());
     setMarkAllActive(false);
   }, [profileId]);
 
@@ -409,30 +409,59 @@ export default function LandAlertsPage() {
   }, []);
 
   const visible = useMemo(() => {
-    if (tab === "viewed") {
-      // Pending checks stay out of Viewed until refresh / return
-      return matches.filter((m) => m.status === "viewed" && !pendingSeen.has(m.parcel_id));
+    if (tab === "saved") {
+      // Saved = checked matches
+      return matches.filter((m) => m.status === "viewed" || pendingSaved.has(m.parcel_id));
     }
-    // Keep pending-seen cards in place (greyed) until refresh / return
-    if (tab === "new") {
-      return matches.filter((m) => m.status === "new" || pendingSeen.has(m.parcel_id));
-    }
+    // Matches = new + current. Opening a report does not remove them.
+    // Checked items stay greyed here this session, then live under Saved after refresh.
     return matches.filter(
-      (m) => m.status === "new" || m.status === "unseen" || pendingSeen.has(m.parcel_id),
+      (m) => m.status === "new" || m.status === "unseen" || pendingSaved.has(m.parcel_id),
     );
-  }, [matches, tab, pendingSeen]);
+  }, [matches, tab, pendingSaved]);
+
+  const matchesTabCount = useMemo(
+    () =>
+      matches.filter(
+        (m) => m.status === "new" || m.status === "unseen" || pendingSaved.has(m.parcel_id),
+      ).length,
+    [matches, pendingSaved],
+  );
+  const savedTabCount = useMemo(() => {
+    const ids = new Set<string>();
+    for (const m of matches) {
+      if (m.status === "viewed" || pendingSaved.has(m.parcel_id)) ids.add(m.parcel_id);
+    }
+    return ids.size;
+  }, [matches, pendingSaved]);
 
   async function toggleSeen(parcelId: string, nextChecked: boolean) {
-    setPendingSeen((prev) => {
+    setPendingSaved((prev) => {
       const next = new Set(prev);
       if (nextChecked) next.add(parcelId);
       else next.delete(parcelId);
-      const activeIds = matches
+      const openIds = matches
         .filter((m) => m.status === "new" || m.status === "unseen" || next.has(m.parcel_id))
         .map((m) => m.parcel_id);
-      const unique = Array.from(new Set(activeIds));
+      const unique = Array.from(new Set(openIds));
       setMarkAllActive(unique.length > 0 && unique.every((id) => next.has(id)));
       return next;
+    });
+    setMatches((prev) =>
+      prev.map((m) => {
+        if (m.parcel_id !== parcelId) return m;
+        if (nextChecked) return { ...m, status: "viewed" };
+        // Restore to unseen (or new if it was a discovery)
+        return { ...m, status: m.is_new_discovery || m.origin === "new_discovery" ? "new" : "unseen" };
+      }),
+    );
+    setCounts((c) => {
+      const delta = nextChecked ? 1 : -1;
+      return {
+        ...c,
+        viewed: Math.max(0, c.viewed + delta),
+        unseen: Math.max(0, (c.unseen || 0) + (nextChecked ? -1 : 1)),
+      };
     });
     try {
       if (nextChecked) await landsignalApi.markLandAlertViewed(parcelId);
@@ -447,29 +476,28 @@ export default function LandAlertsPage() {
     [matches],
   );
 
-  // Undo when this session marked all, OR everything already sits in Viewed (e.g. after refresh)
+  // Undo when this session saved all, OR everything already sits in Saved (e.g. after refresh)
   const showUndoMarkAll =
     markAllActive ||
-    pendingSeen.size > 0 ||
-    (counts.viewed > 0 && markAllTargetCount === 0);
+    pendingSaved.size > 0 ||
+    (savedTabCount > 0 && markAllTargetCount === 0);
 
   async function toggleMarkAllSeen() {
     if (showUndoMarkAll) {
       setMarkAllActive(false);
-      setPendingSeen(new Set());
+      setPendingSaved(new Set());
       try {
         await landsignalApi.markAllLandAlertsUnseen(profileId || undefined);
       } catch {
-        const viewedIds = matches.filter((m) => m.status === "viewed").map((m) => m.parcel_id);
+        const savedIds = matches.filter((m) => m.status === "viewed").map((m) => m.parcel_id);
         await Promise.all(
-          viewedIds.map((id) => landsignalApi.unmarkLandAlertViewed(id).catch(() => null)),
+          savedIds.map((id) => landsignalApi.unmarkLandAlertViewed(id).catch(() => null)),
         );
       }
-      // Reload so restored matches leave Viewed and return to New / Current
       const data = await landsignalApi.landAlertMatches(profileId || undefined);
       setMatches(data.matches || []);
       setCounts(data.counts || { new: 0, unseen: 0, viewed: 0, total: 0 });
-      setTab("current");
+      setTab("matches");
       setMsg("");
       return;
     }
@@ -479,13 +507,12 @@ export default function LandAlertsPage() {
       .map((m) => m.parcel_id);
     if (!ids.length) return;
     setMarkAllActive(true);
-    setPendingSeen(new Set(ids));
+    setPendingSaved(new Set(ids));
     try {
       await landsignalApi.markAllLandAlertsSeen(profileId || undefined);
     } catch {
       await Promise.all(ids.map((id) => landsignalApi.markLandAlertViewed(id).catch(() => null)));
     }
-    // Keep cards greyed in Current this session; persist viewed for next visit
     setMatches((prev) =>
       prev.map((m) => (ids.includes(m.parcel_id) ? { ...m, status: "viewed" } : m)),
     );
@@ -553,7 +580,7 @@ export default function LandAlertsPage() {
       setMsg(
         `Profile saved. ${res.match_count} current matches from existing inventory. Monitoring continues in the background.`,
       );
-      setTab("current");
+      setTab("matches");
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Could not save profile");
     } finally {
@@ -641,7 +668,7 @@ export default function LandAlertsPage() {
               onClick={() => void toggleMarkAllSeen()}
               aria-pressed={showUndoMarkAll}
             >
-              Mark all as seen
+              {showUndoMarkAll ? "Unsave all" : "Save all"}
             </button>
           </div>
         ) : null}
@@ -960,24 +987,17 @@ export default function LandAlertsPage() {
           <div className="land-alerts-tabs">
             <button
               type="button"
-              className={tab === "new" ? "on" : ""}
-              onClick={() => setTab("new")}
+              className={tab === "matches" ? "on" : ""}
+              onClick={() => setTab("matches")}
             >
-              New Matches ({counts.new})
+              Matches ({matchesTabCount})
             </button>
             <button
               type="button"
-              className={tab === "current" ? "on" : ""}
-              onClick={() => setTab("current")}
+              className={tab === "saved" ? "on" : ""}
+              onClick={() => setTab("saved")}
             >
-              Current Matches ({counts.new + counts.unseen})
-            </button>
-            <button
-              type="button"
-              className={tab === "viewed" ? "on" : ""}
-              onClick={() => setTab("viewed")}
-            >
-              Viewed ({counts.viewed})
+              Saved ({savedTabCount})
             </button>
           </div>
 
@@ -986,17 +1006,15 @@ export default function LandAlertsPage() {
               <MatchCard
                 key={row.id}
                 row={row}
-                dimmed={pendingSeen.has(row.parcel_id)}
+                dimmed={pendingSaved.has(row.parcel_id) || row.status === "viewed"}
                 onToggleSeen={toggleSeen}
               />
             ))}
             {!visible.length ? (
               <div className="panel empty-state p-6">
-                {tab === "new"
-                  ? "No newly discovered matches yet. LandSignal keeps scanning in the background."
-                  : tab === "viewed"
-                    ? "You haven’t opened any matched properties yet."
-                    : "No current matches for this profile. Widen preferences or wait for new inventory."}
+                {tab === "saved"
+                  ? "No saved matches yet. Check a match to save it here."
+                  : "No matches for this profile yet. Widen preferences or wait for new inventory."}
               </div>
             ) : null}
           </div>
