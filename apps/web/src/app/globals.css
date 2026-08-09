@@ -656,8 +656,8 @@ select {
 }
 
 .shell-brand-mark {
-  width: 1.75rem;
-  height: 1.48rem;
+  width: 2.35rem;
+  height: 1.98rem;
   color: var(--brand);
   flex: 0 0 auto;
   /* Optical lift — pin mass sits a bit high relative to the wordmark */
@@ -686,8 +686,8 @@ select {
 
 @media (max-width: 720px) {
   .shell-brand-mark {
-    width: 1.5rem;
-    height: 1.26rem;
+    width: 2rem;
+    height: 1.68rem;
     transform: translateY(-1px);
   }
 }
@@ -3611,7 +3611,7 @@ a.acquire-block:hover {
 
 .land-alert-watch {
   margin-top: 0.15rem;
-  margin-bottom: 0;
+  margin-bottom: 0.55rem;
   font-size: 0.72rem;
   color: color-mix(in srgb, #a65b1a 80%, var(--ink));
   line-height: 1.25;
@@ -3621,7 +3621,7 @@ a.acquire-block:hover {
   display: flex;
   justify-content: stretch;
   width: 100%;
-  margin: 0.35rem 0 0.1rem;
+  margin: 0.65rem 0 0.1rem;
   transform: none;
 }
 

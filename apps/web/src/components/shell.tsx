@@ -28,8 +28,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-4 px-4 py-3.5">
           <div className="flex items-center gap-8">
             <Link href="/" className="shell-brand">
-              <span className="display text-2xl font-semibold text-[var(--brand)]">LandSignal</span>
               <MapPinMark className="shell-brand-mark" />
+              <span className="display text-2xl font-semibold text-[var(--brand)]">LandSignal</span>
               <span className="shell-brand-tagline hidden text-xs text-[var(--muted)] sm:inline">
                 Land investment intelligence
               </span>
