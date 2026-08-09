@@ -324,9 +324,9 @@ function pickTopHits(
     const detail =
       kind === "flood"
         ? floodTagged
-          ? "OSM flood tag"
+          ? "Flood tag"
           : "Nearest mapped waterway (flood-adjacency)"
-        : "OpenStreetMap";
+        : undefined;
 
     const key = elementKey(el);
     const hit = {
@@ -503,7 +503,6 @@ export function LandViewerModal({
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [nearbyHits, setNearbyHits] = useState<NearbyHit[]>([]);
   const [nearbyHitIndex, setNearbyHitIndex] = useState(0);
-  const [nearbyNextPulse, setNearbyNextPulse] = useState(false);
 
   const hasGeo = latitude != null && longitude != null;
   const center = useMemo<[number, number]>(
@@ -528,7 +527,6 @@ export function LandViewerModal({
     setNearbyStatus("");
     setNearbyHits([]);
     setNearbyHitIndex(0);
-    setNearbyNextPulse(false);
     setElevationFt(null);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -692,7 +690,7 @@ export function LandViewerModal({
   }, []);
 
   const paintNearbyHit = useCallback(
-    async (hit: NearbyHit, index: number, total: number) => {
+    async (hit: NearbyHit, index: number) => {
       const chip = NEARBY_CHIPS.find((c) => c.kind === hit.kind);
       const L = await import("leaflet");
       const map = mapRef.current;
@@ -715,9 +713,7 @@ export function LandViewerModal({
         fillOpacity: 1,
       })
         .bindPopup(
-          `<strong>${rank} ${hit.label}</strong><br/>${hit.name}<br/>${formatDistance(hit.meters)} away` +
-            (hit.detail ? `<br/><span style="opacity:.8">${hit.detail}</span>` : "") +
-            (total > 1 ? `<br/><span style="opacity:.75">${index + 1} of ${total}</span>` : ""),
+          `<strong>${rank} ${hit.label}</strong><br/>${hit.name}<br/>${formatDistance(hit.meters)} away`,
         )
         .addTo(layer)
         .openPopup();
@@ -725,10 +721,7 @@ export function LandViewerModal({
         padding: [60, 60],
         maxZoom: 14,
       });
-      setNearbyStatus(
-        `${rank} ${hit.label}: ${formatDistance(hit.meters)} · ${hit.name}` +
-          (hit.detail ? ` · ${hit.detail}` : ""),
-      );
+      setNearbyStatus(`${rank} ${hit.label}: ${formatDistance(hit.meters)} · ${hit.name}`);
     },
     [center],
   );
@@ -767,18 +760,14 @@ export function LandViewerModal({
         setNearbyHits([]);
         setNearbyHitIndex(0);
         setNearbyStatus(
-          `No mapped ${chip?.label?.toLowerCase() ?? "feature"} within ~${chip?.maxMiles ?? 10} mi (OpenStreetMap)`,
+          `No mapped ${chip?.label?.toLowerCase() ?? "feature"} within ~${chip?.maxMiles ?? 10} mi`,
         );
         return;
       }
 
       setNearbyHits(hits);
       setNearbyHitIndex(0);
-      await paintNearbyHit(hits[0], 0, hits.length);
-      if (hits.length > 1) {
-        setNearbyNextPulse(true);
-        window.setTimeout(() => setNearbyNextPulse(false), 900);
-      }
+      await paintNearbyHit(hits[0], 0);
     },
     [hasGeo, latitude, longitude, nearbyActive, paintNearbyHit],
   );
@@ -790,9 +779,7 @@ export function LandViewerModal({
     const hit = nearbyHits[next];
     if (!hit) return;
     setNearbyHitIndex(next);
-    void paintNearbyHit(hit, next, nearbyHits.length);
-    setNearbyNextPulse(true);
-    window.setTimeout(() => setNearbyNextPulse(false), 700);
+    void paintNearbyHit(hit, next);
   }, [nearbyHitIndex, nearbyHits, paintNearbyHit]);
 
   // Mount / tear down map when modal opens
@@ -820,18 +807,18 @@ export function LandViewerModal({
         boxZoom: true,
         keyboard: true,
         zoomControl: true,
-        attributionControl: true,
+        attributionControl: false,
       }).setView(center, hasGeo ? 15 : 4);
       map.zoomControl.setPosition("topleft");
       mapRef.current = map;
 
       const streets = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap",
+        attribution: "",
         maxZoom: 19,
       }).addTo(map);
       const satellite = L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        { attribution: "Esri imagery", maxZoom: 19, opacity: 0.88 },
+        { attribution: "", maxZoom: 19, opacity: 0.88 },
       ).addTo(map);
       layersRef.current.streets = streets;
       layersRef.current.satellite = satellite;
