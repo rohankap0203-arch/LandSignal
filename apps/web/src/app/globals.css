@@ -387,7 +387,6 @@ select {
 }
 
 .btn-land-alerts {
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -396,30 +395,12 @@ select {
   font-weight: 600;
   text-align: center;
   border: 1px solid #0a0a0a;
-  padding-left: 1.15rem;
-  padding-right: 2.15rem;
 }
 
 .btn-land-alerts:hover {
   background: #000000;
   border-color: #000000;
   color: #ffffff;
-}
-
-.btn-land-alerts-label {
-  display: block;
-  width: 100%;
-  text-align: center;
-  line-height: 1.2;
-}
-
-.btn-land-alerts-bell {
-  position: absolute;
-  right: 0.7rem;
-  top: 50%;
-  transform: translateY(-50%);
-  color: #ffffff;
-  pointer-events: none;
 }
 
 /* Small screens: stack secondary actions; keep primary pair side-by-side */
@@ -436,15 +417,6 @@ select {
     padding-right: 10px;
     font-size: 0.9rem;
     white-space: nowrap;
-  }
-
-  .btn-land-alerts {
-    padding-left: 0.65rem;
-    padding-right: 1.75rem;
-  }
-
-  .btn-land-alerts-bell {
-    right: 0.45rem;
   }
 
   .filter-actions-secondary {

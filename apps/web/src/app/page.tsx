@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FilterField } from "@/components/filter-field";
 import { LandLoader } from "@/components/land-loader";
-import { AlertBell } from "@/components/alert-bell";
 import { PropertyCard } from "@/components/property-card";
 import {
   landsignalApi,
@@ -437,14 +436,15 @@ export default function SearchPage() {
               <button
                 type="button"
                 className="btn btn-primary btn-search-primary"
-                onClick={() => void runSearch()}
-                disabled={loading}
+                onClick={() => {
+                  setForm(DEFAULT_FORM);
+                  setStatus("Filters reset to Any. Click Show matches when you want results.");
+                }}
               >
-                {loading ? "Searching…" : "Show matches"}
+                Reset to Any
               </button>
               <Link href="/alerts" className="btn btn-land-alerts btn-search-primary">
-                <span className="btn-land-alerts-label">Land Alerts</span>
-                <AlertBell size={15} label="Land Alerts" className="btn-land-alerts-bell" />
+                Land Alerts
               </Link>
             </div>
             <div className="filter-actions-secondary">
@@ -471,12 +471,10 @@ export default function SearchPage() {
               <button
                 type="button"
                 className="btn btn-secondary filter-action-reset"
-                onClick={() => {
-                  setForm(DEFAULT_FORM);
-                  setStatus("Filters reset to Any. Click Show matches when you want results.");
-                }}
+                onClick={() => void runSearch()}
+                disabled={loading}
               >
-                Reset to Any
+                {loading ? "Searching…" : "Show matches"}
               </button>
             </div>
           </div>
