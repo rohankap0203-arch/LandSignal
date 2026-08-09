@@ -751,6 +751,65 @@ def matches_for_user(
     return rows
 
 
+def _tailored_scout_line(
+    parcel: ParcelRecord | None,
+    listing: ListingRecord | None,
+    score: ScoreRecord | None,
+    source: dict[str, Any],
+    phone: str | None,
+    website: str | None,
+) -> str | None:
+    """One non-redundant acquisition angle — not price, acres, score, or strategy labels."""
+    if not parcel:
+        return None
+    provider = _norm(listing.provider_id if listing else None)
+    channel = {
+        "public_tax_sale": "County tax-sale / land-bank channel — confirm redemption & clear title path",
+        "public_surplus": "Government surplus disposal — process and deposit rules matter more than comps",
+        "blm_lpad": "Federal BLM disposal — access, reservations, and patent conditions are the underwrite",
+        "public_markets": "Public inventory channel — verify the live office page before you chase the pin",
+    }.get(provider)
+
+    # Prefer a concrete diligence kill over generic scores
+    if score and score.what_could_kill:
+        kill = str(score.what_could_kill[0]).strip()
+        if kill and len(kill) < 120:
+            return f"First diligence gate · {kill}"
+
+    if score and score.why_mispriced:
+        tip = str(score.why_mispriced[0]).strip()
+        if tip and len(tip) < 120:
+            return f"Mispricing scent · {tip}"
+
+    if channel:
+        return channel
+
+    # Zoning / use oddity when present
+    use = (parcel.land_use or "").strip()
+    zoning = (parcel.zoning or "").strip()
+    if zoning and use and _norm(zoning) not in _norm(use):
+        return f"Use vs zoning tension · {use} under {zoning}"
+    if zoning:
+        return f"Zoning on file · {zoning} — verify buildability with the county"
+
+    # Contact gap is action-relevant and not shown elsewhere on the front
+    if not phone and not website:
+        return "No public phone or office link yet — parcel ID lookup may be the only door in"
+    if phone and not website:
+        return "Phone on file, no office page — call for status before driving the pin"
+    if website and not phone:
+        return "Office page exists, no public desk number — dig status online first"
+
+    if score and score.why_still_available:
+        tip = str(score.why_still_available[0]).strip()
+        if tip and len(tip) < 120:
+            return f"Still available because · {tip}"
+
+    county = parcel.county or "this county"
+    st = parcel.state or ""
+    return f"Next move · pull {county}{', ' + st if st else ''} assessor / GIS before you treat the ask as firm"
+
+
 def match_card(store: MemoryStore, match: LandAlertMatch) -> dict[str, Any]:
     from landsignal.services.presentation import sourcing_card
 
@@ -784,45 +843,25 @@ def match_card(store: MemoryStore, match: LandAlertMatch) -> dict[str, Any]:
         listing.source_url if listing else None
     )
     phone = source.get("phone")
-    # Live acquisition intel for the Watch block
+    # Timing + one tailored scout line (never restate price/acres/score/strategy already on the card)
     intel_notes: list[str] = []
     if listing and listing.days_on_market is not None:
         dom = int(listing.days_on_market)
         if dom <= 14:
             intel_notes.append(f"Fresh to market · {dom} days listed")
         elif dom >= 120:
-            intel_notes.append(f"Long exposure · {dom} days on market")
-        else:
-            intel_notes.append(f"{dom} days on market")
-    if ppa is not None:
-        intel_notes.append(f"${ppa:,.0f}/acre asking screen")
-    if score:
-        if score.asking_discount_pct is not None:
-            d = float(score.asking_discount_pct)
-            if d >= 15:
-                intel_notes.append(f"~{d:.0f}% under LandSignal value screen")
-            elif d <= -10:
-                intel_notes.append(f"Asking ~{abs(d):.0f}% above value screen")
-        if score.confidence is not None:
-            if score.confidence < 45:
-                intel_notes.append(f"Thin file confidence ({score.confidence:.0f})")
-            elif score.confidence >= 70:
-                intel_notes.append(f"Solid file confidence ({score.confidence:.0f})")
-        if score.deal_readiness is not None and score.deal_readiness < 40:
-            intel_notes.append("Early deal readiness — diligence friction likely")
-        if score.risk is not None:
-            intel_notes.append(f"Risk screen {score.risk:.0f}/100")
-        if score.best_strategy:
-            intel_notes.append(f"Engine leans {score.best_strategy.value.replace('_', ' ').title()}")
-        if score.signal:
-            intel_notes.append(f"Signal: {score.signal.value.title()}")
-    if listing and listing.last_seen_at:
+            intel_notes.append(f"Stale on market · {dom} days — ask what blocked prior buyers")
+    elif listing and listing.last_seen_at:
         try:
             age_h = (datetime.now(timezone.utc) - listing.last_seen_at).total_seconds() / 3600.0
-            if age_h <= 48:
-                intel_notes.append("Seen in feed within 48 hours")
+            if age_h <= 36:
+                intel_notes.append("Just surfaced in the live feed")
         except Exception:
             pass
+
+    scout = _tailored_scout_line(parcel, listing, score, source, phone, website)
+    if scout:
+        intel_notes.append(scout)
 
     return {
         "id": str(match.id),

@@ -215,7 +215,7 @@ function MatchCard({
           ) : null}
           {row.intel_notes?.length ? (
             <ul className="land-alert-intel">
-              {row.intel_notes.slice(0, 4).map((n) => (
+              {row.intel_notes.slice(0, 2).map((n) => (
                 <li key={n}>{n}</li>
               ))}
             </ul>
