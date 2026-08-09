@@ -477,13 +477,13 @@ async def radar(
                     *reasons,
                 ][:5]
             if isinstance(auction_path, dict) and auction_path.get("expected_settle_usd"):
-                # Prefer underwrite-gap bullet from match_reasons; only add opener math if missing
-                if not any("underwrite gap" in r.lower() or "clear ~$" in r.lower() for r in reasons):
+                # Prefer the plain buy-price bullet from match_reasons
+                if not any("likely auction finish" in r.lower() or "likely finish" in r.lower() for r in reasons):
                     reasons = [
                         (
-                            f"Opening bid ${auction_path['opening_bid_usd']:,.0f} — expected settle "
-                            f"~${auction_path['expected_settle_usd']:,.0f} after typical bid-up "
-                            f"(~{auction_path.get('bid_inflation_mult_base', 0):.1f}×)"
+                            f"Starts at ${auction_path['opening_bid_usd']:,.0f}; auctions like this "
+                            f"usually finish near ${auction_path['expected_settle_usd']:,.0f} "
+                            f"(about {auction_path.get('bid_inflation_mult_base', 0):.1f}× the start)"
                         ),
                         *reasons,
                     ][:5]
@@ -494,13 +494,13 @@ async def radar(
                 settle_disc = auction_path.get("settle_discount_pct")
             if settle_disc is not None:
                 discount_display = (
-                    f"Settle-adj {settle_disc:+.1f}% vs model "
-                    f"(opener teaser {auction_path.get('opener_discount_pct', 0):+.0f}%)"
+                    f"Likely finish {settle_disc:+.1f}% vs our value "
+                    f"(start bid looked {auction_path.get('opener_discount_pct', 0):+.0f}%)"
                 )
             elif score.asking_discount_pct is not None:
-                discount_display = f"{score.asking_discount_pct:+.1f}% vs model"
+                discount_display = f"{score.asking_discount_pct:+.1f}% vs our value"
             else:
-                discount_display = "No retail ask to compare"
+                discount_display = "No public price to compare"
             risk_label = (
                 "Lower risk on the map checks"
                 if score.risk < 30
