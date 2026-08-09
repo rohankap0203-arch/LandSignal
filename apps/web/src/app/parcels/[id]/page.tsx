@@ -41,7 +41,6 @@ export default function ParcelIntelligencePage() {
   const params = useParams<{ id: string }>();
   const [data, setData] = useState<AnyRec | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [ddOpen, setDdOpen] = useState<Record<string, boolean>>({});
   const [watched, setWatched] = useState(false);
   const [watchMsg, setWatchMsg] = useState("");
   const [openRating, setOpenRating] = useState<string | null>(null);
@@ -81,7 +80,7 @@ export default function ParcelIntelligencePage() {
   const whyOpp = (brief.why_opportunity as AnyRec[]) || [];
   const whyStill = (brief.why_still_available as AnyRec[]) || [];
   const scenarios = (brief.scenario_cards as AnyRec[]) || (data.scenarios_human as AnyRec[]) || [];
-  const dd = (brief.dd_focus as AnyRec[]) || (data.due_diligence_guided as AnyRec[]) || [];
+  const askYourself = (brief.ask_yourself as AnyRec) || null;
   const story = (brief.score_story as Record<string, string>) || {};
   const returnCase = (brief.return_case as AnyRec) || {};
   const drivers = (data.score_drivers as AnyRec) || {};
@@ -335,7 +334,7 @@ export default function ParcelIntelligencePage() {
                   { id: "sec-why", label: "Why buy / why open" },
                   { id: "sec-score", label: "Score parts" },
                   { id: "sec-land", label: "Land checks" },
-                  { id: "sec-checklist", label: "Before you bid" },
+                  { id: "sec-ask", label: "Ask yourself" },
                 ].map((s) => (
                   <button
                     key={s.id}
@@ -494,50 +493,19 @@ export default function ParcelIntelligencePage() {
         </div>
       </section>
 
-      <section id="sec-checklist" className="panel p-4 scroll-mt-20 dd-compact">
-        <h2 className="display text-lg font-semibold">Before you spend money on this file</h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Diligence steps that still stand between you and a clean bid — tap a row for why it
-          matters on this pin and where to start.
-          {dd.length > 0
-            ? ` ${dd.filter((i) => i.completed).length} of ${dd.length} already cleared.`
-            : ""}
-          {score?.deal_readiness != null
-            ? ` Land basics already on file (access, flood, wetlands, comps, zoning): ${Number(score.deal_readiness).toFixed(0)}/100.`
-            : ""}
-        </p>
-        <div className="mt-3 grid gap-1.5">
-          {dd.map((item) => {
-            const label = String(item.label);
-            const open = ddOpen[label];
-            return (
-              <button
-                key={label}
-                type="button"
-                className="border border-[var(--line)] bg-[var(--bg-soft)] text-left"
-                onClick={() => setDdOpen((s) => ({ ...s, [label]: !s[label] }))}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="font-semibold">
-                    {item.completed ? "☑" : "☐"} {label}
-                  </div>
-                  <span className="rounded-full bg-[var(--bg-elevated)] px-2 py-0.5 text-[10px] font-semibold">
-                    {String(item.priority || "Soon")}
-                  </span>
-                </div>
-                {open && (
-                  <div className="mt-1.5 space-y-1 text-xs text-[var(--muted)]">
-                    <p>{String(item.parcel_note || item.why_it_matters)}</p>
-                    <p>
-                      <strong className="text-[var(--ink)]">Start:</strong> {String(item.how_to_start)}
-                    </p>
-                  </div>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </section>
+      {askYourself?.question ? (
+        <section id="sec-ask" className="panel ask-yourself scroll-mt-20 p-5 md:p-7">
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
+            {String(askYourself.label || "Ask yourself")}
+          </div>
+          <p className="ask-yourself-q display mt-3 text-2xl font-semibold leading-snug md:text-[1.85rem]">
+            {String(askYourself.question)}
+          </p>
+          {askYourself.aftertaste ? (
+            <p className="mt-4 text-sm text-[var(--muted)]">{String(askYourself.aftertaste)}</p>
+          ) : null}
+        </section>
+      ) : null}
 
     </div>
   );

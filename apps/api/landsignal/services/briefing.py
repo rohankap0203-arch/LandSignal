@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from landsignal.services.ask_yourself import build_ask_yourself
 from landsignal.services.voice import place_phrase, strip_apn_mentions, this_property
 
 from typing import Any
@@ -588,6 +589,14 @@ def build_intelligence_brief(
             return {k: _scrub(v) for k, v in obj.items()}
         return obj
 
+    ask_yourself = build_ask_yourself(
+        parcel=parcel,
+        listing=listing,
+        score=score,
+        land_readouts=land_readouts,
+        enrichment=enrichment,
+    )
+
     return _scrub({
         "why_opportunity": why,
         "why_still_available": still,
@@ -597,6 +606,7 @@ def build_intelligence_brief(
         "wetlands_addendum": wet_extra,
         "transmission_addendum": tx_extra,
         "scenario_cards": scen_notes,
+        "ask_yourself": ask_yourself,
         "dd_focus": dd_focus,
         "score_story": {
             "landsignal": (
