@@ -28,6 +28,19 @@ function shortPrice(display: string): string {
   return s.slice(0, 27).trimEnd() + "…";
 }
 
+/** Modal title mirrors the headline (or discount line) left of the ? */
+function gapHelpTitle(headline: string | null | undefined, discountDisplay: string | null | undefined): string {
+  const h = (headline || "").trim();
+  if (/under our value|vs our value|our value/i.test(h)) {
+    return `What “${h}” means`;
+  }
+  const d = (discountDisplay || "").trim().replace(/\s*\(start bid[^)]*\)\s*$/i, "").trim();
+  if (/vs our value|under our/i.test(d)) {
+    return `What “${d}” means`;
+  }
+  return "What this price gap means";
+}
+
 export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
   const router = useRouter();
   const [intelPending, setIntelPending] = useState(false);
@@ -48,12 +61,24 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
   const gapHelp =
     row.discount_help?.trim() ||
     (row.discount_pct != null && row.estimated_value != null
-      ? `Our desktop value for this ${row.acres_display} tract in ${row.location} is about ${row.estimated_value_display}. The public price screen (${row.price_display}) is ${Math.abs(row.discount_pct).toFixed(0)}% ${row.discount_pct < 0 ? "under" : "over"} that mark. That gap is a buy-edge screen — not a guaranteed close price.`
+      ? (() => {
+          const h = (row.headline_metric || "").trim();
+          const lead =
+            /under our value|vs our value/i.test(h)
+              ? `“${h}” means `
+              : "";
+          return (
+            `${lead}our desktop value for this ${row.acres_display} tract in ${row.location} is about ${row.estimated_value_display}. ` +
+            `The public price screen (${row.price_display}) is ${Math.abs(row.discount_pct).toFixed(0)}% ` +
+            `${row.discount_pct < 0 ? "under" : "over"} that mark. That gap is a buy-edge screen — not a guaranteed close price.`
+          );
+        })()
       : null);
   const showGapHelp =
     Boolean(gapHelp) &&
     (/under our value|vs our value/i.test(row.headline_metric || "") ||
       /vs our value|under our/i.test(row.discount_display || ""));
+  const gapTitle = gapHelpTitle(row.headline_metric, row.discount_display);
 
   useEffect(() => {
     if (!gapHelpOpen) return;
@@ -113,7 +138,7 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
               <button
                 type="button"
                 className={`help-q headline-help-q ${gapHelpOpen ? "on" : ""}`}
-                aria-label="What under our value means"
+                aria-label={gapTitle}
                 aria-expanded={gapHelpOpen}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -249,11 +274,11 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             className="help-modal"
             role="dialog"
             aria-modal="true"
-            aria-label="What under our value means"
+            aria-label={gapTitle}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
-              <strong className="display text-lg leading-snug">What “under our value” means here</strong>
+              <strong className="display text-lg leading-snug">{gapTitle}</strong>
               <button
                 type="button"
                 className="help-q on"

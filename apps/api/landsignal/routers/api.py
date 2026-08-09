@@ -567,13 +567,16 @@ async def radar(
             else:
                 discount_display = "No public price to compare"
 
-            # Plain-English, parcel-specific explainer for “X% under our value”
+            # Plain-English explainer — phrasing mirrors the card headline left of “?”
             discount_help: str | None = None
             gap_pct = settle_disc if settle_disc is not None else score.asking_discount_pct
             our_val = score.estimated_value_usd
             compare_price = None
             compare_label = "public price"
-            if isinstance(auction_path, dict) and auction_path.get("expected_settle_usd"):
+            is_auction_settle = bool(
+                isinstance(auction_path, dict) and auction_path.get("expected_settle_usd")
+            )
+            if is_auction_settle:
                 compare_price = float(auction_path["expected_settle_usd"])
                 compare_label = "likely auction finish"
             elif ask is not None and ask > 0:
@@ -585,12 +588,25 @@ async def radar(
                 place_bit = f" in {parcel.county or 'this county'}, {parcel.state or 'US'}"
                 channel_bit = _provider_label(listing.provider_id, parcel.county)
                 our_s = f"${our_val:,.0f}"
+                # Lead with the same wording the card shows (About / Likely finish / vs our value)
+                if float(gap_pct) < -8 and listing.provider_id != "public_vacant_gis":
+                    lead = (
+                        f"“Likely finish ~{pct_abs:.0f}% under our value” means "
+                        if is_auction_settle
+                        else f"“About {pct_abs:.0f}% under our value” means "
+                    )
+                elif is_auction_settle:
+                    lead = f"“Likely finish {float(gap_pct):+.1f}% vs our value” means "
+                elif score.asking_discount_pct is not None:
+                    lead = f"“{float(gap_pct):+.1f}% vs our value” means "
+                else:
+                    lead = "This price gap means "
                 if compare_price is not None:
                     cmp_s = f"${compare_price:,.0f}"
                     if float(gap_pct) < -3:
                         discount_help = (
-                            f"Our desktop value for this {acres_bit}{channel_bit} tract{place_bit} "
-                            f"is about {our_s}. The {compare_label} we see is about {cmp_s} — "
+                            f"{lead}our desktop value for this {acres_bit}{channel_bit} tract{place_bit} "
+                            f"is about {our_s}, while the {compare_label} we see is about {cmp_s} — "
                             f"roughly {pct_abs:.0f}% lower. That gap is a buy-edge screen from maps, "
                             f"comps, and channel norms — not a promise you’ll close at that number. "
                             f"Auctions and negotiations often move the price; check flood, access, "
@@ -598,21 +614,21 @@ async def radar(
                         )
                     elif float(gap_pct) > 3:
                         discount_help = (
-                            f"Our desktop value for this {acres_bit}tract{place_bit} is about {our_s}. "
+                            f"{lead}our desktop value for this {acres_bit}tract{place_bit} is about {our_s}. "
                             f"The {compare_label} ({cmp_s}) sits roughly {pct_abs:.0f}% above that mark — "
                             f"so the screen does not show a clear under-value buy yet. Dig into why the "
                             f"ask is high (improvements, location, thin comps) before chasing it."
                         )
                     else:
                         discount_help = (
-                            f"Our desktop value (~{our_s}) and the {compare_label} "
+                            f"{lead}our desktop value (~{our_s}) and the {compare_label} "
                             f"(~{cmp_s}) are close for this {acres_bit}tract{place_bit}. "
                             f"You’re not looking at a big under-value gap — underwrite the site and "
                             f"process instead of leaning on discount math."
                         )
                 elif float(gap_pct) < -3:
                     discount_help = (
-                        f"We underwrite a process entry on this {acres_bit}{channel_bit} "
+                        f"{lead}we underwrite a process entry on this {acres_bit}{channel_bit} "
                         f"file{place_bit} about {pct_abs:.0f}% under our desktop mark of {our_s}. "
                         f"There’s no firm public ask — the gap is an optionality screen, not a "
                         f"listed sale price. Confirm the real buy path with the office before you spend."
