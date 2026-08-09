@@ -121,10 +121,11 @@ function ModeSelect({
   );
 }
 
-/** One card per parcel / property — newest first; drop boundary-less leftovers. */
+/** One card per parcel / property / near-identical batch — newest first. */
 function dedupeRecentLandAlerts(alerts: Record<string, unknown>[]): Record<string, unknown>[] {
   const seenParcel = new Set<string>();
   const seenProp = new Set<string>();
+  const seenSoft = new Set<string>();
   const out: Record<string, unknown>[] = [];
   for (const alert of alerts) {
     if (String(alert.severity || "") !== "LAND_ALERT") continue;
@@ -136,10 +137,24 @@ function dedupeRecentLandAlerts(alerts: Record<string, unknown>[]): Record<strin
       .toLowerCase()}|${String(body.location || "")
       .trim()
       .toLowerCase()}`;
+    const acresNum = Number(body.acres);
+    const matchNum = Number(body.preference_match_pct);
+    const softKey = [
+      String(body.location || "")
+        .trim()
+        .toLowerCase(),
+      Number.isFinite(acresNum) ? acresNum.toFixed(2) : "",
+      String(body.update_kind || "new_listing")
+        .trim()
+        .toLowerCase(),
+      Number.isFinite(matchNum) ? String(Math.round(matchNum)) : "",
+    ].join("|");
     if (!parcelKey || seenParcel.has(parcelKey)) continue;
     if (propKey !== "|" && seenProp.has(propKey)) continue;
+    if (softKey !== "|||" && seenSoft.has(softKey)) continue;
     seenParcel.add(parcelKey);
     if (propKey !== "|") seenProp.add(propKey);
+    if (softKey !== "|||") seenSoft.add(softKey);
     out.push(alert);
   }
   return out;

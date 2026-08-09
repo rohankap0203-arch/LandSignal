@@ -551,14 +551,42 @@ def _parcel_has_real_boundary(parcel: ParcelRecord | None) -> bool:
     return ok >= 4
 
 
+def _looks_like_synthetic_square(ring: list) -> bool:
+    """Detect the 4-corner square helper used for demo/fallback geometry — not a real parcel."""
+    if not isinstance(ring, list) or len(ring) != 5:
+        return False
+    try:
+        pts = [(float(p[0]), float(p[1])) for p in ring[:4]]
+    except (TypeError, ValueError, IndexError):
+        return False
+    lons = [p[0] for p in pts]
+    lats = [p[1] for p in pts]
+    # Axis-aligned rectangle with identical opposite sides.
+    return len(set(round(x, 6) for x in lons)) == 2 and len(set(round(y, 6) for y in lats)) == 2
+
+
 def _parcel_is_mappable(parcel: ParcelRecord | None) -> bool:
     if not parcel:
+        return False
+    if getattr(parcel, "is_demo", False):
         return False
     if parcel.latitude is None or parcel.longitude is None:
         return False
     if not (-90 <= parcel.latitude <= 90 and -180 <= parcel.longitude <= 180):
         return False
-    return _parcel_has_real_boundary(parcel)
+    if not _parcel_has_real_boundary(parcel):
+        return False
+    try:
+        ring = parcel.polygon[0]  # type: ignore[index]
+    except (IndexError, TypeError):
+        return False
+    # Drop low-confidence or synthetic square placeholders.
+    conf = parcel.geometry_confidence
+    if conf is not None and conf < 55:
+        return False
+    if _looks_like_synthetic_square(ring) and (conf is None or conf < 80):
+        return False
+    return True
 
 
 def _existing_land_alert(
@@ -617,10 +645,11 @@ def dedupe_land_alert_records(alerts: list[AlertRecord]) -> list[AlertRecord]:
 
 def curate_land_alert_feed(store: MemoryStore) -> list[AlertRecord]:
     """Dedupe + drop alerts for parcels that are unmappable or no longer matching."""
-    curated: list[AlertRecord] = []
+    land: list[AlertRecord] = []
+    other: list[AlertRecord] = []
     for alert in dedupe_land_alert_records(list(store.alerts)):
         if alert.severity != "LAND_ALERT":
-            curated.append(alert)
+            other.append(alert)
             continue
         parcel = store.parcels.get(alert.parcel_id)
         if not _parcel_is_mappable(parcel):
@@ -639,15 +668,48 @@ def curate_land_alert_feed(store: MemoryStore) -> list[AlertRecord]:
                 break
         if not live:
             continue
-        # Normalize scouted timestamps to real UTC, never in the future.
-        scouted = _clamp_not_future(
-            _as_utc(_parse_iso(body.get("scouted_at")) or alert.created_at) or _utcnow()
-        )
+        # Prefer alert.created_at (when we notified) over vendor listed clocks.
+        scouted = _clamp_not_future(_as_utc(alert.created_at) or _utcnow())
         body["scouted_at"] = scouted.isoformat().replace("+00:00", "Z")
         body["retrieved_at"] = body["scouted_at"]
         body["has_boundary"] = True
-        curated.append(alert.model_copy(update={"body": body, "created_at": _clamp_not_future(_as_utc(alert.created_at) or scouted)}))
-    return curated
+        land.append(
+            alert.model_copy(
+                update={
+                    "body": body,
+                    "created_at": scouted.replace(tzinfo=None),
+                }
+            )
+        )
+    # Newest first.
+    land.sort(key=lambda a: _as_utc(a.created_at) or _utcnow(), reverse=True)
+    # Collapse near-identical batch spam (same place/acres/kind/match%), keep newest.
+    soft_seen: set[str] = set()
+    compact: list[AlertRecord] = []
+    for alert in land:
+        body = alert.body or {}
+        try:
+            acres_key = f"{float(body.get('acres')):.2f}" if body.get("acres") is not None else ""
+        except (TypeError, ValueError):
+            acres_key = str(body.get("acres") or "")
+        try:
+            match_key = str(int(round(float(body.get("preference_match_pct") or 0))))
+        except (TypeError, ValueError):
+            match_key = ""
+        soft = "|".join(
+            [
+                _norm(body.get("location")),
+                acres_key,
+                _norm(body.get("update_kind") or "new_listing"),
+                match_key,
+            ]
+        )
+        if soft != "|||" and soft in soft_seen:
+            continue
+        if soft != "|||":
+            soft_seen.add(soft)
+        compact.append(alert)
+    return compact[:16] + other
 
 
 def _parse_iso(value: Any) -> datetime | None:
