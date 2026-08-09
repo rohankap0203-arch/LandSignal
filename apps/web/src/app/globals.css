@@ -4122,9 +4122,11 @@ a.acquire-block:hover {
   gap: 0.28rem;
   flex: 0 0 auto;
   margin: 0;
+  box-sizing: border-box;
+  height: 1.4rem;
   min-height: 1.4rem;
-  min-width: 4.4rem;
-  padding: 0.1rem 0.72rem;
+  min-width: 5.6rem;
+  padding: 0 0.9rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line));
   background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
