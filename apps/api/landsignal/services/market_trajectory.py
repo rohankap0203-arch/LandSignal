@@ -421,9 +421,10 @@ def build_market_trajectory(
         confidence += 5
     confidence = min(78, confidence)
 
-    identity = f"{apn} · {county or 'County'}, {(state or 'US').upper()}"
+    identity = f"{county or 'County'}, {(state or 'US').upper()}"
     if acres is not None:
         identity += f" · {acres:,.2f} acres"
+    identity = f"This property · {identity}"
 
     headline = (
         f"{regime_label}. Today ~{_money(y0['value_usd'])}"

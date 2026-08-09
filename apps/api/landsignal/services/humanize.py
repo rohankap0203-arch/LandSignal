@@ -20,7 +20,7 @@ def human_soil(prov: Any, *, apn: str | None = None, county: str | None = None, 
     state_s = state.value if hasattr(state, "value") else (prov.get("knowledge_state") if isinstance(prov, dict) else "UNKNOWN")
     prime = n.get("prime_farmland_pct")
     farm = n.get("farmland_classification")
-    where = f"{apn or 'This parcel'}" + (f" in {county}, {state}" if county and state else "")
+    where = ("This property" + (f" in {county}, {state}" if county and state else ""))
     bullets = []
     if farm:
         bullets.append(f"{where}: USDA farmland class = {farm}")
@@ -52,7 +52,7 @@ def human_flood(prov: Any, *, apn: str | None = None) -> dict[str, Any]:
     state_s = state.value if hasattr(state, "value") else (prov.get("knowledge_state") if isinstance(prov, dict) else "UNKNOWN")
     flood = n.get("flood_zone_pct")
     zone = n.get("zone")
-    who = apn or "This pin"
+    who = "This property"
     if flood is None:
         plain = f"{who}: flood exposure not confirmed yet from FEMA."
         level = "Unknown"

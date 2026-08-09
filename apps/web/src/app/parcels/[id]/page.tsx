@@ -35,6 +35,7 @@ export default function ParcelIntelligencePage() {
   const [memo, setMemo] = useState<string | null>(null);
   const [verdict, setVerdict] = useState<string | null>(null);
   const [memoLoading, setMemoLoading] = useState(false);
+  const [memoError, setMemoError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ddOpen, setDdOpen] = useState<Record<string, boolean>>({});
   const [watched, setWatched] = useState(false);
@@ -80,13 +81,32 @@ export default function ParcelIntelligencePage() {
   const story = (brief.score_story as Record<string, string>) || {};
   const returnCase = (brief.return_case as AnyRec) || {};
 
+  const place = parcel.county
+    ? `${parcel.county}, ${parcel.state}`
+    : String(parcel.state || "Location on file");
   const identity = [
-    parcel.apn ? String(parcel.apn) : null,
-    parcel.county ? `${parcel.county}, ${parcel.state}` : String(parcel.state || ""),
-    parcel.acreage != null ? `${Number(parcel.acreage).toFixed(2)} ac` : null,
+    place,
+    parcel.acreage != null ? `${Number(parcel.acreage).toFixed(2)} acres` : null,
   ]
     .filter(Boolean)
     .join(" · ");
+
+  const pageTitle = (() => {
+    const raw = String((listing?.title as string) || "");
+    const cleaned = raw
+      .replace(/\bAPN\s*[:#]?\s*[\w./-]+/gi, "")
+      .replace(/\b\d{7,}\b/g, "")
+      .replace(/\s*[·|]\s*/g, " · ")
+      .replace(/(?:\s*·\s*)+/g, " · ")
+      .replace(/\s{2,}/g, " ")
+      .trim()
+      .replace(/^·|·$/g, "")
+      .trim();
+    if (cleaned && !/^\d[\d.\-]*$/.test(cleaned)) return cleaned;
+    const acres =
+      parcel.acreage != null ? `${Number(parcel.acreage).toFixed(1)}-acre ` : "";
+    return `${acres}property in ${place}`.replace(/^./, (c) => c.toUpperCase());
+  })();
 
   const sellerLink =
     links.find((l) => l.kind === "primary") ||
@@ -169,9 +189,14 @@ export default function ParcelIntelligencePage() {
               </button>
             </div>
             <h1 className="display mt-3 text-3xl font-semibold leading-tight break-words">
-              {(listing?.title as string) || (parcel.apn as string)}
+              {pageTitle}
             </h1>
             <p className="mt-2 text-[var(--muted)] break-words">{identity}</p>
+            {parcel.apn ? (
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                County parcel ID (for assessor lookup only): {String(parcel.apn)}
+              </p>
+            ) : null}
             {watchMsg ? <p className="mt-2 text-xs text-[var(--muted)]">{watchMsg}</p> : null}
 
             <div className="mt-5 grid gap-4">
@@ -270,13 +295,23 @@ export default function ParcelIntelligencePage() {
                 type="button"
                 className="btn btn-ghost"
                 disabled={memoLoading}
+                title="Writes a one-page summary of scores, price, risks, and homework for this property"
                 onClick={() => {
                   setMemoLoading(true);
+                  setMemoError(null);
                   landsignalApi
                     .memo(params.id)
                     .then((m) => {
                       setMemo(m.markdown);
                       setVerdict(m.verdict);
+                      requestAnimationFrame(() => {
+                        document
+                          .getElementById("investment-memo")
+                          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      });
+                    })
+                    .catch((e: Error) => {
+                      setMemoError(e.message || "Could not write the memo. Try again.");
                     })
                     .finally(() => setMemoLoading(false));
                 }}
@@ -284,6 +319,11 @@ export default function ParcelIntelligencePage() {
                 {memoLoading ? "Writing memo…" : "Write a plain-English memo"}
               </button>
             </div>
+            <p className="mt-2 text-xs text-[var(--muted)] leading-relaxed">
+              The memo button builds a short, readable summary of this property’s scores, price case,
+              risks, and checklist — then scrolls you to it below. Handy for sharing or printing.
+            </p>
+            {memoError ? <p className="mt-2 text-xs text-[var(--danger)]">{memoError}</p> : null}
           </div>
 
           <div className="flex flex-col border-t border-[var(--line)] lg:border-l lg:border-t-0">
@@ -302,7 +342,11 @@ export default function ParcelIntelligencePage() {
       </section>
 
       {memoLoading && (
-        <LandLoader compact label="Composing investment memo…" detail="Weighing this parcel’s score, constraints, and gaps." />
+        <LandLoader
+          compact
+          label="Writing your plain-English memo…"
+          detail="Pulling scores, price case, risks, and homework for this property into one short note."
+        />
       )}
 
       <section className="panel p-5">
@@ -316,28 +360,30 @@ export default function ParcelIntelligencePage() {
 
       <section className="panel p-5">
         <ReturnVisual
-          cases={scenarios as never[]}
-          identity={identity}
-          entryLabel={
-            returnCase.entry_usd != null
-              ? `$${Number(returnCase.entry_usd).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-              : undefined
+          cases={
+            ((data.scenarios_human as AnyRec[]) || scenarios || []) as never[]
           }
-          markLabel={
-            returnCase.mark_usd != null
-              ? `$${Number(returnCase.mark_usd).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-              : undefined
+          entryUsd={
+            returnCase.entry_usd != null ? Number(returnCase.entry_usd) : null
+          }
+          markUsd={returnCase.mark_usd != null ? Number(returnCase.mark_usd) : null}
+          annualRate={
+            Number(
+              ((data.market_trajectory as AnyRec) || {}).annual_rate ??
+                ((data.market_trajectory as AnyRec) || {}).annualRate,
+            ) || null
           }
         />
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
-        <InsightList title={`Why ${parcel.apn || "this parcel"} stands out`} items={whyOpp} />
+        <InsightList title="Why this property stands out" items={whyOpp} />
         <InsightList title="Why it might still be available" items={whyStill} />
       </section>
 
       <section className="panel p-5">
-        <h2 className="display text-xl font-semibold">What makes up the opportunity score · {identity}</h2>
+        <h2 className="display text-xl font-semibold">What makes up the opportunity score</h2>
+        <p className="mt-0.5 text-sm text-[var(--muted)]">{identity}</p>
         <p className="mt-1 text-sm text-[var(--muted)]">
           Each number below is 0–100 for this listing only. Tap any bar to see the exact inputs behind it.
         </p>
@@ -431,7 +477,7 @@ export default function ParcelIntelligencePage() {
 
       <section className="panel p-5">
         <h2 className="display text-xl font-semibold">
-          Checklist before you bid on {String(parcel.apn || "this parcel")} · readiness{" "}
+          Checklist before you bid · readiness{" "}
           {Number(score?.deal_readiness || 0).toFixed(0)}/100
         </h2>
         <div className="mt-4 grid gap-2">
@@ -467,13 +513,19 @@ export default function ParcelIntelligencePage() {
         </div>
       </section>
 
-      {memo && (
-        <section className="panel p-5">
+      {(memo || memoError) && (
+        <section id="investment-memo" className="panel memo-panel p-5">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="display text-xl font-semibold">Investment memo</h2>
-            <SignalBadge signal={verdict || "WATCH"} />
+            <div>
+              <h2 className="display text-xl font-semibold">Plain-English memo</h2>
+              <p className="mt-0.5 text-sm text-[var(--muted)]">
+                One-page summary you can share or print — not a formal appraisal.
+              </p>
+            </div>
+            {verdict ? <SignalBadge signal={verdict} /> : null}
           </div>
-          <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed">{memo}</pre>
+          {memoError ? <p className="mt-3 text-sm text-[var(--danger)]">{memoError}</p> : null}
+          {memo ? <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed">{memo}</pre> : null}
         </section>
       )}
     </div>

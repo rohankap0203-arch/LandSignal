@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from landsignal.services.sourcing import build_sourcing_bundle
+from landsignal.services.voice import this_property
 
 
 def build_action_links(
@@ -93,7 +94,7 @@ def estimate_source(
         "blm_lpad": "a federal BLM land feed",
     }.get(provider_id or "", "a public land feed")
     bullets: list[str] = [
-        f"No asking price is published on {channel} for {apn or 'this parcel'}.",
+        f"No asking price is published on {channel} for this property.",
     ]
     if acres and acres < 2 and provider_id in ("public_tax_sale", "public_surplus"):
         bullets.append(
@@ -126,8 +127,8 @@ def estimate_source(
     return {
         "headline": "Where our estimate comes from",
         "summary": (
-            f"No public price is listed. We estimate about ${model_value:,.0f} for "
-            f"{apn or 'this parcel'} so you can still compare it with other land."
+            f"No public price is listed. We estimate about ${model_value:,.0f} for this property "
+            f"so you can still compare it with other land."
         ),
         "amount_usd": model_value,
         "bullets": bullets,
@@ -255,7 +256,8 @@ def match_reasons(
     reasons: list[str] = []
     est = getattr(score, "estimated_value_usd", None)
     ask = listing.asking_price_usd if listing else None
-    apn = getattr(parcel, "apn", None) or "this parcel"
+    apn = getattr(parcel, "apn", None) or ""
+    prop = this_property(parcel, listing)
     auction = None
     if enrichment and enrichment.comps:
         auction = (enrichment.comps.normalized or {}).get("auction_path")
@@ -264,7 +266,7 @@ def match_reasons(
         gap = ((est - settle) / settle) * 100 if settle else 0
         reasons.append(
             f"Likely auction finish ~${settle:,.0f} vs our value ${est:,.0f} "
-            f"({gap:+.0f}% room on {apn})"
+            f"({gap:+.0f}% room on this property)"
         )
     elif score.asking_discount_pct is not None and score.asking_discount_pct < -10:
         reasons.append(
@@ -291,7 +293,7 @@ def match_reasons(
     if acres and acres >= 40:
         reasons.append(f"Large tract ({acres:,.0f} acres) — big enough to hold on its own")
     if not reasons:
-        reasons.append(f"{apn} passes the first automated checks for a closer look")
+        reasons.append("This property passes the first automated checks for a closer look")
     return reasons[:5]
 
 

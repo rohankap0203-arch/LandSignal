@@ -21,6 +21,7 @@ from landsignal.services.alerts import create_rule, evaluate_rules
 from landsignal.services.analyze import analyze_parcel
 from landsignal.services.discover import discover_opportunities
 from landsignal.services.memo import generate_memo, verdict_from_score
+from landsignal.services.voice import display_title
 from landsignal.settings import get_settings
 from landsignal.store import get_store
 
@@ -289,7 +290,6 @@ async def radar(
         sourcing_card,
         value_display,
     )
-
     store = get_store(get_settings().demo_seed)
     # Never block search on enrichment — unscored parcels are omitted until discover finishes them
 
@@ -562,7 +562,7 @@ async def radar(
                     parcel_id=parcel.id,
                     listing_id=listing.id,
                     signal=score.signal,
-                    property_name=listing.title or parcel.apn or str(parcel.id),
+                    property_name=display_title(parcel, listing),
                     location=f"{parcel.county or 'County TBD'}, {parcel.state or 'US'}",
                     state=parcel.state,
                     county=parcel.county,
@@ -861,7 +861,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     hypotheses = (unsold.get("hypotheses") if isinstance(unsold, dict) else None) or []
     cockpit = {
         "title": "Who’s still bidding at each price",
-        "subtitle": f"{parcel.apn or 'Parcel'} · {parcel.county}, {parcel.state}",
+        "subtitle": f"{parcel.county}, {parcel.state}" + (f" · {parcel.acreage:,.1f} acres" if parcel.acreage else ""),
         "auction_path": auction_path,
         "price": price,
         "model_value": score.estimated_value_usd if score else None,
@@ -1065,7 +1065,7 @@ async def watchlist() -> dict[str, Any]:
         items.append(
             {
                 "parcel_id": pid,
-                "title": (listing.title if listing else None) or (parcel.apn if parcel else str(pid)),
+                "title": display_title(parcel, listing) if parcel else str(pid),
                 "location": f"{getattr(parcel, 'county', None) or '—'}, {getattr(parcel, 'state', None) or '—'}",
                 "current": cur,
                 "baseline": prev,

@@ -1,13 +1,14 @@
 """Plain-English, listing-specific rating explanations.
 
-Style: short sentences, everyday words, still packed with this listing’s
-numbers (APN, $, acres, pin). Never define the category in the abstract —
-always say why THIS listing got THIS score.
+Style: everyday words, packed with THIS listing’s numbers ($/acres/pin/channel),
+never lead with raw parcel IDs, never restate the category title as filler.
 """
 
 from __future__ import annotations
 
 from typing import Any
+
+from landsignal.services.voice import place_phrase, this_property
 
 
 def _f(v: Any) -> float | None:
@@ -35,28 +36,14 @@ def _pin(parcel) -> str:
 
 
 def _listing_label(parcel, listing) -> str:
-    title = (getattr(listing, "title", None) if listing else None) or None
-    apn = (getattr(parcel, "apn", None) if parcel else None) or "no APN"
-    county = (getattr(parcel, "county", None) if parcel else None) or "county n/a"
-    state = (getattr(parcel, "state", None) if parcel else None) or "US"
+    place = place_phrase(parcel)
     acres = _f(getattr(parcel, "acreage", None) if parcel else None)
     size = f"{acres:,.2f} acres" if acres is not None else "size unknown"
-    addr = getattr(parcel, "address", None) if parcel else None
-    if not addr and listing:
-        addr = (getattr(listing, "raw", None) or {}).get("address")
-    head = title[:70] if title else f"Parcel {apn}"
-    bits = [head, f"ID {apn}", f"{county}, {state}", size]
-    if addr and str(addr)[:20].lower() not in head.lower():
-        bits.append(str(addr)[:60])
-    return " · ".join(bits)
+    return f"{place} · {size}"
 
 
 def _short_name(parcel, listing) -> str:
-    title = (getattr(listing, "title", None) if listing else None) or None
-    apn = (getattr(parcel, "apn", None) if parcel else None) or "this parcel"
-    if title:
-        return title[:55]
-    return f"Parcel {apn}"
+    return this_property(parcel, listing, with_place=False)
 
 
 def _strategy_map(score) -> dict[str, float]:
@@ -75,14 +62,14 @@ def _top_strategies(score, n: int = 3) -> str:
 
 def _score_plain(value: float) -> str:
     if value >= 80:
-        return f"{value:.0f}/100 (strong for this listing)"
+        return f"{value:.0f}/100 (strong here)"
     if value >= 65:
-        return f"{value:.0f}/100 (solid for this listing)"
+        return f"{value:.0f}/100 (solid here)"
     if value >= 50:
-        return f"{value:.0f}/100 (okay — not a standout on its own)"
+        return f"{value:.0f}/100 (okay — not a standout alone)"
     if value >= 35:
-        return f"{value:.0f}/100 (weak — pulling this listing down)"
-    return f"{value:.0f}/100 (very weak on this listing)"
+        return f"{value:.0f}/100 (weak — pulling the ranking down)"
+    return f"{value:.0f}/100 (very weak on this file)"
 
 
 def justify_component(
@@ -99,6 +86,7 @@ def justify_component(
     name = _short_name(parcel, listing)
     full = _listing_label(parcel, listing)
     pin = _pin(parcel)
+    place = place_phrase(parcel)
     ask = _f(getattr(listing, "asking_price_usd", None) if listing else None)
     if ask is not None and ask <= 0:
         ask = None
@@ -117,6 +105,8 @@ def justify_component(
         "public_surplus": "government surplus",
         "blm_lpad": "federal BLM land",
     }.get(provider or "", provider or "public listing")
+    ppa = (est / acres) if est and acres and acres > 0 else None
+    size_bit = f"{acres:,.2f}-acre" if acres is not None else "this"
 
     why = ""
     drivers: list[str] = []
@@ -128,70 +118,85 @@ def justify_component(
         elif ask is not None:
             comparison = ask
         if comparison is not None and est is not None and disc is not None:
-            raw = 58 - disc * 1.35
             cheaper = disc < 0
+            gap_usd = abs(est - comparison)
             gap_words = (
-                f"{abs(disc):.0f}% below our estimated value"
+                f"{abs(disc):.0f}% below our estimated value ({_money(gap_usd)} of room)"
                 if cheaper
-                else f"{abs(disc):.0f}% above our estimated value"
+                else f"{abs(disc):.0f}% above our estimated value ({_money(gap_usd)} more expensive)"
             )
             opener_bit = ""
             if ask is not None and abs(ask - comparison) / max(ask, 1) > 0.15:
                 opener_bit = (
-                    f" The starting bid shown publicly is {_money(ask)}, but we don’t treat that "
-                    f"as the real buy price — auctions usually finish near {_money(comparison)}."
+                    f" The public starting bid is {_money(ask)}, but auctions like this in {place} "
+                    f"usually finish closer to {_money(comparison)} — so we score the likely finish, "
+                    f"not the teaser opener."
                 )
+            nuance = (
+                "That gap is the main economic hook on this file — still confirm with a local broker "
+                "and a site walk before you treat it as locked-in equity."
+                if cheaper and abs(disc) >= 12
+                else "The gap is modest, so price alone should not carry your decision; weigh risk and "
+                "how complete the file is next to it."
+                if cheaper
+                else "Paying above our estimate only makes sense if you see a use we are under-counting "
+                "(homes, energy, assemble) — otherwise this is a tougher entry."
+            )
             why = (
-                f"{name} gets {_score_plain(value)} for price because the realistic buy price "
-                f"we use is {_money(comparison)}, while our estimated value for this land is "
-                f"{_money(est)} — so it’s {gap_words}."
-                f"{opener_bit} "
-                f"That price gap alone adds about {contribution:.0f} points to the overall "
-                f"opportunity score of {opp:.0f}/100 (this category is {wt_pct}% of the total)."
+                f"{name.capitalize()} scores {_score_plain(value)} on price: we underwrite a realistic "
+                f"buy near {_money(comparison)}"
+                + (f" (~{_money(ppa)}/acre)" if ppa else "")
+                + f", while our estimated value for the {size_bit} tract in {place} is {_money(est)} — "
+                f"so it sits {gap_words}.{opener_bit} "
+                f"{nuance} This category is {wt_pct}% of the opportunity score and contributes about "
+                f"{contribution:.0f} points toward {opp:.0f}/100 overall."
             )
             drivers = [
-                f"Realistic buy price used for {name}: {_money(comparison)}",
-                f"Our estimated value for this land: {_money(est)}",
-                f"Difference: {disc:+.1f}% → price score {value:.0f}/100",
-                f"Adds ~{contribution:.0f} of the overall {opp:.0f}/100 opportunity score" if opp else f"{wt_pct}% of total score",
+                f"Buy price we underwrite: {_money(comparison)}",
+                f"Our estimated value: {_money(est)}"
+                + (f" (~{_money(ppa)}/acre)" if ppa else ""),
+                f"Gap: {disc:+.1f}% → category {value:.0f}/100",
+                f"~{contribution:.0f} pts toward overall {opp:.0f}/100" if opp else f"{wt_pct}% of total",
             ]
             if ask is not None and abs(ask - comparison) / max(ask, 1) > 0.15:
-                drivers.append(f"Public starting bid (not the real buy price): {_money(ask)}")
+                drivers.append(f"Published starting bid (not the real buy): {_money(ask)}")
         elif ask is None and est is not None:
-            if acres is not None:
-                why = (
-                    f"{name} has no public sale price on this {channel} feed. "
-                    f"So the price score ({value:.0f}/100) reflects how workable a "
-                    f"{acres:,.2f}-acre buy looks against our estimated value of {_money(est)} — "
-                    f"not a “cheap vs expensive” retail listing. "
-                    f"This adds about {contribution:.0f} points to the overall {opp:.0f}/100 score."
-                )
-            else:
-                why = (
-                    f"{name} has no public sale price on this {channel} feed. "
-                    f"Price score is {value:.0f}/100 based on our estimated value {_money(est)} "
-                    f"and how this kind of listing usually trades."
-                )
+            why = (
+                f"{name.capitalize()} has no published sale price on this {channel} feed in {place}. "
+                f"So {value:.0f}/100 here is not a “cheap listing” grade — it reflects how workable a "
+                f"{size_bit} buy looks against our {_money(est)} estimate"
+                + (f" (~{_money(ppa)}/acre)" if ppa else "")
+                + f", given how {channel} inventory usually clears. "
+                f"Your edge is process access (office, calendar, surplus rules), not outbidding a "
+                f"retail crowd. Adds ~{contribution:.0f} points toward {opp:.0f}/100 "
+                f"({wt_pct}% of the score)."
+            )
             drivers = [
-                f"No public price on this listing ({channel})",
-                f"Estimated value used: {_money(est)}",
+                f"No public price ({channel} in {place})",
+                f"Estimate used: {_money(est)}"
+                + (f" / ~{_money(ppa)} per acre" if ppa else ""),
                 *evid[:2],
             ]
         else:
             why = (
-                f"{name} is missing a price and/or estimated value, so the price score "
-                f"stays at {value:.0f}/100 — we won’t invent a bargain for this parcel."
+                f"{name.capitalize()} is missing both a public price and a solid estimate, so this "
+                f"stays at {value:.0f}/100 — we will not invent a bargain. Confirm pricing with the "
+                f"selling office before ranking this above better-documented land."
             )
-            drivers = evid or ["Price and estimated value are incomplete on this listing"]
+            drivers = evid or ["Price and estimated value are incomplete"]
 
     elif key == "intrinsic_land_quality":
-        soil_bits = "; ".join(evid[:2]) if evid else "soil and slope data not confirmed for this pin yet"
+        soil_bits = "; ".join(evid[:2]) if evid else "soil and slope not confirmed on the map yet"
         why = (
-            f"{name} gets {_score_plain(value)} for land quality from the soil/slope check "
-            f"on this exact spot" + (f" ({pin})" if pin else "") + f": {soil_bits}. "
-            f"This is {wt_pct}% of the overall score (~{contribution:.0f} points toward {opp:.0f}/100)."
+            f"On the {size_bit} ground in {place}"
+            + (f" at pin {pin}" if pin else "")
+            + f", the soil/slope reading scores {_score_plain(value)}. "
+            f"What we see: {soil_bits}. "
+            f"Higher here means more usable acres for farming, recreation, or a later resale to a "
+            f"user who cares about dirt quality — not curb appeal. "
+            f"{wt_pct}% of the score (~{contribution:.0f} pts toward {opp:.0f}/100)."
         )
-        drivers = evid[:4] or [f"No soil/slope confirmation for {pin or name}"]
+        drivers = evid[:4] or [f"No soil/slope confirmation yet for {place}"]
 
     elif key == "hbu_optionality":
         strat = getattr(score, "best_strategy", None) if score else None
@@ -202,101 +207,120 @@ def justify_component(
         )
         tops = _top_strategies(score)
         why = (
-            f"{name} gets {_score_plain(value)} for future-use options because the best fit "
-            f"we see for this land is {strat_s}. "
-            f"Other use scores on this same listing: {tops}. "
-            f"That adds ~{contribution:.0f} points to the overall {opp:.0f}/100 score."
+            f"For {name} in {place}, the strongest fit we see is {strat_s} "
+            f"({_score_plain(value)} on future-use options). "
+            f"Same-file use mix: {tops}. "
+            f"That matters on exit — a second use can still help you sell later even if your hold "
+            f"plan is {strat_s.lower()}. Adds ~{contribution:.0f} pts ({wt_pct}% of opportunity)."
         )
-        drivers = [f"Best use for this listing: {strat_s}", f"Use scores: {tops}", *evid[:2]]
+        drivers = [f"Best use: {strat_s}", f"Use mix: {tops}", *evid[:2]]
 
     elif key == "growth_appreciation":
-        g = evid[0] if evid else "local growth data is thin for this pin"
+        g = evid[0] if evid else "local growth data is still thin for this pin"
         why = (
-            f"{name} gets {_score_plain(value)} for area growth"
-            + (f" at {pin}" if pin else "")
-            + f". Reason for this listing: {g}. "
-            f"Worth {wt_pct}% of the total (~{contribution:.0f} points)."
+            f"Area growth for {name} in {place} scores {_score_plain(value)}"
+            + (f" near {pin}" if pin else "")
+            + f". Signal we used: {g}. "
+            f"Stronger growth means more people, jobs, or development pressure moving toward this "
+            f"pin — which can support a longer hold even when today’s rent is ordinary. "
+            f"~{contribution:.0f} pts ({wt_pct}% of total)."
         )
-        drivers = evid[:3] or [f"Growth data not confirmed for {pin or name}"]
+        drivers = evid[:3] or [f"Growth not confirmed yet for {place}"]
 
     elif key == "infrastructure":
-        infra = "; ".join(evid[:2]) if evid else "road access / power distance not confirmed yet for this pin"
+        infra = "; ".join(evid[:2]) if evid else "road access / power distance not confirmed yet"
         why = (
-            f"{name} gets {_score_plain(value)} for access & infrastructure. "
-            f"For this pin: {infra}. "
-            f"Adds ~{contribution:.0f} points ({wt_pct}% of total)."
+            f"Access and power for {name} in {place}: {_score_plain(value)}. "
+            f"Pin-level reading: {infra}. "
+            f"Weak access raises carry cost and scares some buyers; confirmed road frontage and "
+            f"nearby power make a later resale or build much easier. "
+            f"~{contribution:.0f} pts ({wt_pct}%)."
         )
-        drivers = evid[:4] or [f"Infrastructure not confirmed for {pin or name}"]
+        drivers = evid[:4] or [f"Infrastructure not confirmed for {place}"]
 
     elif key == "liquidity":
         why = (
-            f"{name} gets {_score_plain(value)} for ease of resale because it sits on a "
-            f"{channel} channel"
-            + (f" and is {acres:,.2f} acres" if acres is not None else "")
-            + ". Listings like this usually take longer to sell than normal MLS land. "
-            f"Adds ~{contribution:.0f} points to the overall score."
+            f"Ease of resale for {name}: {_score_plain(value)}. "
+            f"It sits on a {channel} channel in {place}"
+            + (f" at {acres:,.2f} acres" if acres is not None else "")
+            + " — inventory like this usually takes longer than a normal MLS farm listing because "
+            f"title, occupancy, or agency rules slow the buyer pool. "
+            f"Lower liquidity is not automatically bad if your hold is patient; it does mean you "
+            f"should not assume a quick flip. ~{contribution:.0f} pts toward {opp:.0f}/100."
         )
-        drivers = evid[:3] or [f"{channel} resale difficulty → {value:.0f}/100 for this listing"]
+        drivers = evid[:3] or [f"{channel} in {place} → resale score {value:.0f}/100"]
 
     elif key == "scarcity":
-        county = getattr(parcel, "county", None) or "this county"
-        state = getattr(parcel, "state", None) or "US"
         why = (
-            f"{name} gets {_score_plain(value)} for scarcity"
-            + (f" as a {acres:,.2f}-acre tract" if acres is not None else "")
-            + f" in {county}, {state}. "
-            f"Adds ~{contribution:.0f} points ({wt_pct}% of total)."
+            f"How rare {name} is in {place}: {_score_plain(value)}"
+            + (f" for a {acres:,.2f}-acre tract" if acres is not None else "")
+            + ". "
+            f"Harder-to-replace acreage supports asking power on exit; common small lots compete "
+            f"with dozens of substitutes. "
+            f"~{contribution:.0f} pts ({wt_pct}% of total)."
         )
-        drivers = evid[:3] or [f"Scarcity for this tract in {county}, {state} → {value:.0f}/100"]
+        drivers = evid[:3] or [f"Scarcity in {place} → {value:.0f}/100"]
 
     elif key == "catalysts":
-        why = (
-            f"{name} gets {_score_plain(value)} for nearby value-boosting projects. "
-            f"{(evid[0] if evid else 'No clear highway, plant, or zoning catalyst is tied to this parcel ID yet')}. "
-            f"Adds ~{contribution:.0f} points."
+        cat = evid[0] if evid else (
+            "No clear highway, plant, or zoning project is tied to this pin yet — "
+            "so we are not inventing upside"
         )
-        drivers = evid[:3] or [f"No catalyst on file for ID {(getattr(parcel, 'apn', None) or 'n/a')}"]
+        why = (
+            f"Nearby projects that could lift value for {name} in {place}: {_score_plain(value)}. "
+            f"{cat}. "
+            f"Catalysts are optional upside, not a reason to overpay if the base price case is weak. "
+            f"~{contribution:.0f} pts."
+        )
+        drivers = evid[:3] or [f"No catalyst on file for {place}"]
 
     elif key == "seller_dynamics":
         dom = getattr(listing, "days_on_market", None) if listing else None
         why = (
-            f"{name} gets {_score_plain(value)} for seller / listing pressure on this "
-            f"{channel} file"
+            f"Seller / channel pressure on this {channel} file in {place}: {_score_plain(value)}"
             + (f" (about {dom} days on market)" if dom is not None else "")
-            + ". Higher here usually means more room to negotiate on this kind of listing. "
-            f"Adds ~{contribution:.0f} points."
+            + ". "
+            f"Tax-sale and surplus channels often accept process-driven outcomes; higher pressure "
+            f"here usually means more room to negotiate timing or price — not a guarantee of a "
+            f"steal. ~{contribution:.0f} pts."
         )
-        drivers = evid[:3] or [f"Seller pressure on this {channel} listing → {value:.0f}/100"]
+        drivers = evid[:3] or [f"Seller pressure on {channel} → {value:.0f}/100"]
 
     elif key == "risk":
-        risk_bits = "; ".join(evid[:3]) if evid else "no major flood, wetland, or access red flags on the map checks yet"
-        why = (
-            f"{name} has an overall risk of {risk_score:.0f}/100"
-            + (f" at {pin}" if pin else "")
-            + f". This “risk cushion” piece of the opportunity score is {value:.0f}/100 "
-            f"(higher here means cleaner risk on the map checks). "
-            f"What’s driving risk on this listing: {risk_bits}. "
-            f"Adds ~{contribution:.0f} points toward opportunity {opp:.0f}/100."
+        risk_bits = "; ".join(evid[:3]) if evid else (
+            "no major flood, wetland, or access red flags on the map checks yet"
         )
-        drivers = evid[:4] or [f"Map risk {risk_score:.0f}/100 on this listing → cushion {value:.0f}/100"]
+        why = (
+            f"Map risk for {name} in {place} is {risk_score:.0f}/100"
+            + (f" at pin {pin}" if pin else "")
+            + f". The “risk cushion” slice of opportunity is {value:.0f}/100 "
+            f"(higher cushion = cleaner map checks). Drivers: {risk_bits}. "
+            f"Budget insurance, fill, or a wetland survey when flood/wetland shares are material — "
+            f"many cash buyers step back, which can leave negotiating room if you price those costs. "
+            f"~{contribution:.0f} pts toward {opp:.0f}/100."
+        )
+        drivers = evid[:4] or [f"Map risk {risk_score:.0f}/100 → cushion {value:.0f}/100"]
 
     else:
         why = (
-            f"{name} scores {value:.0f}/100 for {key.replace('_', ' ')} from this listing’s own inputs."
+            f"{name.capitalize()} scores {value:.0f}/100 on {key.replace('_', ' ')} from this "
+            f"file’s own inputs in {place}."
         )
-        drivers = evid[:3] or [f"{key} → {value:.0f} on this listing"]
+        drivers = evid[:3] or [f"{key} → {value:.0f}"]
 
     why = why.replace("..", ".").strip()
+    if why and why[0].islower():
+        why = why[0].upper() + why[1:]
 
     return {
         "plain_english": why,
         "why_this_number": why,
-        "drivers": drivers[:5],
+        "drivers": drivers[:6],
         "weight_note": (
-            f"For {name}, this category is {wt_pct}% of the opportunity score and adds about "
-            f"{contribution:.0f} points toward {opp:.0f}/100"
+            f"This category is {wt_pct}% of opportunity and adds about {contribution:.0f} points "
+            f"toward {opp:.0f}/100 on {name}"
             + (
-                f". Risk on this listing is {risk_score:.0f}/100; how complete the file is: {conf:.0f}/100."
+                f". Risk {risk_score:.0f}/100 · file complete {conf:.0f}/100."
                 if risk_score is not None and conf is not None
                 else "."
             )
@@ -326,19 +350,20 @@ def rating_breakdown_justified(score, parcel=None, listing=None) -> list[dict[st
             listing=listing,
             score=score,
         )
+        title = help_row.get("title") or str(key).replace("_", " ").title()
         out.append(
             {
                 "key": key,
-                "label": help_row.get("title") or str(key).replace("_", " ").title(),
-                "simple": just["why_this_number"],
+                "label": title,
+                "simple": help_row.get("simple"),
                 "plain_english": just["plain_english"],
                 "why_this_number": just["why_this_number"],
-                "drivers": just["drivers"],
                 "score": val,
-                "score_display": f"{val:.0f} out of 100",
-                "weight_pct": int(round(weight * 100)),
+                "score_display": f"{val:.0f}/100",
+                "weight_pct": round(weight * 100),
                 "weight_display": just["weight_note"],
-                "evidence": just["drivers"] or evidence,
+                "drivers": just["drivers"],
+                "evidence": evidence,
                 "knowledge_state": ks,
                 "identity": just["identity"],
             }

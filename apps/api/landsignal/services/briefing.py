@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from landsignal.services.voice import place_phrase, strip_apn_mentions, this_property
+
 from typing import Any
 
 
@@ -35,8 +37,11 @@ def build_intelligence_brief(
     ask = listing.asking_price_usd if listing else None
     state = (parcel.state or "US").upper()
     county = parcel.county or "this county"
-    apn = parcel.apn or "no APN on file"
-    title = (listing.title if listing else None) or parcel.apn or "This parcel"
+    apn = parcel.apn or ""
+    prop = this_property(parcel, listing, with_place=True, with_acres=True)
+    prop_short = this_property(parcel, listing)
+    from landsignal.services.voice import display_title as _display_title
+    title = _display_title(parcel, listing)
     provider = (listing.provider_id if listing else None) or "unknown"
     provider_label = provider.replace("_", " ")
     opp = _n(getattr(score, "opportunity", None), 0) or 0
@@ -101,7 +106,7 @@ def build_intelligence_brief(
                     f"our value {_money(est)}"
                 ),
                 "detail": (
-                    f"On {apn} in {county}, {state}, the {_money(ask)} number is only the opening bid — "
+                    f"On {prop}, the {_money(ask)} number is only the opening bid — "
                     f"not what you should expect to pay. Similar auctions usually climb about "
                     f"{auction.get('bid_inflation_mult_base', 0):.1f}× "
                     f"(rough range {auction.get('bid_inflation_mult_low', 0):.1f}×–"
@@ -123,7 +128,7 @@ def build_intelligence_brief(
                     f"({abs(disc):.0f}% {'cheaper' if disc < 0 else 'pricier'} than our estimate)"
                 ),
                 "detail": (
-                    f"On {apn} in {county}, {state}, the public price is {_money(ask)}"
+                    f"On {prop}, the public price is {_money(ask)}"
                     + (f" ({_money(ppa)} per acre)" if ppa else "")
                     + f". Our estimate for this land is {_money(est)}"
                     + (f" ({_money(model_ppa)} per acre)" if model_ppa else "")
@@ -176,7 +181,7 @@ def build_intelligence_brief(
                     "headline": f"Small lot ({acres:,.2f} acres) — city / tax-sale style",
                     "detail": (
                         f"This size usually fits assembling with a neighbor, flipping, or holding — not growing crops. "
-                        f"Our value estimate uses small-lot logic, not farm-per-acre pricing. Parcel ID {apn}."
+                        f"Our value estimate uses small-lot logic, not farm-per-acre pricing. Keep the county parcel ID handy for the assessor lookup."
                     ),
                 }
             )
@@ -257,7 +262,7 @@ def build_intelligence_brief(
                 "detail": (
                     f"Opportunity score {opp:.0f}/100 is a first look, not proof this is a great buy. "
                     f"Missing maps or listing facts lower the completeness score on purpose. "
-                    f"Use the checklist below before bidding on {apn}."
+                    f"Use the checklist below before bidding on this property."
                 ),
             }
         )
@@ -266,7 +271,7 @@ def build_intelligence_brief(
             {
                 "headline": "Passes the first automated checks",
                 "detail": (
-                    f"At least one use still looks possible for {apn} in {county}, {state} "
+                    f"At least one use still looks possible for {prop} "
                     f"after the first automated gates."
                 ),
             }
@@ -282,7 +287,7 @@ def build_intelligence_brief(
     for h in hyps[:5]:
         evid = "; ".join(str(e) for e in (h.get("evidence") or [])[:3])
         psych = h.get("psychology")
-        detail = evid or f"Buyer friction on {apn}."
+        detail = evid or f"Buyer friction on this property."
         if psych:
             detail = f"{detail} Buyer psychology: {psych}"
         still.append(
@@ -334,7 +339,7 @@ def build_intelligence_brief(
             {
                 "headline": "Harder for casual buyers to find or price",
                 "detail": (
-                    f"Without a normal asking price, most shoppers never see {apn}. "
+                    f"Without a normal asking price, most shoppers never see this property. "
                     f"“Still available” often means the government / auction process is unfinished — "
                     f"not that the land is automatically bad."
                 ),
@@ -366,7 +371,7 @@ def build_intelligence_brief(
             {
                 "headline": "No single clear red flag in the public file",
                 "detail": (
-                    f"Public maps on {apn} don’t show an obvious deal-breaker at pin {pin}. "
+                    f"Public maps on this property don’t show an obvious deal-breaker at pin {pin}. "
                     f"It may be early in marketing, hard to find online, or waiting on an agency / auction date."
                 ),
             }
@@ -374,7 +379,7 @@ def build_intelligence_brief(
 
     # ---- Land card addenda (parcel-specific) ----
     soil_extra = [
-        f"Parcel {apn} · {county}, {state} · {acres:,.2f} ac" if acres else f"Parcel {apn} · {county}, {state}",
+        f"{prop_short} · {county}, {state} · {acres:,.2f} ac" if acres else f"{prop_short} · {county}, {state}",
         f"Pin {pin}",
     ]
     if farm_class:
@@ -398,7 +403,7 @@ def build_intelligence_brief(
     ]
     wet_extra = [
         f"Wetland share screen: {wet_pct:.0f}%" if wet_pct is not None else "NWI wetland share not confirmed yet",
-        f"If your plan needs grading in {county}, budget a delineation before you lock a close date on {apn}.",
+        f"If your plan needs grading in {county}, budget a delineation before you lock a close date on this property.",
         f"Deeded acres {acres:,.2f} ≠ tillable/buildable acres when wetlands bite." if acres else "Confirm usable acres on site.",
     ]
     tx_extra = [
@@ -441,7 +446,7 @@ def build_intelligence_brief(
             {
                 "case": "Not modeled yet",
                 "summary": (
-                    f"Yearly return screens need local rent and yield numbers. For this {state} parcel ({apn}), "
+                    f"Yearly return screens need local rent and yield numbers. For {prop}, "
                     f"pull local cash-rent comps before trusting a percent-per-year figure."
                 ),
                 "numbers": {},
@@ -455,14 +460,14 @@ def build_intelligence_brief(
         why_m = str(item.get("why_it_matters") or "")
         how = str(item.get("how_to_start") or "")
         parcel_note = (
-            f"On {title[:70]} ({apn}) in {county}, {state}"
+            f"On {prop}"
             + (f", {acres:.2f} ac" if acres else "")
             + f", at {pin}: {why_m}"
         )
         if "title" in label.lower() and provider in ("public_tax_sale", "blm_lpad"):
             how = (
                 f"{how} For this {provider_label} file, start with the county treasurer / clerk "
-                f"or BLM field office and ask specifically about {apn}."
+                f"or BLM field office and ask specifically about this property (bring the county parcel ID)."
             )
         if "flood" in label.lower() and flood_pct is not None:
             parcel_note += f" Desktop flood screen already shows ~{flood_pct:.0f}% overlap."
@@ -512,7 +517,7 @@ def build_intelligence_brief(
         thesis_bullets.append(
             f"Plan to buy near {_money(entry)}. We think this land is worth about {_money(est)}"
             + (f" ({gap_pct:+.0f}% difference)" if gap_pct is not None else "")
-            + f" for {apn}."
+            + "."
         )
     if auction and settle:
         thesis_bullets.append(
@@ -539,7 +544,7 @@ def build_intelligence_brief(
         )
     if not thesis_bullets:
         thesis_bullets.append(
-            f"{apn} in {county}, {state} passes the first automated checks for a closer look."
+            f"{prop_short.capitalize()} in {county}, {state} passes the first automated checks for a closer look."
         )
     return_case = {
         "conviction": conviction,
@@ -560,13 +565,22 @@ def build_intelligence_brief(
         "irr_screen": irr_best if irr_best is not None and irr_best > -900 else None,
         "bullets": thesis_bullets[:5],
         "desk_note": (
-            f"For {apn}: opportunity {opp:.0f}/100, risk {risk:.0f}/100, "
+            f"For {prop_short}: opportunity {opp:.0f}/100, risk {risk:.0f}/100, "
             f"how complete the file is {conf:.0f}/100, ready-to-pursue {readiness:.0f}/100. "
             f"This is a first look — not a buy order."
         ),
     }
 
-    return {
+    def _scrub(obj):
+        if isinstance(obj, str):
+            return strip_apn_mentions(obj)
+        if isinstance(obj, list):
+            return [_scrub(x) for x in obj]
+        if isinstance(obj, dict):
+            return {k: _scrub(v) for k, v in obj.items()}
+        return obj
+
+    return _scrub({
         "why_opportunity": why,
         "why_still_available": still,
         "return_case": return_case,
@@ -578,9 +592,7 @@ def build_intelligence_brief(
         "dd_focus": dd_focus,
         "score_story": {
             "landsignal": (
-                f"{apn} in {county}, {state}"
-                + (f" ({acres:,.2f} acres)" if acres is not None else "")
-                + " ranks here because "
+                f"{prop} ranks here because "
                 + (
                     f"the realistic buy price sits {abs(disc):.0f}% "
                     f"{'under' if (disc or 0) < 0 else 'over'} our estimated value {_money(est)}, "
@@ -602,10 +614,10 @@ def build_intelligence_brief(
                     if wet_pct is not None
                     else ", and wetlands are not confirmed yet"
                 )
-                + f". That’s why {apn} needs extra homework before a bid."
+                + f". That’s why this property needs extra homework before a bid."
             ),
             "confidence": (
-                f"Tracks soils, flood, value, and map data at {pin} for {apn}. "
+                f"Tracks soils, flood, value, and map data at {pin} for this property. "
                 f"Missing pieces lower this number on purpose — it is not a quality grade."
             ),
         },
@@ -614,4 +626,4 @@ def build_intelligence_brief(
             "Track opportunity, risk, how-complete, price, and status here. "
             "Set your email under My criteria → Watchlist email sync to get change notices."
         ),
-    }
+    })

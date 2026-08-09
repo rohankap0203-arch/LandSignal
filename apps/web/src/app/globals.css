@@ -937,6 +937,62 @@ a.btn-intel:hover {
   background: linear-gradient(90deg, #b42318, #d4544a);
 }
 
+.return-future {
+  border-radius: 14px;
+  background: var(--bg-soft);
+  padding: 12px 14px;
+}
+
+.return-future-grid {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (min-width: 720px) {
+  .return-future-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.return-future-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.return-future-grid span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.return-future-grid strong {
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.return-mini {
+  width: 100%;
+  text-align: left;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: var(--bg-soft);
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.return-mini.active {
+  border-color: color-mix(in srgb, var(--brand) 45%, transparent);
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-soft));
+}
+
+.memo-panel {
+  scroll-margin-top: 88px;
+}
+
 .price-trajectory {
   display: flex;
   flex-direction: column;

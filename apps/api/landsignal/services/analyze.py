@@ -491,6 +491,7 @@ async def analyze_parcel(
     traj_rate = float(trajectory.get("annual_rate") or 0.03)
     scenarios = []
     if purchase and parcel.acreage:
+        hold_options = [1, 3, 5, 7, 10, 15, 20, 30]
         for case, rent, appr in (
             ("BEAR", 140, max(0.0, traj_rate - 0.02)),
             ("BASE", 200, traj_rate),
@@ -510,7 +511,27 @@ async def analyze_parcel(
                 annual_appreciation=appr,
                 discount_rate=0.1,
             )
-            scenarios.append({"strategy": "FARMLAND", "case_type": case, **sc, "knowledge_state": "ESTIMATED"})
+            exits = {
+                str(y): round(float(purchase) * ((1 + appr) ** y), 0) for y in hold_options
+            }
+            rent_stack = {
+                str(y): round(float(sc.get("noi") or 0) * y, 0) for y in hold_options
+            }
+            scenarios.append(
+                {
+                    "strategy": "FARMLAND",
+                    "case_type": case,
+                    **sc,
+                    "knowledge_state": "ESTIMATED",
+                    "annual_appreciation": appr,
+                    "annual_appreciation_display": f"{appr*100:.1f}%/yr",
+                    "cash_rent_per_acre": rent,
+                    "purchase_price": float(purchase),
+                    "hold_years_options": hold_options,
+                    "exit_value_by_year": exits,
+                    "rent_stack_by_year": rent_stack,
+                }
+            )
     existing.scenarios = scenarios
     store.enrichments[parcel_id] = existing
 
