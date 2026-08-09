@@ -520,8 +520,7 @@ export function LandViewerModal({
         fillOpacity: 1,
       })
         .bindPopup(
-          `<strong>${hit.label}</strong><br/>${hit.name}<br/>${formatDistance(hit.meters)} away` +
-            (hit.source === "estimate" ? "<br/><em>Approximate locate</em>" : ""),
+          `<strong>${hit.label}</strong><br/>${hit.name}<br/>${formatDistance(hit.meters)} away`,
         )
         .addTo(group)
         .openPopup();
@@ -529,10 +528,7 @@ export function LandViewerModal({
         padding: [60, 60],
         maxZoom: 14,
       });
-      setNearbyStatus(
-        `${hit.label}: ${formatDistance(hit.meters)} · ${hit.name}` +
-          (hit.source === "estimate" ? " (approx)" : ""),
-      );
+      setNearbyStatus(`${hit.label}: ${formatDistance(hit.meters)} · ${hit.name}`);
     },
     [center, hasGeo, latitude, longitude, nearbyActive],
   );
