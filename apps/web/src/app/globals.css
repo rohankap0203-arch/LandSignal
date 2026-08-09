@@ -1263,24 +1263,39 @@ a.btn-intel:hover {
   }
 }
 
-.land-ping {
-  fill: rgba(255, 255, 255, 0.9);
-  transform-origin: 188px 78px;
-  animation: ping 1.8s ease-out infinite;
+.land-pin-field {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
-.land-ping.delay {
-  animation-delay: 0.55s;
+.land-scout-pin {
+  position: absolute;
+  color: rgba(255, 255, 255, 0.92);
+  transform: translate(-50%, -100%) scale(var(--pin-scale, 1));
+  opacity: 0;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.28));
+  animation-name: scout-pin-pop;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
 }
 
-@keyframes ping {
-  0% {
-    transform: scale(0.6);
-    opacity: 0.95;
-  }
-  100% {
-    transform: scale(3.2);
+@keyframes scout-pin-pop {
+  0%,
+  12% {
     opacity: 0;
+    transform: translate(-50%, -70%) scale(calc(var(--pin-scale, 1) * 0.55));
+  }
+  28%,
+  52% {
+    opacity: 1;
+    transform: translate(-50%, -100%) scale(var(--pin-scale, 1));
+  }
+  68%,
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -118%) scale(calc(var(--pin-scale, 1) * 0.7));
   }
 }
 
@@ -1855,11 +1870,7 @@ a.btn-intel:hover {
   gap: 10px;
 }
 
-.intel-topbar-right {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+.intel-topbar .watch-eye {
   margin-left: auto;
   flex-shrink: 0;
 }

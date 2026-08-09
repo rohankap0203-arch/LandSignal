@@ -199,13 +199,13 @@ export default function ParcelIntelligencePage() {
       <section className="panel overflow-hidden">
         <div className="p-6 pb-4">
           <div className="intel-topbar">
-            <span className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-xs font-semibold">
-              {String(sourcing.source_name || "Public source")}
-            </span>
-            <div className="intel-topbar-right">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
               {score ? <SignalBadge signal={score.signal as string} /> : null}
-              <WatchEyeButton watched={watched} onToggle={toggleWatch} />
+              <span className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-xs font-semibold">
+                {String(sourcing.source_name || "Public source")}
+              </span>
             </div>
+            <WatchEyeButton watched={watched} onToggle={toggleWatch} />
           </div>
           <h1 className="display mt-3 text-3xl font-semibold leading-tight break-words">
             {pageTitle}
