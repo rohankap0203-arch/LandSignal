@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FilterField } from "@/components/filter-field";
 import { LandLoader } from "@/components/land-loader";
+import { LiveMagnifier } from "@/components/live-magnifier";
 import { PropertyCard } from "@/components/property-card";
 import {
   landsignalApi,
@@ -441,8 +442,9 @@ export default function SearchPage() {
               >
                 {loading ? "Searching…" : "Show matches"}
               </button>
-              <Link href="/alerts" className="btn btn-primary btn-search-primary">
-                Land Alerts
+              <Link href="/alerts" className="btn btn-land-alerts btn-search-primary">
+                <span className="btn-land-alerts-text">Land Alerts</span>
+                <LiveMagnifier size={18} className="btn-land-alerts-mag" />
               </Link>
             </div>
             <div className="filter-actions-secondary">

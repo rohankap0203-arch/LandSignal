@@ -376,6 +376,114 @@ select {
   min-width: 10.5rem;
 }
 
+.btn-land-alerts {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  background: #0a0a0a;
+  color: #ffffff;
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid #0a0a0a;
+}
+
+.btn-land-alerts:hover {
+  background: #000000;
+  border-color: #000000;
+  color: #ffffff;
+}
+
+.btn-land-alerts-text {
+  flex: 1 1 auto;
+  text-align: center;
+}
+
+.btn-land-alerts-mag {
+  flex: 0 0 auto;
+  color: #ffffff;
+}
+
+/* Live scanning magnifier */
+.live-magnifier {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  flex: 0 0 auto;
+}
+
+.live-magnifier-svg {
+  display: block;
+  animation: live-mag-sweep 2.4s ease-in-out infinite;
+  transform-origin: 42% 42%;
+}
+
+.live-magnifier-glint {
+  opacity: 0.35;
+  animation: live-mag-glint 1.8s ease-in-out infinite;
+}
+
+.live-magnifier-pulse {
+  position: absolute;
+  inset: -4px;
+  border-radius: 999px;
+  border: 1.5px solid currentColor;
+  opacity: 0;
+  animation: live-mag-ring 2.4s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes live-mag-sweep {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(-8deg);
+  }
+  25% {
+    transform: translate(2px, -2px) rotate(4deg);
+  }
+  50% {
+    transform: translate(-1px, 2px) rotate(-2deg);
+  }
+  75% {
+    transform: translate(1px, 1px) rotate(6deg);
+  }
+}
+
+@keyframes live-mag-glint {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@keyframes live-mag-ring {
+  0% {
+    transform: scale(0.72);
+    opacity: 0.45;
+  }
+  70% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-magnifier-svg,
+  .live-magnifier-glint,
+  .live-magnifier-pulse {
+    animation: none;
+  }
+}
+
 .filter-custom-pair {
   display: flex;
   gap: 8px;
@@ -2633,6 +2741,13 @@ a.acquire-block:hover {
 }
 
 /* ——— Land Alerts ——— */
+.land-alerts-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .land-alerts-back {
   display: inline-flex;
   align-items: center;
@@ -2646,6 +2761,22 @@ a.acquire-block:hover {
 
 .land-alerts-back:hover {
   color: var(--ink);
+}
+
+.land-alerts-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--brand);
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.land-alerts-live span {
+  color: var(--muted);
+  letter-spacing: 0.06em;
 }
 
 .land-alerts-hero {

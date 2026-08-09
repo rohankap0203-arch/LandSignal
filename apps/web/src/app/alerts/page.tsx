@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { LiveMagnifier } from "@/components/live-magnifier";
 import { landsignalApi, type LandAlertMatchCard } from "@/lib/api";
 
 type PrefMode = "must" | "prefer" | "flexible";
@@ -375,9 +376,15 @@ export default function LandAlertsPage() {
   if (loading) {
     return (
       <div className="land-alerts-page space-y-4">
-        <Link href="/" className="land-alerts-back">
-          ← Back
-        </Link>
+        <div className="land-alerts-topbar">
+          <Link href="/" className="land-alerts-back">
+            ← Back
+          </Link>
+          <div className="land-alerts-live" title="LandSignal is scanning live">
+            <LiveMagnifier size={28} />
+            <span>Scanning live</span>
+          </div>
+        </div>
         <h1 className="display text-3xl font-semibold">Land Alerts</h1>
         <p className="text-sm text-[var(--muted)]">Loading your acquisition profile…</p>
       </div>
@@ -386,9 +393,15 @@ export default function LandAlertsPage() {
 
   return (
     <div className="land-alerts-page space-y-6">
-      <Link href="/" className="land-alerts-back">
-        ← Back
-      </Link>
+      <div className="land-alerts-topbar">
+        <Link href="/" className="land-alerts-back">
+          ← Back
+        </Link>
+        <div className="land-alerts-live" title="LandSignal is scanning live">
+          <LiveMagnifier size={28} />
+          <span>Scanning live</span>
+        </div>
+      </div>
       <div className="land-alerts-hero">
         <div>
           <h1 className="display text-3xl font-semibold">Land Alerts</h1>
