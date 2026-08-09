@@ -3445,7 +3445,8 @@ a.acquire-block:hover {
 .land-alert-front-actions {
   display: flex;
   width: 100%;
-  margin-top: 0.15rem;
+  margin-top: 0;
+  transform: translateY(-8px);
 }
 
 .land-alert-front-actions .btn-intel,
@@ -3600,8 +3601,8 @@ a.acquire-block:hover {
 }
 
 .land-alert-watch {
-  margin-top: 0.5rem;
-  margin-bottom: 0.15rem;
+  margin-top: 0.35rem;
+  margin-bottom: 0;
   font-size: 0.72rem;
   color: color-mix(in srgb, #a65b1a 80%, var(--ink));
   line-height: 1.35;
@@ -3609,10 +3610,11 @@ a.acquire-block:hover {
 
 .land-alert-view-land-wrap {
   display: flex;
-  justify-content: center;
-  margin: 0.7rem 0 0.2rem;
+  justify-content: stretch;
+  width: 100%;
+  margin: 0.25rem 0 0.15rem;
   margin-top: auto;
-  transform: translateY(-2px);
+  transform: translateY(-10px);
 }
 
 .land-alert-view-land {
@@ -3620,38 +3622,40 @@ a.acquire-block:hover {
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  width: auto;
-  min-height: 2rem;
-  padding: 0.35rem 1rem;
+  width: 100%;
+  min-height: 2.15rem;
+  padding: 0.4rem 1rem;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--brand) 45%, var(--line));
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--brand) 16%, var(--bg-elevated)),
-      color-mix(in srgb, var(--brand) 6%, var(--bg-soft))
-    );
-  color: var(--ink);
-  font-size: 0.84rem;
-  font-weight: 600;
+  border: 1px solid color-mix(in srgb, var(--accent) 70%, #8a3a12);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 92%, #fff) 0%,
+    var(--accent) 55%,
+    color-mix(in srgb, var(--accent) 82%, #5c2410) 100%
+  );
+  color: #fff;
+  font-size: 0.86rem;
+  font-weight: 650;
   letter-spacing: 0.01em;
   cursor: pointer;
-  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 35%, transparent);
+  transition: transform 0.15s ease, filter 0.15s ease, background 0.15s ease;
 }
 
 .land-alert-view-land:hover:not(:disabled) {
-  border-color: var(--brand);
+  filter: brightness(1.05);
   transform: translateY(-1px);
 }
 
 .land-alert-view-land:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+  filter: none;
 }
 
 .land-alert-view-land svg {
   flex: 0 0 auto;
-  color: color-mix(in srgb, var(--brand) 70%, var(--ink));
+  color: #fff;
 }
 
 /* Full-screen land viewer */
