@@ -155,268 +155,269 @@ export default function ParcelIntelligencePage() {
       </div>
 
       <section className="panel overflow-hidden">
-        <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="p-6">
-            <div className="intel-topbar">
-              <div className="flex flex-wrap items-center gap-2 min-w-0">
-                {score && <SignalBadge signal={score.signal as string} />}
-                <button
-                  type="button"
-                  className={`watch-eye ${watched ? "on" : ""}`}
-                  onClick={toggleWatch}
-                  title={watched ? "Remove from watchlist" : "Add to watchlist"}
-                  aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
-                  aria-pressed={watched}
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden>
-                    {watched ? (
-                      <>
-                        <path
-                          fill="currentColor"
-                          d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"
-                        />
-                        <circle fill="var(--bg-elevated)" cx="12" cy="12" r="2.2" />
-                      </>
-                    ) : (
+        <div className="p-6 pb-4">
+          <div className="intel-topbar">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              {score && <SignalBadge signal={score.signal as string} />}
+              <button
+                type="button"
+                className={`watch-eye ${watched ? "on" : ""}`}
+                onClick={toggleWatch}
+                title={watched ? "Remove from watchlist" : "Add to watchlist"}
+                aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+                aria-pressed={watched}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden>
+                  {watched ? (
+                    <>
                       <path
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.7"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"
+                        fill="currentColor"
+                        d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"
                       />
-                    )}
-                    {!watched && <circle fill="currentColor" cx="12" cy="12" r="2.5" />}
-                  </svg>
-                  <span>{watched ? "Added" : "Add"}</span>
-                </button>
-                <span className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-xs font-semibold">
-                  {String(sourcing.source_name || "Public source")}
-                </span>
-              </div>
-            </div>
-            <h1 className="display mt-3 text-3xl font-semibold leading-tight break-words">
-              {pageTitle}
-            </h1>
-            <p className="mt-2 text-[var(--muted)] break-words">{identity}</p>
-            {parcel.apn ? (
-              <p className="mt-1 text-xs text-[var(--muted)]">
-                County parcel ID (for assessor lookup only): {String(parcel.apn)}
-              </p>
-            ) : null}
-            {watchMsg ? <p className="mt-2 text-xs text-[var(--muted)]">{watchMsg}</p> : null}
-
-            <div className="next-process mt-4">
-              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-                Three steps from here
-              </div>
-              <ol className="next-process-list mt-2">
-                <li className="next-process-step">
-                  <span className="next-process-num" aria-hidden>
-                    1
-                  </span>
-                  <div className="min-w-0">
-                    <div className="font-semibold text-sm">Learn this page</div>
-                    <p className="next-process-note">
-                      Skim value, return, land checks, and Ask yourself.
-                    </p>
-                    <button
-                      type="button"
-                      className="next-process-action"
-                      onClick={() =>
-                        document
-                          .getElementById("sec-scroll-to")
-                          ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                      }
-                    >
-                      Start reading ↓
-                    </button>
-                  </div>
-                </li>
-                <li className="next-process-step">
-                  <span className="next-process-num" aria-hidden>
-                    2
-                  </span>
-                  <div className="min-w-0">
-                    <div className="font-semibold text-sm">
-                      {watched ? "On your watchlist" : "Watchlist if interested"}
-                    </div>
-                    <p className="next-process-note">
-                      {watched ? "Saved — come back anytime." : "Save it if it still feels like a fit."}
-                    </p>
-                    <button type="button" className="next-process-action" onClick={toggleWatch}>
-                      {watched ? "Remove" : "Add to watchlist"}
-                    </button>
-                  </div>
-                </li>
-                <li className="next-process-step">
-                  <span className="next-process-num" aria-hidden>
-                    3
-                  </span>
-                  <div className="min-w-0">
-                    <div className="font-semibold text-sm">Contact the seller</div>
-                    <p className="next-process-note">
-                      Reach out, then open What to say / Look-for.
-                    </p>
-                    <button
-                      type="button"
-                      className="next-process-action"
-                      onClick={() =>
-                        document
-                          .getElementById("sec-reach")
-                          ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                      }
-                    >
-                      Contact & advice ↓
-                    </button>
-                  </div>
-                </li>
-              </ol>
-            </div>
-
-            <div className="mt-5 grid gap-3">
-              <ScoreBar
-                label="Opportunity score"
-                value={Number(score?.opportunity || 0)}
-                hint={String(oppDrive.verdict || "Tap for why this file scored here")}
-                verdict={String(oppDrive.verdict || "")}
-                bullets={(oppDrive.bullets as string[]) || []}
-              />
-              <ScoreBar
-                label="Risk"
-                value={Number(score?.risk || 0)}
-                invert
-                hint={String(riskDrive.verdict || "Tap for what could go wrong")}
-                verdict={String(riskDrive.verdict || "")}
-                bullets={(riskDrive.bullets as string[]) || []}
-              />
-              <ScoreBar
-                label="How complete the file is"
-                value={Number(score?.confidence || 0)}
-                hint={String(confDrive.verdict || "Tap to see what’s filled in")}
-                verdict={String(confDrive.verdict || "")}
-                bullets={(confDrive.bullets as string[]) || []}
-              />
-            </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <Stat label={String(price?.label || "Price")} value={String(price?.display || "No public price yet")} />
-              <Stat
-                label="Basics already on file"
-                value={`${Number(score?.deal_readiness || 0).toFixed(0)}/100`}
-              />
-            </div>
-
-            {price?.estimate_source ? (
-              <div className="estimate-source mt-4">
-                <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-                  {String((price.estimate_source as AnyRec).headline || "Where our estimate comes from")}
-                </div>
-                <p className="mt-1 text-sm leading-relaxed">
-                  {String((price.estimate_source as AnyRec).summary || "")}
-                </p>
-                <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
-                  {(((price.estimate_source as AnyRec).bullets as string[]) || []).slice(0, 3).map((b) => (
-                    <li key={b}>• {b}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            {returnCase.headline ? (
-              <div className="return-case mt-5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-                    Buy case for this listing
-                  </div>
-                  <span className={`conviction-pill ${String(returnCase.conviction || "watch").toLowerCase()}`}>
-                    {String(returnCase.conviction || "WATCH") === "HIGH"
-                      ? "Strong interest"
-                      : String(returnCase.conviction || "WATCH") === "MEDIUM"
-                        ? "Moderate interest"
-                        : "Worth watching"}
-                  </span>
-                </div>
-                <div className="mt-1 font-semibold leading-snug break-words">{String(returnCase.headline)}</div>
-                <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
-                  {((returnCase.bullets as string[]) || []).slice(0, 2).map((b) => (
-                    <li key={b}>• {b}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            <div id="sec-reach" className="source-card mt-5 scroll-mt-20">
-              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">How to reach the seller</div>
-              <div className="font-semibold break-words">{String(sourcing.office || "County office")}</div>
-              <AcquireRail
-                className="mt-3"
-                postingUrl={sellerLink?.url || String(sourcing.website || "")}
-                phone={phone}
-                office={sourcing.office ? String(sourcing.office) : null}
-                findUrl={findLink?.url}
-                findLabel={findLink?.label}
-                outreach={(data.outreach as OutreachPlaybook) || null}
-              />
-              {sourcing.how_to_buy ? (
-                <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{String(sourcing.how_to_buy)}</p>
-              ) : null}
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {links
-                .filter(
-                  (l) =>
-                    l.url &&
-                    l.url !== sellerLink?.url &&
-                    l.url !== findLink?.url &&
-                    !String(l.url).startsWith("tel:") &&
-                    l.kind !== "map" &&
-                    l.kind !== "primary" &&
-                    l.kind !== "contact",
-                )
-                .map((link, i) => (
-                  <LinkButton key={`${link.url}-${i}`} link={link} />
-                ))}
+                      <circle fill="var(--bg-elevated)" cx="12" cy="12" r="2.2" />
+                    </>
+                  ) : (
+                    <path
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"
+                    />
+                  )}
+                  {!watched && <circle fill="currentColor" cx="12" cy="12" r="2.5" />}
+                </svg>
+                <span>{watched ? "Added" : "Add"}</span>
+              </button>
+              <span className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-xs font-semibold">
+                {String(sourcing.source_name || "Public source")}
+              </span>
             </div>
           </div>
+          <h1 className="display mt-3 text-3xl font-semibold leading-tight break-words">
+            {pageTitle}
+          </h1>
+          <p className="mt-2 text-[var(--muted)] break-words">{identity}</p>
+          {parcel.apn ? (
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              County parcel ID (for assessor lookup only): {String(parcel.apn)}
+            </p>
+          ) : null}
+          {watchMsg ? <p className="mt-2 text-xs text-[var(--muted)]">{watchMsg}</p> : null}
 
-          <div className="flex flex-col border-t border-[var(--line)] lg:border-l lg:border-t-0">
-            <nav id="sec-scroll-to" className="scroll-to scroll-mt-20" aria-label="Scroll to">
-              <div className="scroll-to-label">Scroll-to</div>
-              <div className="scroll-to-row">
-                {[
-                  { id: "sec-value", label: "Value path" },
-                  { id: "sec-return", label: "Return" },
-                  { id: "sec-why", label: "Why buy / why open" },
-                  { id: "sec-score", label: "Score parts" },
-                  { id: "sec-land", label: "Land checks" },
-                  { id: "sec-ask", label: "Ask yourself" },
-                ].map((s) => (
+          <div className="next-process mt-4">
+            <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+              Three steps from here
+            </div>
+            <ol className="next-process-list mt-2">
+              <li className="next-process-step">
+                <span className="next-process-num" aria-hidden>
+                  1
+                </span>
+                <div className="min-w-0">
+                  <div className="font-semibold text-sm">Learn this page</div>
+                  <p className="next-process-note">
+                    Skim value, return, land checks, and Ask yourself.
+                  </p>
                   <button
-                    key={s.id}
                     type="button"
-                    className="scroll-to-btn"
+                    className="next-process-action"
                     onClick={() =>
-                      document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+                      document
+                        .getElementById("sec-scroll-to")
+                        ?.scrollIntoView({ behavior: "smooth", block: "start" })
                     }
                   >
-                    {s.label}
+                    Start reading ↓
                   </button>
-                ))}
-              </div>
-            </nav>
-            <ParcelMap
-              latitude={parcel.latitude as number}
-              longitude={parcel.longitude as number}
-              polygon={parcel.polygon as number[][][]}
-              title={listing?.title as string}
-              height={280}
-            />
-            <div className="border-t border-[var(--line)] p-4">
-              <SignalCockpit cockpit={cockpit} />
+                </div>
+              </li>
+              <li className="next-process-step">
+                <span className="next-process-num" aria-hidden>
+                  2
+                </span>
+                <div className="min-w-0">
+                  <div className="font-semibold text-sm">
+                    {watched ? "On your watchlist" : "Watchlist if interested"}
+                  </div>
+                  <p className="next-process-note">
+                    {watched ? "Saved — come back anytime." : "Save it if it still feels like a fit."}
+                  </p>
+                  <button type="button" className="next-process-action" onClick={toggleWatch}>
+                    {watched ? "Remove" : "Add to watchlist"}
+                  </button>
+                </div>
+              </li>
+              <li className="next-process-step">
+                <span className="next-process-num" aria-hidden>
+                  3
+                </span>
+                <div className="min-w-0">
+                  <div className="font-semibold text-sm">Contact the seller</div>
+                  <p className="next-process-note">
+                    Reach out, then open What to say / Look-for.
+                  </p>
+                  <button
+                    type="button"
+                    className="next-process-action"
+                    onClick={() =>
+                      document
+                        .getElementById("sec-reach")
+                        ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    }
+                  >
+                    Contact & advice ↓
+                  </button>
+                </div>
+              </li>
+            </ol>
+          </div>
+        </div>
+
+        <div className="border-t border-[var(--line)]">
+          <nav id="sec-scroll-to" className="scroll-to scroll-mt-20" aria-label="Scroll to">
+            <div className="scroll-to-label">Scroll-to</div>
+            <div className="scroll-to-row">
+              {[
+                { id: "sec-value", label: "Value path" },
+                { id: "sec-return", label: "Return" },
+                { id: "sec-why", label: "Why buy / why open" },
+                { id: "sec-score", label: "Score parts" },
+                { id: "sec-land", label: "Land checks" },
+                { id: "sec-ask", label: "Ask yourself" },
+              ].map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className="scroll-to-btn"
+                  onClick={() =>
+                    document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }
+                >
+                  {s.label}
+                </button>
+              ))}
             </div>
+          </nav>
+          <ParcelMap
+            latitude={parcel.latitude as number}
+            longitude={parcel.longitude as number}
+            polygon={parcel.polygon as number[][][]}
+            title={listing?.title as string}
+            height={280}
+          />
+        </div>
+
+        <div className="border-t border-[var(--line)] p-6">
+          <div className="grid gap-3">
+            <ScoreBar
+              label="Opportunity score"
+              value={Number(score?.opportunity || 0)}
+              hint={String(oppDrive.verdict || "Tap for why this file scored here")}
+              verdict={String(oppDrive.verdict || "")}
+              bullets={(oppDrive.bullets as string[]) || []}
+            />
+            <ScoreBar
+              label="Risk"
+              value={Number(score?.risk || 0)}
+              invert
+              hint={String(riskDrive.verdict || "Tap for what could go wrong")}
+              verdict={String(riskDrive.verdict || "")}
+              bullets={(riskDrive.bullets as string[]) || []}
+            />
+            <ScoreBar
+              label="How complete the file is"
+              value={Number(score?.confidence || 0)}
+              hint={String(confDrive.verdict || "Tap to see what’s filled in")}
+              verdict={String(confDrive.verdict || "")}
+              bullets={(confDrive.bullets as string[]) || []}
+            />
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <Stat label={String(price?.label || "Price")} value={String(price?.display || "No public price yet")} />
+            <Stat
+              label="Basics already on file"
+              value={`${Number(score?.deal_readiness || 0).toFixed(0)}/100`}
+            />
+          </div>
+
+          {price?.estimate_source ? (
+            <div className="estimate-source mt-4">
+              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+                {String((price.estimate_source as AnyRec).headline || "Where our estimate comes from")}
+              </div>
+              <p className="mt-1 text-sm leading-relaxed">
+                {String((price.estimate_source as AnyRec).summary || "")}
+              </p>
+              <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
+                {(((price.estimate_source as AnyRec).bullets as string[]) || []).slice(0, 3).map((b) => (
+                  <li key={b}>• {b}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {returnCase.headline ? (
+            <div className="return-case mt-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+                  Buy case for this listing
+                </div>
+                <span className={`conviction-pill ${String(returnCase.conviction || "watch").toLowerCase()}`}>
+                  {String(returnCase.conviction || "WATCH") === "HIGH"
+                    ? "Strong interest"
+                    : String(returnCase.conviction || "WATCH") === "MEDIUM"
+                      ? "Moderate interest"
+                      : "Worth watching"}
+                </span>
+              </div>
+              <div className="mt-1 font-semibold leading-snug break-words">{String(returnCase.headline)}</div>
+              <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
+                {((returnCase.bullets as string[]) || []).slice(0, 2).map((b) => (
+                  <li key={b}>• {b}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <div className="border-t border-[var(--line)] mt-5 pt-4">
+            <SignalCockpit cockpit={cockpit} />
+          </div>
+
+          <div id="sec-reach" className="source-card mt-5 scroll-mt-20">
+            <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">How to reach the seller</div>
+            <div className="font-semibold break-words">{String(sourcing.office || "County office")}</div>
+            <AcquireRail
+              className="mt-3"
+              postingUrl={sellerLink?.url || String(sourcing.website || "")}
+              phone={phone}
+              office={sourcing.office ? String(sourcing.office) : null}
+              findUrl={findLink?.url}
+              findLabel={findLink?.label}
+              outreach={(data.outreach as OutreachPlaybook) || null}
+            />
+            {sourcing.how_to_buy ? (
+              <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{String(sourcing.how_to_buy)}</p>
+            ) : null}
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {links
+              .filter(
+                (l) =>
+                  l.url &&
+                  l.url !== sellerLink?.url &&
+                  l.url !== findLink?.url &&
+                  !String(l.url).startsWith("tel:") &&
+                  l.kind !== "map" &&
+                  l.kind !== "primary" &&
+                  l.kind !== "contact",
+              )
+              .map((link, i) => (
+                <LinkButton key={`${link.url}-${i}`} link={link} />
+              ))}
           </div>
         </div>
       </section>
