@@ -31,16 +31,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen">
       <header className="shell-header">
-        <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-4 px-4 py-3.5">
-          <div className="flex min-w-0 items-center gap-8">
+        <div className="shell-header-inner">
+          <div className="shell-header-left">
             <Link href="/" className="shell-brand">
               <MapPinMark className="shell-brand-mark" />
-              <span className="display text-2xl font-semibold text-[var(--brand)]">LandSignal</span>
-              <span className="shell-brand-tagline hidden text-xs text-[var(--muted)] sm:inline">
+              <span className="shell-brand-name display font-semibold text-[var(--brand)]">LandSignal</span>
+              <span className="shell-brand-tagline hidden text-xs text-[var(--muted)] lg:inline">
                 Land investment intelligence
               </span>
             </Link>
-            <nav className="hidden items-center gap-1 md:flex">
+            <nav className="shell-nav">
               {NAV.map((item) => (
                 <Link
                   key={item.href}
@@ -61,7 +61,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <AccountMenu />
             <button
               type="button"
-              className="btn btn-ghost text-sm"
+              className="btn btn-ghost text-sm shell-theme-toggle"
               onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
             >
               {theme === "light" ? "Dark" : "Light"}

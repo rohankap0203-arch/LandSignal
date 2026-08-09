@@ -13,10 +13,10 @@ export function AccountMenu() {
   if (!data?.user) {
     return (
       <div className="account-menu">
-        <Link href="/login" className="btn btn-ghost text-sm account-signin">
+        <Link href="/login" className="btn btn-dark text-sm account-signin">
           Sign in
         </Link>
-        <Link href="/login?mode=signup" className="btn btn-dark text-sm account-create">
+        <Link href="/login?mode=signup" className="btn btn-ghost text-sm account-create">
           Create account
         </Link>
       </div>
@@ -37,7 +37,7 @@ export function AccountMenu() {
       </div>
       <button
         type="button"
-        className="btn btn-ghost text-sm"
+        className="btn btn-ghost text-sm account-signout"
         onClick={() => void signOut({ callbackUrl: "/" })}
       >
         Sign out
