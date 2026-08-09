@@ -222,14 +222,6 @@ select {
   font-weight: 650;
 }
 
-.shell-menu-link-auth {
-  margin-top: 0.25rem;
-  border-top: 1px solid var(--line);
-  border-radius: 0 0 12px 12px;
-  color: var(--muted);
-  font-weight: 500;
-}
-
 .shell-menu-theme {
   width: 100%;
   text-align: left;
@@ -240,6 +232,33 @@ select {
   margin-top: 0.15rem;
   border-top: 1px solid var(--line);
   border-radius: 0;
+}
+
+.shell-menu-close-panel {
+  margin-top: 0.25rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--line);
+}
+
+.shell-menu-close-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.6rem;
+  padding: 0.7rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-soft);
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.shell-menu-close-btn:hover {
+  border-color: color-mix(in srgb, var(--brand) 40%, var(--line));
+  background: color-mix(in srgb, var(--brand) 10%, var(--bg-soft));
 }
 
 @media (min-width: 900px) {
