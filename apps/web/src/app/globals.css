@@ -310,7 +310,7 @@ select {
 
 .filter-map-hero {
   position: absolute;
-  inset: -40px -10% -40px 10%;
+  inset: -40px -6% -40px 2%;
   z-index: 0;
   pointer-events: none;
   color: rgba(247, 250, 248, 0.58);
@@ -324,7 +324,8 @@ select {
   display: block;
   width: min(280px, 58vw);
   height: min(234px, 48vw);
-  margin-right: -8%;
+  margin-right: -4%;
+  transform: translateX(-10%);
   flex-shrink: 0;
 }
 
@@ -345,30 +346,46 @@ select {
 }
 
 .shell-brand-mark {
-  width: 1.7rem;
-  height: 1.5rem;
+  width: 1.75rem;
+  height: 1.48rem;
   color: var(--brand);
   flex: 0 0 auto;
-  display: block;
 }
 
 .shell-brand-tagline {
   margin-left: 2px;
 }
 
+/* Provided logo file — masked so currentColor tints the black ink */
+.map-pin-asset {
+  display: inline-block;
+  background-color: currentColor;
+  -webkit-mask-image: url("/brand/map-pin-logo-mask.png");
+  mask-image: url("/brand/map-pin-logo-mask.png");
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-mode: luminance;
+  mask-mode: luminance;
+}
+
 @media (max-width: 720px) {
   .filter-map-hero {
-    inset: -28px -12% -28px 8%;
+    inset: -28px -14% -28px 6%;
   }
 
   .filter-map-hero-svg {
-    height: min(160px, 58vw);
-    margin-right: -10%;
+    width: min(200px, 62vw);
+    height: min(168px, 52vw);
+    margin-right: -12%;
   }
 
   .shell-brand-mark {
-    width: 1.45rem;
-    height: 1.28rem;
+    width: 1.5rem;
+    height: 1.26rem;
   }
 }
 
