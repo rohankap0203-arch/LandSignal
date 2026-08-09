@@ -212,10 +212,6 @@ export default function ParcelIntelligencePage() {
                 {String(sourcing.source_name || "Public source")}
               </span>
             </div>
-            <div className="return-case-actions">
-              <span className={`conviction-pill ${convictionKey.toLowerCase()}`}>{convictionLabel}</span>
-              <WatchEyeButton watched={watched} onToggle={toggleWatch} />
-            </div>
           </div>
           <h1 className="display mt-3 text-3xl font-semibold leading-tight break-words">
             {pageTitle}
