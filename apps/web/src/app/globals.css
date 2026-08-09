@@ -290,50 +290,37 @@ select {
   margin-top: 16px;
 }
 
-.filter-actions-stage {
+.filter-actions-main {
   display: flex;
-  align-items: stretch;
-  gap: 14px;
-  min-width: 0;
-}
-
-.filter-actions-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
-  flex: 0 1 auto;
-  min-width: min(220px, 100%);
-  max-width: 280px;
-}
-
-.filter-actions-stack .btn {
-  width: 100%;
-  text-align: center;
-  justify-content: center;
+  min-width: 0;
 }
 
 .filter-map-hero {
   position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 100%;
+  flex: 1 1 160px;
+  align-self: stretch;
+  min-width: 140px;
+  min-height: 168px;
+  max-height: 210px;
   overflow: hidden;
   pointer-events: none;
-  color: rgba(247, 250, 248, 0.78);
+  color: rgba(247, 250, 248, 0.82);
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  margin-left: 4px;
 }
 
 .filter-map-hero-svg {
   display: block;
-  height: 118%;
+  height: 100%;
   width: auto;
   max-width: none;
-  margin-right: -12%;
-  transform: translateX(2%);
-  opacity: 0.92;
+  margin-right: -18%;
+  transform: translateX(4%);
 }
 
 .filter-inventory-note {
@@ -351,8 +338,8 @@ select {
 }
 
 .shell-brand-mark {
-  width: 1.55rem;
-  height: 1.35rem;
+  width: 1.65rem;
+  height: 1.45rem;
   color: var(--brand);
   flex: 0 0 auto;
   display: block;
@@ -363,22 +350,21 @@ select {
 }
 
 @media (max-width: 720px) {
-  .filter-actions-stage {
-    gap: 10px;
-  }
-
-  .filter-actions-stack {
-    max-width: 210px;
+  .filter-map-hero {
+    flex-basis: 120px;
+    min-width: 110px;
+    min-height: 132px;
+    max-height: 160px;
+    margin-left: 0;
   }
 
   .filter-map-hero-svg {
-    height: 112%;
-    margin-right: -18%;
+    margin-right: -22%;
   }
 
   .shell-brand-mark {
-    width: 1.35rem;
-    height: 1.15rem;
+    width: 1.4rem;
+    height: 1.22rem;
   }
 }
 

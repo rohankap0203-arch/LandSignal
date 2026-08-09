@@ -1,56 +1,55 @@
-/** Map + pin mark matching the scout icon — stroke inherits currentColor. */
+"use client";
+
+import { useId } from "react";
+
+/**
+ * Exact solid map + pin mark (filled board, thin cutout grid, solid pin with hole).
+ * Color via currentColor.
+ */
 export function MapPinMark({ className }: { className?: string }) {
+  const uid = useId().replace(/:/g, "");
+  const maskId = `mapPinMask-${uid}`;
+
   return (
     <svg
       className={className}
-      viewBox="0 0 96 84"
-      fill="none"
+      viewBox="0 0 64 56"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden
     >
-      {/* Perspective map board (parallelogram) */}
-      <path
-        d="M8 46 L22 20 L86 14 L78 52 L14 58 Z"
-        stroke="currentColor"
-        strokeWidth="3.2"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      {/* Two vertical-ish folds */}
-      <path
-        d="M36 18.8 L30 54.2"
-        stroke="currentColor"
-        strokeWidth="2.6"
-        strokeLinecap="round"
-      />
-      <path
-        d="M58 16.6 L52 53"
-        stroke="currentColor"
-        strokeWidth="2.6"
-        strokeLinecap="round"
-      />
-      {/* One horizontal fold */}
-      <path
-        d="M16 38.5 L80 33.2"
-        stroke="currentColor"
-        strokeWidth="2.6"
-        strokeLinecap="round"
-      />
-      {/* Location pin over top-left cell */}
-      <path
-        d="M34 6 C27.4 6 22 11.3 22 17.8 C22 26.2 34 40 34 40 C34 40 46 26.2 46 17.8 C46 11.3 40.6 6 34 6 Z"
-        stroke="currentColor"
-        strokeWidth="3.2"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      <circle
-        cx="34"
-        cy="17.2"
-        r="4.6"
-        stroke="currentColor"
-        strokeWidth="2.8"
-      />
+      <defs>
+        <mask id={maskId} maskUnits="userSpaceOnUse">
+          <rect x="0" y="0" width="64" height="56" fill="#fff" />
+          {/* Thin divider “roads” cut out of the solid map */}
+          <path
+            d="M24 16.2 L20.2 41.8"
+            stroke="#000"
+            strokeWidth="2.1"
+            strokeLinecap="butt"
+          />
+          <path
+            d="M40.5 15.2 L36.8 41"
+            stroke="#000"
+            strokeWidth="2.1"
+            strokeLinecap="butt"
+          />
+          <path
+            d="M11.5 29.2 L54.5 25.4"
+            stroke="#000"
+            strokeWidth="2.1"
+            strokeLinecap="butt"
+          />
+          {/* Pin hole */}
+          <circle cx="23.5" cy="15.2" r="3.35" fill="#000" />
+        </mask>
+      </defs>
+
+      <g fill="currentColor" mask={`url(#${maskId})`}>
+        {/* Perspective trapezoid map */}
+        <path d="M6.5 40.5 L16.5 15.5 L57.5 12.5 L51.5 42.5 L10.5 45.5 Z" />
+        {/* Solid teardrop pin */}
+        <path d="M23.5 5.2 C18.55 5.2 14.5 9.15 14.5 14.05 C14.5 20.9 23.5 31.2 23.5 31.2 C23.5 31.2 32.5 20.9 32.5 14.05 C32.5 9.15 28.45 5.2 23.5 5.2 Z" />
+      </g>
     </svg>
   );
 }
