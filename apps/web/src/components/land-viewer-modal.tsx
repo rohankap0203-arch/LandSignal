@@ -838,24 +838,33 @@ export function LandViewerModal({
 
         <div className="land-viewer-nearby" aria-label="Closest landmarks">
           <span className="land-viewer-nearby-label">Closest</span>
-          {NEARBY_CHIPS.map((chip) => (
-            <button
-              key={chip.kind}
-              type="button"
-              className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
-              style={{ ["--chip" as string]: chip.color }}
-              disabled={!hasGeo || nearbyLoading}
-              onClick={() => void showNearby(chip.kind)}
-            >
-              {chip.label}
-            </button>
-          ))}
-          {nearbyLoading ? (
-            <span className="land-viewer-nearby-loading" role="status" aria-live="polite">
-              <LiveMagnifier size={18} label="Finding closest landmark" />
-              <span>Working…</span>
-            </span>
-          ) : null}
+          {NEARBY_CHIPS.map((chip) => {
+            const isLast = chip.kind === "water";
+            const button = (
+              <button
+                key={chip.kind}
+                type="button"
+                className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
+                style={{ ["--chip" as string]: chip.color }}
+                disabled={!hasGeo || nearbyLoading}
+                onClick={() => void showNearby(chip.kind)}
+              >
+                {chip.label}
+              </button>
+            );
+            if (!isLast) return button;
+            return (
+              <span key={chip.kind} className="land-viewer-nearby-tail">
+                {button}
+                {nearbyLoading ? (
+                  <span className="land-viewer-nearby-loading" role="status" aria-live="polite">
+                    <LiveMagnifier size={14} label="Finding closest landmark" />
+                    <span>Working</span>
+                  </span>
+                ) : null}
+              </span>
+            );
+          })}
         </div>
 
         <div className="land-viewer-stage">
