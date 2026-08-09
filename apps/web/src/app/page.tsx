@@ -360,8 +360,8 @@ export default function SearchPage() {
           <FilterField
             label="Strategy"
             tip={{
-              title: "Strategy shapes fit",
-              body: "Pick the land use you want to underwrite (farmland, development, timber, etc.). Matches for that use rank higher; near-misses stay in results with a softer fit score. “Type my own…” matches wording in the file when there’s no standard use tag.",
+              title: "What strategy does",
+              body: "Prefers parcels that fit that use (farm, develop, timber…). Others stay in results — they just rank lower.",
             }}
           >
             <select
@@ -394,8 +394,8 @@ export default function SearchPage() {
           <FilterField
             label="Hold period"
             tip={{
-              title: "Hold period ranks priority",
-              body: "This does not drop parcels from your results. It only nudges which matches float higher when sorting by best match — short holds favor cash-flow uses; longer holds favor land-bank / development / timber.",
+              title: "What hold period does",
+              body: "Doesn’t remove results. Only reorders them — short holds lift cash-flow uses; longer holds lift land-bank / develop / timber.",
             }}
           >
             <select

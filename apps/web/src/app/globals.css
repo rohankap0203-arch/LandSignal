@@ -95,6 +95,7 @@ select {
   border-radius: 28px;
   padding: 28px;
   box-shadow: var(--shadow);
+  overflow: visible;
 }
 
 .hero-brand-row {
@@ -165,6 +166,21 @@ select {
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
   margin-top: 22px;
+  overflow: visible;
+}
+
+.filter-field {
+  position: relative;
+  overflow: visible;
+}
+
+.filter-field.has-tip {
+  z-index: 1;
+}
+
+.filter-field.has-tip:focus-within,
+.filter-field.has-tip:has(.help-tip-pop) {
+  z-index: 40;
 }
 
 .filter-grid-12 {
@@ -201,7 +217,7 @@ select {
 }
 
 .help-tip {
-  position: relative;
+  position: static;
   display: inline-flex;
 }
 
@@ -219,31 +235,43 @@ select {
   cursor: pointer;
 }
 
+/* Same width as the field’s dropdown; sits above the control, not clipped */
 .help-tip-pop {
   position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  bottom: calc(100% - 2px);
   top: auto;
-  z-index: 30;
-  width: min(260px, 70vw);
+  z-index: 50;
+  width: 100%;
+  box-sizing: border-box;
   padding: 10px 12px;
   border-radius: 12px;
   background: #10261e;
   color: #f4faf6;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(247, 250, 248, 0.14);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.32);
   display: grid;
-  gap: 4px;
+  gap: 5px;
   text-transform: none;
   letter-spacing: 0;
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 1.4;
   font-weight: 500;
-  transform: translateX(-50%);
-  text-align: center;
+  text-align: left;
+  transform: none;
 }
 
 .help-tip-pop strong {
+  display: block;
   font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.help-tip-pop span {
+  display: block;
+  color: rgba(244, 250, 246, 0.9);
 }
 
 .card-actions .link-disabled,
@@ -1049,28 +1077,32 @@ button.score-bar-click:disabled {
   grid-column: span 1;
 }
 
-/* Dark silver Full intelligence CTA — full-bleed row */
+/* Dynamic silver Full intelligence CTA — full-bleed row */
 .card-actions a.btn-intel,
 a.btn-intel {
   display: flex;
   width: 100%;
   align-items: center;
   justify-content: center;
-  background: #6e7681;
-  color: #f4f6f8;
-  border: 1px solid #5c636d;
-  box-shadow: none;
+  background:
+    linear-gradient(165deg, #d7dde6 0%, #9aa4b2 42%, #6f7886 100%);
+  color: #1b222c;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 8px 18px rgba(28, 36, 48, 0.18);
   font-weight: 700;
   letter-spacing: 0.01em;
-  text-shadow: none;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
   text-align: center;
-  border-radius: 12px;
-  padding: 11px 16px;
+  border-radius: 999px;
+  padding: 12px 18px;
 }
 
 .card-actions a.btn-intel:hover,
 a.btn-intel:hover {
-  background: #5f6670;
+  background:
+    linear-gradient(165deg, #e2e7ef 0%, #a7b0bd 42%, #7a8492 100%);
   filter: none;
   transform: translateY(-1px);
 }
