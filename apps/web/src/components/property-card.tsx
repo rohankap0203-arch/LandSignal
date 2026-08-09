@@ -159,8 +159,8 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           <span className="meta-match" title="How well this matches your filters (0–100)">
             Match {Math.round(row.fit_score ?? row.opportunity)}
           </span>
-          <span className="meta-price" title={row.price_display}>
-            {shortPrice(row.price_display)}
+          <span className="meta-price" title={row.ask != null && row.ask > 0 ? row.price_display : "No public price"}>
+            {row.ask != null && row.ask > 0 ? shortPrice(row.price_display) : "No public price"}
           </span>
         </div>
 

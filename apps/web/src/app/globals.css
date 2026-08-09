@@ -267,6 +267,7 @@ select {
   font-size: 12px;
   font-weight: 700;
   color: #fff;
+  white-space: nowrap;
 }
 
 .help-tip-pop span {
@@ -501,11 +502,10 @@ select {
 
 .card-meta-line {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   min-width: 0;
-  overflow: hidden;
 }
 
 .card-meta-line .conviction-pill {
@@ -528,27 +528,19 @@ select {
 }
 
 .card-meta-line .meta-price {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex-shrink: 0;
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 .card-chip-line {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.card-chip-line::-webkit-scrollbar {
-  display: none;
 }
 
 .card-chip-line .chip {
@@ -1085,23 +1077,20 @@ button.score-bar-click:disabled {
   grid-column: span 1;
 }
 
-/* Dynamic silver Full intelligence CTA — full-bleed row */
+/* Open Intelligence CTA — black / white, inverted in dark mode */
 .card-actions a.btn-intel,
 a.btn-intel {
   display: flex;
   width: 100%;
   align-items: center;
   justify-content: center;
-  background:
-    linear-gradient(165deg, #d7dde6 0%, #9aa4b2 42%, #6f7886 100%);
-  color: #1b222c;
-  border: 1px solid rgba(255, 255, 255, 0.42);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    0 8px 18px rgba(28, 36, 48, 0.18);
+  background: #111418;
+  color: #ffffff;
+  border: 1px solid #111418;
+  box-shadow: none;
   font-weight: 700;
   letter-spacing: 0.01em;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+  text-shadow: none;
   text-align: center;
   border-radius: 999px;
   padding: 12px 18px;
@@ -1109,10 +1098,23 @@ a.btn-intel {
 
 .card-actions a.btn-intel:hover,
 a.btn-intel:hover {
-  background:
-    linear-gradient(165deg, #e2e7ef 0%, #a7b0bd 42%, #7a8492 100%);
+  background: #000000;
+  border-color: #000000;
   filter: none;
   transform: translateY(-1px);
+}
+
+[data-theme="dark"] .card-actions a.btn-intel,
+[data-theme="dark"] a.btn-intel {
+  background: #f4f6f8;
+  color: #111418;
+  border-color: #f4f6f8;
+}
+
+[data-theme="dark"] .card-actions a.btn-intel:hover,
+[data-theme="dark"] a.btn-intel:hover {
+  background: #ffffff;
+  border-color: #ffffff;
 }
 
 .card-actions a.btn-intel.pending {

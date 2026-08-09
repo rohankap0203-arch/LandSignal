@@ -394,7 +394,7 @@ export default function SearchPage() {
             label="Hold period"
             tip={{
               title: "What hold period does",
-              body: "Doesn’t remove results. Only reorders them — short holds lift cash-flow uses; longer holds lift land-bank / develop / timber.",
+              body: "Doesn’t remove results — only reorders them.",
             }}
           >
             <select
