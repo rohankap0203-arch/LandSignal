@@ -357,7 +357,13 @@ export default function SearchPage() {
             ) : null}
           </FilterField>
 
-          <FilterField label="Strategy">
+          <FilterField
+            label="Strategy"
+            tip={{
+              title: "Strategy shapes fit",
+              body: "Pick the land use you want to underwrite (farmland, development, timber, etc.). Matches for that use rank higher; near-misses stay in results with a softer fit score. “Type my own…” matches wording in the file when there’s no standard use tag.",
+            }}
+          >
             <select
               value={form.strategy}
               onChange={(e) => {
