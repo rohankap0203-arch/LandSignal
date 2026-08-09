@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type ScriptSide = {
   title?: string;
@@ -25,17 +25,11 @@ export type OutreachPlaybook = {
 type Step = {
   kicker: string;
   body: string;
-  href?: string | null;
-  hrefLabel?: string;
 };
 
-function buildSteps(
-  kind: "web" | "call",
-  script: ScriptSide | undefined,
-  action: Step,
-): Step[] {
-  const steps: Step[] = [action];
-  if (!script) return steps;
+function buildGuideSteps(kind: "web" | "call", script: ScriptSide | undefined): Step[] {
+  if (!script) return [];
+  const steps: Step[] = [];
   if (script.opener) {
     steps.push({
       kicker: kind === "call" ? "Say this first" : "Start here",
@@ -55,94 +49,159 @@ function buildSteps(
     });
   }
   for (const line of (script.watch_outs || []).slice(0, 1)) {
-    steps.push({
-      kicker: "Watch out",
-      body: line,
-    });
+    steps.push({ kicker: "Watch out", body: line });
   }
   if (script.closing && kind === "call") {
-    steps.push({
-      kicker: "Close with",
-      body: script.closing,
-    });
+    steps.push({ kicker: "Close with", body: script.closing });
   }
   return steps;
 }
 
-function AcquireStepper({
+function GuideDropdown({
+  open,
   tone,
   steps,
-  emptyHint,
+  onClose,
 }: {
+  open: boolean;
   tone: "source" | "call";
   steps: Step[];
-  emptyHint?: string;
+  onClose: () => void;
 }) {
   const [i, setI] = useState(0);
-  const step = steps[Math.min(i, Math.max(0, steps.length - 1))] || null;
-  const n = steps.length;
-  const atAction = i === 0;
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
-  if (!step) {
-    return (
-      <div className={`acquire-stepper tone-${tone} muted`}>
-        <p className="acquire-step-body">{emptyHint || "Nothing here yet"}</p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (open) setI(0);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    const onDoc = (e: MouseEvent) => {
+      if (!panelRef.current) return;
+      if (!panelRef.current.contains(e.target as Node)) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    // defer so the opening click doesn’t instantly close
+    const t = window.setTimeout(() => document.addEventListener("mousedown", onDoc), 0);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDoc);
+    };
+  }, [open, onClose]);
+
+  if (!open || !steps.length) return null;
+  const step = steps[Math.min(i, steps.length - 1)];
+  const n = steps.length;
 
   return (
-    <div className={`acquire-stepper tone-${tone}`}>
-      <div className="acquire-step-head">
+    <div ref={panelRef} className={`acquire-guide tone-${tone}`} role="dialog" aria-label="Guide steps">
+      <div className="acquire-guide-head">
         <span className="acquire-kicker">{step.kicker}</span>
-        {n > 1 ? (
-          <span className="acquire-step-count">
-            {i + 1}/{n}
-          </span>
-        ) : null}
+        <span className="acquire-step-count">
+          {i + 1}/{n}
+        </span>
       </div>
+      <p className="acquire-guide-body">{step.body}</p>
+      <div className="acquire-step-nav">
+        <button
+          type="button"
+          className="acquire-step-btn"
+          aria-label="Previous step"
+          disabled={i <= 0}
+          onClick={() => setI((v) => Math.max(0, v - 1))}
+        >
+          ←
+        </button>
+        <div className="acquire-step-dots" aria-hidden>
+          {steps.map((_, di) => (
+            <span key={di} className={`acquire-step-dot ${di === i ? "on" : ""}`} />
+          ))}
+        </div>
+        <button
+          type="button"
+          className="acquire-step-btn"
+          aria-label="Next step"
+          disabled={i >= n - 1}
+          onClick={() => setI((v) => Math.min(n - 1, v + 1))}
+        >
+          →
+        </button>
+      </div>
+    </div>
+  );
+}
 
-      {atAction && step.href ? (
-        <a className="acquire-step-action" href={step.href} target={step.href.startsWith("tel:") ? undefined : "_blank"} rel="noreferrer">
-          <span className="acquire-value">{step.body}</span>
-          {step.hrefLabel ? <span className="acquire-hint">{step.hrefLabel}</span> : null}
+function ActionCard({
+  tone,
+  kicker,
+  value,
+  hint,
+  href,
+  steps,
+  open,
+  onToggle,
+}: {
+  tone: "source" | "call";
+  kicker: string;
+  value: string;
+  hint?: string | null;
+  href?: string | null;
+  steps: Step[];
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const hasGuide = steps.length > 0;
+  return (
+    <div className={`acquire-card tone-${tone} ${open ? "open" : ""}`}>
+      {href ? (
+        <a
+          className={`acquire-block ${tone}`}
+          href={href}
+          target={href.startsWith("tel:") ? undefined : "_blank"}
+          rel="noreferrer"
+        >
+          <span className="acquire-kicker">{kicker}</span>
+          <span className="acquire-value">{value}</span>
+          {hint ? <span className="acquire-hint">{hint}</span> : null}
         </a>
       ) : (
-        <p className={`acquire-step-body ${atAction ? "action" : ""}`}>{step.body}</p>
-      )}
-
-      {n > 1 ? (
-        <div className="acquire-step-nav">
-          <button
-            type="button"
-            className="acquire-step-btn"
-            aria-label="Previous step"
-            disabled={i <= 0}
-            onClick={() => setI((v) => Math.max(0, v - 1))}
-          >
-            ←
-          </button>
-          <div className="acquire-step-dots" aria-hidden>
-            {steps.map((_, di) => (
-              <span key={di} className={`acquire-step-dot ${di === i ? "on" : ""}`} />
-            ))}
-          </div>
-          <button
-            type="button"
-            className="acquire-step-btn"
-            aria-label="Next step"
-            disabled={i >= n - 1}
-            onClick={() => setI((v) => Math.min(n - 1, v + 1))}
-          >
-            →
-          </button>
+        <div className={`acquire-block ${tone} muted`}>
+          <span className="acquire-kicker">{kicker}</span>
+          <span className="acquire-value">{value}</span>
+          {hint ? <span className="acquire-hint">{hint}</span> : null}
         </div>
+      )}
+      {hasGuide ? (
+        <>
+          <button
+            type="button"
+            className={`acquire-chevron ${open ? "on" : ""}`}
+            aria-label={open ? "Hide guide" : "Show guide steps"}
+            aria-expanded={open}
+            onClick={onToggle}
+          >
+            <span aria-hidden>v</span>
+          </button>
+          <GuideDropdown
+            open={open}
+            tone={tone}
+            steps={steps}
+            onClose={() => {
+              if (open) onToggle();
+            }}
+          />
+        </>
       ) : null}
     </div>
   );
 }
 
-/** Office page + Call as left→right step guides; Find parcel stays clear below. */
+/** Compact Call / Office cards; centered v opens a step-toggle dropdown. */
 export function AcquireRail({
   postingUrl,
   postingLabel = "Open site",
@@ -173,49 +232,9 @@ export function AcquireRail({
     }
   })();
 
-  const webSteps = useMemo(
-    () =>
-      buildSteps(
-        "web",
-        outreach?.website,
-        postingUrl
-          ? {
-              kicker: "Office page",
-              body: `Open ${host}`,
-              href: postingUrl,
-              hrefLabel: host.includes("google.")
-                ? "Search for the live county sale / assessor page"
-                : "County / agency page for this inventory",
-            }
-          : {
-              kicker: "Office page",
-              body: "No link yet",
-              hrefLabel: "Use parcel lookup below if you have it",
-            },
-      ),
-    [outreach?.website, postingUrl, host],
-  );
-
-  const callSteps = useMemo(
-    () =>
-      buildSteps(
-        "call",
-        outreach?.call,
-        tel
-          ? {
-              kicker: "Call the office",
-              body: phoneDisplay || "Call",
-              href: tel,
-              hrefLabel: office || "County / agency desk",
-            }
-          : {
-              kicker: "Call the office",
-              body: "No public phone listed",
-              hrefLabel: office || "Use the official page to contact them",
-            },
-      ),
-    [outreach?.call, tel, phoneDisplay, office],
-  );
+  const webSteps = useMemo(() => buildGuideSteps("web", outreach?.website), [outreach?.website]);
+  const callSteps = useMemo(() => buildGuideSteps("call", outreach?.call), [outreach?.call]);
+  const [openGuide, setOpenGuide] = useState<"web" | "call" | null>(null);
 
   if (!postingUrl && !tel && !findUrl) return null;
 
@@ -223,8 +242,33 @@ export function AcquireRail({
     <div className={`acquire-rail ${className}`.trim()}>
       {outreach?.one_liner ? <p className="acquire-mission">{outreach.one_liner}</p> : null}
 
-      <AcquireStepper tone="source" steps={webSteps} emptyHint="No office page yet" />
-      <AcquireStepper tone="call" steps={callSteps} emptyHint="No phone listed" />
+      <ActionCard
+        tone="source"
+        kicker="Office page"
+        value={postingUrl ? `Open ${host}` : "No link yet"}
+        hint={
+          postingUrl
+            ? host.includes("google.")
+              ? "Search for the live county sale / assessor page"
+              : "County / agency page for this inventory"
+            : "Use parcel lookup below if you have it"
+        }
+        href={postingUrl}
+        steps={webSteps}
+        open={openGuide === "web"}
+        onToggle={() => setOpenGuide((v) => (v === "web" ? null : "web"))}
+      />
+
+      <ActionCard
+        tone="call"
+        kicker="Call the office"
+        value={phoneDisplay || "No public phone listed"}
+        hint={office || (tel ? "County / agency desk" : "Use the official page to contact them")}
+        href={tel}
+        steps={callSteps}
+        open={openGuide === "call"}
+        onToggle={() => setOpenGuide((v) => (v === "call" ? null : "call"))}
+      />
 
       {findUrl ? (
         <a className="acquire-block find" href={findUrl} target="_blank" rel="noreferrer">
