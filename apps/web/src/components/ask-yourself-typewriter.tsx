@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 
 type Props = {
   question: string;
+  /** "Because…" reality line that follows the question */
+  because?: string | null;
   aftertaste?: string | null;
   /** ms per character while typing */
   charMs?: number;
@@ -13,12 +15,13 @@ type Props = {
 
 export function AskYourselfTypewriter({
   question,
+  because,
   aftertaste,
   charMs = 28,
   holdMs = 7000,
 }: Props) {
   const fullQuestion = question.trim();
-  const fullAfter = (aftertaste || "").trim();
+  const fullAfter = (because || aftertaste || "").trim();
   const [qLen, setQLen] = useState(0);
   const [aLen, setALen] = useState(0);
   const [phase, setPhase] = useState<"question" | "aftertaste" | "hold">("question");
@@ -87,7 +90,7 @@ export function AskYourselfTypewriter({
         </span>
       </p>
       {fullAfter ? (
-        <p className="mt-4 text-sm text-[var(--muted)]">
+        <p className="ask-yourself-because mt-4 text-sm leading-relaxed text-[var(--muted)]">
           <span className="sr-only">{fullAfter}</span>
           <span aria-hidden="true">
             {aShown}

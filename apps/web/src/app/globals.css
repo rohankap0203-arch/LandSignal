@@ -2416,6 +2416,14 @@ a.acquire-block:hover {
   min-height: 4.5em;
 }
 
+.ask-yourself-because {
+  max-width: 42rem;
+  text-wrap: pretty;
+  min-height: 3.2em;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  padding-left: 0.85rem;
+}
+
 .ask-yourself-typewriter .ask-caret {
   display: inline-block;
   width: 0.55ch;

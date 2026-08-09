@@ -501,7 +501,13 @@ export default function ParcelIntelligencePage() {
           </div>
           <AskYourselfTypewriter
             question={String(askYourself.question)}
-            aftertaste={askYourself.aftertaste ? String(askYourself.aftertaste) : null}
+            because={
+              askYourself.because
+                ? String(askYourself.because)
+                : askYourself.aftertaste
+                  ? String(askYourself.aftertaste)
+                  : null
+            }
             holdMs={7000}
           />
         </section>
