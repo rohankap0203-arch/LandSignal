@@ -386,6 +386,19 @@ export default function SearchPage() {
             >
               {loading ? "Searching…" : "Show matches"}
             </button>
+            <div className="filter-parcel-mark" aria-hidden title="Parcel outline">
+              <svg viewBox="0 0 120 88" className="filter-parcel-svg">
+                {/* Angular cadastral-style tract — like the intelligence map outline */}
+                <path
+                  className="filter-parcel-poly"
+                  d="M14 62 L22 28 L48 12 L78 18 L102 34 L110 58 L96 76 L58 82 L28 74 Z"
+                />
+                <path
+                  className="filter-parcel-poly inner"
+                  d="M34 58 L40 36 L58 26 L78 32 L88 50 L80 66 L54 70 Z"
+                />
+              </svg>
+            </div>
             <button
               type="button"
               className="btn btn-secondary"
@@ -411,33 +424,13 @@ export default function SearchPage() {
             >
               Reset to Any
             </button>
-            {meta?.inventory_count != null && (
-              <span className="self-center text-sm text-white/70">
-                Live inventory: {meta.inventory_count} parcels
-                {inventoryStates.length ? ` across ${inventoryStates.length} states (${inventoryStates.join(", ")})` : ""}
-              </span>
-            )}
           </div>
-          <div className="filter-land-silhouettes" aria-hidden>
-            <svg viewBox="0 0 220 72" className="filter-land-svg">
-              <path
-                className="filter-land-outline a"
-                d="M18 48 C28 22, 52 14, 78 20 C96 24, 108 38, 124 34 C142 28, 158 12, 178 18 C196 24, 206 40, 204 54 L188 58 C170 50, 154 56, 138 58 C112 62, 90 52, 68 54 C48 56, 32 60, 22 56 Z"
-              />
-              <path
-                className="filter-land-outline b"
-                d="M36 56 C44 40, 62 34, 84 38 C104 42, 118 30, 136 28 C154 26, 170 36, 186 44 L176 58 C158 50, 140 54, 122 56 C98 58, 76 52, 54 54 Z"
-              />
-              <path
-                className="filter-land-contour"
-                d="M30 44 C58 36, 86 46, 118 40 S170 34, 198 42"
-              />
-              <path
-                className="filter-land-contour"
-                d="M40 50 C70 46, 100 52, 132 48 S176 44, 200 50"
-              />
-            </svg>
-          </div>
+          {meta?.inventory_count != null && (
+            <div className="filter-inventory-note">
+              Live inventory: {meta.inventory_count} parcels
+              {inventoryStates.length ? ` across ${inventoryStates.length} states (${inventoryStates.join(", ")})` : ""}
+            </div>
+          )}
         </div>
       </section>
 
