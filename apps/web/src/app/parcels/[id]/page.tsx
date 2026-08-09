@@ -38,6 +38,48 @@ function LinkButton({ link }: { link: ActionLink }) {
   );
 }
 
+function WatchEyeButton({
+  watched,
+  onToggle,
+}: {
+  watched: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`watch-eye ${watched ? "on" : ""}`}
+      onClick={onToggle}
+      title={watched ? "Remove from watchlist" : "Add to watchlist"}
+      aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+      aria-pressed={watched}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden>
+        {watched ? (
+          <>
+            <path
+              fill="currentColor"
+              d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"
+            />
+            <circle fill="var(--bg-elevated)" cx="12" cy="12" r="2.2" />
+          </>
+        ) : (
+          <path
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"
+          />
+        )}
+        {!watched && <circle fill="currentColor" cx="12" cy="12" r="2.5" />}
+      </svg>
+      <span>{watched ? "Added" : "Add"}</span>
+    </button>
+  );
+}
+
 export default function ParcelIntelligencePage() {
   const params = useParams<{ id: string }>();
   const [data, setData] = useState<AnyRec | null>(null);
@@ -159,41 +201,11 @@ export default function ParcelIntelligencePage() {
           <div className="intel-topbar">
             <div className="flex flex-wrap items-center gap-2 min-w-0">
               {score && <SignalBadge signal={score.signal as string} />}
-              <button
-                type="button"
-                className={`watch-eye ${watched ? "on" : ""}`}
-                onClick={toggleWatch}
-                title={watched ? "Remove from watchlist" : "Add to watchlist"}
-                aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
-                aria-pressed={watched}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden>
-                  {watched ? (
-                    <>
-                      <path
-                        fill="currentColor"
-                        d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"
-                      />
-                      <circle fill="var(--bg-elevated)" cx="12" cy="12" r="2.2" />
-                    </>
-                  ) : (
-                    <path
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.7"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"
-                    />
-                  )}
-                  {!watched && <circle fill="currentColor" cx="12" cy="12" r="2.5" />}
-                </svg>
-                <span>{watched ? "Added" : "Add"}</span>
-              </button>
               <span className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-xs font-semibold">
                 {String(sourcing.source_name || "Public source")}
               </span>
             </div>
+            {!returnCase.headline ? <WatchEyeButton watched={watched} onToggle={toggleWatch} /> : null}
           </div>
           <h1 className="display mt-3 text-3xl font-semibold leading-tight break-words">
             {pageTitle}
@@ -366,13 +378,16 @@ export default function ParcelIntelligencePage() {
                 <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
                   Buy case for this listing
                 </div>
-                <span className={`conviction-pill ${String(returnCase.conviction || "watch").toLowerCase()}`}>
-                  {String(returnCase.conviction || "WATCH") === "HIGH"
-                    ? "Strong interest"
-                    : String(returnCase.conviction || "WATCH") === "MEDIUM"
-                      ? "Moderate interest"
-                      : "Worth watching"}
-                </span>
+                <div className="return-case-actions">
+                  <span className={`conviction-pill ${String(returnCase.conviction || "watch").toLowerCase()}`}>
+                    {String(returnCase.conviction || "WATCH") === "HIGH"
+                      ? "Strong interest"
+                      : String(returnCase.conviction || "WATCH") === "MEDIUM"
+                        ? "Moderate interest"
+                        : "Worth watching"}
+                  </span>
+                  <WatchEyeButton watched={watched} onToggle={toggleWatch} />
+                </div>
               </div>
               <div className="mt-1 font-semibold leading-snug break-words">{String(returnCase.headline)}</div>
               <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">

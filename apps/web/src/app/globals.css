@@ -1338,10 +1338,12 @@ a.btn-intel:hover {
 
 /* Signal cockpit under map */
 .signal-cockpit {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
   min-height: 220px;
+  overflow: visible;
 }
 
 .cockpit-tabs {
@@ -1898,6 +1900,14 @@ a.btn-intel:hover {
   font-size: 0.85rem;
 }
 
+.return-case-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .watch-eye {
   display: inline-flex;
   flex-direction: row;
@@ -1919,6 +1929,17 @@ a.btn-intel:hover {
   flex-shrink: 0;
   margin-left: 0;
   transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.return-case .watch-eye {
+  height: 22px;
+  min-height: 22px;
+  font-size: 0.62rem;
+}
+
+.return-case .watch-eye svg {
+  width: 12px;
+  height: 12px;
 }
 
 .watch-eye svg {
