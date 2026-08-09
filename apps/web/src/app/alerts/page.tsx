@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
 import { LiveMagnifier } from "@/components/live-magnifier";
 import { landsignalApi, type LandAlertMatchCard } from "@/lib/api";
@@ -121,27 +121,38 @@ function ModeSelect({
 
 function MatchCard({
   row,
-  onFlipOpen,
+  dimmed,
+  onCheckSeen,
 }: {
   row: LandAlertMatchCard;
-  onFlipOpen: (parcelId: string) => void;
+  dimmed: boolean;
+  onCheckSeen: (parcelId: string) => void;
 }) {
   const [flipped, setFlipped] = useState(false);
   const href = row.deep_link || `/parcels/${row.parcel_id}`;
+  const innerRef = useRef<HTMLDivElement | null>(null);
+  const frontRef = useRef<HTMLElement | null>(null);
+  const backRef = useRef<HTMLElement | null>(null);
+
+  useLayoutEffect(() => {
+    const inner = innerRef.current;
+    const face = flipped ? backRef.current : frontRef.current;
+    if (!inner || !face) return;
+    // Hold the active face height until the user flips back — no temporary tween
+    inner.style.height = `${face.scrollHeight}px`;
+  }, [flipped, row, dimmed]);
 
   function flipOpen() {
-    if (!flipped) {
-      setFlipped(true);
-      onFlipOpen(row.parcel_id);
-    } else {
-      setFlipped(false);
-    }
+    setFlipped((v) => !v);
   }
 
   return (
-    <div className={`land-alert-flip${flipped ? " is-flipped" : ""}${row.status === "new" ? " is-new" : ""}`}>
-      <div className="land-alert-flip-inner">
+    <div
+      className={`land-alert-flip${flipped ? " is-flipped" : ""}${row.status === "new" && !dimmed ? " is-new" : ""}${dimmed ? " is-dimmed" : ""}`}
+    >
+      <div className="land-alert-flip-inner" ref={innerRef}>
         <article
+          ref={frontRef}
           className="land-alert-card land-alert-card-front"
           onClick={flipOpen}
           onKeyDown={(e) => {
@@ -158,18 +169,36 @@ function MatchCard({
           <div className="land-alert-card-top">
             <div className="land-alert-card-scores">
               <span className="land-alert-match-pct">
-                {Math.round(row.preference_match_pct)}% Preference Match
+                {Math.round(row.preference_match_pct)}% Match
               </span>
               <span className="land-alert-ls-score">
-                {Math.round(row.landsignal_score)}/100 LandSignal Score
+                {Math.round(row.landsignal_score)}/100 Score
               </span>
             </div>
             <div className="land-alert-card-badges">
-              {row.status === "new" ? <span className="land-alert-new">NEW</span> : null}
+              <label
+                className={`land-alert-checkseen${dimmed ? " on" : ""}`}
+                title="Mark as seen — moves to Viewed after refresh"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  checked={dimmed}
+                  disabled={dimmed}
+                  onChange={() => {
+                    if (!dimmed) onCheckSeen(row.parcel_id);
+                  }}
+                  aria-label="Mark match as seen"
+                />
+                <span className="land-alert-checkseen-box" aria-hidden>
+                  {dimmed ? "✓" : ""}
+                </span>
+              </label>
+              {row.status === "new" && !dimmed ? <span className="land-alert-new">NEW</span> : null}
               {row.update_kind && row.update_kind !== "new_listing" ? (
                 <span className="land-alert-update">{row.update_kind.replace(/_/g, " ")}</span>
               ) : null}
-              {row.status === "viewed" ? <span className="land-alert-viewed">Viewed</span> : null}
             </div>
           </div>
           <div className="land-alert-card-title">{row.property_name}</div>
@@ -178,11 +207,10 @@ function MatchCard({
             <span>{row.asking_price_display}</span>
             <span>{row.acres_display}</span>
             <span>{row.price_per_acre_display}</span>
-            <span>{row.land_type}</span>
           </div>
           {row.why_matched?.length ? (
             <ul className="land-alert-why">
-              {row.why_matched.slice(0, 5).map((r) => (
+              {row.why_matched.slice(0, 3).map((r) => (
                 <li key={r}>{r}</li>
               ))}
             </ul>
@@ -192,18 +220,10 @@ function MatchCard({
               <strong>Watch:</strong> {row.watch_flags[0]}
             </div>
           ) : null}
-          {(row.opportunity_indicators?.length || row.risk_indicators?.length) ? (
-            <div className="land-alert-indicators">
-              {row.opportunity_indicators?.[0] ? (
-                <span className="ok">{row.opportunity_indicators[0]}</span>
-              ) : null}
-              {row.risk_indicators?.[0] ? <span className="risk">{row.risk_indicators[0]}</span> : null}
-            </div>
-          ) : null}
-          <div className="land-alert-flip-hint">Tap to reveal contact &amp; next steps</div>
+          <div className="land-alert-flip-hint">Tap to flip</div>
         </article>
 
-        <article className="land-alert-card land-alert-card-back">
+        <article ref={backRef} className="land-alert-card land-alert-card-back">
           <div className="land-alert-back-head">
             <div>
               <div className="land-alert-card-title">{row.property_name}</div>
@@ -225,9 +245,9 @@ function MatchCard({
             </button>
           </div>
 
-          <div onClick={(e) => e.stopPropagation()}>
+          <div className="land-alert-back-rail" onClick={(e) => e.stopPropagation()}>
             <AcquireRail
-              className="mt-2"
+              className="land-alert-acquire"
               postingUrl={row.contact_website}
               phone={row.contact_phone}
               office={row.contact_office}
@@ -260,11 +280,14 @@ export default function LandAlertsPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [inAppAlerts, setInAppAlerts] = useState<Record<string, unknown>[]>([]);
+  /** Checked this session — grey out now; move to Viewed on refresh / return */
+  const [pendingSeen, setPendingSeen] = useState<Set<string>>(() => new Set());
 
   const loadMatches = useCallback(async () => {
     const data = await landsignalApi.landAlertMatches(profileId || undefined);
     setMatches(data.matches || []);
     setCounts(data.counts || { new: 0, unseen: 0, viewed: 0, total: 0 });
+    setPendingSeen(new Set());
   }, [profileId]);
 
   const hydrate = useCallback(async () => {
@@ -335,11 +358,31 @@ export default function LandAlertsPage() {
   }, [hydrate]);
 
   const visible = useMemo(() => {
-    if (tab === "new") return matches.filter((m) => m.status === "new");
-    if (tab === "viewed") return matches.filter((m) => m.status === "viewed");
-    // Current = qualifying inventory (new + unseen), not yet dismissed as viewed-only feed
-    return matches.filter((m) => m.status === "new" || m.status === "unseen");
-  }, [matches, tab]);
+    if (tab === "viewed") {
+      // Pending checks stay out of Viewed until refresh / return
+      return matches.filter((m) => m.status === "viewed" && !pendingSeen.has(m.parcel_id));
+    }
+    // Keep pending-seen cards in place (greyed) until refresh / return
+    if (tab === "new") {
+      return matches.filter((m) => m.status === "new" || pendingSeen.has(m.parcel_id));
+    }
+    return matches.filter(
+      (m) => m.status === "new" || m.status === "unseen" || pendingSeen.has(m.parcel_id),
+    );
+  }, [matches, tab, pendingSeen]);
+
+  async function checkSeen(parcelId: string) {
+    setPendingSeen((prev) => {
+      const next = new Set(prev);
+      next.add(parcelId);
+      return next;
+    });
+    try {
+      await landsignalApi.markLandAlertViewed(parcelId);
+    } catch {
+      /* keep greyed locally; will sync on next load */
+    }
+  }
 
   async function saveProfile() {
     setSaving(true);
@@ -417,15 +460,6 @@ export default function LandAlertsPage() {
       setMsg("Land Alerts paused. Existing matches stay visible; no new notifications.");
     }
     await loadMatches();
-  }
-
-  async function onOpen(parcelId: string) {
-    try {
-      await landsignalApi.markLandAlertViewed(parcelId);
-      await loadMatches();
-    } catch {
-      /* detail page also marks viewed */
-    }
   }
 
   function toggleStrategy(id: string) {
@@ -838,7 +872,12 @@ export default function LandAlertsPage() {
 
           <div className="space-y-3">
             {visible.map((row) => (
-              <MatchCard key={row.id} row={row} onFlipOpen={onOpen} />
+              <MatchCard
+                key={row.id}
+                row={row}
+                dimmed={pendingSeen.has(row.parcel_id)}
+                onCheckSeen={checkSeen}
+              />
             ))}
             {!visible.length ? (
               <div className="panel empty-state p-6">

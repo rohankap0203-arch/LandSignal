@@ -2935,13 +2935,11 @@ a.acquire-block:hover {
 
 .land-alerts-hero-actions {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   max-width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 2px;
+  overflow: visible;
 }
 
 .land-alerts-hero-actions .btn-ghost {
@@ -2950,8 +2948,9 @@ a.acquire-block:hover {
   border: 1px solid var(--line);
   white-space: nowrap;
   flex: 0 0 auto;
-  padding: 10px 14px;
-  font-size: 0.88rem;
+  padding: 8px 11px;
+  font-size: 0.8rem;
+  border-radius: 999px;
 }
 
 .land-alerts-hero-actions .btn-ghost:hover {
@@ -3081,10 +3080,24 @@ a.acquire-block:hover {
   perspective: 1400px;
 }
 
+.land-alert-flip.is-dimmed {
+  opacity: 0.48;
+  filter: grayscale(0.35);
+}
+
+.land-alert-flip.is-dimmed .land-alert-card {
+  pointer-events: none;
+}
+
+.land-alert-flip.is-dimmed .land-alert-checkseen {
+  pointer-events: auto;
+}
+
 .land-alert-flip-inner {
   position: relative;
   transform-style: preserve-3d;
   transition: transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+  /* Height is set in JS to active face and held until flip-back */
 }
 
 .land-alert-flip.is-flipped .land-alert-flip-inner {
@@ -3092,7 +3105,7 @@ a.acquire-block:hover {
 }
 
 .land-alert-card {
-  padding: 1rem 1.1rem;
+  padding: 0.7rem 0.8rem;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel, var(--bg-elevated));
@@ -3106,12 +3119,15 @@ a.acquire-block:hover {
 
 .land-alert-card-back {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: 0;
   transform: rotateY(180deg);
-  overflow: auto;
+  overflow: visible;
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.45rem;
+  height: auto;
 }
 
 .land-alert-flip.is-new .land-alert-card-front,
@@ -3121,8 +3137,8 @@ a.acquire-block:hover {
 }
 
 .land-alert-flip-hint {
-  margin-top: 0.75rem;
-  font-size: 0.75rem;
+  margin-top: 0.45rem;
+  font-size: 0.68rem;
   color: var(--muted);
   letter-spacing: 0.02em;
 }
@@ -3131,19 +3147,36 @@ a.acquire-block:hover {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .land-alert-flip-back {
   flex: 0 0 auto;
   white-space: nowrap;
-  padding: 8px 12px !important;
-  font-size: 0.82rem !important;
+  padding: 6px 10px !important;
+  font-size: 0.75rem !important;
+}
+
+.land-alert-back-rail {
+  overflow: visible;
+}
+
+.land-alert-acquire.acquire-rail,
+.land-alert-back-rail .acquire-rail {
+  gap: 0.4rem;
+}
+
+.land-alert-back-rail .acquire-card-row {
+  gap: 0.4rem;
+}
+
+.land-alert-back-rail .acquire-mission {
+  display: none;
 }
 
 .land-alert-back-actions {
-  margin-top: auto;
-  padding-top: 0.35rem;
+  margin-top: 0.15rem;
+  padding-top: 0;
 }
 
 .land-alert-back-actions .btn-intel {
@@ -3155,8 +3188,8 @@ a.acquire-block:hover {
   color: #ffffff;
   border: 1px solid #111418;
   border-radius: 999px;
-  padding: 11px 16px;
-  font-size: 0.92rem;
+  padding: 9px 14px;
+  font-size: 0.84rem;
   font-weight: 600;
   text-decoration: none;
 }
@@ -3166,17 +3199,48 @@ a.acquire-block:hover {
   border-color: #000000;
 }
 
-/* Keep front height when back is absolute — measure via front only */
-.land-alert-flip-inner:has(.land-alert-card-front) {
-  min-height: 100%;
-}
-
 .land-alert-flip.is-flipped .land-alert-card-front {
   pointer-events: none;
 }
 
 .land-alert-flip:not(.is-flipped) .land-alert-card-back {
   pointer-events: none;
+}
+
+.land-alert-checkseen {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin: 0;
+}
+
+.land-alert-checkseen input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.land-alert-checkseen-box {
+  width: 1rem;
+  height: 1rem;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 45%, var(--line));
+  border-radius: 3px;
+  background: var(--bg-elevated);
+  color: var(--brand);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.land-alert-checkseen.on .land-alert-checkseen-box {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 14%, var(--bg-elevated));
 }
 
 .land-alert-card-top {
@@ -3233,10 +3297,11 @@ a.acquire-block:hover {
 .land-alert-card-title {
   display: inline-block;
   font-family: var(--font-display, inherit);
-  font-size: 1.15rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--ink);
   text-decoration: none;
+  line-height: 1.25;
 }
 
 .land-alert-card-title:hover {
@@ -3253,9 +3318,9 @@ a.acquire-block:hover {
 }
 
 .land-alert-why {
-  margin: 0.65rem 0 0;
-  padding-left: 1.1rem;
-  font-size: 0.84rem;
+  margin: 0.4rem 0 0;
+  padding-left: 1rem;
+  font-size: 0.78rem;
   color: var(--ink);
 }
 
