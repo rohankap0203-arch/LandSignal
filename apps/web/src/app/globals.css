@@ -317,7 +317,7 @@ select {
   color: var(--brand);
   flex: 0 0 auto;
   /* Optical lift — pin mass sits a bit high relative to the wordmark */
-  transform: translateY(-4px);
+  transform: translateY(-3px);
 }
 
 .shell-brand-tagline {
@@ -344,7 +344,7 @@ select {
   .shell-brand-mark {
     width: 1.5rem;
     height: 1.26rem;
-    transform: translateY(-3px);
+    transform: translateY(-2px);
   }
 }
 
