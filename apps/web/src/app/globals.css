@@ -310,10 +310,10 @@ select {
 
 .filter-map-hero {
   position: absolute;
-  inset: -36px -8% -36px 12%;
+  inset: -40px -10% -40px 10%;
   z-index: 0;
   pointer-events: none;
-  color: rgba(247, 250, 248, 0.55);
+  color: rgba(247, 250, 248, 0.58);
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -322,10 +322,9 @@ select {
 
 .filter-map-hero-svg {
   display: block;
-  height: min(210px, 52vw);
-  width: auto;
-  max-width: none;
-  margin-right: -6%;
+  width: min(280px, 58vw);
+  height: min(234px, 48vw);
+  margin-right: -8%;
   flex-shrink: 0;
 }
 
