@@ -378,19 +378,27 @@ export default function ParcelIntelligencePage() {
             </div>
           ) : null}
 
-          {returnCase.headline ? (
-            <div className="return-case mt-5">
+          <div className="return-case mt-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
                 Buy case for this listing
               </div>
-              <div className="mt-1 font-semibold leading-snug break-words">{String(returnCase.headline)}</div>
-              <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
-                {((returnCase.bullets as string[]) || []).slice(0, 2).map((b) => (
-                  <li key={b}>• {b}</li>
-                ))}
-              </ul>
+              <div className="return-case-actions">
+                <span className={`conviction-pill ${convictionKey.toLowerCase()}`}>{convictionLabel}</span>
+                <WatchEyeButton watched={watched} onToggle={toggleWatch} />
+              </div>
             </div>
-          ) : null}
+            {returnCase.headline ? (
+              <>
+                <div className="mt-1 font-semibold leading-snug break-words">{String(returnCase.headline)}</div>
+                <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
+                  {((returnCase.bullets as string[]) || []).slice(0, 2).map((b) => (
+                    <li key={b}>• {b}</li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </div>
 
           <div id="sec-reach" className="source-card mt-5 scroll-mt-20">
             <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">How to reach the seller</div>
