@@ -3383,11 +3383,6 @@ a.acquire-block:hover {
   letter-spacing: 0.02em;
   line-height: 1;
   text-align: right;
-  margin-top: auto;
-}
-
-.land-alert-card-front .land-alert-view-land-wrap + .land-alert-flip-hint {
-  margin-top: 0.1rem;
 }
 
 .land-alert-back-head {
