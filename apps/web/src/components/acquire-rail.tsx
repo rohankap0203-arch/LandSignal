@@ -86,6 +86,23 @@ function formatStepBody(tone: "source" | "call", step: Step): string {
   return quoteIfNeeded(step.body);
 }
 
+/** Fallback if API didn’t send fulfills — keep the step useful. */
+function fallbackFulfills(tone: "source" | "call", step: Step): string {
+  if (step.fulfills?.trim()) return step.fulfills.trim();
+  const k = step.kicker.toLowerCase();
+  if (tone === "call") {
+    if (k.includes("first")) return "Opens the call as a real buyer on this exact file.";
+    if (k.includes("ask")) return "Gets a yes/no that changes whether you keep spending time.";
+    if (k.includes("watch")) return "Flags the trap before it eats the deal.";
+    if (k.includes("close")) return "Leaves a clean reason to call back with facts.";
+    return "Advances the buy path — status, price, or who can sell it.";
+  }
+  if (k.includes("start")) return "Confirms the file is live before you dig deeper.";
+  if (k.includes("do next")) return "Turns the page dig into facts you can use on the call.";
+  if (k.includes("watch")) return "Stops a dead-end dig on a pin that isn’t buyable.";
+  return "Pulls the fact you need before you dial or bid.";
+}
+
 /** Compact animated reveal — clearer than a bare V for “open the guide”. */
 function GuideRevealMark({ open }: { open: boolean }) {
   return (
@@ -131,7 +148,9 @@ function GuidePanel({
   const step = steps[Math.min(i, steps.length - 1)];
   const n = steps.length;
   const bodies = steps.map((s) => formatStepBody(tone, s));
+  const whys = steps.map((s) => fallbackFulfills(tone, s));
   const body = bodies[Math.min(i, bodies.length - 1)];
+  const why = whys[Math.min(i, whys.length - 1)];
 
   return (
     <div className={`acquire-guide tone-${tone}`} role="region" aria-label="Guide steps">
@@ -144,14 +163,20 @@ function GuidePanel({
       <div className="acquire-guide-body-wrap" style={bodyMin ? { minHeight: bodyMin } : undefined}>
         <div className="acquire-guide-step">
           <p className="acquire-guide-body">{body}</p>
-          {step.fulfills ? <p className="acquire-guide-why">{step.fulfills}</p> : null}
+          <p className="acquire-guide-why">
+            <span className="acquire-guide-why-k">Why · </span>
+            {why}
+          </p>
         </div>
       </div>
       <div className="acquire-guide-measure" ref={measureRef} aria-hidden>
         {steps.map((s, idx) => (
           <div key={idx} data-step-measure className="acquire-guide-step">
             <p className="acquire-guide-body">{bodies[idx]}</p>
-            {s.fulfills ? <p className="acquire-guide-why">{s.fulfills}</p> : null}
+            <p className="acquire-guide-why">
+              <span className="acquire-guide-why-k">Why · </span>
+              {whys[idx]}
+            </p>
           </div>
         ))}
       </div>

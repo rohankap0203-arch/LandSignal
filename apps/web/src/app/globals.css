@@ -1689,19 +1689,6 @@ a.btn-intel:hover {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.acquire-check-empty {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border: 1.5px solid currentColor;
-  border-radius: 1.5px;
-  opacity: 0.9;
-  flex-shrink: 0;
 }
 
 .acquire-reveal-count {
@@ -1855,22 +1842,28 @@ a.btn-intel:hover {
 
 .acquire-guide-why {
   margin: 0;
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   font-weight: 500;
-  line-height: 1.3;
-  color: var(--muted);
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--muted) 88%, var(--ink));
   letter-spacing: 0.01em;
+}
+
+.acquire-guide-why-k {
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.58rem;
+  color: var(--muted);
 }
 
 .acquire-guide-measure {
   position: absolute;
+  left: -9999px;
+  top: 0;
+  width: calc(100% - 28px);
   visibility: hidden;
   pointer-events: none;
-  left: 14px;
-  right: 14px;
-  top: 0;
-  height: 0;
-  overflow: hidden;
 }
 
 .acquire-step-nav {
