@@ -3464,9 +3464,9 @@ a.acquire-block:hover {
   width: 100%;
   align-items: center;
   justify-content: center;
-  background: #111418;
+  background: var(--brand);
   color: #ffffff;
-  border: 1px solid #111418;
+  border: 1px solid var(--brand);
   border-radius: 999px;
   padding: 9px 14px;
   font-size: 0.84rem;
@@ -3476,8 +3476,8 @@ a.acquire-block:hover {
 
 .land-alert-front-actions .btn-intel:hover,
 .land-alert-card-front .btn-intel:hover {
-  background: #000000;
-  border-color: #000000;
+  background: var(--brand-soft);
+  border-color: var(--brand-soft);
 }
 
 .land-alert-flip.is-flipped .land-alert-card-front {
