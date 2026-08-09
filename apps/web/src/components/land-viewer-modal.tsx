@@ -924,106 +924,110 @@ export function LandViewerModal({
         </header>
 
         <div className="land-viewer-tools" role="toolbar" aria-label="Map tools">
-          <div className="land-viewer-tool-group" aria-label="Basemap">
-            {(
-              [
-                ["hybrid", "Hybrid"],
-                ["satellite", "Satellite"],
-                ["streets", "Streets"],
-              ] as const
-            ).map(([id, label]) => (
+          <div className="land-viewer-tools-row">
+            <div className="land-viewer-tool-group" aria-label="Basemap">
+              {(
+                [
+                  ["hybrid", "Hybrid"],
+                  ["satellite", "Satellite"],
+                  ["streets", "Streets"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={basemap === id ? "is-on" : undefined}
+                  onClick={() => setBasemap(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="land-viewer-tool-group" aria-label="Interaction">
               <button
-                key={id}
                 type="button"
-                className={basemap === id ? "is-on" : undefined}
-                onClick={() => setBasemap(id)}
+                className={tool === "pan" ? "is-on" : undefined}
+                onClick={() => setTool("pan")}
               >
-                {label}
+                Pan
               </button>
-            ))}
-          </div>
-
-          <div className="land-viewer-tool-group" aria-label="Interaction">
-            <button
-              type="button"
-              className={tool === "pan" ? "is-on" : undefined}
-              onClick={() => setTool("pan")}
-            >
-              Pan
-            </button>
-            <button
-              type="button"
-              className={tool === "measure" ? "is-on" : undefined}
-              onClick={() => setTool("measure")}
-            >
-              Measure
-            </button>
-            {tool === "measure" ? (
-              <button type="button" onClick={clearMeasure} title="Clear measure points">
-                Clear
+              <button
+                type="button"
+                className={tool === "measure" ? "is-on" : undefined}
+                onClick={() => setTool("measure")}
+              >
+                Measure
               </button>
-            ) : null}
-            <button
-              type="button"
-              className={showBoundary ? "is-on" : undefined}
-              onClick={() => setShowBoundary((v) => !v)}
-              disabled={!polygon?.[0]?.length}
-            >
-              Boundary
-            </button>
-            <button
-              type="button"
-              className={showGrid ? "is-on" : undefined}
-              onClick={() => setShowGrid((v) => !v)}
-            >
-              Grid
-            </button>
+              {tool === "measure" ? (
+                <button type="button" onClick={clearMeasure} title="Clear measure points">
+                  Clear
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={showBoundary ? "is-on" : undefined}
+                onClick={() => setShowBoundary((v) => !v)}
+                disabled={!polygon?.[0]?.length}
+              >
+                Boundary
+              </button>
+              <button
+                type="button"
+                className={showGrid ? "is-on" : undefined}
+                onClick={() => setShowGrid((v) => !v)}
+              >
+                Grid
+              </button>
+            </div>
           </div>
 
-          <div className="land-viewer-tool-group" aria-label="Radius">
-            <button
-              type="button"
-              className={radiusMiles === 1 ? "is-on" : undefined}
-              onClick={() => setRadiusMiles((v) => (v === 1 ? 0 : 1))}
-              disabled={!hasGeo}
-            >
-              1 mi ring
-            </button>
-            <button
-              type="button"
-              className={radiusMiles === 5 ? "is-on" : undefined}
-              onClick={() => setRadiusMiles((v) => (v === 5 ? 0 : 5))}
-              disabled={!hasGeo}
-            >
-              5 mi ring
-            </button>
-          </div>
+          <div className="land-viewer-tools-row">
+            <div className="land-viewer-tool-group" aria-label="Radius">
+              <button
+                type="button"
+                className={radiusMiles === 1 ? "is-on" : undefined}
+                onClick={() => setRadiusMiles((v) => (v === 1 ? 0 : 1))}
+                disabled={!hasGeo}
+              >
+                1 mi
+              </button>
+              <button
+                type="button"
+                className={radiusMiles === 5 ? "is-on" : undefined}
+                onClick={() => setRadiusMiles((v) => (v === 5 ? 0 : 5))}
+                disabled={!hasGeo}
+              >
+                5 mi
+              </button>
+            </div>
 
-          <div className="land-viewer-tool-group" aria-label="View">
-            <button type="button" onClick={fitParcel} disabled={!hasGeo}>
-              Fit land
-            </button>
-            <button type="button" onClick={copyCoords} disabled={!hasGeo}>
-              {copied ? "Copied" : "Copy pin"}
-            </button>
-          </div>
+            <div className="land-viewer-tool-group" aria-label="View">
+              <button type="button" onClick={fitParcel} disabled={!hasGeo}>
+                Fit land
+              </button>
+              <button type="button" onClick={copyCoords} disabled={!hasGeo}>
+                {copied ? "Copied" : "Copy pin"}
+              </button>
+            </div>
 
-          <div className="land-viewer-tool-group" aria-label="Owner links">
-            {mapsUrl ? (
-              <a className="land-viewer-tool-link" href={mapsUrl} target="_blank" rel="noreferrer">
-                Google Maps
-              </a>
-            ) : null}
-            {directionsUrl ? (
-              <a className="land-viewer-tool-link" href={directionsUrl} target="_blank" rel="noreferrer">
-                Directions
-              </a>
-            ) : null}
-            {streetViewUrl ? (
-              <a className="land-viewer-tool-link" href={streetViewUrl} target="_blank" rel="noreferrer">
-                Street View
-              </a>
-            ) : null}
+            <div className="land-viewer-tool-group" aria-label="Owner links">
+              {mapsUrl ? (
+                <a className="land-viewer-tool-link" href={mapsUrl} target="_blank" rel="noreferrer">
+                  Maps
+                </a>
+              ) : null}
+              {directionsUrl ? (
+                <a className="land-viewer-tool-link" href={directionsUrl} target="_blank" rel="noreferrer">
+                  Directions
+                </a>
+              ) : null}
+              {streetViewUrl ? (
+                <a className="land-viewer-tool-link" href={streetViewUrl} target="_blank" rel="noreferrer">
+                  Street View
+                </a>
+              ) : null}
+            </div>
           </div>
         </div>
 
