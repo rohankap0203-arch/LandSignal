@@ -2,6 +2,12 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+type ScriptStep = {
+  kicker?: string;
+  body?: string;
+  fulfills?: string;
+};
+
 type ScriptSide = {
   title?: string;
   subtitle?: string;
@@ -10,6 +16,7 @@ type ScriptSide = {
   ask_next?: string[];
   watch_outs?: string[];
   closing?: string;
+  steps?: ScriptStep[];
 };
 
 export type OutreachPlaybook = {
@@ -25,10 +32,21 @@ export type OutreachPlaybook = {
 type Step = {
   kicker: string;
   body: string;
+  fulfills?: string;
 };
 
 function buildGuideSteps(kind: "web" | "call", script: ScriptSide | undefined): Step[] {
   if (!script) return [];
+  if (script.steps?.length) {
+    return script.steps
+      .filter((s) => s.body)
+      .map((s) => ({
+        kicker: s.kicker || (kind === "call" ? "Say" : "Look"),
+        body: String(s.body),
+        fulfills: s.fulfills ? String(s.fulfills) : undefined,
+      }));
+  }
+  // Legacy flat shape
   const steps: Step[] = [];
   if (script.opener) {
     steps.push({
@@ -64,7 +82,6 @@ function quoteIfNeeded(text: string): string {
 
 function formatStepBody(tone: "source" | "call", step: Step): string {
   if (tone !== "call") return step.body;
-  // Spoken beats get quotes; watch-outs stay plain coaching
   if (step.kicker === "Watch out") return step.body;
   return quoteIfNeeded(step.body);
 }
@@ -95,7 +112,7 @@ function GuidePanel({
     setI(0);
   }, [steps]);
 
-  // Lock body height to the tallest step so ← → never resizes the section
+  // Lock block height to the tallest step (body + fulfills) so ← → never jumps
   useLayoutEffect(() => {
     const root = measureRef.current;
     if (!root || !steps.length) {
@@ -125,14 +142,17 @@ function GuidePanel({
         </span>
       </div>
       <div className="acquire-guide-body-wrap" style={bodyMin ? { minHeight: bodyMin } : undefined}>
-        <p className="acquire-guide-body">{body}</p>
+        <div className="acquire-guide-step">
+          <p className="acquire-guide-body">{body}</p>
+          {step.fulfills ? <p className="acquire-guide-why">{step.fulfills}</p> : null}
+        </div>
       </div>
-      {/* Off-screen measure all steps at the same width (quoted when call) */}
       <div className="acquire-guide-measure" ref={measureRef} aria-hidden>
-        {bodies.map((b, idx) => (
-          <p key={idx} data-step-measure className="acquire-guide-body">
-            {b}
-          </p>
+        {steps.map((s, idx) => (
+          <div key={idx} data-step-measure className="acquire-guide-step">
+            <p className="acquire-guide-body">{bodies[idx]}</p>
+            {s.fulfills ? <p className="acquire-guide-why">{s.fulfills}</p> : null}
+          </div>
         ))}
       </div>
       <div className="acquire-step-nav">
