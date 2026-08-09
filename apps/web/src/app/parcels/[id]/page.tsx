@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AcquireRail, type OutreachPlaybook } from "@/components/acquire-rail";
+import { AskYourselfTypewriter } from "@/components/ask-yourself-typewriter";
 import { LandLoader } from "@/components/land-loader";
 import { PriceTrajectory } from "@/components/price-trajectory";
 import { ReturnVisual } from "@/components/return-visual";
@@ -498,12 +499,11 @@ export default function ParcelIntelligencePage() {
           <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
             {String(askYourself.label || "Ask yourself")}
           </div>
-          <p className="ask-yourself-q display mt-3 text-2xl font-semibold leading-snug md:text-[1.85rem]">
-            {String(askYourself.question)}
-          </p>
-          {askYourself.aftertaste ? (
-            <p className="mt-4 text-sm text-[var(--muted)]">{String(askYourself.aftertaste)}</p>
-          ) : null}
+          <AskYourselfTypewriter
+            question={String(askYourself.question)}
+            aftertaste={askYourself.aftertaste ? String(askYourself.aftertaste) : null}
+            holdMs={7000}
+          />
         </section>
       ) : null}
 

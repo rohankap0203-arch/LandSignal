@@ -2413,4 +2413,38 @@ a.acquire-block:hover {
 .ask-yourself-q {
   max-width: 46rem;
   text-wrap: pretty;
+  min-height: 4.5em;
+}
+
+.ask-yourself-typewriter .ask-caret {
+  display: inline-block;
+  width: 0.55ch;
+  height: 1.05em;
+  margin-left: 0.08em;
+  vertical-align: -0.12em;
+  background: color-mix(in srgb, var(--accent) 85%, var(--ink));
+  animation: ask-caret-blink 0.9s steps(1, end) infinite;
+}
+
+.ask-yourself-typewriter .ask-caret.muted {
+  height: 0.95em;
+  background: color-mix(in srgb, var(--muted) 70%, var(--accent));
+}
+
+@keyframes ask-caret-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ask-yourself-typewriter .ask-caret {
+    animation: none;
+    opacity: 0;
+  }
 }
