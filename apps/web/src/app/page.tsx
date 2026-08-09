@@ -225,11 +225,15 @@ export default function SearchPage() {
   return (
     <div>
       <section className="hero-search">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="text-xs uppercase tracking-[0.14em] text-white/70">LandSignal</div>
-            <h1>Scout the best land buys in the country</h1>
+        <div>
+          <div className="hero-brand-row">
+            <div className="hero-brand-mark">LandSignal</div>
+            <div className="hero-live" title="Live public inventory index">
+              <span className="hero-live-dot" aria-hidden />
+              <span>Live</span>
+            </div>
           </div>
+          <h1>Scout the best land buys in the country</h1>
         </div>
 
         <div className="filter-grid filter-grid-12">
