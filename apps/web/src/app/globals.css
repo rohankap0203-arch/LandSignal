@@ -536,18 +536,17 @@ select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  /* Same light green used for live/status accents elsewhere */
-  background: #3dcf7a;
-  color: #14201c;
-  font-weight: 650;
+  background: #0a0a0a;
+  color: #ffffff;
+  font-weight: 600;
   text-align: center;
-  border: 1px solid color-mix(in srgb, #3dcf7a 70%, #1f7a4d);
+  border: 1px solid #0a0a0a;
 }
 
 .btn-land-alerts:hover {
-  background: #34c06e;
-  border-color: color-mix(in srgb, #34c06e 65%, #1f7a4d);
-  color: #14201c;
+  background: #000000;
+  border-color: #000000;
+  color: #ffffff;
 }
 
 /* Small screens: stack secondary actions; keep primary pair side-by-side */
