@@ -1116,7 +1116,7 @@ export function LandViewerModal({
           ) : nearbyHits.length > 1 && nearbyHitIndex < nearbyHits.length - 1 ? (
             <button
               type="button"
-              className={`land-viewer-nearby-next${nearbyNextPulse ? " is-pulse" : ""}`}
+              className="land-viewer-nearby-next"
               onClick={showNextNearby}
               aria-label={`Show next closest (${nearbyHitIndex + 2} of ${nearbyHits.length})`}
               title={`Next closest (${nearbyHitIndex + 2}/${nearbyHits.length})`}
@@ -1130,7 +1130,9 @@ export function LandViewerModal({
             </button>
           ) : nearbyHits.length > 1 ? (
             <span className="land-viewer-nearby-next is-done" title="Furthest of nearby results">
-              {nearbyHitIndex + 1}/{nearbyHits.length}
+              <span className="land-viewer-nearby-next-count">
+                {nearbyHitIndex + 1}/{nearbyHits.length}
+              </span>
             </span>
           ) : null}
         </div>

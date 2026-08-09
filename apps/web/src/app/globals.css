@@ -4038,12 +4038,12 @@ a.acquire-block:hover {
 }
 
 .land-viewer-nearby {
-  --nearby-chip-gap: 0.4rem;
+  --nearby-chip-gap: 0.3rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.3rem var(--nearby-chip-gap);
-  padding: 0.28rem 0.6rem 0.3rem;
+  gap: 0.28rem var(--nearby-chip-gap);
+  padding: 0.28rem 0.5rem 0.3rem;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-elevated) 90%, var(--bg-soft));
 }
@@ -4054,17 +4054,17 @@ a.acquire-block:hover {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
-  margin-right: 0.05rem;
+  margin-right: 0.02rem;
 }
 
 .land-viewer-chip {
   min-height: 1.4rem;
-  padding: 0.1rem 0.45rem;
+  padding: 0.1rem 0.36rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--chip, var(--brand)) 45%, var(--line));
   background: color-mix(in srgb, var(--chip, var(--brand)) 10%, var(--bg-elevated));
   color: var(--ink);
-  font-size: 0.66rem;
+  font-size: 0.64rem;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -4084,14 +4084,12 @@ a.acquire-block:hover {
   cursor: not-allowed;
 }
 
-.land-viewer-nearby-loading,
-.land-viewer-nearby-next {
+.land-viewer-nearby-loading {
   display: inline-flex;
   align-items: center;
   gap: 0.14rem;
   box-sizing: border-box;
   flex: 0 0 auto;
-  min-width: 0;
   min-height: 1.4rem;
   margin: 0;
   padding: 0.08rem 0.22rem 0.08rem 0.2rem;
@@ -4112,44 +4110,103 @@ a.acquire-block:hover {
 }
 
 .land-viewer-nearby-next {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  min-width: 3.55rem;
+  min-height: 1.4rem;
+  margin: 0;
+  padding: 0.08rem 0.48rem;
+  border-radius: 999px;
+  border: 1px solid #0a0a0a;
+  background: #111;
+  color: #fff;
   font: inherit;
-  font-size: 0.62rem;
-  font-weight: 650;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
 }
 
 .land-viewer-nearby-next.is-done {
   cursor: default;
-  opacity: 0.85;
+  background: #2a2a2a;
+  border-color: #2a2a2a;
+  color: rgba(255, 255, 255, 0.82);
+  opacity: 1;
 }
 
 .land-viewer-nearby-next:hover:not(.is-done) {
-  background: color-mix(in srgb, var(--brand) 20%, var(--bg-elevated));
+  background: #000;
 }
 
 .land-viewer-nearby-next-arrow {
+  position: relative;
   display: inline-block;
-  font-size: 0.72rem;
+  overflow: hidden;
+  font-size: 0.78rem;
   line-height: 1;
-  transform: translateX(0);
+  color: #fff;
+  animation: land-viewer-nearby-arrow-glide 1.05s ease-in-out infinite;
 }
 
-.land-viewer-nearby-next.is-pulse .land-viewer-nearby-next-arrow {
-  animation: land-viewer-nearby-nudge 0.7s ease-out 1;
+.land-viewer-nearby-next-arrow::after {
+  content: "";
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: -60%;
+  width: 45%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.15) 35%,
+    rgba(255, 255, 255, 0.95) 50%,
+    rgba(255, 255, 255, 0.15) 65%,
+    transparent 100%
+  );
+  transform: skewX(-18deg);
+  animation: land-viewer-nearby-arrow-gleam 1.6s ease-in-out infinite;
+  pointer-events: none;
 }
 
-@keyframes land-viewer-nearby-nudge {
-  0% {
-    transform: translateX(0);
-    opacity: 0.55;
-  }
-  40% {
-    transform: translateX(3px);
-    opacity: 1;
-  }
+.land-viewer-nearby-next.is-done .land-viewer-nearby-next-arrow {
+  animation: none;
+}
+
+.land-viewer-nearby-next.is-done .land-viewer-nearby-next-arrow::after {
+  display: none;
+}
+
+@keyframes land-viewer-nearby-arrow-glide {
+  0%,
   100% {
     transform: translateX(0);
+  }
+  50% {
+    transform: translateX(3px);
+  }
+}
+
+@keyframes land-viewer-nearby-arrow-gleam {
+  0%,
+  25% {
+    left: -70%;
+    opacity: 0;
+  }
+  40% {
     opacity: 1;
+  }
+  70%,
+  100% {
+    left: 130%;
+    opacity: 0;
   }
 }
 
