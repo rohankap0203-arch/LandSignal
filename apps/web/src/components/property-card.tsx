@@ -7,6 +7,13 @@ import { TrajectorySpark } from "@/components/price-trajectory";
 import { SignalBadge } from "@/components/signal-badge";
 import type { RadarRow } from "@/lib/api";
 
+function shortLine(text: string, max = 110): string {
+  const s = (text || "").trim();
+  if (!s) return "";
+  const first = s.split(/(?<=[.!?])\s+/)[0] || s;
+  return first.length > max ? first.slice(0, max - 1).trimEnd() + "…" : first;
+}
+
 export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
   const [intelPending, setIntelPending] = useState(false);
   const posting =
@@ -20,6 +27,7 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
     row.links.find((l) => l.kind === "contact" && String(l.url).startsWith("tel:"))?.label ||
     null;
   const conviction = row.conviction || "WATCH";
+  const blurb = shortLine(row.return_thesis || row.summary || "");
 
   return (
     <article className="panel property-card" style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}>
@@ -43,20 +51,14 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
                 {row.property_name}
               </Link>
             </h2>
-            <p className="mt-1 text-sm leading-relaxed text-[var(--ink)] break-words">
-              {row.return_thesis || row.summary}
-            </p>
-            {row.source_name && (
-              <p className="mt-1 text-xs text-[var(--muted)] break-words">
-                Source: {row.source_name}
-                {row.contact_office ? ` · ${row.contact_office}` : ""}
-              </p>
-            )}
+            {blurb ? (
+              <p className="mt-1 text-sm leading-snug text-[var(--muted)] break-words">{blurb}</p>
+            ) : null}
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
             <div
               className={`conviction-pill ${conviction.toLowerCase()}`}
-              title="How interested we are after the first automated look (HIGH / MEDIUM / WATCH)"
+              title="First-look interest after automated checks"
             >
               {conviction === "HIGH"
                 ? "Strong interest"
@@ -66,9 +68,9 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             </div>
             <div
               className="rounded-full bg-[var(--bg-soft)] px-3 py-1 text-sm font-semibold text-[var(--brand)] whitespace-nowrap"
-              title="How well this matches your filters (0–100). Separate from the global opportunity score."
+              title="How well this matches your filters (0–100)"
             >
-              Match {Math.round(row.fit_score ?? row.opportunity)}/100
+              Match {Math.round(row.fit_score ?? row.opportunity)}
             </div>
           </div>
         </div>
@@ -79,41 +81,22 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             <div className="v">{row.price_display}</div>
           </div>
           <div className="metric">
-            <div className="k">Our estimated value</div>
+            <div className="k">Our estimate</div>
             <div className="v">{row.estimated_value_display}</div>
           </div>
-          <div className="metric metric-span">
-            <div className="k">Opportunity {Math.round(row.opportunity)} / 100</div>
-            <div
-              className="mini-bar"
-              style={{
-                background: `linear-gradient(90deg, hsl(${row.opportunity * 1.2} 65% 42%) ${row.opportunity}%, var(--bg-elevated) ${row.opportunity}%)`,
-              }}
-            />
-          </div>
-          <div className="metric metric-span">
-            <div className="k">Risk {Math.round(row.risk)} / 100</div>
-            <div
-              className="mini-bar"
-              style={{
-                background: `linear-gradient(90deg, hsl(${120 - row.risk * 1.2} 65% 42%) ${row.risk}%, var(--bg-elevated) ${row.risk}%)`,
-              }}
-            />
+          <div className="metric">
+            <div className="k">Opportunity</div>
+            <div className="v">{Math.round(row.opportunity)}</div>
           </div>
           <div className="metric">
-            <div className="k">File complete</div>
-            <div className="v">{Math.round(row.confidence)} / 100</div>
-          </div>
-          <div className="metric">
-            <div className="k">Best use</div>
-            <div className="v">{row.best_strategy_label}</div>
+            <div className="k">Risk</div>
+            <div className="v">{Math.round(row.risk)}</div>
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+        <div className="mt-2 flex flex-wrap gap-2 text-xs">
           <span className="chip">{row.discount_display}</span>
-          <span className="chip">{row.risk_label}</span>
-          <span className="chip">{row.confidence_label}</span>
+          <span className="chip">{row.best_strategy_label}</span>
         </div>
 
         <TrajectorySpark
@@ -122,11 +105,13 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           cagr={row.trajectory_cagr_5y}
         />
 
-        <ul className="reasons">
-          {row.match_reasons.slice(0, 3).map((reason) => (
-            <li key={reason}>{reason}</li>
-          ))}
-        </ul>
+        {row.match_reasons?.length ? (
+          <ul className="reasons">
+            {row.match_reasons.slice(0, 2).map((reason) => (
+              <li key={reason}>{shortLine(reason, 100)}</li>
+            ))}
+          </ul>
+        ) : null}
 
         <AcquireRail
           className="mt-3"
@@ -134,7 +119,7 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           phone={phone}
           office={row.contact_office}
           findUrl={findParcel?.url}
-          findLabel={findParcel?.label?.replace(/^Find parcel /, "APN ")}
+          findLabel={findParcel?.label?.replace(/^Find parcel /, "ID ")}
         />
 
         <div className="card-actions mt-3">
@@ -143,7 +128,7 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             className={`btn-intel ${intelPending ? "pending" : ""}`}
             onClick={() => setIntelPending(true)}
           >
-            {intelPending ? "Opening details…" : "See full details"}
+            {intelPending ? "Opening…" : "See full details"}
           </Link>
         </div>
       </div>

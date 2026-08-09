@@ -23,34 +23,14 @@ type Trajectory = {
   headline?: string;
   regime?: string;
   regime_label?: string;
-  knowledge_state?: string;
   knowledge_label?: string;
-  confidence?: number;
   annual_rate_display?: string;
-  cagr_5y_display?: string;
-  cagr_10y_display?: string;
-  cagr_forward_display?: string;
   now_usd?: number;
-  peak?: { year: number; value_usd: number };
-  trough?: { year: number; value_usd: number };
   points?: Point[];
   summary_bullets?: string[];
   method_notes?: string[];
   disclaimer?: string;
-  interaction_hint?: string;
   windows?: number[];
-  window_stats?: Record<
-    string,
-    {
-      years?: number;
-      start_year?: number;
-      start_usd?: number;
-      end_usd?: number;
-      cagr_display?: string;
-      change_pct?: number | null;
-    }
-  >;
-  observed_marks?: Array<{ year: number; value_usd: number; label?: string }>;
 };
 
 const TIMEFRAMES = [1, 3, 5, 10, 15, 30, 50, 75, 100] as const;
@@ -69,7 +49,12 @@ function shortMoney(v: number): string {
   return money(v);
 }
 
-/** Interactive value path — drag to scrub years; toggle 1y–100y windows. */
+function cagr(start: number, end: number, years: number): number | null {
+  if (!(start > 0) || !(end > 0) || !(years > 0)) return null;
+  return Math.pow(end / start, 1 / years) - 1;
+}
+
+/** Interactive value path — selected N-year window is exact lookback math. */
 export function PriceTrajectory({
   trajectory,
   compact,
@@ -85,28 +70,57 @@ export function PriceTrajectory({
   const [dragging, setDragging] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
+  // Exact window: history from -horizon…0, plus short outlook (not counted in window CAGR)
+  const forwardYears = Math.min(5, Math.max(1, Math.round(horizon / 10) || 1));
+
   const points = useMemo(() => {
     if (!allPoints.length) return [];
-    const fwd = Math.min(10, Math.max(1, Math.ceil(horizon / 5)));
-    return allPoints.filter((p) => {
-      const o = Number(p.offset ?? 0);
-      return o >= -horizon && o <= fwd;
-    });
-  }, [allPoints, horizon]);
+    const byOff = new Map(allPoints.map((p) => [Number(p.offset ?? 0), p]));
+    const out: Point[] = [];
+    for (let o = -horizon; o <= forwardYears; o++) {
+      const hit = byOff.get(o);
+      if (hit) out.push(hit);
+    }
+    return out;
+  }, [allPoints, horizon, forwardYears]);
+
+  const windowMath = useMemo(() => {
+    const start = points.find((p) => Number(p.offset) === -horizon);
+    const today = points.find((p) => Number(p.offset) === 0);
+    if (!start || !today) return null;
+    const years = horizon;
+    const rate = cagr(Number(start.value_usd), Number(today.value_usd), years);
+    const changePct =
+      Number(start.value_usd) > 0
+        ? ((Number(today.value_usd) - Number(start.value_usd)) / Number(start.value_usd)) * 100
+        : null;
+    return {
+      startYear: start.year,
+      endYear: today.year,
+      startUsd: Number(start.value_usd),
+      endUsd: Number(today.value_usd),
+      years,
+      rate,
+      changePct,
+      cagrDisplay: rate != null ? `${rate >= 0 ? "+" : ""}${(rate * 100).toFixed(1)}%/yr` : "—",
+    };
+  }, [points, horizon]);
 
   const todayIdx = useMemo(() => {
-    const i = points.findIndex((p) => p.offset === 0);
+    const i = points.findIndex((p) => Number(p.offset) === 0);
     return i >= 0 ? i : Math.max(0, points.length - 1);
   }, [points]);
 
   const [active, setActive] = useState(todayIdx);
-
   useEffect(() => {
     setActive(todayIdx);
   }, [todayIdx, horizon]);
 
   const layout = useMemo(() => {
     if (points.length < 2) return null;
+    const years = points.map((p) => Number(p.year));
+    const minYear = Math.min(...years);
+    const maxYear = Math.max(...years);
     const ys = points.map((p) => Number(p.value_usd));
     const minY = Math.min(...ys) * 0.92;
     const maxY = Math.max(...ys) * 1.06;
@@ -116,18 +130,43 @@ export function PriceTrajectory({
     const padB = 38;
     const w = compact ? 300 : 520;
     const h = compact ? 160 : 260;
-    const xScale = (i: number) => padL + (i / Math.max(1, points.length - 1)) * (w - padL - padR);
+    const span = Math.max(1, maxYear - minYear);
+    const xScale = (year: number) => padL + ((year - minYear) / span) * (w - padL - padR);
     const yScale = (y: number) => padT + (1 - (y - minY) / Math.max(1, maxY - minY)) * (h - padT - padB);
-    const mapped = points.map((p, i) => ({ ...p, cx: xScale(i), cy: yScale(Number(p.value_usd)) }));
-    const hist = mapped.filter((p) => p.kind !== "outlook");
-    const fut = mapped.filter((p) => p.kind === "outlook" || p.offset === 0);
+    const mapped = points.map((p) => ({
+      ...p,
+      cx: xScale(Number(p.year)),
+      cy: yScale(Number(p.value_usd)),
+    }));
+    const hist = mapped.filter((p) => Number(p.offset ?? 0) <= 0);
+    const fut = mapped.filter((p) => Number(p.offset ?? 0) >= 0);
     const histPath = hist.map((p, i) => `${i === 0 ? "M" : "L"} ${p.cx.toFixed(1)} ${p.cy.toFixed(1)}`).join(" ");
     const futPath = fut.map((p, i) => `${i === 0 ? "M" : "L"} ${p.cx.toFixed(1)} ${p.cy.toFixed(1)}`).join(" ");
     const areaPath =
       hist.length > 1
         ? `${histPath} L ${hist[hist.length - 1].cx.toFixed(1)} ${(h - padB).toFixed(1)} L ${hist[0].cx.toFixed(1)} ${(h - padB).toFixed(1)} Z`
         : "";
-    return { w, h, padL, padT, padB, padR, mapped, histPath, futPath, areaPath, minY, maxY, yScale, xScale };
+    // Today x for a marker band
+    const today = mapped.find((p) => Number(p.offset) === 0);
+    return {
+      w,
+      h,
+      padL,
+      padT,
+      padB,
+      padR,
+      mapped,
+      histPath,
+      futPath,
+      areaPath,
+      minY,
+      maxY,
+      minYear,
+      maxYear,
+      yScale,
+      xScale,
+      todayCx: today?.cx,
+    };
   }, [points, compact]);
 
   const indexFromClientX = useCallback(
@@ -135,8 +174,17 @@ export function PriceTrajectory({
       if (!layout || !svgRef.current || points.length < 2) return 0;
       const rect = svgRef.current.getBoundingClientRect();
       const xSvg = ((clientX - rect.left) / Math.max(1, rect.width)) * layout.w;
-      const t = (xSvg - layout.padL) / Math.max(1, layout.w - layout.padL - layout.padR);
-      return Math.max(0, Math.min(points.length - 1, Math.round(t * (points.length - 1))));
+      // nearest point by x
+      let best = 0;
+      let bestDist = Infinity;
+      layout.mapped.forEach((p, i) => {
+        const d = Math.abs(p.cx - xSvg);
+        if (d < bestDist) {
+          bestDist = d;
+          best = i;
+        }
+      });
+      return best;
     },
     [layout, points.length],
   );
@@ -148,13 +196,7 @@ export function PriceTrajectory({
     setActive(indexFromClientX(e.clientX));
   };
   const onPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
-    if (!dragging && e.pointerType !== "touch") {
-      // hover scrub on desktop
-      if (e.buttons === 1) setActive(indexFromClientX(e.clientX));
-      else if (e.pointerType === "mouse") setActive(indexFromClientX(e.clientX));
-      return;
-    }
-    if (dragging) setActive(indexFromClientX(e.clientX));
+    if (dragging || e.pointerType === "mouse") setActive(indexFromClientX(e.clientX));
   };
   const onPointerUp = (e: ReactPointerEvent<SVGSVGElement>) => {
     setDragging(false);
@@ -165,25 +207,29 @@ export function PriceTrajectory({
     }
   };
 
-  if (!trajectory || !layout) {
+  if (!trajectory || !layout || !windowMath) {
     return (
       <div className="price-trajectory">
         <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Value over time</div>
-        <p className="mt-1 text-sm text-[var(--muted)]">Building the dollar path for this listing…</p>
+        <p className="mt-1 text-sm text-[var(--muted)]">Building the dollar path…</p>
       </div>
     );
   }
 
   const selected = points[Math.min(Math.max(0, active), points.length - 1)];
-  const win = trajectory.window_stats?.[String(horizon)];
-  const knowledge = String(
-    trajectory.knowledge_label || "Estimated from similar land nearby",
-  ).replace(/_/g, " ");
   const sel = layout.mapped[Math.min(Math.max(0, active), layout.mapped.length - 1)];
-  const vsToday =
-    selected && trajectory.now_usd
-      ? ((Number(selected.value_usd) - Number(trajectory.now_usd)) / Number(trajectory.now_usd)) * 100
-      : null;
+  const knowledge = String(trajectory.knowledge_label || "Estimated from similar land nearby").replace(
+    /_/g,
+    " ",
+  );
+
+  // CAGR from window start → scrubbed year (history only)
+  const scrubCagr = (() => {
+    if (!selected || Number(selected.offset) > 0) return null;
+    const span = Number(selected.year) - windowMath.startYear;
+    if (span <= 0) return null;
+    return cagr(windowMath.startUsd, Number(selected.value_usd), span);
+  })();
 
   return (
     <div className={`price-trajectory ${compact ? "compact" : ""}`}>
@@ -191,18 +237,18 @@ export function PriceTrajectory({
         <div className="min-w-0">
           <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Value over time</div>
           <h3 className="display text-lg font-semibold leading-snug">
-            {trajectory.regime_label || "Dollar path for this listing"}
+            {horizon}-year window · {windowMath.startYear}→{windowMath.endYear}
           </h3>
           <p className="mt-1 text-xs text-[var(--muted)] break-words">{knowledge}</p>
         </div>
         <div className="traj-stats">
           <div>
-            <span>This window</span>
-            <strong>{win?.cagr_display || trajectory.annual_rate_display || "—"}</strong>
+            <span>{horizon} yr pace</span>
+            <strong>{windowMath.cagrDisplay}</strong>
           </div>
           <div>
             <span>Today</span>
-            <strong>{money(trajectory.now_usd)}</strong>
+            <strong>{money(windowMath.endUsd)}</strong>
           </div>
         </div>
       </div>
@@ -223,12 +269,13 @@ export function PriceTrajectory({
       </div>
 
       <p className="text-[11px] text-[var(--muted)]">
-        {trajectory.interaction_hint ||
-          "Drag your finger (or mouse) across the chart to see the dollar value in any year."}
+        Showing exactly {horizon} years back to today
+        {forwardYears ? ` (+ ${forwardYears} yr outlook)` : ""}. Drag to read any year.
       </p>
 
       <div className="traj-chart-wrap">
         <svg
+          key={`traj-${horizon}-${layout.minYear}-${layout.maxYear}`}
           ref={svgRef}
           className="traj-chart interactive"
           viewBox={`0 0 ${layout.w} ${layout.h}`}
@@ -239,7 +286,7 @@ export function PriceTrajectory({
           onPointerUp={onPointerUp}
           onPointerLeave={() => setDragging(false)}
         >
-          <title>Drag to see land value by year</title>
+          <title>{horizon}-year land value window</title>
           <defs>
             <linearGradient id="trajFill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--brand)" stopOpacity="0.22" />
@@ -251,7 +298,14 @@ export function PriceTrajectory({
             const gy = layout.yScale(y);
             return (
               <g key={t}>
-                <line x1={layout.padL} x2={layout.w - layout.padR} y1={gy} y2={gy} stroke="var(--line)" strokeWidth="1" />
+                <line
+                  x1={layout.padL}
+                  x2={layout.w - layout.padR}
+                  y1={gy}
+                  y2={gy}
+                  stroke="var(--line)"
+                  strokeWidth="1"
+                />
                 <text x={layout.padL - 6} y={gy + 3} textAnchor="end" className="chart-tick">
                   {shortMoney(y)}
                 </text>
@@ -268,14 +322,27 @@ export function PriceTrajectory({
             strokeDasharray="5 4"
             opacity="0.9"
           />
-          {/* sparse year ticks */}
+          {layout.todayCx != null && (
+            <line
+              x1={layout.todayCx}
+              x2={layout.todayCx}
+              y1={layout.padT}
+              y2={layout.h - layout.padB}
+              stroke="var(--muted)"
+              strokeWidth="1"
+              strokeDasharray="2 3"
+              opacity="0.5"
+            />
+          )}
+          {/* Year ticks: start, today, end */}
           {layout.mapped.map((p, i) => {
+            const o = Number(p.offset ?? 0);
             const show =
+              o === -horizon ||
+              o === 0 ||
+              o === forwardYears ||
               i === 0 ||
-              i === layout.mapped.length - 1 ||
-              p.offset === 0 ||
-              (layout.mapped.length <= 20 && i % 2 === 0) ||
-              (layout.mapped.length > 20 && i % Math.ceil(layout.mapped.length / 6) === 0);
+              i === layout.mapped.length - 1;
             if (!show) return null;
             return (
               <text key={`tick-${p.year}-${i}`} x={p.cx} y={layout.h - 12} textAnchor="middle" className="chart-axis">
@@ -299,27 +366,12 @@ export function PriceTrajectory({
                 cx={sel.cx}
                 cy={sel.cy}
                 r={dragging ? 7 : 5.5}
-                fill={sel.kind === "outlook" ? "var(--accent, #2f6f4e)" : "var(--brand)"}
+                fill={Number(sel.offset) > 0 ? "var(--accent, #2f6f4e)" : "var(--brand)"}
                 stroke="#fff"
                 strokeWidth="2"
               />
             </g>
           )}
-          {/* invisible hit targets */}
-          {layout.mapped.map((p, i) => (
-            <circle
-              key={`hit-${p.year}`}
-              cx={p.cx}
-              cy={p.cy}
-              r={14}
-              fill="transparent"
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                setActive(i);
-                setDragging(true);
-              }}
-            />
-          ))}
         </svg>
       </div>
 
@@ -328,35 +380,29 @@ export function PriceTrajectory({
           <div>
             <strong>
               {selected.year}
-              {selected.kind === "outlook" ? " · outlook" : ""}
-              {selected.offset === 0 ? " · today" : ""}
+              {Number(selected.offset) > 0 ? " · outlook" : ""}
+              {Number(selected.offset) === 0 ? " · today" : ""}
+              {Number(selected.offset) === -horizon ? ` · start of ${horizon} yr window` : ""}
             </strong>
             <span className="traj-readout-value">{money(selected.value_usd)}</span>
           </div>
           <span>
-            {vsToday != null && selected.offset !== 0
-              ? `${vsToday >= 0 ? "+" : ""}${vsToday.toFixed(0)}% vs today`
-              : "Anchor year for this listing"}
-            {win?.change_pct != null && selected.offset === 0
-              ? ` · ${win.change_pct >= 0 ? "+" : ""}${win.change_pct.toFixed(0)}% across this ${horizon} yr window`
-              : ""}
+            {Number(selected.offset) === 0
+              ? `${money(windowMath.startUsd)} → ${money(windowMath.endUsd)} over ${horizon} yrs (${windowMath.cagrDisplay})`
+              : Number(selected.offset) < 0 && scrubCagr != null
+                ? `${scrubCagr >= 0 ? "+" : ""}${(scrubCagr * 100).toFixed(1)}%/yr from ${windowMath.startYear} → ${selected.year}`
+                : Number(selected.offset) > 0
+                  ? `Outlook beyond today · window pace still ${windowMath.cagrDisplay}`
+                  : null}
           </span>
-          {!compact && selected.note ? <p>{selected.note}</p> : null}
         </div>
       )}
 
       {!compact && (
-        <>
-          <ul className="mt-1 space-y-1 text-sm text-[var(--muted)]">
-            {(trajectory.method_notes || []).slice(0, 3).map((b) => (
-              <li key={b}>• {b}</li>
-            ))}
-            {(trajectory.summary_bullets || []).slice(0, 2).map((b) => (
-              <li key={b}>• {b}</li>
-            ))}
-          </ul>
-          <p className="mt-2 text-[11px] text-[var(--muted)] leading-relaxed">{trajectory.disclaimer}</p>
-        </>
+        <p className="mt-1 text-[11px] text-[var(--muted)] leading-relaxed">
+          {trajectory.disclaimer ||
+            "First look only. Missing deed history uses similar land in this state and listing type."}
+        </p>
       )}
     </div>
   );

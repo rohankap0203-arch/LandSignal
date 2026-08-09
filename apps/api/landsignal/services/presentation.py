@@ -264,37 +264,27 @@ def match_reasons(
     if isinstance(auction, dict) and auction.get("expected_settle_usd") and est:
         settle = float(auction["expected_settle_usd"])
         gap = ((est - settle) / settle) * 100 if settle else 0
-        reasons.append(
-            f"Likely auction finish ~${settle:,.0f} vs our value ${est:,.0f} "
-            f"({gap:+.0f}% room on this property)"
-        )
+        reasons.append(f"Likely finish ~${settle:,.0f} vs value ${est:,.0f} ({gap:+.0f}%)")
     elif score.asking_discount_pct is not None and score.asking_discount_pct < -10:
-        reasons.append(
-            f"Buy price looks about {abs(score.asking_discount_pct):.0f}% under our value estimate"
-        )
+        reasons.append(f"About {abs(score.asking_discount_pct):.0f}% under our value estimate")
     elif ask is None and est:
-        reasons.append(f"No public price yet · our value estimate is ${est:,.0f}")
+        reasons.append(f"No public price · estimate ${est:,.0f}")
     if score.best_strategy:
-        reasons.append(
-            f"Best use we see: {score.best_strategy.value.replace('_', ' ').title()} "
-            f"(opportunity {score.opportunity:.0f}/100)"
-        )
+        reasons.append(f"Best use: {score.best_strategy.value.replace('_', ' ').title()}")
     if score.risk <= 35:
-        reasons.append(f"Lower risk on the map checks ({score.risk:.0f}/100)")
+        reasons.append(f"Lower map risk ({score.risk:.0f}/100)")
     elif score.risk >= 55:
-        reasons.append(f"Higher risk ({score.risk:.0f}/100) — budget extra homework")
-    if score.confidence >= 55:
-        reasons.append(f"File looks fairly complete ({score.confidence:.0f}/100)")
+        reasons.append(f"Higher risk ({score.risk:.0f}/100)")
     if listing and listing.provider_id == "blm_lpad":
-        reasons.append("Federal BLM land — fewer retail buyers, slower process")
+        reasons.append("Federal BLM — slower process")
     if listing and listing.provider_id == "public_tax_sale":
-        reasons.append("County tax-sale listing — more paperwork, often less competition")
+        reasons.append("County tax sale — more paperwork")
     acres = getattr(parcel, "acreage", None)
     if acres and acres >= 40:
-        reasons.append(f"Large tract ({acres:,.0f} acres) — big enough to hold on its own")
+        reasons.append(f"Large tract ({acres:,.0f} acres)")
     if not reasons:
-        reasons.append("This property passes the first automated checks for a closer look")
-    return reasons[:5]
+        reasons.append("Passes first automated checks")
+    return reasons[:3]
 
 
 def build_return_thesis(
@@ -337,14 +327,11 @@ def build_return_thesis(
         else "Worth watching"
     )
     if entry and est and gap_pct is not None:
-        thesis = (
-            f"{interest} · plan on ~${entry:,.0f} vs our value ${est:,.0f} "
-            f"({gap_pct:+.0f}%) · best use {strat}"
-        )
+        thesis = f"{interest} · ~${entry:,.0f} buy vs ${est:,.0f} value ({gap_pct:+.0f}%)"
     elif est:
-        thesis = f"{interest} · our value ~${est:,.0f} · best use {strat}"
+        thesis = f"{interest} · value ~${est:,.0f} · {strat}"
     else:
-        thesis = f"{interest} · {strat} looks possible — confirm local prices"
+        thesis = f"{interest} · {strat} possible"
     return thesis, conviction
 
 

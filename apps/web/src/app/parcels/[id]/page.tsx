@@ -19,6 +19,14 @@ const ParcelMap = dynamic(() => import("@/components/parcel-map").then((m) => m.
 
 type AnyRec = Record<string, unknown>;
 
+function firstSentence(text: unknown, max = 140): string {
+  const s = String(text || "").trim();
+  if (!s) return "";
+  const cut = s.split(/(?<=[.!?])\s+/)[0] || s;
+  return cut.length > max ? cut.slice(0, max - 1).trimEnd() + "…" : cut;
+}
+
+
 function LinkButton({ link }: { link: ActionLink }) {
   // Never show error codes / unavailable — every URL we render is clickable
   if (!link.url) return null;
@@ -32,10 +40,6 @@ function LinkButton({ link }: { link: ActionLink }) {
 export default function ParcelIntelligencePage() {
   const params = useParams<{ id: string }>();
   const [data, setData] = useState<AnyRec | null>(null);
-  const [memo, setMemo] = useState<string | null>(null);
-  const [verdict, setVerdict] = useState<string | null>(null);
-  const [memoLoading, setMemoLoading] = useState(false);
-  const [memoError, setMemoError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ddOpen, setDdOpen] = useState<Record<string, boolean>>({});
   const [watched, setWatched] = useState(false);
@@ -203,13 +207,13 @@ export default function ParcelIntelligencePage() {
               <ScoreBar
                 label="Opportunity score"
                 value={Number(score?.opportunity || 0)}
-                hint={story.landsignal}
+                hint={firstSentence(story.landsignal)}
               />
-              <ScoreBar label="Risk" value={Number(score?.risk || 0)} invert hint={story.risk} />
+              <ScoreBar label="Risk" value={Number(score?.risk || 0)} invert hint={firstSentence(story.risk)} />
               <ScoreBar
                 label="How complete the file is"
                 value={Number(score?.confidence || 0)}
-                hint={story.confidence}
+                hint={firstSentence(story.confidence)}
               />
             </div>
 
@@ -230,7 +234,7 @@ export default function ParcelIntelligencePage() {
                   {String((price.estimate_source as AnyRec).summary || "")}
                 </p>
                 <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
-                  {(((price.estimate_source as AnyRec).bullets as string[]) || []).slice(0, 5).map((b) => (
+                  {(((price.estimate_source as AnyRec).bullets as string[]) || []).slice(0, 3).map((b) => (
                     <li key={b}>• {b}</li>
                   ))}
                 </ul>
@@ -253,7 +257,7 @@ export default function ParcelIntelligencePage() {
                 </div>
                 <div className="mt-1 font-semibold leading-snug break-words">{String(returnCase.headline)}</div>
                 <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
-                  {((returnCase.bullets as string[]) || []).slice(0, 4).map((b) => (
+                  {((returnCase.bullets as string[]) || []).slice(0, 2).map((b) => (
                     <li key={b}>• {b}</li>
                   ))}
                 </ul>
@@ -291,39 +295,7 @@ export default function ParcelIntelligencePage() {
                 .map((link, i) => (
                   <LinkButton key={`${link.url}-${i}`} link={link} />
                 ))}
-              <button
-                type="button"
-                className="btn btn-ghost"
-                disabled={memoLoading}
-                title="Writes a one-page summary of scores, price, risks, and homework for this property"
-                onClick={() => {
-                  setMemoLoading(true);
-                  setMemoError(null);
-                  landsignalApi
-                    .memo(params.id)
-                    .then((m) => {
-                      setMemo(m.markdown);
-                      setVerdict(m.verdict);
-                      requestAnimationFrame(() => {
-                        document
-                          .getElementById("investment-memo")
-                          ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                      });
-                    })
-                    .catch((e: Error) => {
-                      setMemoError(e.message || "Could not write the memo. Try again.");
-                    })
-                    .finally(() => setMemoLoading(false));
-                }}
-              >
-                {memoLoading ? "Writing memo…" : "Write a plain-English memo"}
-              </button>
             </div>
-            <p className="mt-2 text-xs text-[var(--muted)] leading-relaxed">
-              The memo button builds a short, readable summary of this property’s scores, price case,
-              risks, and checklist — then scrolls you to it below. Handy for sharing or printing.
-            </p>
-            {memoError ? <p className="mt-2 text-xs text-[var(--danger)]">{memoError}</p> : null}
           </div>
 
           <div className="flex flex-col border-t border-[var(--line)] lg:border-l lg:border-t-0">
@@ -340,14 +312,6 @@ export default function ParcelIntelligencePage() {
           </div>
         </div>
       </section>
-
-      {memoLoading && (
-        <LandLoader
-          compact
-          label="Writing your plain-English memo…"
-          detail="Pulling scores, price case, risks, and homework for this property into one short note."
-        />
-      )}
 
       <section className="panel p-5">
         <PriceTrajectory
@@ -414,14 +378,16 @@ export default function ParcelIntelligencePage() {
                     }}
                   />
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-[var(--ink)]">
-                  {String(r.why_this_number || r.plain_english || r.simple || "")}
+                <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
+                  {open
+                    ? String(r.why_this_number || r.plain_english || r.simple || "")
+                    : firstSentence(r.why_this_number || r.plain_english || r.simple || "", 160)}
                 </p>
                 {open && (
                   <div className="mt-2 space-y-1 text-sm text-[var(--muted)]">
                     <div className="text-xs">{String(r.weight_display || "")}</div>
                     <ul className="space-y-1">
-                      {((r.drivers as string[]) || (r.evidence as string[]) || []).map((e) => (
+                      {((r.drivers as string[]) || (r.evidence as string[]) || []).slice(0, 4).map((e) => (
                         <li key={e}>• {e}</li>
                       ))}
                     </ul>
@@ -463,10 +429,10 @@ export default function ParcelIntelligencePage() {
               </div>
               <p className="mt-2 text-sm leading-relaxed">{String(card.plain_english || "No reading for this pin yet.")}</p>
               <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
-                {((card.bullets as string[]) || []).slice(0, 3).map((b) => (
+                {((card.bullets as string[]) || []).slice(0, 2).map((b) => (
                   <li key={b}>• {b}</li>
                 ))}
-                {addenda.slice(0, 2).map((a) => (
+                {addenda.slice(0, 1).map((a) => (
                   <li key={a}>• {a}</li>
                 ))}
               </ul>
@@ -513,21 +479,6 @@ export default function ParcelIntelligencePage() {
         </div>
       </section>
 
-      {(memo || memoError) && (
-        <section id="investment-memo" className="panel memo-panel p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="display text-xl font-semibold">Plain-English memo</h2>
-              <p className="mt-0.5 text-sm text-[var(--muted)]">
-                One-page summary you can share or print — not a formal appraisal.
-              </p>
-            </div>
-            {verdict ? <SignalBadge signal={verdict} /> : null}
-          </div>
-          {memoError ? <p className="mt-3 text-sm text-[var(--danger)]">{memoError}</p> : null}
-          {memo ? <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed">{memo}</pre> : null}
-        </section>
-      )}
     </div>
   );
 }
