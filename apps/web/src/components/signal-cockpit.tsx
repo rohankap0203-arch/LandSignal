@@ -10,13 +10,12 @@ function money(v: unknown): string {
   return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
-/** X–Y bid clearing chart + source note (contact CTAs live under How to reach the seller). */
+/** X–Y bid clearing chart from opener through our value. */
 export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
   const chart = (cockpit.chart as AnyRec) || {};
   const points = ((chart.points as AnyRec[]) || []).filter(
     (p) => Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)),
   );
-  const source = (cockpit.source as AnyRec) || {};
   const [active, setActive] = useState(0);
 
   const layout = useMemo(() => {
@@ -175,14 +174,6 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
       ) : (
         <p className="text-sm text-[var(--muted)]">Not enough price points to chart this parcel yet.</p>
       )}
-
-      <div className="source-card">
-        <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Where we found this</div>
-        <div className="font-semibold break-words">{String(source.source_name || "Public GIS")}</div>
-        {source.how_to_buy ? (
-          <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{String(source.how_to_buy)}</p>
-        ) : null}
-      </div>
     </div>
   );
 }

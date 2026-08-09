@@ -217,9 +217,9 @@ export default function ParcelIntelligencePage() {
                 </span>
                 <div className="min-w-0">
                   <div className="font-semibold text-sm">Learn this page</div>
-                  <p className="next-process-note">
-                    Skim value, return, land checks, and Ask yourself.
-                  </p>
+                    <p className="next-process-note">
+                      Skim value, return, why this land, score parts, land checks.
+                    </p>
                   <button
                     type="button"
                     className="next-process-action"
@@ -282,10 +282,11 @@ export default function ParcelIntelligencePage() {
               {[
                 { id: "sec-value", label: "Value path" },
                 { id: "sec-return", label: "Return" },
-                { id: "sec-why", label: "Why buy / why open" },
+                { id: "sec-why", label: "Why this land" },
                 { id: "sec-score", label: "Score parts" },
                 { id: "sec-land", label: "Land checks" },
                 { id: "sec-ask", label: "Ask yourself" },
+                { id: "sec-bidding", label: "Bidding by price" },
               ].map((s) => (
                 <button
                   key={s.id}
@@ -382,10 +383,6 @@ export default function ParcelIntelligencePage() {
             </div>
           ) : null}
 
-          <div className="border-t border-[var(--line)] mt-5 pt-4">
-            <SignalCockpit cockpit={cockpit} />
-          </div>
-
           <div id="sec-reach" className="source-card mt-5 scroll-mt-20">
             <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">How to reach the seller</div>
             <div className="font-semibold break-words">{String(sourcing.office || "County office")}</div>
@@ -401,6 +398,10 @@ export default function ParcelIntelligencePage() {
             {sourcing.how_to_buy ? (
               <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{String(sourcing.how_to_buy)}</p>
             ) : null}
+          </div>
+
+          <div id="sec-bidding" className="mt-5 scroll-mt-20">
+            <SignalCockpit cockpit={cockpit} />
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
