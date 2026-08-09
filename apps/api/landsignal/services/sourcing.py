@@ -146,6 +146,62 @@ OFFICES: list[dict[str, Any]] = [
         ),
     },
     {
+        "provider_id": "public_vacant_gis",
+        "state": "NJ",
+        "county": "",
+        "source_name": "New Jersey MOD-IV cadastral (NJOGIS)",
+        "office": "New Jersey Office of GIS / local tax assessor",
+        "website": "https://maps.nj.gov/",
+        "phone": None,
+        "parcel_lookup": "https://www.njparcels.com/",
+        "how": (
+            "Statewide MOD-IV vacant/farm map screen — look up the PIN with the municipal assessor. "
+            "Not a live tax-sale calendar."
+        ),
+    },
+    {
+        "provider_id": "public_vacant_gis",
+        "state": "NY",
+        "county": "",
+        "source_name": "NYS Tax Parcels Public (ORPTS / ITS Geospatial)",
+        "office": "NYS Geospatial Services / local assessor",
+        "website": "https://gis.ny.gov/parcels",
+        "phone": "518-242-5029",
+        "parcel_lookup": "https://gis.ny.gov/parcels",
+        "how": (
+            "Statewide ORPTS parcel screen for counties that authorize public share. "
+            "Confirm owner of record with the local assessor — not a tax-sale list."
+        ),
+    },
+    {
+        "provider_id": "public_vacant_gis",
+        "state": "AR",
+        "county": "",
+        "source_name": "Arkansas GeoStor CAMP parcels (AGISO)",
+        "office": "Arkansas Geographic Information Office / county assessor",
+        "website": "https://gis.arkansas.gov/",
+        "phone": "501-682-2767",
+        "parcel_lookup": "https://gis.arkansas.gov/",
+        "how": (
+            "Statewide CAMP cadastral polygons — coverage varies by county production block. "
+            "Look up the parcel ID with the county assessor; not a confirmed sale."
+        ),
+    },
+    {
+        "provider_id": "public_vacant_gis",
+        "state": "MA",
+        "county": "",
+        "source_name": "MassGIS Level-3 property tax parcels",
+        "office": "MassGIS / local assessor",
+        "website": "https://www.mass.gov/info-details/massgis-data-property-tax-parcels",
+        "phone": None,
+        "parcel_lookup": "https://www.mass.gov/info-details/massachusetts-interactive-property-map",
+        "how": (
+            "Statewide MassGIS assessor parcels (vacant / Chapter 61 screens). "
+            "Confirm with the city/town assessor whether the owner will sell."
+        ),
+    },
+    {
         "provider_id": "public_tax_sale",
         "state": "MI",
         "county": "wayne",

@@ -648,6 +648,82 @@ def _nj_acres(props: dict, geom_acres: float | None, *, min_ac: float, max_ac: f
     return float(acreage)
 
 
+def _bounded_acres(
+    preferred: float | None,
+    geom_acres: float | None,
+    *,
+    min_ac: float,
+    max_ac: float = 2500.0,
+) -> float | None:
+    """Prefer assessor acreage; fall back to geometry; reject absurd outliers.
+
+    If assessor acres and polygon acres disagree by a wide margin, trust the
+    polygon (common MassGIS / CAD typos publish thousands of acres on small lots).
+    """
+    acreage = preferred if preferred is not None else geom_acres
+    if (
+        preferred is not None
+        and geom_acres is not None
+        and preferred > 0
+        and geom_acres > 0
+        and (preferred / geom_acres > 3.0 or geom_acres / preferred > 3.0)
+        and min_ac <= geom_acres <= max_ac
+    ):
+        acreage = geom_acres
+    if acreage is None:
+        return None
+    if acreage > max_ac:
+        if geom_acres is not None and min_ac <= geom_acres <= max_ac:
+            acreage = geom_acres
+        else:
+            return None
+    if acreage < min_ac:
+        return None
+    return float(acreage)
+
+
+_NON_MARKET_OWNER_MARKERS = (
+    "UNITED STATES",
+    "U S A",
+    "U.S.",
+    "USA ",
+    "STATE OF",
+    "PEOPLE OF",
+    "COMMONWEALTH OF",
+    "COUNTY OF",
+    "CITY OF",
+    "TOWN OF",
+    "VILLAGE OF",
+    "NYS ",
+    "NEW YORK STATE",
+    "MASSACHUSETTS",
+    "DEPT OF",
+    "DEPARTMENT OF",
+    "NATURE CONSERVANCY",
+    "OPEN SPACE INSTITUTE",
+    "LAND TRUST",
+    "LAND, TRUST",
+    "CONSERVANCY",
+    "NATIONAL PARK",
+    "FOREST SERVICE",
+    "GAME & FISH",
+    "GAME AND FISH",
+    "FISH AND WILDLIFE",
+    "ARMY",
+    "AIR FORCE",
+    "NAVY ",
+    "CAMP ROBINSON",
+)
+
+
+def _non_market_owner(name: str | None) -> bool:
+    """True for government / conservation holders we should not present as buys."""
+    blob = " ".join(str(name or "").upper().split())
+    if not blob:
+        return False
+    return any(m in blob for m in _NON_MARKET_OWNER_MARKERS)
+
+
 def _norm_nj_mod4_vacant(raw: dict) -> dict | None:
     """NJ statewide MOD-IV class 1 vacant land (map screen — not a sale calendar)."""
     props = raw.get("properties") or {}
@@ -724,6 +800,262 @@ def _norm_nj_mod4_farm(raw: dict) -> dict | None:
         "longitude": lon,
         "polygon": polygon,
         "source_url": "https://maps.nj.gov/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_ny_orpts_vacant(raw: dict) -> dict | None:
+    """NY ORPTS vacant land (prop class 300–399, excl. underwater) — public map screen."""
+    props = raw.get("properties") or {}
+    try:
+        pclass = int(float(props.get("PROP_CLASS")))
+    except (TypeError, ValueError):
+        return None
+    if pclass < 300 or pclass >= 400 or pclass == 315:
+        return None
+    owner = props.get("PRIMARY_OWNER")
+    if _non_market_owner(owner):
+        return None
+    addr = str(props.get("PARCEL_ADDR") or "")
+    if "UNDERWATER" in addr.upper():
+        return None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(
+        _fnum(props.get("CALC_ACRES")) or _fnum(props.get("ACRES")),
+        geom_acres,
+        min_ac=5.0,
+    )
+    if acreage is None:
+        return None
+    pid = props.get("PRINT_KEY") or props.get("SBL") or props.get("SWIS_PRINT_KEY_ID") or props.get("OBJECTID")
+    county = str(props.get("COUNTY_NAME") or "Unknown").replace("StLawrence", "St. Lawrence").title()
+    mun = str(props.get("MUNI_NAME") or "").title()
+    land_val = _fnum(props.get("LAND_AV"))
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"nyorpts:{props.get('SWIS') or ''}:{pid}",
+        "title": f"New York vacant · {float(acreage):.2f} ac · {mun or county}",
+        "description": (
+            "New York ORPTS vacant land (statewide NYS Tax Parcels Public; 38 participating counties). "
+            f"Property class={pclass}. County={county}. Municipality={mun or 'n/a'}. "
+            f"Land assessed value mark=${land_val}. "
+            "Public cadastral screen — not a tax-sale calendar; confirm owner / sale path before chasing."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage),
+        "state": "NY",
+        "county": county,
+        "apn": str(pid),
+        "address": f"{addr}, {mun or county}, NY".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://gis.ny.gov/parcels",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_ny_orpts_ag(raw: dict) -> dict | None:
+    """NY ORPTS agricultural parcels (prop class 100–199) — larger rural map screen."""
+    props = raw.get("properties") or {}
+    try:
+        pclass = int(float(props.get("PROP_CLASS")))
+    except (TypeError, ValueError):
+        return None
+    if pclass < 100 or pclass >= 200:
+        return None
+    owner = props.get("PRIMARY_OWNER")
+    if _non_market_owner(owner):
+        return None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(
+        _fnum(props.get("CALC_ACRES")) or _fnum(props.get("ACRES")),
+        geom_acres,
+        min_ac=10.0,
+    )
+    if acreage is None:
+        return None
+    pid = props.get("PRINT_KEY") or props.get("SBL") or props.get("SWIS_PRINT_KEY_ID") or props.get("OBJECTID")
+    county = str(props.get("COUNTY_NAME") or "Unknown").replace("StLawrence", "St. Lawrence").title()
+    mun = str(props.get("MUNI_NAME") or "").title()
+    addr = props.get("PARCEL_ADDR") or ""
+    land_val = _fnum(props.get("LAND_AV"))
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"nyag:{props.get('SWIS') or ''}:{pid}",
+        "title": f"New York farmland · {float(acreage):.2f} ac · {mun or county}",
+        "description": (
+            f"New York ORPTS agricultural parcel (statewide NYS Tax Parcels Public). "
+            f"Property class={pclass}. County={county}. Municipality={mun or 'n/a'}. "
+            f"Land assessed value mark=${land_val}. "
+            "Public cadastral screen — not MLS; confirm whether the owner will sell before underwriting."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage),
+        "state": "NY",
+        "county": county,
+        "apn": str(pid),
+        "address": f"{addr}, {mun or county}, NY".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://gis.ny.gov/parcels",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_ar_geostor_vacant(raw: dict) -> dict | None:
+    """Arkansas statewide CAMP parcels — unimproved AV tracts (AGISO / GeoStor)."""
+    props = raw.get("properties") or {}
+    ptype = str(_prop(props, "parceltype", "ParcelType") or "").upper()
+    if ptype and ptype != "AV":
+        return None
+    imp = _fnum(_prop(props, "impvalue", "ImpValue")) or 0.0
+    if imp > 0:
+        return None
+    land_val = _fnum(_prop(props, "landvalue", "LandValue"))
+    if land_val is not None and land_val <= 0:
+        return None
+    owner = _prop(props, "ownername", "OwnerName")
+    if _non_market_owner(owner):
+        return None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(
+        _fnum(_prop(props, "taxarea", "TaxArea")),
+        geom_acres,
+        min_ac=5.0,
+    )
+    if acreage is None:
+        return None
+    pid = _prop(props, "parcelid", "ParcelId", "countyid", "CountyId", "objectid", "OBJECTID")
+    county = str(_prop(props, "county", "County") or "Unknown").title()
+    loc = _prop(props, "adrlabel", "AdrLabel", "parcellgl", "ParcelLgl") or ""
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"argeostor:{county}:{pid}",
+        "title": f"Arkansas vacant/ag · {float(acreage):.2f} ac · {county}",
+        "description": (
+            f"Arkansas statewide CAMP cadastral parcel (AGISO / GeoStor Planning_Cadastre). "
+            f"Parcel type={ptype or 'AV'}. County={county}. Land value mark=${land_val}. "
+            "Unimproved map screen — coverage varies by county production block; "
+            "not a tax-sale list. Confirm owner / sale path before chasing."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage),
+        "state": "AR",
+        "county": county,
+        "apn": str(pid),
+        "address": f"{str(loc)[:80]}, {county}, AR".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://gis.arkansas.gov/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_ma_massgis_vacant(raw: dict) -> dict | None:
+    """MassGIS Level-3 vacant / open land (statewide assessor parcels)."""
+    props = raw.get("properties") or {}
+    use = str(props.get("USE_CODE") or "").strip()
+    vacant_codes = {"130", "131", "132", "201", "202", "390", "391", "392", "393"}
+    if use not in vacant_codes:
+        return None
+    bldg = _fnum(props.get("BLDG_VAL")) or 0.0
+    if bldg > 0:
+        return None
+    units = str(props.get("LOT_UNITS") or "").lower()
+    lot = _fnum(props.get("LOT_SIZE"))
+    # Only trust LOT_SIZE when the town published acres (sq-ft towns are inconsistent).
+    preferred = lot if "acre" in units else None
+    owner = props.get("OWNER1")
+    if _non_market_owner(owner):
+        return None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=5.0)
+    if acreage is None:
+        return None
+    pid = props.get("PROP_ID") or props.get("MAP_PAR_ID") or props.get("LOC_ID") or props.get("OBJECTID")
+    city = str(props.get("CITY") or "Unknown").title()
+    addr = props.get("SITE_ADDR") or ""
+    land_val = _fnum(props.get("LAND_VAL"))
+    use_desc = props.get("USE_DESC") or use
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"massgis:{pid}",
+        "title": f"Massachusetts vacant · {float(acreage):.2f} ac · {city}",
+        "description": (
+            f"Massachusetts MassGIS Level-3 property tax parcel (statewide). "
+            f"Use={use} ({use_desc}). City/town={city}. Land value mark=${land_val}. "
+            "Public cadastral screen — not a confirmed listing; confirm owner / sale path before chasing."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage),
+        "state": "MA",
+        "county": city,  # MassGIS is town-based; city/town is the practical locality key
+        "apn": str(pid),
+        "address": f"{addr}, {city}, MA".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.mass.gov/info-details/massgis-data-property-tax-parcels",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_ma_massgis_chapter61(raw: dict) -> dict | None:
+    """MassGIS Chapter 61 / 61A forest & farm land (larger rural tracts)."""
+    props = raw.get("properties") or {}
+    use = str(props.get("USE_CODE") or "").strip()
+    if use not in {"601", "602", "713", "714", "717", "718"}:
+        return None
+    bldg = _fnum(props.get("BLDG_VAL")) or 0.0
+    if bldg > 0:
+        return None
+    units = str(props.get("LOT_UNITS") or "").lower()
+    lot = _fnum(props.get("LOT_SIZE"))
+    preferred = lot if "acre" in units else None
+    owner = props.get("OWNER1")
+    if _non_market_owner(owner):
+        return None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=10.0)
+    if acreage is None:
+        return None
+    pid = props.get("PROP_ID") or props.get("MAP_PAR_ID") or props.get("LOC_ID") or props.get("OBJECTID")
+    city = str(props.get("CITY") or "Unknown").title()
+    addr = props.get("SITE_ADDR") or ""
+    land_val = _fnum(props.get("LAND_VAL"))
+    use_desc = props.get("USE_DESC") or use
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"mach61:{pid}",
+        "title": f"Massachusetts Ch.61 land · {float(acreage):.2f} ac · {city}",
+        "description": (
+            f"Massachusetts MassGIS Chapter 61 / 61A forest or farm parcel (statewide). "
+            f"Use={use} ({use_desc}). City/town={city}. Land value mark=${land_val}. "
+            "Public cadastral screen — not MLS; confirm whether the owner will sell before underwriting."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage),
+        "state": "MA",
+        "county": city,
+        "apn": str(pid),
+        "address": f"{addr}, {city}, MA".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.mass.gov/info-details/massgis-data-property-tax-parcels",
         "status": "ACTIVE",
         "raw": props,
         "is_demo": False,
@@ -1419,6 +1751,71 @@ SOURCES: list[ArcgisMarketSource] = [
         _norm_nj_mod4_farm,
         where="PROP_CLASS='3B' AND CALC_ACRE>=10",
         order_by="CALC_ACRE DESC",
+    ),
+    # Statewide cadastral screens — only states with verified official vacant/ag attributes.
+    # Skipped for now (no equally clean public vacant filter): DE, HI, IA, KY, LA, ME, MS,
+    # ND, NH, OK, RI, SC, SD, VT, WV, DC (county-only / centroids-only / stale / no class codes).
+    ArcgisMarketSource(
+        "ny_orpts_vacant",
+        "New York ORPTS Vacant Land (5ac+)",
+        "https://gisservices.its.ny.gov/arcgis/rest/services/NYS_Tax_Parcels_Public/MapServer/1/query",
+        "NY",
+        "Statewide",
+        _norm_ny_orpts_vacant,
+        where=(
+            "PROP_CLASS >= 300 AND PROP_CLASS < 400 AND PROP_CLASS <> 315 "
+            "AND CALC_ACRES >= 5 AND CALC_ACRES <= 2500 AND OWNER_TYPE='8'"
+        ),
+        order_by="CALC_ACRES DESC",
+    ),
+    ArcgisMarketSource(
+        "ny_orpts_agriculture",
+        "New York ORPTS Agriculture (10ac+)",
+        "https://gisservices.its.ny.gov/arcgis/rest/services/NYS_Tax_Parcels_Public/MapServer/1/query",
+        "NY",
+        "Statewide",
+        _norm_ny_orpts_ag,
+        where=(
+            "PROP_CLASS >= 100 AND PROP_CLASS < 200 "
+            "AND CALC_ACRES >= 10 AND CALC_ACRES <= 2500 AND OWNER_TYPE='8'"
+        ),
+        order_by="CALC_ACRES DESC",
+    ),
+    ArcgisMarketSource(
+        "ar_geostor_vacant",
+        "Arkansas GeoStor Unimproved AV (5ac+)",
+        "https://gis.arkansas.gov/arcgis/rest/services/FEATURESERVICES/Planning_Cadastre/FeatureServer/6/query",
+        "AR",
+        "Statewide",
+        _norm_ar_geostor_vacant,
+        where="impvalue=0 AND taxarea>=5 AND taxarea<=2500 AND landvalue>0 AND parceltype='AV'",
+        order_by="taxarea DESC",
+    ),
+    ArcgisMarketSource(
+        "ma_massgis_vacant",
+        "Massachusetts MassGIS Vacant Land (5ac+)",
+        "https://services1.arcgis.com/hGdibHYSPO59RG1h/arcgis/rest/services/Massachusetts_Property_Tax_Parcels/FeatureServer/0/query",
+        "MA",
+        "Statewide",
+        _norm_ma_massgis_vacant,
+        where=(
+            "BLDG_VAL=0 AND LOT_UNITS='Acres' AND LOT_SIZE>=5 AND LOT_SIZE<=2500 "
+            "AND USE_CODE IN ('130','131','132','201','202','390','391','392','393')"
+        ),
+        order_by="LOT_SIZE DESC",
+    ),
+    ArcgisMarketSource(
+        "ma_massgis_chapter61",
+        "Massachusetts MassGIS Chapter 61/61A (10ac+)",
+        "https://services1.arcgis.com/hGdibHYSPO59RG1h/arcgis/rest/services/Massachusetts_Property_Tax_Parcels/FeatureServer/0/query",
+        "MA",
+        "Statewide",
+        _norm_ma_massgis_chapter61,
+        where=(
+            "BLDG_VAL=0 AND LOT_UNITS='Acres' AND LOT_SIZE>=10 AND LOT_SIZE<=2500 "
+            "AND USE_CODE IN ('601','602','713','714','717','718')"
+        ),
+        order_by="LOT_SIZE DESC",
     ),
 ]
 
