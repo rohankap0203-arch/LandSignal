@@ -294,7 +294,19 @@ class MemoryStore:
 
     def latest_score(self, parcel_id: UUID) -> ScoreRecord | None:
         items = self.scores.get(parcel_id) or []
-        return items[-1] if items else None
+        if not items:
+            return None
+        # Prefer the current algorithm — startup rescore is capped, so older
+        # versions can still sit at the end of the list for unscored batches.
+        try:
+            from landsignal.scoring.engine import ALGORITHM_VERSION
+
+            for s in reversed(items):
+                if getattr(s, "algorithm_version", None) == ALGORITHM_VERSION:
+                    return s
+        except Exception:
+            pass
+        return items[-1]
 
     def listing_for_parcel(self, parcel_id: UUID) -> ListingRecord | None:
         for listing in self.listings.values():

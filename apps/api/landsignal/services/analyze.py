@@ -171,6 +171,16 @@ def _estimate_value(parcel, soil_n, flood_n, wet_n, growth_n, listing=None) -> d
     }
 
 
+def _retag_vacant_gis_listing(listing) -> None:
+    """Vacant CAD/cadastral feeds are not confirmed tax sales."""
+    if not listing or getattr(listing, "provider_id", None) != "public_tax_sale":
+        return
+    ext = str(getattr(listing, "external_id", None) or "")
+    desc = str(getattr(listing, "description", None) or "").lower()
+    if ext.startswith(("nash:", "bexar:", "dallas:", "kingwa:")) or "cadastral gis" in desc or "public cad gis" in desc:
+        listing.provider_id = "public_vacant_gis"
+
+
 async def analyze_parcel(
     store: MemoryStore,
     parcel_id: UUID,
@@ -181,6 +191,9 @@ async def analyze_parcel(
     settings = settings or get_settings()
     parcel = store.parcels[parcel_id]
     listing = store.listing_for_parcel(parcel_id)
+    _retag_vacant_gis_listing(listing)
+    if listing is not None:
+        store.listings[listing.id] = listing
     providers = build_enrichment_providers(settings)
     parcel_dict = parcel.model_dump()
     existing = store.enrichments.get(parcel_id) or EnrichmentBundle()
@@ -259,6 +272,19 @@ async def analyze_parcel(
     ask = listing.asking_price_usd if listing else None
     provider = listing.provider_id if listing else None
     state = (parcel.state or "").upper()
+    # Vacant map screens must not keep stale tax-sale auction / pressure invents
+    if provider == "public_vacant_gis":
+        comps_n.pop("auction_path", None)
+        comps_n["seller_pressure_score"] = 42.0
+        if existing.comps:
+            norm = dict(existing.comps.normalized or {})
+            val = dict(existing.comps.value or {}) if isinstance(existing.comps.value, dict) else {}
+            norm.pop("auction_path", None)
+            val.pop("auction_path", None)
+            norm["seller_pressure_score"] = 42.0
+            existing.comps.normalized = norm
+            if val:
+                existing.comps.value = val
     if comps_n.get("seller_pressure_score") is None:
         if provider == "public_tax_sale":
             comps_n["seller_pressure_score"] = 78.0

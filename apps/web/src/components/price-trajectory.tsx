@@ -27,6 +27,12 @@ type Hitch = {
   points?: Point[];
 };
 
+type HitchHelp = {
+  title?: string;
+  body?: string;
+  items?: Array<{ id?: string; label?: string; plain?: string }>;
+};
+
 type Trajectory = {
   identity?: string;
   headline?: string;
@@ -37,6 +43,7 @@ type Trajectory = {
   now_usd?: number;
   points?: Point[];
   hitches?: Hitch[];
+  hitch_help?: HitchHelp;
   summary_bullets?: string[];
   method_notes?: string[];
   disclaimer?: string;
@@ -78,8 +85,18 @@ export function PriceTrajectory({
   );
   const [horizon, setHorizon] = useState(10);
   const [hitchId, setHitchId] = useState<string>("base");
+  const [hitchHelpOpen, setHitchHelpOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
+
+  useEffect(() => {
+    if (!hitchHelpOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setHitchHelpOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [hitchHelpOpen]);
 
   const activeHitch = hitches.find((h) => h.id === hitchId) || null;
   const sourcePoints =
@@ -405,33 +422,90 @@ export function PriceTrajectory({
       </div>
 
       {!compact && hitches.length > 0 ? (
-        <div className="traj-hitch-rail" role="tablist" aria-label="Chart hitches">
-          {hitches.slice(0, 3).map((h) => {
-            const on = hitchId === h.id;
-            return (
-              <button
-                key={h.id}
-                type="button"
-                role="tab"
-                aria-selected={on}
-                className={`traj-hitch-btn ${on ? "active" : ""}`}
-                onClick={() => setHitchId(on ? "base" : h.id)}
-                title={h.plain || h.label}
-              >
-                <span className="traj-hitch-k">{h.short || h.label}</span>
-                <span className="traj-hitch-v">{on ? "On chart" : "Hitch"}</span>
-              </button>
-            );
-          })}
+        <div className="traj-hitch-col">
+          <button
+            type="button"
+            className={`help-q hitch-help-q ${hitchHelpOpen ? "on" : ""}`}
+            aria-label="What hitch buttons mean"
+            aria-haspopup="dialog"
+            aria-expanded={hitchHelpOpen}
+            title="What these buttons mean"
+            onClick={() => setHitchHelpOpen(true)}
+          >
+            ?
+          </button>
+          <div className="traj-hitch-rail" role="tablist" aria-label="Chart hitches">
+            {hitches.slice(0, 3).map((h) => {
+              const on = hitchId === h.id;
+              return (
+                <button
+                  key={h.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={on}
+                  className={`traj-hitch-btn ${on ? "active" : ""}`}
+                  onClick={() => setHitchId(on ? "base" : h.id)}
+                  title={h.plain || h.label}
+                >
+                  <span className="traj-hitch-k">{h.short || h.label}</span>
+                  <span className="traj-hitch-v">{on ? "Future" : "Hitch"}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       ) : null}
       </div>
+
+      {hitchHelpOpen && trajectory?.hitch_help ? (
+        <div
+          className="help-modal-backdrop"
+          role="presentation"
+          onClick={() => setHitchHelpOpen(false)}
+        >
+          <div
+            className="help-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="What hitch buttons mean"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h4 className="display text-base font-semibold">
+                {trajectory.hitch_help.title || "What these hitch buttons do"}
+              </h4>
+              <button
+                type="button"
+                className="help-q on"
+                aria-label="Close"
+                onClick={() => setHitchHelpOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <p className="mt-2 text-sm text-[var(--muted)] leading-snug">
+              {trajectory.hitch_help.body}
+            </p>
+            <ul className="help-modal-list">
+              {(trajectory.hitch_help.items || []).map((item) => (
+                <li key={item.id || item.label}>
+                  <strong>{item.label}</strong>
+                  <span>{item.plain}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 text-xs text-[var(--muted)] leading-snug">
+              Tap a button to bend only the years ahead. Tap again to clear. Past years never move.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {activeHitch && hitchId !== "base" ? (
         <p className="traj-hitch-note">{activeHitch.plain}</p>
       ) : !compact && hitches.length > 0 ? (
         <p className="traj-hitch-note">
-          Tap Rates, Growth, or Site to bend the path — tap again for the base line.
+          Hitches bend the future only — tap Rates, Growth, or Site (or ? for plain English).
         </p>
       ) : null}
 

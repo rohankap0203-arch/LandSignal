@@ -13,7 +13,7 @@ from landsignal.store import MemoryStore
 log = structlog.get_logger()
 
 
-async def rescore_stale(store: MemoryStore, *, limit: int = 5000, concurrency: int = 32) -> dict:
+async def rescore_stale(store: MemoryStore, *, limit: int = 20000, concurrency: int = 32) -> dict:
     stale = [
         pid
         for pid, scores in store.scores.items()

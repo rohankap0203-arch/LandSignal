@@ -728,13 +728,30 @@ button.score-bar-click:disabled {
   align-items: stretch;
 }
 
+.traj-hitch-col {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  align-self: stretch;
+}
+
+.hitch-help-q {
+  align-self: flex-end;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  padding: 0;
+  font-size: 12px;
+}
+
 .traj-hitch-rail {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 5px;
   width: 64px;
-  align-self: stretch;
+  flex: 1;
 }
 
 .traj-hitch-btn {
@@ -788,6 +805,12 @@ button.score-bar-click:disabled {
 @media (max-width: 640px) {
   .traj-chart-row {
     grid-template-columns: 1fr;
+  }
+
+  .traj-hitch-col {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
   }
 
   .traj-hitch-rail {
@@ -1586,6 +1609,14 @@ a.btn-intel:hover {
   gap: 8px;
 }
 
+.acquire-mission {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
 .acquire-rail:has(.acquire-block.find) {
   grid-template-columns: 1fr 1fr;
 }
@@ -1593,6 +1624,156 @@ a.btn-intel:hover {
 .acquire-block.find {
   grid-column: 1 / -1;
   width: 100%;
+}
+
+.acquire-flip {
+  perspective: 900px;
+  min-height: 108px;
+}
+
+.acquire-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 108px;
+  transform-style: preserve-3d;
+  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.acquire-flip.is-flipped .acquire-flip-inner {
+  transform: rotateY(180deg);
+}
+
+.acquire-flip-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.acquire-flip-front .acquire-block {
+  flex: 1;
+}
+
+.acquire-flip-back {
+  transform: rotateY(180deg);
+}
+
+.acquire-flip-btn {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 2px 4px;
+  text-align: left;
+  opacity: 0.85;
+}
+
+.acquire-flip-btn:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.acquire-flip-btn.ghost {
+  opacity: 0.75;
+}
+
+.acquire-script {
+  flex: 1;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  padding: 10px 11px;
+  overflow: auto;
+  max-height: 280px;
+}
+
+.acquire-flip-back.source-back .acquire-script {
+  border-color: color-mix(in srgb, var(--brand) 35%, var(--line));
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-elevated));
+}
+
+.acquire-flip-back.call-back .acquire-script {
+  border-color: color-mix(in srgb, var(--accent, #2f6f4e) 40%, var(--line));
+  box-shadow: inset 3px 0 0 var(--accent, #2f6f4e);
+}
+
+.acquire-script-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.acquire-script-top strong {
+  font-size: 0.82rem;
+}
+
+.acquire-script-opener {
+  margin: 0 0 6px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+.acquire-script-list,
+.acquire-script-bullets {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.acquire-script-list li + li,
+.acquire-script-bullets li + li {
+  margin-top: 3px;
+}
+
+.acquire-script-bullets.warn {
+  color: color-mix(in srgb, var(--danger) 70%, var(--ink));
+}
+
+.acquire-script-label {
+  margin-top: 8px;
+  margin-bottom: 3px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.acquire-script-close {
+  margin: 8px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.acquire-script-cta {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--brand);
+  text-decoration: none;
+}
+
+.acquire-script-cta.call {
+  color: var(--accent, #2f6f4e);
+}
+
+.acquire-script-cta:hover {
+  text-decoration: underline;
 }
 
 .acquire-block {

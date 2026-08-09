@@ -404,13 +404,13 @@ def _norm_dallas_vacant(raw: dict) -> dict | None:
     pid = props.get("ACCT") or props.get("GIS_ACCT") or props.get("OBJECTID")
     use = props.get("PROP_CL") or "Vacant tract"
     return {
-        "provider_id": "public_tax_sale",
+        "provider_id": "public_vacant_gis",
         "external_id": f"dallas:{pid}",
         "title": f"Dallas CAD vacant · {acreage:.2f} ac · {use}",
         "description": (
             f"Dallas County, TX appraisal vacant/land tract (public CAD GIS). "
             f"Class={use}. SPTB={props.get('SPTBCODE')}. "
-            "Vacant land screen — not MLS/Crexi; confirm sale status with DCAD / broker."
+            "Public map screen — not a confirmed tax sale; confirm owner / sale status before chasing."
         ),
         "asking_price_usd": None,
         "acreage": float(acreage),
@@ -443,13 +443,13 @@ def _norm_bexar_vacant(raw: dict) -> dict | None:
     pid = props.get("PropID") or props.get("AcctNumb") or props.get("OBJECTID")
     land_val = props.get("LandVal")
     return {
-        "provider_id": "public_tax_sale",
+        "provider_id": "public_vacant_gis",
         "external_id": f"bexar:{pid}",
         "title": f"Bexar TX vacant land · {float(acreage):.2f} ac · {props.get('Situs') or pid}",
         "description": (
             f"Bexar County, TX (San Antonio) vacant/unimproved parcel from public CAD GIS. "
             f"Land value mark=${land_val}. Owner mark={props.get('Owner') or 'n/a'}. "
-            "Not a dedicated tax-sale feed — screen for land thesis only."
+            "Public map screen — not a dedicated tax-sale feed."
         ),
         # LandVal is assessed mark, not an auction opener — don't fake a bid price
         "asking_price_usd": None,
@@ -479,12 +479,12 @@ def _norm_king_vacant(raw: dict) -> dict | None:
     pid = props.get("PIN") or props.get("MAJOR") or props.get("OBJECTID")
     use = (props.get("PREUSE_DESC") or "Vacant").strip()
     return {
-        "provider_id": "public_tax_sale",
+        "provider_id": "public_vacant_gis",
         "external_id": f"kingwa:{pid}",
         "title": f"King County WA vacant · {float(acreage):.2f} ac · {use}",
         "description": (
             f"King County, WA vacant land (public property info GIS). Use={use}. "
-            "Not MLS — confirm marketing status with a local broker / assessor."
+            "Public map screen — not MLS; confirm owner / marketing status before assuming a sale path."
         ),
         "asking_price_usd": None,
         "acreage": float(acreage),
@@ -513,13 +513,15 @@ def _norm_nashville_vacant(raw: dict) -> dict | None:
     pid = props.get("APN") or props.get("ParID") or props.get("OBJECTID")
     land = props.get("LandAppr")
     return {
-        "provider_id": "public_tax_sale",
+        # Vacant cadastral GIS — NOT a confirmed tax-sale calendar. Mis-tagging as
+        # public_tax_sale was inventing huge “buy edges” and crowding the radar with TN.
+        "provider_id": "public_vacant_gis",
         "external_id": f"nash:{pid}",
         "title": f"Davidson TN vacant · {float(acreage):.2f} ac · {props.get('PropAddr') or pid}",
         "description": (
             f"Davidson County / Nashville vacant rural or vacant land (public cadastral GIS). "
             f"Use={props.get('LUDesc')}. Land appraisal mark=${land}. "
-            "Public land inventory screen — not MLS."
+            "Public map screen — not a confirmed tax sale and not MLS."
         ),
         # LandAppr is assessed mark, not a list/bid price
         "asking_price_usd": None,

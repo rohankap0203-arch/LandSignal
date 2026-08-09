@@ -97,7 +97,7 @@ OFFICES: list[dict[str, Any]] = [
         "how": "Public parcel screen (≥2 ac). Confirm if on upset/tax sale with Treasurer.",
     },
     {
-        "provider_id": "public_tax_sale",
+        "provider_id": "public_vacant_gis",
         "state": "TX",
         "county": "dallas",
         "source_name": "Dallas CAD vacant tracts (public GIS)",
@@ -105,10 +105,10 @@ OFFICES: list[dict[str, Any]] = [
         "website": "https://www.dallascad.org/",
         "phone": "214-631-0910",
         "parcel_lookup": "https://www.dallascad.org/",
-        "how": "Vacant CAD inventory — not a live MLS ask. Look up account on DCAD, then owner/broker.",
+        "how": "Vacant CAD map screen — look up the account for owner of record. Not a live tax-sale bid sheet.",
     },
     {
-        "provider_id": "public_tax_sale",
+        "provider_id": "public_vacant_gis",
         "state": "TX",
         "county": "bexar",
         "source_name": "Bexar County CAD vacant land GIS",
@@ -116,10 +116,10 @@ OFFICES: list[dict[str, Any]] = [
         "website": "https://www.bcad.org/",
         "phone": "210-242-2432",
         "parcel_lookup": "https://www.bcad.org/",
-        "how": "Vacant land screen from CAD. Owner on account; no retail list price on this feed.",
+        "how": "Vacant CAD map screen — owner on account; confirm it’s actually obtainable before you chase.",
     },
     {
-        "provider_id": "public_tax_sale",
+        "provider_id": "public_vacant_gis",
         "state": "WA",
         "county": "king",
         "source_name": "King County WA vacant property GIS",
@@ -127,10 +127,10 @@ OFFICES: list[dict[str, Any]] = [
         "website": "https://www.kingcounty.gov/depts/assessor.aspx",
         "phone": "206-296-7300",
         "parcel_lookup": "https://blue.kingcounty.com/Assessor/eRealProperty/default.aspx",
-        "how": "Vacant land from county property info — look up PIN for owner/mailing contact.",
+        "how": "Vacant map screen — look up PIN for owner/mailing. Don’t treat assessor GIS as a sale listing.",
     },
     {
-        "provider_id": "public_tax_sale",
+        "provider_id": "public_vacant_gis",
         "state": "TN",
         "county": "davidson",
         "source_name": "Davidson County / Nashville vacant cadastral GIS",
@@ -139,7 +139,11 @@ OFFICES: list[dict[str, Any]] = [
         "phone": "615-862-6080",
         "parcel_lookup": "https://www.padctn.org/",
         "posting_url": "https://www.padctn.org/",
-        "how": "Open PAD to look up this parcel ID / owner. Metro tax-sale calendars change — call the Assessor or Trustee if you need the live sale path.",
+        "how": (
+            "Open PAD to look up this parcel ID / owner of record. This feed is vacant land on the "
+            "public map — not a live tax-sale list. Ask whether it’s privately owned, metro-owned, "
+            "or on a trustee sale calendar before you chase a bid."
+        ),
     },
     {
         "provider_id": "public_tax_sale",
@@ -325,6 +329,7 @@ def _pick_posting_url(source_url: str | None, office: dict[str, Any]) -> str | N
         "public_tax_sale",
         "public_surplus",
         "blm_lpad",
+        "public_vacant_gis",
     ):
         return curated
     if curated and _url_path_depth(src) <= 1 and _url_path_depth(curated) > _url_path_depth(src):

@@ -133,6 +133,7 @@ def build_factor_model(
         rate += delta
         channel_name = {
             "public_tax_sale": "county tax-sale channel",
+            "public_vacant_gis": "vacant public-map screen",
             "public_surplus": "government surplus channel",
             "blm_lpad": "federal BLM channel",
         }.get(provider or "", "this listing channel")

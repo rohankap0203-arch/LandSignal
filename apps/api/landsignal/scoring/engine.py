@@ -6,7 +6,7 @@ from typing import Any
 
 from landsignal.scoring.financial import asking_discount_pct, clamp, margin_of_safety
 
-ALGORITHM_VERSION = "landsignal_score_v3_3_1"
+ALGORITHM_VERSION = "landsignal_score_v3_3_3"
 WEIGHT_VERSION = "weights_default_v3"
 
 DEFAULT_WEIGHTS = {
@@ -457,23 +457,36 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
     lift_notes: list[str] = []
     provider = str(inp.get("provider_id") or "")
     eff_discount = discount
-    # Unpriced process inventory (≥5 ac): underwrite a channel entry so mispricing can surface
+    # Unpriced process inventory (≥5 ac): underwrite a channel entry so mispricing can surface.
+    # Vacant GIS screens are NOT confirmed sales — only a mild “maybe approachable” underwrite.
     if (
         eff_discount is None
         and ask is None
         and base is not None
         and float(acres or 0) >= 5
-        and provider in ("public_tax_sale", "public_surplus", "blm_lpad")
+        and provider in ("public_tax_sale", "public_surplus", "blm_lpad", "public_vacant_gis")
     ):
         underwrite = base * (
-            0.62 if provider == "public_tax_sale" else 0.72 if provider == "public_surplus" else 0.78
+            0.62
+            if provider == "public_tax_sale"
+            else 0.72
+            if provider == "public_surplus"
+            else 0.78
+            if provider == "blm_lpad"
+            else 0.92  # vacant map screen — not a distressed bid assumption
         )
         eff_discount = asking_discount_pct(underwrite, base)
         lift_notes.append(
-            f"Process underwrite ~${underwrite:,.0f} vs mark ${base:,.0f} ({eff_discount:.0f}% gap)"
+            f"{'Map-screen' if provider == 'public_vacant_gis' else 'Process'} underwrite "
+            f"~${underwrite:,.0f} vs mark ${base:,.0f} ({eff_discount:.0f}% gap)"
         )
     if eff_discount is not None:
-        if eff_discount <= -50:
+        if provider == "public_vacant_gis":
+            # Cap lifts — vacant GIS must not crowd out true tax-sale / surplus edges
+            if eff_discount <= -15:
+                lift += 3
+                lift_notes.append(f"Soft map-screen edge (+3) for {eff_discount:.0f}% vs model")
+        elif eff_discount <= -50:
             lift += 16
             lift_notes.append(f"Deep discount lift (+16) for {eff_discount:.0f}% vs model")
         elif eff_discount <= -30:
@@ -482,22 +495,25 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
         elif eff_discount <= -15:
             lift += 6
             lift_notes.append(f"Discount lift (+6) for {eff_discount:.0f}% vs model")
-    # Channel edge only when the file also shows a real price/use gap
+    # Channel edge only when the file also shows a real price/use gap (not bare vacant GIS)
     if provider in ("public_tax_sale", "public_surplus", "blm_lpad") and (
         (eff_discount is not None and eff_discount <= -15) or float(acres or 0) >= 40
     ):
         lift += 3
         lift_notes.append("Off-MLS / process channel scout edge (+3)")
     sp = _v(inp, "seller_pressure_score")
-    if sp is not None and sp >= 72:
+    if sp is not None and sp >= 72 and provider != "public_vacant_gis":
         lift += 5
         lift_notes.append("Distressed / high seller-pressure channel (+5)")
-    if ask is None and acres >= 40:
+    if ask is None and acres >= 40 and provider in ("public_tax_sale", "public_surplus", "blm_lpad"):
         lift += 6
         lift_notes.append("Unpriced large-tract process edge (+6)")
         if (_v(inp, "scarcity_score") or 0) >= 65:
             lift += 4
             lift_notes.append("Scarcity on large unpriced tract (+4)")
+    elif ask is None and acres >= 40 and provider == "public_vacant_gis":
+        lift += 2
+        lift_notes.append("Large vacant map screen — still need an owner path (+2)")
     # Usable-acre quality when soil is strong and flood/wetlands are contained
     if (prime or 0) >= 50 and (wetland or 0) < 15 and (_v(inp, "flood_zone_pct") or 0) < 20:
         lift += 4

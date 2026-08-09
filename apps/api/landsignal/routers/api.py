@@ -201,9 +201,25 @@ PROVIDER_LABELS = {
     "blm_lpad": "Federal BLM land",
     "public_tax_sale": "County tax-delinquent sale",
     "public_surplus": "Public surplus land",
+    "public_vacant_gis": "Vacant land on the public map",
     "manual": "Manual entry",
     "csv": "CSV import",
 }
+
+# External-id prefixes that are vacant CAD/cadastral screens, not confirmed tax sales.
+_VACANT_GIS_PREFIXES = ("nash:", "bexar:", "dallas:", "kingwa:")
+
+
+def _maybe_retag_vacant_gis(listing) -> None:
+    """Correct in-memory mislabels so radar isn’t flooded by fake tax-sale edges."""
+    if not listing:
+        return
+    ext = str(getattr(listing, "external_id", None) or "")
+    desc = str(getattr(listing, "description", None) or "").lower()
+    if getattr(listing, "provider_id", None) != "public_tax_sale":
+        return
+    if ext.startswith(_VACANT_GIS_PREFIXES) or "cadastral gis" in desc or "public cad gis" in desc:
+        listing.provider_id = "public_vacant_gis"
 
 
 def _provider_label(provider_id: str | None, county: str | None = None) -> str:
@@ -217,6 +233,9 @@ def _provider_label(provider_id: str | None, county: str | None = None) -> str:
     if pid == "public_surplus":
         co = (county or "").strip()
         return f"{co} surplus land" if co else "Public surplus land"
+    if pid == "public_vacant_gis":
+        co = (county or "").strip()
+        return f"{co} vacant map screen" if co else "Vacant land on the public map"
     return PROVIDER_LABELS.get(pid, pid or "Public source")
 
 
@@ -337,6 +356,7 @@ async def radar(
             listing = store.listing_for_parcel(parcel.id)
             if not score or not listing or parcel.is_demo:
                 continue
+            _maybe_retag_vacant_gis(listing)
 
             if state_code and (parcel.state or "").upper() != state_code:
                 continue
@@ -422,8 +442,10 @@ async def radar(
             enrichment = store.enrichments.get(parcel.id)
 
             auction_path = None
-            if enrichment and enrichment.comps:
+            if enrichment and enrichment.comps and listing.provider_id != "public_vacant_gis":
                 auction_path = (enrichment.comps.normalized or {}).get("auction_path")
+            if listing.provider_id == "public_vacant_gis":
+                auction_path = None
             if not isinstance(auction_path, dict) and ask and listing.provider_id in (
                 "public_tax_sale",
                 "public_surplus",
@@ -563,7 +585,16 @@ async def radar(
                 f"Opportunity {score.opportunity:.0f} · Risk {score.risk:.0f} · {pd['display']}"
             )
             headline_disc = settle_disc if settle_disc is not None else score.asking_discount_pct
-            if headline_disc is not None and headline_disc < -8:
+            if listing.provider_id == "public_vacant_gis":
+                headline_disc = score.asking_discount_pct
+            if listing.provider_id == "public_vacant_gis":
+                acres_h = f"{acres:,.0f} ac" if acres is not None else "tract"
+                headline = (
+                    f"Vacant map screen · {acres_h} · confirm owner path"
+                    if score.opportunity < 62
+                    else f"Worth a look · {acres_h} vacant map screen — verify it’s buyable"
+                )
+            elif headline_disc is not None and headline_disc < -8:
                 headline = (
                     f"Likely finish ~{abs(headline_disc):.0f}% under our value"
                     if isinstance(auction_path, dict)
@@ -624,7 +655,10 @@ async def radar(
                     growth_v = None
 
             edge_pct = settle_disc if settle_disc is not None else score.asking_discount_pct
-            if edge_pct is not None and edge_pct <= -20:
+            # Vacant GIS: no fake bargain copy — the job is “is this actually buyable?”
+            if listing.provider_id == "public_vacant_gis":
+                edge_pct = None
+            elif edge_pct is not None and edge_pct <= -20:
                 scout_bits.append(f"Buy edge ~{abs(edge_pct):.0f}% under our mark")
             elif edge_pct is not None and edge_pct <= -8:
                 scout_bits.append(f"Modest edge ~{abs(edge_pct):.0f}% under our mark")
@@ -634,6 +668,8 @@ async def radar(
                 scout_bits.append("BLM disposal process")
             elif listing.provider_id == "public_surplus":
                 scout_bits.append("public surplus inventory")
+            elif listing.provider_id == "public_vacant_gis":
+                scout_bits.append("vacant map screen — confirm owner path")
             if prime_v is not None and prime_v >= 45:
                 scout_bits.append(f"~{prime_v:.0f}% prime soil")
             if flood_v is not None and flood_v >= 25:
@@ -960,9 +996,11 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     from landsignal.services.briefing import build_intelligence_brief
 
     auction_path = None
-    if enrichment and enrichment.comps:
+    if enrichment and enrichment.comps and getattr(listing, "provider_id", None) != "public_vacant_gis":
         auction_path = (enrichment.comps.normalized or {}).get("auction_path")
     if not isinstance(auction_path, dict):
+        auction_path = None
+    if getattr(listing, "provider_id", None) == "public_vacant_gis":
         auction_path = None
 
     ask = listing.asking_price_usd if listing else None
@@ -1063,8 +1101,11 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     }
 
     from landsignal.services.market_trajectory import build_market_trajectory
+    from landsignal.services.outreach import build_outreach_playbook
     from landsignal.services.return_path import build_return_intelligence
     from landsignal.services.score_drivers import build_score_drivers
+
+    _maybe_retag_vacant_gis(listing)
 
     market_trajectory = build_market_trajectory(
         parcel=parcel,
@@ -1115,6 +1156,15 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         if score
         else {}
     )
+    outreach = build_outreach_playbook(
+        parcel=parcel,
+        listing=listing,
+        score=score,
+        enrichment=enrichment,
+        sourcing=source if isinstance(source, dict) else {},
+        entry_usd=float(entry_for_path) if entry_for_path is not None else None,
+        mark_usd=float(mark_for_path) if mark_for_path is not None else None,
+    )
 
     return {
         "parcel": parcel,
@@ -1134,6 +1184,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         "market_trajectory": market_trajectory,
         "return_intelligence": return_intelligence,
         "score_drivers": score_drivers,
+        "outreach": outreach,
         "rating_breakdown": rating_breakdown(score, parcel=parcel, listing=listing) if score else [],
         "score_explained": brief.get("score_story")
         or {

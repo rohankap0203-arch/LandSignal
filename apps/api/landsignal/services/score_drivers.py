@@ -89,6 +89,10 @@ def build_score_drivers(
         opp_bullets.append(f"Federal BLM disposal land in {place} — public process, not MLS retail.")
     elif provider == "public_surplus":
         opp_bullets.append(f"Public surplus inventory in {place} — agency sells, not a broker.")
+    elif provider == "public_vacant_gis":
+        opp_bullets.append(
+            f"This started as vacant land on the {place} public map — confirm owner / sale path before you treat it as a buy."
+        )
 
     if strat_s:
         opp_bullets.append(f"Best fit we see here: {strat_s}.")

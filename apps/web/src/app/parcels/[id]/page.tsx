@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { AcquireRail } from "@/components/acquire-rail";
+import { AcquireRail, type OutreachPlaybook } from "@/components/acquire-rail";
 import { LandLoader } from "@/components/land-loader";
 import { PriceTrajectory } from "@/components/price-trajectory";
 import { ReturnVisual } from "@/components/return-visual";
@@ -300,6 +300,7 @@ export default function ParcelIntelligencePage() {
                 office={sourcing.office ? String(sourcing.office) : null}
                 findUrl={findLink?.url}
                 findLabel={findLink?.label}
+                outreach={(data.outreach as OutreachPlaybook) || null}
               />
               {sourcing.how_to_buy ? (
                 <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{String(sourcing.how_to_buy)}</p>
