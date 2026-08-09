@@ -481,10 +481,7 @@ export default function SearchPage() {
       <div id="search-results" className="results-head scroll-mt-24">
         <div>
           <h2 className="display text-2xl font-semibold">Scouted opportunities</h2>
-          <p className="mt-1 text-[var(--muted)]">
-            {status ||
-              "Ranked by opportunity by default — process / off-MLS inventory first, with risk and file completeness on every card."}
-          </p>
+          {status ? <p className="mt-1 text-[var(--muted)]">{status}</p> : null}
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className="text-xs uppercase tracking-wide text-[var(--muted)]">
