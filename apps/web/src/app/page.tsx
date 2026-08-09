@@ -435,7 +435,7 @@ export default function SearchPage() {
             <div className="filter-actions-primary">
               <button
                 type="button"
-                className="btn btn-primary btn-search-primary"
+                className="btn btn-secondary btn-search-primary"
                 onClick={() => {
                   setForm(DEFAULT_FORM);
                   setStatus("Filters reset to Any. Click Show matches when you want results.");
@@ -470,7 +470,7 @@ export default function SearchPage() {
               </button>
               <button
                 type="button"
-                className="btn btn-secondary filter-action-reset"
+                className="btn btn-primary filter-action-reset"
                 onClick={() => void runSearch()}
                 disabled={loading}
               >
