@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
 import { LandAlertsLoader } from "@/components/land-alerts-loader";
 import { LiveMagnifier } from "@/components/live-magnifier";
@@ -136,15 +136,43 @@ function MatchCard({
   onToggleSeen: (parcelId: string, nextChecked: boolean) => void;
 }) {
   const [flipped, setFlipped] = useState(false);
+  const [animating, setAnimating] = useState(false);
+  const [snapPose, setSnapPose] = useState(false);
+  const [mapLayoutKey, setMapLayoutKey] = useState(0);
+  const flipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const href = row.deep_link || `/parcels/${row.parcel_id}`;
 
+  useEffect(() => {
+    return () => {
+      if (flipTimer.current) clearTimeout(flipTimer.current);
+    };
+  }, []);
+
   function flipToggle() {
-    setFlipped((v) => !v);
+    if (animating) return;
+    // 3D transforms break Leaflet hit-testing — only use them during the flip,
+    // then settle to a flat face so the map matches intelligence-results behavior.
+    setSnapPose(true);
+    setAnimating(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setSnapPose(false);
+        requestAnimationFrame(() => {
+          setFlipped((v) => !v);
+        });
+      });
+    });
+    if (flipTimer.current) clearTimeout(flipTimer.current);
+    flipTimer.current = setTimeout(() => {
+      setAnimating(false);
+      setSnapPose(false);
+      setMapLayoutKey((k) => k + 1);
+    }, 680);
   }
 
   return (
     <div
-      className={`land-alert-flip${flipped ? " is-flipped" : ""}${row.status === "new" && !dimmed ? " is-new" : ""}${dimmed ? " is-dimmed" : ""}`}
+      className={`land-alert-flip${flipped ? " is-flipped" : ""}${animating ? " is-animating" : ""}${snapPose ? " is-snap-pose" : ""}${row.status === "new" && !dimmed ? " is-new" : ""}${dimmed ? " is-dimmed" : ""}`}
     >
       <div className="land-alert-flip-inner">
         <article
@@ -215,9 +243,8 @@ function MatchCard({
           <div
             className="land-alert-map"
             onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
           >
             {row.latitude != null && row.longitude != null ? (
               <ParcelMap
@@ -227,6 +254,8 @@ function MatchCard({
                 title={row.property_name}
                 height={228}
                 compact
+                scrollWheelZoom={false}
+                layoutKey={mapLayoutKey}
                 className="land-alert-parcel-map"
               />
             ) : (

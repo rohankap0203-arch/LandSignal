@@ -11,8 +11,10 @@ type Props = {
   /** Hide caption; denser chrome for embed in cards */
   compact?: boolean;
   className?: string;
-  /** Allow scroll-wheel zoom (default false on detail, true in compact cards) */
+  /** Allow scroll-wheel zoom (default false — same as intelligence results) */
   scrollWheelZoom?: boolean;
+  /** Bump to force Leaflet to remeasure after a parent layout/transform change */
+  layoutKey?: string | number;
 };
 
 export function ParcelMap({
@@ -23,11 +25,11 @@ export function ParcelMap({
   height = 360,
   compact = false,
   className = "",
-  scrollWheelZoom,
+  scrollWheelZoom = false,
+  layoutKey = 0,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
-  const wheelZoom = scrollWheelZoom ?? compact;
 
   useEffect(() => {
     if (!ref.current) return;
@@ -50,12 +52,14 @@ export function ParcelMap({
       ref.current.innerHTML = "";
       const center: [number, number] =
         latitude != null && longitude != null ? [latitude, longitude] : [39.5, -98.35];
+
+      // Match intelligence-results map interaction options exactly
       map = L.map(ref.current, {
-        scrollWheelZoom: wheelZoom,
+        scrollWheelZoom,
         dragging: true,
         doubleClickZoom: true,
-        boxZoom: !compact,
-        keyboard: !compact,
+        boxZoom: true,
+        keyboard: true,
         zoomControl: true,
         attributionControl: !compact,
       }).setView(center, latitude != null ? (compact ? 15 : 11) : 4);
@@ -66,7 +70,6 @@ export function ParcelMap({
       }
       mapRef.current = map;
 
-      // Same stack as full intelligence results: OSM base + Esri imagery overlay
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: compact ? undefined : "&copy; OpenStreetMap",
         maxZoom: 19,
@@ -75,7 +78,7 @@ export function ParcelMap({
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         {
           attribution: compact ? undefined : "Esri imagery",
-          opacity: compact ? 0.92 : 0.85,
+          opacity: 0.85,
           maxZoom: 19,
         },
       ).addTo(map);
@@ -99,8 +102,8 @@ export function ParcelMap({
 
       const bump = () => map?.invalidateSize({ animate: false });
       requestAnimationFrame(bump);
-      window.setTimeout(bump, 80);
-      window.setTimeout(bump, 240);
+      window.setTimeout(bump, 100);
+      window.setTimeout(bump, 300);
       el.addEventListener("pointerenter", bump);
       (map as unknown as { __onEnter?: () => void }).__onEnter = bump;
     }
@@ -115,11 +118,15 @@ export function ParcelMap({
       }
       mapRef.current = null;
     };
-  }, [latitude, longitude, polygon, title, compact, wheelZoom]);
+  }, [latitude, longitude, polygon, title, compact, scrollWheelZoom]);
 
   useEffect(() => {
-    mapRef.current?.invalidateSize({ animate: false });
-  }, [height]);
+    const map = mapRef.current;
+    if (!map) return;
+    map.invalidateSize({ animate: false });
+    const t = window.setTimeout(() => map.invalidateSize({ animate: false }), 50);
+    return () => window.clearTimeout(t);
+  }, [height, layoutKey]);
 
   if (latitude == null && longitude == null && !polygon) {
     return (

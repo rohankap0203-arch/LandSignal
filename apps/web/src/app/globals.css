@@ -3286,11 +3286,55 @@ a.acquire-block:hover {
 
 .land-alert-flip-inner {
   display: grid;
+}
+
+/*
+  Leaflet breaks under CSS 3D ancestors. Keep faces flat when settled so the
+  alert map pans/zooms like the intelligence-results map; use 3D only while animating.
+*/
+.land-alert-flip:not(.is-animating) .land-alert-flip-inner {
+  transform: none;
+  transform-style: flat;
+  transition: none;
+}
+
+.land-alert-flip:not(.is-animating) .land-alert-card {
+  backface-visibility: visible;
+  -webkit-backface-visibility: visible;
+  transform: none;
+}
+
+.land-alert-flip:not(.is-animating):not(.is-flipped) .land-alert-card-back {
+  display: none;
+}
+
+.land-alert-flip:not(.is-animating).is-flipped .land-alert-card-front {
+  display: none;
+}
+
+.land-alert-flip.is-animating .land-alert-flip-inner {
   transform-style: preserve-3d;
   transition: transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.land-alert-flip.is-flipped .land-alert-flip-inner {
+.land-alert-flip.is-animating.is-snap-pose .land-alert-flip-inner {
+  transition: none;
+}
+
+.land-alert-flip.is-animating.is-flipped .land-alert-flip-inner {
+  transform: rotateY(180deg);
+}
+
+.land-alert-flip.is-animating {
+  pointer-events: none;
+}
+
+.land-alert-flip.is-animating .land-alert-card {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.land-alert-flip.is-animating .land-alert-card-back {
   transform: rotateY(180deg);
 }
 
@@ -3299,8 +3343,6 @@ a.acquire-block:hover {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel, var(--bg-elevated));
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
   box-sizing: border-box;
 }
 
@@ -3315,7 +3357,6 @@ a.acquire-block:hover {
 }
 
 .land-alert-card-back {
-  transform: rotateY(180deg);
   overflow: visible;
   display: flex;
   flex-direction: column;
@@ -3527,9 +3568,8 @@ a.acquire-block:hover {
   border-radius: 8px;
   overflow: hidden;
   cursor: grab;
-  /* Keep Leaflet interactive inside flip/3D card faces */
-  transform: translateZ(0);
-  touch-action: none;
+  position: relative;
+  z-index: 1;
 }
 
 .land-alert-map:active {
@@ -3545,6 +3585,11 @@ a.acquire-block:hover {
 .land-alert-map .leaflet-container {
   font: inherit;
   background: #1a1f24;
+  cursor: grab;
+}
+
+.land-alert-map .leaflet-container:active {
+  cursor: grabbing;
 }
 
 .land-alert-map .parcel-map-shell.is-compact .leaflet-control-zoom {
@@ -3561,6 +3606,7 @@ a.acquire-block:hover {
   font-weight: 600;
   color: #111;
   background: #fff;
+  cursor: pointer;
 }
 
 .land-alert-map-fallback {
