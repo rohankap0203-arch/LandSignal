@@ -2396,3 +2396,21 @@ a.acquire-block:hover {
 .dd-compact .font-semibold {
   font-size: 0.9rem;
 }
+
+.ask-yourself {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--accent-soft) 55%, var(--bg-elevated)),
+      var(--bg-elevated) 55%,
+      color-mix(in srgb, var(--brand-soft) 12%, var(--bg-elevated))
+    );
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+}
+
+.ask-yourself-q {
+  max-width: 46rem;
+  text-wrap: pretty;
+}
