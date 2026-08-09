@@ -279,7 +279,6 @@ export function LandViewerModal({
       });
 
       if (toolRef.current === "measure") {
-        map.dragging.disable();
         map.getContainer().style.cursor = "crosshair";
       }
 
@@ -305,14 +304,9 @@ export function LandViewerModal({
     toolRef.current = tool;
     const map = mapRef.current;
     if (!map) return;
-    if (tool === "measure") {
-      map.dragging.disable();
-      map.getContainer().style.cursor = "crosshair";
-    } else {
-      map.dragging.enable();
-      map.getContainer().style.cursor = "";
-      clearMeasure();
-    }
+    map.dragging.enable();
+    map.getContainer().style.cursor = tool === "measure" ? "crosshair" : "";
+    if (tool !== "measure") clearMeasure();
   }, [tool, clearMeasure]);
 
   useEffect(() => {
