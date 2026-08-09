@@ -632,14 +632,30 @@ def _norm_toledo_forsale(raw: dict) -> dict | None:
     }
 
 
+def _nj_acres(props: dict, geom_acres: float | None, *, min_ac: float, max_ac: float = 2500.0) -> float | None:
+    """Prefer MOD-IV CALC_ACRE, but reject absurd assessor typos using geometry."""
+    calc = _fnum(props.get("CALC_ACRE"))
+    acreage = calc if calc is not None else geom_acres
+    if acreage is None:
+        return None
+    if acreage > max_ac:
+        if geom_acres is not None and min_ac <= geom_acres <= max_ac:
+            acreage = geom_acres
+        else:
+            return None
+    if acreage < min_ac:
+        return None
+    return float(acreage)
+
+
 def _norm_nj_mod4_vacant(raw: dict) -> dict | None:
     """NJ statewide MOD-IV class 1 vacant land (map screen — not a sale calendar)."""
     props = raw.get("properties") or {}
     if str(props.get("PROP_CLASS") or "").strip() != "1":
         return None
     geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
-    acreage = _fnum(props.get("CALC_ACRE")) or geom_acres
-    if acreage is None or acreage < 5:
+    acreage = _nj_acres(props, geom_acres, min_ac=5.0)
+    if acreage is None:
         return None
     impr = _fnum(props.get("IMPRVT_VAL")) or 0
     if impr > 0:
@@ -681,8 +697,8 @@ def _norm_nj_mod4_farm(raw: dict) -> dict | None:
     if str(props.get("PROP_CLASS") or "").strip().upper() != "3B":
         return None
     geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
-    acreage = _fnum(props.get("CALC_ACRE")) or geom_acres
-    if acreage is None or acreage < 10:
+    acreage = _nj_acres(props, geom_acres, min_ac=10.0)
+    if acreage is None:
         return None
     pid = props.get("PAMS_PIN") or props.get("GIS_PIN") or props.get("PIN_NODUP") or props.get("OBJECTID")
     county = (props.get("COUNTY") or "Unknown").title()
@@ -1470,6 +1486,12 @@ class PublicTaxSaleProvider(ListingProvider):
             for s in SOURCES
             if "surplus" not in s.source_id and "fairfax" not in s.source_id
         ]
+        prefer = {str(s).upper() for s in (query.get("states") or []) if s}
+        if prefer:
+            # When a state filter is active, spend budget on that state's layers first
+            preferred = [s for s in tax_sources if s.state.upper() in prefer]
+            if preferred:
+                tax_sources = preferred
         # Split the budget across counties so one mega-layer doesn't dominate
         per_source = max(300, limit // max(1, len(tax_sources)))
         start_offset = int(query.get("offset") or 0)
@@ -1553,6 +1575,11 @@ class PublicSurplusProvider(ListingProvider):
         limit = int(query.get("limit") or 200)
         out: list[dict] = []
         surplus_sources = [s for s in SOURCES if "surplus" in s.source_id or "fairfax" in s.source_id]
+        prefer = {str(s).upper() for s in (query.get("states") or []) if s}
+        if prefer:
+            preferred = [s for s in surplus_sources if s.state.upper() in prefer]
+            if preferred:
+                surplus_sources = preferred
         errors: list[str] = []
         per_source = max(50, limit // max(1, len(surplus_sources)))
         async with httpx.AsyncClient(timeout=60.0) as client:

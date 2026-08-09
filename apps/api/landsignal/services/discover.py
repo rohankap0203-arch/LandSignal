@@ -95,9 +95,15 @@ async def discover_opportunities(
                 "limit": min(8000, max(500, limit)),
                 "min_acres": min_acres,
                 "offset": 0,
+                "states": states,
             }
         ),
-        surplus.search_listings({"limit": min(800, max(50, limit // 8))}),
+        surplus.search_listings(
+            {
+                "limit": min(800, max(50, limit // 8)),
+                "states": states,
+            }
+        ),
     )
 
     listings: list[dict] = []
