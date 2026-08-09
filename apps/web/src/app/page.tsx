@@ -380,7 +380,7 @@ export default function SearchPage() {
         <div className="filter-actions">
           <div className="filter-actions-main">
             <div className="filter-map-hero" aria-hidden title="Map scout">
-              <MapPinMark className="filter-map-hero-svg" />
+              <MapPinMark className="filter-map-hero-svg" tone="light" />
             </div>
             <div className="filter-actions-buttons">
               <button
