@@ -2,14 +2,24 @@
 
 import { useId, useState } from "react";
 
-export function HelpTip({ title, body }: { title: string; body: string }) {
+export function HelpTip({
+  title,
+  body,
+  tone = "hero",
+}: {
+  title: string;
+  body: string;
+  /** hero = search filters; panel = light intelligence pages */
+  tone?: "hero" | "panel";
+}) {
   const [open, setOpen] = useState(false);
   const id = useId();
   return (
-    <span className="help-tip">
+    <span className={`help-tip tone-${tone}`}>
       <button
         type="button"
         className="help-tip-btn"
+        aria-label={title}
         aria-describedby={open ? id : undefined}
         aria-expanded={open}
         onClick={(e) => {

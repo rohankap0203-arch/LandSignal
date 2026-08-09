@@ -280,13 +280,13 @@ export default function ParcelIntelligencePage() {
             <div className="scroll-to-label">Scroll-to</div>
             <div className="scroll-to-row">
               {[
+                { id: "sec-bidding", label: "Bidding by price" },
                 { id: "sec-value", label: "Value path" },
                 { id: "sec-return", label: "Return" },
                 { id: "sec-why", label: "Why this land" },
                 { id: "sec-score", label: "Score parts" },
                 { id: "sec-land", label: "Land checks" },
                 { id: "sec-ask", label: "Ask yourself" },
-                { id: "sec-bidding", label: "Bidding by price" },
               ].map((s) => (
                 <button
                   key={s.id}
@@ -400,10 +400,6 @@ export default function ParcelIntelligencePage() {
             ) : null}
           </div>
 
-          <div id="sec-bidding" className="mt-5 scroll-mt-20">
-            <SignalCockpit cockpit={cockpit} />
-          </div>
-
           <div className="mt-4 flex flex-wrap gap-2">
             {links
               .filter(
@@ -421,6 +417,10 @@ export default function ParcelIntelligencePage() {
               ))}
           </div>
         </div>
+      </section>
+
+      <section id="sec-bidding" className="panel p-5 scroll-mt-20">
+        <SignalCockpit cockpit={cockpit} />
       </section>
 
       <section id="sec-value" className="panel p-5 scroll-mt-20">

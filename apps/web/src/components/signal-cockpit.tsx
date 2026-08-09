@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { HelpTip } from "@/components/filter-field";
 
 type AnyRec = Record<string, unknown>;
 
@@ -49,8 +50,15 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
   return (
     <div className="signal-cockpit">
       <div>
-        <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
-          Who’s still bidding at each price
+        <div className="flex items-center gap-2">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
+            Who’s still bidding at each price
+          </div>
+          <HelpTip
+            tone="panel"
+            title="What this chart shows"
+            body="As the price climbs, fewer buyers stay in. Each point is a price level on this file — from the start bid toward our value — and roughly how much competition is still there. Use it to see where the crowd thins and what a realistic finish looks like, not as a promise of the sale price."
+          />
         </div>
         <h3 className="display text-lg font-semibold">
           {String(cockpit.subtitle || "Price up → fewer buyers left")}

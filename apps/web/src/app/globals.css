@@ -221,6 +221,11 @@ select {
   display: inline-flex;
 }
 
+.help-tip.tone-panel {
+  position: relative;
+  z-index: 2;
+}
+
 .help-tip-btn {
   width: 16px;
   height: 16px;
@@ -233,6 +238,19 @@ select {
   line-height: 1;
   padding: 0;
   cursor: pointer;
+}
+
+.help-tip.tone-panel .help-tip-btn {
+  border-color: color-mix(in srgb, var(--brand) 35%, var(--line));
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-elevated));
+  color: var(--brand);
+}
+
+.help-tip.tone-panel .help-tip-pop {
+  left: auto;
+  right: 0;
+  width: min(20rem, 78vw);
+  bottom: calc(100% + 6px);
 }
 
 /* Same width as the field’s dropdown; sits above the control, not clipped */
