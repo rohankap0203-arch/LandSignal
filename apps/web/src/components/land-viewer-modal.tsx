@@ -759,6 +759,11 @@ export function LandViewerModal({
             >
               Measure
             </button>
+            {tool === "measure" ? (
+              <button type="button" onClick={clearMeasure} title="Clear measure points">
+                Clear
+              </button>
+            ) : null}
             <button
               type="button"
               className={showBoundary ? "is-on" : undefined}
@@ -802,11 +807,6 @@ export function LandViewerModal({
             <button type="button" onClick={copyCoords} disabled={!hasGeo}>
               {copied ? "Copied" : "Copy pin"}
             </button>
-            {tool === "measure" ? (
-              <button type="button" onClick={clearMeasure}>
-                Clear measure
-              </button>
-            ) : null}
           </div>
 
           <div className="land-viewer-tool-group" aria-label="Owner links">

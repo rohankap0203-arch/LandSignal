@@ -8,11 +8,9 @@ import { MapPinMark } from "@/components/map-pin-mark";
 
 const NAV = [
   { href: "/", label: "Search" },
-  { href: "/map", label: "Map" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/alerts", label: "Land Alerts" },
   { href: "/profile", label: "My criteria" },
-  { href: "/ingest", label: "Add land" },
 ];
 
 function navActive(pathname: string, href: string) {
@@ -88,6 +86,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               className="shell-menu-toggle"
+              data-open={menuOpen ? "true" : "false"}
               aria-expanded={menuOpen}
               aria-controls={menuId}
               aria-label={menuOpen ? "Close site menu" : "Open site menu"}
@@ -96,13 +95,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <span className="shell-menu-toggle-bars" data-open={menuOpen ? "true" : "false"} />
             </button>
             <AccountMenu />
-            <button
-              type="button"
-              className="btn btn-ghost text-sm shell-theme-toggle"
-              onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
-            >
-              {theme === "light" ? "Dark" : "Light"}
-            </button>
           </div>
         </div>
         {menuOpen ? (
@@ -128,6 +120,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   </Link>
                 );
               })}
+              <button
+                type="button"
+                className="shell-menu-link shell-menu-theme"
+                onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
+              >
+                {theme === "light" ? "Dark mode" : "Light mode"}
+              </button>
               <Link href="/login" className="shell-menu-link shell-menu-link-auth" onClick={() => setMenuOpen(false)}>
                 Sign in / Create account
               </Link>

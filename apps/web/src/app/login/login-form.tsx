@@ -31,23 +31,26 @@ function AppleGlyph() {
 }
 
 export function LoginForm({
-  googleProvider,
-  appleProvider,
+  googleLive,
+  appleLive,
 }: {
-  googleProvider: "google" | "google-demo";
-  appleProvider: "apple" | "apple-demo";
+  googleLive: boolean;
+  appleLive: boolean;
 }) {
   const router = useRouter();
   const params = useSearchParams();
   const callbackUrl = params.get("callbackUrl") || "/alerts";
   const initialMode = params.get("mode") === "signup" ? "signup" : "signin";
+  const authError = params.get("error");
 
   const [mode, setMode] = useState<Mode>(initialMode);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(
+    authError ? "Sign-in was cancelled or failed. Try again." : "",
+  );
 
   const title = useMemo(
     () => (mode === "signup" ? "Create your account" : "Welcome back"),
@@ -91,28 +94,31 @@ export function LoginForm({
     }
   }
 
-  async function onSocial(provider: "google" | "apple" | "google-demo" | "apple-demo") {
+  async function onSocial(provider: "google" | "apple") {
     setError("");
     setBusy(provider);
     try {
-      if (provider.endsWith("-demo")) {
-        const res = await signIn(provider, {
-          redirect: false,
-          callbackUrl,
-          email: provider.startsWith("google") ? "investor@gmail.com" : "investor@icloud.com",
-          name: provider.startsWith("google") ? "Google Investor" : "Apple Investor",
-        });
-        if (res?.error) {
-          setError("Could not continue with that provider.");
-          return;
-        }
-        router.push(callbackUrl);
-        router.refresh();
+      const live = provider === "google" ? googleLive : appleLive;
+      if (live) {
+        // Real OAuth — full redirect to Google / Apple
+        await signIn(provider, { callbackUrl, redirect: true });
         return;
       }
-      await signIn(provider, { callbackUrl });
+      // Local social session (no vendor secrets configured in this environment)
+      const res = await signIn(provider, {
+        redirect: false,
+        callbackUrl,
+        email: provider === "google" ? "investor@gmail.com" : "investor@icloud.com",
+        name: provider === "google" ? "Google Investor" : "Apple Investor",
+      });
+      if (res?.error) {
+        setError(`Could not continue with ${provider === "google" ? "Google" : "Apple"}.`);
+        return;
+      }
+      router.push(callbackUrl);
+      router.refresh();
     } catch {
-      setError("Could not continue with that provider.");
+      setError(`Could not continue with ${provider === "google" ? "Google" : "Apple"}.`);
     } finally {
       setBusy(null);
     }
@@ -161,19 +167,19 @@ export function LoginForm({
             type="button"
             className="auth-social-btn"
             disabled={Boolean(busy)}
-            onClick={() => void onSocial(googleProvider)}
+            onClick={() => void onSocial("google")}
           >
             <GoogleGlyph />
-            <span>{busy?.includes("google") ? "Connecting…" : "Continue with Google"}</span>
+            <span>{busy === "google" ? "Connecting…" : "Continue with Google"}</span>
           </button>
           <button
             type="button"
             className="auth-social-btn auth-social-apple"
             disabled={Boolean(busy)}
-            onClick={() => void onSocial(appleProvider)}
+            onClick={() => void onSocial("apple")}
           >
             <AppleGlyph />
-            <span>{busy?.includes("apple") ? "Connecting…" : "Continue with Apple"}</span>
+            <span>{busy === "apple" ? "Connecting…" : "Continue with Apple"}</span>
           </button>
         </div>
 

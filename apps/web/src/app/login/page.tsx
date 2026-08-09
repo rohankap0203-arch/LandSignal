@@ -5,7 +5,7 @@ import { LoginForm } from "./login-form";
 export default function LoginPage() {
   return (
     <Suspense fallback={<div className="auth-page" />}>
-      <LoginForm googleProvider={authProviders.google} appleProvider={authProviders.apple} />
+      <LoginForm googleLive={authProviders.googleLive} appleLive={authProviders.appleLive} />
     </Suspense>
   );
 }

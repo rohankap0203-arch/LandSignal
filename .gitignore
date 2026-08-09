@@ -15,3 +15,6 @@ pgdata/
 .vscode/
 apps/web/public/mapbox*
 apps/web/.data/
+
+.env.local
+**/.env.local

@@ -111,6 +111,8 @@ select {
 }
 
 .shell-menu-toggle {
+  position: relative;
+  z-index: 1002;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -121,6 +123,20 @@ select {
   background: var(--bg-elevated);
   color: var(--ink);
   flex: 0 0 auto;
+  cursor: pointer;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.shell-menu-toggle:hover {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+  color: var(--ink);
+}
+
+.shell-menu-toggle[data-open="true"] {
+  border-color: var(--ink);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--ink) 16%, transparent);
 }
 
 .shell-menu-toggle-bars,
@@ -170,7 +186,7 @@ select {
 .shell-menu-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 998;
+  z-index: 1000;
   border: 0;
   background: color-mix(in srgb, var(--ink) 28%, transparent);
 }
@@ -180,7 +196,7 @@ select {
   top: calc(100% + 0.35rem);
   right: 0.75rem;
   left: 0.75rem;
-  z-index: 999;
+  z-index: 1001;
   display: grid;
   gap: 0.2rem;
   padding: 0.55rem;
@@ -214,15 +230,27 @@ select {
   font-weight: 500;
 }
 
+.shell-menu-theme {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  margin-top: 0.15rem;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+}
+
 @media (min-width: 900px) {
   .shell-nav {
     display: flex;
   }
 
-  .shell-menu-toggle,
-  .shell-menu-backdrop,
+  /* Keep the menu button on desktop so theme lives in the same dropdown */
   .shell-menu-panel {
-    display: none !important;
+    left: auto;
+    width: min(22rem, calc(100vw - 1.5rem));
   }
 }
 
@@ -3900,16 +3928,22 @@ a.acquire-block:hover {
 
 .land-viewer-tools {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 0.28rem 0.45rem;
   padding: 0.35rem 0.75rem;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-soft) 80%, var(--bg-elevated));
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .land-viewer-tool-group {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex: 0 0 auto;
   gap: 0.18rem;
   padding: 0.08rem;
   border-radius: 8px;
@@ -4345,8 +4379,7 @@ a.acquire-block:hover {
     gap: 0.2rem;
   }
 
-  .account-create,
-  .shell-theme-toggle {
+  .account-create {
     display: none !important;
   }
 

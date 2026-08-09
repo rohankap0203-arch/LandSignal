@@ -14,23 +14,52 @@ const appleConfigured = Boolean(process.env.AUTH_APPLE_ID && process.env.AUTH_AP
 /** When OAuth secrets are missing, Google/Apple buttons still create a real local session. */
 const demoOauth = process.env.AUTH_DEMO_OAUTH !== "false";
 
+function socialCredentials(provider: "google" | "apple") {
+  const defaults =
+    provider === "google"
+      ? { email: "investor@gmail.com", name: "Google Investor" }
+      : { email: "investor@icloud.com", name: "Apple Investor" };
+
+  return Credentials({
+    id: provider,
+    name: provider === "google" ? "Google" : "Apple",
+    credentials: {
+      email: { label: "Email", type: "email" },
+      name: { label: "Name", type: "text" },
+    },
+    async authorize(credentials) {
+      const email = String(credentials?.email || defaults.email).trim().toLowerCase();
+      const name = String(credentials?.name || defaults.name);
+      if (!email) return null;
+      const user = upsertSocialUser({ email, name, provider });
+      return { id: user.id, email: user.email, name: user.name };
+    },
+  });
+}
+
 const providers = [
   ...(googleConfigured
     ? [
         Google({
           clientId: process.env.AUTH_GOOGLE_ID!,
           clientSecret: process.env.AUTH_GOOGLE_SECRET!,
+          allowDangerousEmailAccountLinking: true,
         }),
       ]
-    : []),
+    : demoOauth
+      ? [socialCredentials("google")]
+      : []),
   ...(appleConfigured
     ? [
         Apple({
           clientId: process.env.AUTH_APPLE_ID!,
           clientSecret: process.env.AUTH_APPLE_SECRET!,
+          allowDangerousEmailAccountLinking: true,
         }),
       ]
-    : []),
+    : demoOauth
+      ? [socialCredentials("apple")]
+      : []),
   Credentials({
     id: "credentials",
     name: "Email",
@@ -60,43 +89,6 @@ const providers = [
       }
     },
   }),
-  // Demo Google / Apple when real OAuth apps are not configured yet
-  ...(demoOauth && !googleConfigured
-    ? [
-        Credentials({
-          id: "google-demo",
-          name: "Google",
-          credentials: {
-            email: { label: "Email", type: "email" },
-            name: { label: "Name", type: "text" },
-          },
-          async authorize(credentials) {
-            const email = String(credentials?.email || "investor@gmail.com").trim().toLowerCase();
-            const name = String(credentials?.name || "Google Investor");
-            const user = upsertSocialUser({ email, name, provider: "google" });
-            return { id: user.id, email: user.email, name: user.name };
-          },
-        }),
-      ]
-    : []),
-  ...(demoOauth && !appleConfigured
-    ? [
-        Credentials({
-          id: "apple-demo",
-          name: "Apple",
-          credentials: {
-            email: { label: "Email", type: "email" },
-            name: { label: "Name", type: "text" },
-          },
-          async authorize(credentials) {
-            const email = String(credentials?.email || "investor@icloud.com").trim().toLowerCase();
-            const name = String(credentials?.name || "Apple Investor");
-            const user = upsertSocialUser({ email, name, provider: "apple" });
-            return { id: user.id, email: user.email, name: user.name };
-          },
-        }),
-      ]
-    : []),
 ];
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -104,30 +96,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   pages: {
     signIn: "/login",
+    error: "/login",
   },
   providers,
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === "google" || account?.provider === "apple") {
-        const email = user.email || `${account.provider}-${account.providerAccountId}@users.landsignal.local`;
-        const name = user.name || (account.provider === "google" ? "Google user" : "Apple user");
-        const saved = upsertSocialUser({
-          email,
-          name,
-          provider: account.provider,
-          subject: account.providerAccountId,
-        });
-        user.id = saved.id;
-        user.email = saved.email;
-        user.name = saved.name;
+        // Real OAuth providers — persist locally so alerts/watchlist stay keyed to a stable id
+        if (account.type === "oauth" || account.type === "oidc") {
+          const email =
+            user.email || `${account.provider}-${account.providerAccountId}@users.landsignal.local`;
+          const name = user.name || (account.provider === "google" ? "Google user" : "Apple user");
+          const saved = upsertSocialUser({
+            email,
+            name,
+            provider: account.provider,
+            subject: account.providerAccountId,
+          });
+          user.id = saved.id;
+          user.email = saved.email;
+          user.name = saved.name;
+        }
       }
       return true;
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user) {
         token.sub = user.id || token.sub;
         token.email = user.email;
         token.name = user.name;
+      }
+      if (account?.provider) {
+        token.provider = account.provider;
       }
       if (token.email && !token.sub) {
         const existing = findUserByEmail(String(token.email));
@@ -148,8 +148,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 });
 
 export const authProviders = {
-  google: googleConfigured ? ("google" as const) : ("google-demo" as const),
-  apple: appleConfigured ? ("apple" as const) : ("apple-demo" as const),
+  google: "google" as const,
+  apple: "apple" as const,
   googleLive: googleConfigured,
   appleLive: appleConfigured,
 };
