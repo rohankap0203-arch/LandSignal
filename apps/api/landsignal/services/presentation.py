@@ -228,15 +228,22 @@ def build_return_thesis(
         if score.best_strategy
         else "Land"
     )
+    interest = (
+        "Strong interest"
+        if conviction == "HIGH"
+        else "Moderate interest"
+        if conviction == "MEDIUM"
+        else "Worth watching"
+    )
     if entry and est and gap_pct is not None:
         thesis = (
-            f"{conviction} interest · plan on ~${entry:,.0f} vs our value ${est:,.0f} "
+            f"{interest} · plan on ~${entry:,.0f} vs our value ${est:,.0f} "
             f"({gap_pct:+.0f}%) · best use {strat}"
         )
     elif est:
-        thesis = f"{conviction} interest · our value ~${est:,.0f} · best use {strat}"
+        thesis = f"{interest} · our value ~${est:,.0f} · best use {strat}"
     else:
-        thesis = f"{conviction} interest · {strat} looks possible — confirm local prices"
+        thesis = f"{interest} · {strat} looks possible — confirm local prices"
     return thesis, conviction
 
 

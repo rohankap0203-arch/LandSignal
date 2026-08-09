@@ -544,9 +544,13 @@ def build_intelligence_brief(
     return_case = {
         "conviction": conviction,
         "headline": (
-            f"{conviction} interest · buy near {_money(entry)} · our value {_money(est)}"
+            f"{'Strong interest' if conviction == 'HIGH' else 'Moderate interest' if conviction == 'MEDIUM' else 'Worth watching'}"
+            f" · buy near {_money(entry)} · our value {_money(est)}"
             if entry and est
-            else f"{conviction} interest · best use {strategy.replace('_', ' ').title()}"
+            else (
+                f"{'Strong interest' if conviction == 'HIGH' else 'Moderate interest' if conviction == 'MEDIUM' else 'Worth watching'}"
+                f" · best use {strategy.replace('_', ' ').title()}"
+            )
         ),
         "entry_usd": entry,
         "mark_usd": est,
