@@ -55,7 +55,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <header className="shell-header">
         <div className="shell-header-inner">
           <div className="shell-header-left">
-            <Link href="/" className="shell-brand">
+            <Link
+              href="/"
+              className="shell-brand"
+              aria-label="LandSignal home"
+              title="Back to home"
+              onClick={() => setMenuOpen(false)}
+            >
               <MapPinMark className="shell-brand-mark" />
               <span className="shell-brand-name display font-semibold text-[var(--brand)]">LandSignal</span>
               <span className="shell-brand-tagline hidden text-xs text-[var(--muted)] lg:inline">
