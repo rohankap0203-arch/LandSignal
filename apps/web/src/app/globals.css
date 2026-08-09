@@ -291,39 +291,47 @@ select {
 }
 
 .filter-actions-main {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 56px;
+  overflow: hidden;
+}
+
+.filter-actions-buttons {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  min-width: 0;
 }
 
 .filter-map-hero {
-  position: relative;
-  flex: 1 1 160px;
-  align-self: stretch;
-  min-width: 140px;
-  min-height: 168px;
-  max-height: 210px;
-  overflow: hidden;
+  position: absolute;
+  inset: -36px -8% -36px 12%;
+  z-index: 0;
   pointer-events: none;
-  color: rgba(247, 250, 248, 0.82);
+  color: rgba(247, 250, 248, 0.55);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  margin-left: 4px;
+  justify-content: flex-end;
+  overflow: hidden;
 }
 
 .filter-map-hero-svg {
   display: block;
-  height: 100%;
+  height: min(210px, 52vw);
   width: auto;
   max-width: none;
-  margin-right: -18%;
-  transform: translateX(4%);
+  margin-right: -6%;
+  flex-shrink: 0;
 }
 
 .filter-inventory-note {
+  position: relative;
+  z-index: 1;
   font-size: 0.875rem;
   line-height: 1.35;
   color: rgba(247, 250, 248, 0.7);
@@ -338,8 +346,8 @@ select {
 }
 
 .shell-brand-mark {
-  width: 1.65rem;
-  height: 1.45rem;
+  width: 1.7rem;
+  height: 1.5rem;
   color: var(--brand);
   flex: 0 0 auto;
   display: block;
@@ -351,20 +359,17 @@ select {
 
 @media (max-width: 720px) {
   .filter-map-hero {
-    flex-basis: 120px;
-    min-width: 110px;
-    min-height: 132px;
-    max-height: 160px;
-    margin-left: 0;
+    inset: -28px -12% -28px 8%;
   }
 
   .filter-map-hero-svg {
-    margin-right: -22%;
+    height: min(160px, 58vw);
+    margin-right: -10%;
   }
 
   .shell-brand-mark {
-    width: 1.4rem;
-    height: 1.22rem;
+    width: 1.45rem;
+    height: 1.28rem;
   }
 }
 

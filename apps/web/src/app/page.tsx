@@ -379,41 +379,43 @@ export default function SearchPage() {
 
         <div className="filter-actions">
           <div className="filter-actions-main">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => void runSearch()}
-              disabled={loading}
-            >
-              {loading ? "Searching…" : "Show matches"}
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={loading}
-              onClick={() => {
-                const next = { ...DEFAULT_FORM, sort: "score_desc" };
-                setForm(next);
-                void runSearch(next);
-              }}
-            >
-              Top opportunities
-            </button>
-            <button type="button" className="btn btn-secondary" onClick={scanFresh} disabled={scanning}>
-              {scanning ? "Starting refresh…" : "Refresh live inventory"}
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => {
-                setForm(DEFAULT_FORM);
-                setStatus("Filters reset to Any. Click Show matches when you want results.");
-              }}
-            >
-              Reset to Any
-            </button>
             <div className="filter-map-hero" aria-hidden title="Map scout">
               <MapPinMark className="filter-map-hero-svg" />
+            </div>
+            <div className="filter-actions-buttons">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void runSearch()}
+                disabled={loading}
+              >
+                {loading ? "Searching…" : "Show matches"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={loading}
+                onClick={() => {
+                  const next = { ...DEFAULT_FORM, sort: "score_desc" };
+                  setForm(next);
+                  void runSearch(next);
+                }}
+              >
+                Top opportunities
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={scanFresh} disabled={scanning}>
+                {scanning ? "Starting refresh…" : "Refresh live inventory"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setForm(DEFAULT_FORM);
+                  setStatus("Filters reset to Any. Click Show matches when you want results.");
+                }}
+              >
+                Reset to Any
+              </button>
             </div>
           </div>
           {meta?.inventory_count != null && (
