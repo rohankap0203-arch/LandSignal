@@ -377,45 +377,67 @@ export default function SearchPage() {
         </div>
 
         <div className="filter-actions">
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => void runSearch()}
-            disabled={loading}
-          >
-            {loading ? "Searching…" : "Show matches"}
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={loading}
-            onClick={() => {
-              const next = { ...DEFAULT_FORM, sort: "score_desc" };
-              setForm(next);
-              void runSearch(next);
-            }}
-          >
-            Top opportunities
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={scanFresh} disabled={scanning}>
-            {scanning ? "Starting refresh…" : "Refresh live inventory"}
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => {
-              setForm(DEFAULT_FORM);
-              setStatus("Filters reset to Any. Click Show matches when you want results.");
-            }}
-          >
-            Reset to Any
-          </button>
-          {meta?.inventory_count != null && (
-            <span className="self-center text-sm text-white/70">
-              Live inventory: {meta.inventory_count} parcels
-              {inventoryStates.length ? ` across ${inventoryStates.length} states (${inventoryStates.join(", ")})` : ""}
-            </span>
-          )}
+          <div className="filter-actions-main">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => void runSearch()}
+              disabled={loading}
+            >
+              {loading ? "Searching…" : "Show matches"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={loading}
+              onClick={() => {
+                const next = { ...DEFAULT_FORM, sort: "score_desc" };
+                setForm(next);
+                void runSearch(next);
+              }}
+            >
+              Top opportunities
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={scanFresh} disabled={scanning}>
+              {scanning ? "Starting refresh…" : "Refresh live inventory"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setForm(DEFAULT_FORM);
+                setStatus("Filters reset to Any. Click Show matches when you want results.");
+              }}
+            >
+              Reset to Any
+            </button>
+            {meta?.inventory_count != null && (
+              <span className="self-center text-sm text-white/70">
+                Live inventory: {meta.inventory_count} parcels
+                {inventoryStates.length ? ` across ${inventoryStates.length} states (${inventoryStates.join(", ")})` : ""}
+              </span>
+            )}
+          </div>
+          <div className="filter-land-silhouettes" aria-hidden>
+            <svg viewBox="0 0 220 72" className="filter-land-svg">
+              <path
+                className="filter-land-outline a"
+                d="M18 48 C28 22, 52 14, 78 20 C96 24, 108 38, 124 34 C142 28, 158 12, 178 18 C196 24, 206 40, 204 54 L188 58 C170 50, 154 56, 138 58 C112 62, 90 52, 68 54 C48 56, 32 60, 22 56 Z"
+              />
+              <path
+                className="filter-land-outline b"
+                d="M36 56 C44 40, 62 34, 84 38 C104 42, 118 30, 136 28 C154 26, 170 36, 186 44 L176 58 C158 50, 140 54, 122 56 C98 58, 76 52, 54 54 Z"
+              />
+              <path
+                className="filter-land-contour"
+                d="M30 44 C58 36, 86 46, 118 40 S170 34, 198 42"
+              />
+              <path
+                className="filter-land-contour"
+                d="M40 50 C70 46, 100 52, 132 48 S176 44, 200 50"
+              />
+            </svg>
+          </div>
         </div>
       </section>
 

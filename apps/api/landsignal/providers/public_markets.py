@@ -254,33 +254,376 @@ def _norm_wyco(raw: dict) -> dict | None:
     }
 
 
+def _prop(props: dict, *names: str) -> Any:
+    """Read a field by exact name or schema-qualified suffix (Toledo-style)."""
+    for n in names:
+        if n in props and props[n] is not None:
+            return props[n]
+    for n in names:
+        for k, v in props.items():
+            if v is None:
+                continue
+            if k.endswith(f".{n}") or k == n:
+                return v
+    return None
+
+
+def _fnum(v: Any) -> float | None:
+    try:
+        if v is None or v == "":
+            return None
+        return float(v)
+    except Exception:
+        return None
+
+
 def _norm_mahoning(raw: dict) -> dict | None:
     props = raw.get("properties") or {}
     geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
-    acreage = geom_acres
+    acreage = _fnum(props.get("ACRES")) or geom_acres
     if acreage is not None and acreage < 0.2:
         return None
     pid = props.get("PARCEL_ID") or props.get("PARCEL_ID_1") or props.get("OBJECTID")
     market = props.get("TOTALMARKET") or props.get("MARKETLAND")
+    addr = props.get("MVP_ADDRESS") or f"Mahoning County, OH · {pid}"
     return {
         "provider_id": "public_tax_sale",
         "external_id": f"mahoning:{pid}",
-        "title": f"Mahoning OH land-bank / delinquent · {pid}",
+        "title": f"Mahoning OH land-bank · {float(acreage):.2f} ac · {pid}"
+        if acreage is not None
+        else f"Mahoning OH land-bank · {pid}",
         "description": (
-            f"Mahoning County, OH tax-delinquent / land-bank inventory (public GIS). "
+            f"Mahoning County, OH land-bank / tax-delinquent inventory (public GIS). "
             f"Land use={props.get('LANDUSE') or 'n/a'}. "
             f"Market mark=${market}. Distressed public inventory — not MLS."
         ),
         "asking_price_usd": float(market) if market is not None else None,
-        "acreage": acreage,
+        "acreage": float(acreage) if acreage is not None else None,
         "state": "OH",
         "county": "Mahoning",
         "apn": str(pid),
-        "address": f"Mahoning County, OH · {pid}",
+        "address": str(addr),
         "latitude": lat,
         "longitude": lon,
         "polygon": polygon,
         "source_url": "https://www.mahoningcountyoh.gov/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_gadsden_lb(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _fnum(props.get("acres")) or geom_acres
+    if acreage is not None and acreage < 0.15:
+        return None
+    pid = props.get("parcelid") or props.get("pin") or props.get("objectid")
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"gadsden:{pid}",
+        "title": f"Gadsden AL land bank · {float(acreage):.2f} ac · {pid}"
+        if acreage is not None
+        else f"Gadsden AL land bank · {pid}",
+        "description": (
+            f"City of Gadsden, AL land-bank parcel (public GIS). "
+            f"Owner mark={props.get('ownername') or 'Land Bank'}. "
+            "Public land-bank channel — not MLS."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage) if acreage is not None else None,
+        "state": "AL",
+        "county": "Etowah",
+        "apn": str(pid),
+        "address": f"Gadsden, AL · {pid}",
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": props.get("proplink") or "https://www.cityofgadsden.com/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_hartford_surplus(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    plan = (props.get("PROPERTY_PLAN") or "").strip().lower()
+    tax_deed = (props.get("Aquired_via_Tax_Deed") or "").upper()
+    if "surplus" not in plan and "land bank" not in plan and "TAX DEED" not in tax_deed:
+        return None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    sqft = _fnum(props.get("LOT_SIZE___SQ__FT__"))
+    acreage = (sqft / 43560.0) if sqft else geom_acres
+    if acreage is not None and acreage < 0.05:
+        return None
+    pid = props.get("PARCEL_NUMBER") or props.get("GIS_PIN") or props.get("OBJECTID")
+    street = props.get("gisaddress") or props.get("STREET") or ""
+    return {
+        "provider_id": "public_surplus",
+        "external_id": f"hartford:{pid}",
+        "title": f"Hartford CT surplus / land bank · {street or pid}",
+        "description": (
+            f"City of Hartford, CT DDS-managed property (public GIS). "
+            f"Plan={props.get('PROPERTY_PLAN')}. Tax deed note={props.get('Aquired_via_Tax_Deed') or 'n/a'}. "
+            "Municipal surplus / land-bank path — not MLS."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage) if acreage is not None else None,
+        "state": "CT",
+        "county": "Hartford",
+        "apn": str(pid),
+        "address": f"{street}, Hartford, CT".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.hartford.gov/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_baltimore_taxsale(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    # Shape__Area often web-mercator m²; prefer geometry acres after outSR=4326
+    acreage = geom_acres
+    if acreage is not None and acreage < 0.08:
+        return None  # skip tiny urban stubs; keep larger tax-sale tracts
+    pid = props.get("Blocklot") or props.get("ObjectID")
+    lien = _fnum(props.get("LIEN_AMOUNT"))
+    addr = props.get("Address") or ""
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"balt:{pid}",
+        "title": f"Baltimore MD tax sale · {addr or pid}",
+        "description": (
+            f"Baltimore City, MD tax-sale inventory (public GIS). "
+            f"Owner mark={props.get('Owner') or 'n/a'}. Lien mark=${lien}. "
+            "Public tax-sale channel — not MLS."
+        ),
+        "asking_price_usd": lien if lien and lien > 0 else None,
+        "acreage": float(acreage) if acreage is not None else 0.1,
+        "state": "MD",
+        "county": "Baltimore City",
+        "apn": str(pid),
+        "address": f"{addr}, Baltimore, MD".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.baltimorecity.gov/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_ramsey_forfeit(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    # Point layer often — use a workable default when acres missing
+    acreage = geom_acres if geom_acres and geom_acres > 0.01 else 0.25
+    pid = props.get("PIN") or props.get("OBJECTID")
+    bid = _fnum(props.get("MinimumBid"))
+    addr = props.get("Address") or props.get("AddressDescription") or ""
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"ramsey:{pid}",
+        "title": f"Ramsey MN tax-forfeit · {addr or pid}",
+        "description": (
+            f"Ramsey County, MN tax-forfeited land (public GIS). "
+            f"Status={props.get('Status') or 'n/a'}. Min bid=${bid}. "
+            f"Municipality={props.get('Municipality') or 'n/a'}. Public forfeit channel — not MLS."
+        ),
+        "asking_price_usd": bid,
+        "acreage": float(acreage),
+        "state": "MN",
+        "county": "Ramsey",
+        "apn": str(pid),
+        "address": f"{addr}, Ramsey County, MN".strip(", "),
+        "latitude": lat or _fnum(props.get("Latitude")),
+        "longitude": lon or _fnum(props.get("Longitude")),
+        "polygon": polygon,
+        "source_url": "https://www.ramseycounty.us/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_dakota_forfeit(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _fnum(props.get("TOTAL_ACRES")) or geom_acres
+    if acreage is not None and acreage < 0.25:
+        return None
+    pid = props.get("TAXPIN") or props.get("Parcel_ID") or props.get("OBJECTID")
+    addr = props.get("SITEADDRESS") or ""
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"dakota:{pid}",
+        "title": f"Dakota MN tax-forfeit · {float(acreage):.2f} ac · {addr or pid}"
+        if acreage is not None
+        else f"Dakota MN tax-forfeit · {addr or pid}",
+        "description": (
+            f"Dakota County, MN tax-forfeit inventory (public GIS). "
+            f"Last owner={props.get('Last_Owner') or 'n/a'}. Public forfeit channel — not MLS."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage) if acreage is not None else None,
+        "state": "MN",
+        "county": "Dakota",
+        "apn": str(pid),
+        "address": f"{addr}, Dakota County, MN".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.co.dakota.mn.us/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_kc_landbank(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = geom_acres
+    if acreage is not None and acreage < 0.08:
+        return None
+    pid = props.get("APN") or props.get("KIVAPIN") or props.get("OBJECTID")
+    addr = props.get("ADDRESS") or props.get("ADDR") or ""
+    return {
+        "provider_id": "public_surplus",
+        "external_id": f"kcmo:{pid}",
+        "title": f"Kansas City MO land bank · {addr or pid}",
+        "description": (
+            f"Kansas City, MO land-bank inventory (public GIS). "
+            f"Owner={props.get('OWN_NAME') or 'Land Bank'}. Land use={props.get('LANDUSECODE') or 'n/a'}. "
+            "Municipal land-bank channel — not MLS."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage) if acreage is not None else 0.12,
+        "state": "MO",
+        "county": "Jackson",
+        "apn": str(pid),
+        "address": f"{addr}, Kansas City, MO".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.kcmo.gov/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_stl_lra(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    if str(props.get("LRA") or "").lower() not in ("yes", "y", "true", "1"):
+        # Still allow LCRA-held if LRA flag blank
+        if str(props.get("LCRA") or "").lower() not in ("yes", "y", "true", "1"):
+            return None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _fnum(props.get("Acres")) or geom_acres
+    if acreage is not None and acreage < 0.15:
+        return None
+    pid = props.get("Handle") or props.get("OBJECTID")
+    addr = props.get("Address") or ""
+    return {
+        "provider_id": "public_surplus",
+        "external_id": f"stlra:{pid}",
+        "title": f"St. Louis MO LRA · {float(acreage):.2f} ac · {addr or pid}"
+        if acreage is not None
+        else f"St. Louis MO LRA · {addr or pid}",
+        "description": (
+            f"St. Louis, MO Land Reutilization Authority / LCRA inventory (public GIS). "
+            f"Neighborhood={props.get('Neighborhood') or 'n/a'}. "
+            "Public land-bank channel — not MLS."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage) if acreage is not None else None,
+        "state": "MO",
+        "county": "St. Louis City",
+        "apn": str(pid),
+        "address": f"{addr}, St. Louis, MO".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.stlouis-mo.gov/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_lancaster_taxsale(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    # Prefer vacant / land-like tax-sale records over dense residential flips
+    vac = _fnum(props.get("vac_cnt")) or 0
+    class_d = (props.get("classdscrp") or "").lower()
+    if vac <= 0 and "vacant" not in class_d and "ag" not in class_d and "land" not in class_d:
+        return None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = geom_acres if geom_acres and geom_acres > 0.05 else 0.5
+    pid = props.get("parcelid") or props.get("pid") or props.get("fid")
+    addr = props.get("siteaddres") or ""
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"lancaster:{pid}",
+        "title": f"Lancaster NE tax sale · {addr or pid}",
+        "description": (
+            f"Lancaster County / Lincoln, NE tax-sale inventory (public GIS). "
+            f"Class={props.get('classdscrp') or 'n/a'}. Tax-sale code={props.get('tax_sale_c') or 'n/a'}. "
+            "Public tax-sale channel — not MLS."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage),
+        "state": "NE",
+        "county": "Lancaster",
+        "apn": str(pid),
+        "address": f"{addr}, Lancaster County, NE".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.lincoln.ne.gov/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_toledo_forsale(raw: dict) -> dict | None:
+    props = raw.get("properties") or {}
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _fnum(_prop(props, "ACREAGE", "ACREAGE_CA")) or geom_acres
+    if acreage is not None and acreage < 0.15:
+        return None
+    pid = _prop(props, "PARID", "ASSESSOR_N", "OBJECTID")
+    addr = _prop(props, "PROPERTY_A", "SITEADD", "ADDRESS") or f"Toledo, OH · {pid}"
+    owner = _prop(props, "OWNER", "OWN_NAME")
+    return {
+        "provider_id": "public_tax_sale",
+        "external_id": f"toledo:{pid}",
+        "title": f"Toledo OH for-sale / land bank · {float(acreage):.2f} ac · {pid}"
+        if acreage is not None
+        else f"Toledo OH for-sale / land bank · {pid}",
+        "description": (
+            f"City of Toledo, OH public for-sale / land-bank inventory (public GIS). "
+            f"Owner mark={owner or 'n/a'}. Distressed / municipal sales channel — not MLS."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage) if acreage is not None else None,
+        "state": "OH",
+        "county": "Lucas",
+        "apn": str(pid),
+        "address": str(addr),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://toledo.oh.gov/",
         "status": "ACTIVE",
         "raw": props,
         "is_demo": False,
@@ -780,11 +1123,89 @@ SOURCES: list[ArcgisMarketSource] = [
     ),
     ArcgisMarketSource(
         "mahoning_oh_tax",
-        "Mahoning County OH Tax Delinquent / Land Bank",
-        "https://gisapp.mahoningcountyoh.gov/arcgis/rest/services/LANDBANK_DELINQUENT_PROPERTIES/MapServer/0/query",
+        "Mahoning County OH Land Bank Properties",
+        # Layer 4 = county land-bank held (layer 0 geojson+ACRES filter was unreliable)
+        "https://gisapp.mahoningcountyoh.gov/arcgis/rest/services/LANDBANK_DELINQUENT_PROPERTIES/MapServer/4/query",
         "OH",
         "Mahoning",
         _norm_mahoning,
+        where="ACRES>=0.2",
+    ),
+    ArcgisMarketSource(
+        "toledo_oh_forsale",
+        "Toledo OH For-Sale / Land Bank",
+        "https://gis.toledo.oh.gov/arcgis/rest/services/Public/For_Sale_Data/MapServer/0/query",
+        "OH",
+        "Lucas",
+        _norm_toledo_forsale,
+    ),
+    ArcgisMarketSource(
+        "gadsden_al_landbank",
+        "Gadsden AL Land Bank",
+        "https://coggis.cityofgadsden.com/arcgis/rest/services/Hosted/Land_Bank_Parcels_Public/FeatureServer/0/query",
+        "AL",
+        "Etowah",
+        _norm_gadsden_lb,
+        where="acres>=0.15",
+    ),
+    ArcgisMarketSource(
+        "hartford_ct_surplus",
+        "Hartford CT Surplus / Land Bank",
+        "https://gis.hartford.gov/arcgis/rest/services/DDSManagedProperties/MapServer/0/query",
+        "CT",
+        "Hartford",
+        _norm_hartford_surplus,
+        where="PROPERTY_PLAN IN ('Surplus Property','Possible Land Bank')",
+    ),
+    ArcgisMarketSource(
+        "baltimore_md_taxsale",
+        "Baltimore City MD Tax Sale 2025",
+        "https://egis.baltimorecity.gov/egis/rest/services/Housing/Tax_Sale_2025/FeatureServer/0/query",
+        "MD",
+        "Baltimore City",
+        _norm_baltimore_taxsale,
+    ),
+    ArcgisMarketSource(
+        "ramsey_mn_forfeit",
+        "Ramsey County MN Tax Forfeit",
+        "https://maps.co.ramsey.mn.us/arcgis/rest/services/PRR/TaxForfeitLand_PublicData/MapServer/0/query",
+        "MN",
+        "Ramsey",
+        _norm_ramsey_forfeit,
+    ),
+    ArcgisMarketSource(
+        "dakota_mn_forfeit",
+        "Dakota County MN Tax Forfeit",
+        "http://gis2.co.dakota.mn.us/arcgis/rest/services/AGOL/DC_OL_TaxForfeit/MapServer/0/query",
+        "MN",
+        "Dakota",
+        _norm_dakota_forfeit,
+        where="TOTAL_ACRES>=0.25",
+    ),
+    ArcgisMarketSource(
+        "kcmo_mo_surplus",
+        "Kansas City MO Land Bank",
+        "https://mapd.kcmo.org/kcgis/rest/services/DataLayers/MapServer/12/query",
+        "MO",
+        "Jackson",
+        _norm_kc_landbank,
+    ),
+    ArcgisMarketSource(
+        "stl_mo_lra_surplus",
+        "St. Louis MO LRA / LCRA",
+        "https://maps8.stlouis-mo.gov/arcgis/rest/services/SLDC/LRA_and_LCRA_Properties/MapServer/0/query",
+        "MO",
+        "St. Louis City",
+        _norm_stl_lra,
+        where="Acres>=0.15",
+    ),
+    ArcgisMarketSource(
+        "lancaster_ne_tax",
+        "Lancaster County NE Tax Sales",
+        "https://gis.lincoln.ne.gov/hosted/rest/services/Hosted/Lancaster_NE_Tax_Sales_2017_to_2024/FeatureServer/0/query",
+        "NE",
+        "Lancaster",
+        _norm_lancaster_taxsale,
     ),
     ArcgisMarketSource(
         "cochise_az_tax",
