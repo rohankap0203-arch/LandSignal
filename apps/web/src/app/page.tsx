@@ -386,17 +386,23 @@ export default function SearchPage() {
             >
               {loading ? "Searching…" : "Show matches"}
             </button>
-            <div className="filter-parcel-mark" aria-hidden title="Parcel outline">
-              <svg viewBox="0 0 120 88" className="filter-parcel-svg">
-                {/* Angular cadastral-style tract — like the intelligence map outline */}
+            <div className="filter-map-mark" aria-hidden title="Map scout">
+              <svg viewBox="0 0 64 56" className="filter-map-svg" fill="none">
+                {/* Perspective map board */}
                 <path
-                  className="filter-parcel-poly"
-                  d="M14 62 L22 28 L48 12 L78 18 L102 34 L110 58 L96 76 L58 82 L28 74 Z"
+                  className="filter-map-stroke"
+                  d="M6 38 L14 18 L50 14 L58 34 L50 48 L12 50 Z"
                 />
+                {/* Grid lines */}
+                <path className="filter-map-grid" d="M18 19.5 L22 46.5" />
+                <path className="filter-map-grid" d="M34 16.2 L38 45.2" />
+                <path className="filter-map-grid" d="M12 30 L54 26" />
+                {/* Location pin */}
                 <path
-                  className="filter-parcel-poly inner"
-                  d="M34 58 L40 36 L58 26 L78 32 L88 50 L80 66 L54 70 Z"
+                  className="filter-map-pin"
+                  d="M24 8 C19.6 8 16 11.5 16 15.8 C16 21.2 24 30 24 30 C24 30 32 21.2 32 15.8 C32 11.5 28.4 8 24 8 Z"
                 />
+                <circle className="filter-map-pin-hole" cx="24" cy="15.5" r="3.1" />
               </svg>
             </div>
             <button
