@@ -47,14 +47,17 @@ const providers = [
       const name = String(credentials?.name || "");
       if (!email || !password) return null;
 
-      if (mode === "signup") {
-        const user = createUser({ email, password, name });
+      try {
+        if (mode === "signup") {
+          const user = createUser({ email, password, name });
+          return { id: user.id, email: user.email, name: user.name };
+        }
+        const user = authenticateUser(email, password);
+        if (!user) return null;
         return { id: user.id, email: user.email, name: user.name };
+      } catch {
+        return null;
       }
-
-      const user = authenticateUser(email, password);
-      if (!user) return null;
-      return { id: user.id, email: user.email, name: user.name };
     },
   }),
   // Demo Google / Apple when real OAuth apps are not configured yet
