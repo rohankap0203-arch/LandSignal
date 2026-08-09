@@ -204,7 +204,7 @@ function ActionCard({
   onToggle: () => void;
 }) {
   const hasGuide = stepCount > 0;
-  const revealLabel = tone === "call" ? "Talk track" : "Look-for guide";
+  const revealLabel = tone === "call" ? "Talk track" : "Look-for";
   return (
     <div className={`acquire-card tone-${tone} ${open ? "open" : ""}`}>
       {href ? (
@@ -234,7 +234,17 @@ function ActionCard({
           onClick={onToggle}
         >
           <GuideRevealMark open={open} />
-          <span className="acquire-reveal-label">{open ? "Hide" : revealLabel}</span>
+          <span className="acquire-reveal-label">
+            {open ? (
+              "Hide"
+            ) : tone === "source" ? (
+              <>
+                Look-for <span className="acquire-check-empty" aria-hidden />
+              </>
+            ) : (
+              revealLabel
+            )}
+          </span>
           <span className="acquire-reveal-count">{stepCount}</span>
         </button>
       ) : null}
