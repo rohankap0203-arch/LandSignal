@@ -219,7 +219,14 @@ async function fetchNearby(kind: NearbyKind, lat: number, lon: number): Promise<
 
 function ImageIcon({ className = "" }: { className?: string }) {
   return (
-    <svg className={className} width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg
+      className={`land-alert-view-land-icon ${className}`.trim()}
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+    >
       <rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.75" />
       <circle cx="8.5" cy="10" r="1.6" fill="currentColor" />
       <path
