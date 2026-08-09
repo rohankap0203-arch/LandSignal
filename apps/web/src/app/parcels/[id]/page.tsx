@@ -497,12 +497,14 @@ export default function ParcelIntelligencePage() {
       <section id="sec-checklist" className="panel p-4 scroll-mt-20 dd-compact">
         <h2 className="display text-lg font-semibold">Before you spend money on this file</h2>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          Open each row for why it matters here and how to start.{" "}
-          {dd.filter((i) => i.completed).length} of {dd.length} already cleared
-          {score?.deal_readiness != null
-            ? ` · ${Number(score.deal_readiness).toFixed(0)}/100 of the land basics (access, flood, wetlands, comps, zoning) are already in the file`
+          Diligence steps that still stand between you and a clean bid — tap a row for why it
+          matters on this pin and where to start.
+          {dd.length > 0
+            ? ` ${dd.filter((i) => i.completed).length} of ${dd.length} already cleared.`
             : ""}
-          .
+          {score?.deal_readiness != null
+            ? ` Land basics already on file (access, flood, wetlands, comps, zoning): ${Number(score.deal_readiness).toFixed(0)}/100.`
+            : ""}
         </p>
         <div className="mt-3 grid gap-1.5">
           {dd.map((item) => {
