@@ -66,6 +66,7 @@ class ArcgisMarketSource:
         county: str,
         normalize: Callable[[dict], dict | None],
         where: str = "1=1",
+        order_by: str | None = None,
     ):
         self.source_id = source_id
         self.name = name
@@ -74,6 +75,7 @@ class ArcgisMarketSource:
         self.county = county
         self.normalize = normalize
         self.where = where
+        self.order_by = order_by
 
 
 def _norm_shasta(raw: dict) -> dict | None:
@@ -624,6 +626,88 @@ def _norm_toledo_forsale(raw: dict) -> dict | None:
         "longitude": lon,
         "polygon": polygon,
         "source_url": "https://toledo.oh.gov/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_nj_mod4_vacant(raw: dict) -> dict | None:
+    """NJ statewide MOD-IV class 1 vacant land (map screen — not a sale calendar)."""
+    props = raw.get("properties") or {}
+    if str(props.get("PROP_CLASS") or "").strip() != "1":
+        return None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _fnum(props.get("CALC_ACRE")) or geom_acres
+    if acreage is None or acreage < 5:
+        return None
+    impr = _fnum(props.get("IMPRVT_VAL")) or 0
+    if impr > 0:
+        return None
+    pid = props.get("PAMS_PIN") or props.get("GIS_PIN") or props.get("PIN_NODUP") or props.get("OBJECTID")
+    county = (props.get("COUNTY") or "Unknown").title()
+    mun = (props.get("MUN_NAME") or "").title()
+    loc = props.get("PROP_LOC") or props.get("ST_ADDRESS") or ""
+    land_val = _fnum(props.get("LAND_VAL"))
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"njmod4:{pid}",
+        "title": f"New Jersey vacant · {float(acreage):.2f} ac · {mun or county}",
+        "description": (
+            f"New Jersey MOD-IV class-1 vacant land (statewide NJOGIS cadastral). "
+            f"County={county}. Municipality={mun or 'n/a'}. Land appraisal mark=${land_val}. "
+            f"Land desc={props.get('LAND_DESC') or 'n/a'}. "
+            "Public map screen — not a confirmed tax sale; confirm owner / sale path before chasing."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage),
+        "state": "NJ",
+        "county": county,
+        "apn": str(pid),
+        "address": f"{loc}, {mun or county}, NJ".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://maps.nj.gov/",
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_nj_mod4_farm(raw: dict) -> dict | None:
+    """NJ statewide MOD-IV class 3B farmland (map screen for larger rural tracts)."""
+    props = raw.get("properties") or {}
+    if str(props.get("PROP_CLASS") or "").strip().upper() != "3B":
+        return None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _fnum(props.get("CALC_ACRE")) or geom_acres
+    if acreage is None or acreage < 10:
+        return None
+    pid = props.get("PAMS_PIN") or props.get("GIS_PIN") or props.get("PIN_NODUP") or props.get("OBJECTID")
+    county = (props.get("COUNTY") or "Unknown").title()
+    mun = (props.get("MUN_NAME") or "").title()
+    loc = props.get("PROP_LOC") or props.get("ST_ADDRESS") or ""
+    land_val = _fnum(props.get("LAND_VAL"))
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"njfarm:{pid}",
+        "title": f"New Jersey farmland · {float(acreage):.2f} ac · {mun or county}",
+        "description": (
+            f"New Jersey MOD-IV class-3B farmland (statewide NJOGIS cadastral). "
+            f"County={county}. Municipality={mun or 'n/a'}. Land appraisal mark=${land_val}. "
+            "Public map screen — not MLS; confirm whether the owner will sell before underwriting."
+        ),
+        "asking_price_usd": None,
+        "acreage": float(acreage),
+        "state": "NJ",
+        "county": county,
+        "apn": str(pid),
+        "address": f"{loc}, {mun or county}, NJ".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://maps.nj.gov/",
         "status": "ACTIVE",
         "raw": props,
         "is_demo": False,
@@ -1300,6 +1384,26 @@ SOURCES: list[ArcgisMarketSource] = [
         _norm_fairfax_large,
         where="SHAPE.STArea() >= 130680",
     ),
+    ArcgisMarketSource(
+        "nj_mod4_vacant",
+        "New Jersey MOD-IV Vacant Land (5ac+)",
+        "https://maps.nj.gov/arcgis/rest/services/Framework/Cadastral/MapServer/0/query",
+        "NJ",
+        "Statewide",
+        _norm_nj_mod4_vacant,
+        where="PROP_CLASS='1' AND CALC_ACRE>=5 AND IMPRVT_VAL=0",
+        order_by="CALC_ACRE DESC",
+    ),
+    ArcgisMarketSource(
+        "nj_mod4_farmland",
+        "New Jersey MOD-IV Farmland (10ac+)",
+        "https://maps.nj.gov/arcgis/rest/services/Framework/Cadastral/MapServer/0/query",
+        "NJ",
+        "Statewide",
+        _norm_nj_mod4_farm,
+        where="PROP_CLASS='3B' AND CALC_ACRE>=10",
+        order_by="CALC_ACRE DESC",
+    ),
 ]
 
 
@@ -1328,6 +1432,8 @@ async def _fetch_arcgis_pages(
             "resultOffset": offset,
             "f": "geojson",
         }
+        if getattr(src, "order_by", None):
+            params["orderByFields"] = src.order_by
         resp = await client.get(src.url, params=params)
         resp.raise_for_status()
         data = resp.json()
