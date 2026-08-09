@@ -212,7 +212,10 @@ export default function ParcelIntelligencePage() {
                 {String(sourcing.source_name || "Public source")}
               </span>
             </div>
-            {!returnCase.headline ? <WatchEyeButton watched={watched} onToggle={toggleWatch} /> : null}
+            <div className="return-case-actions">
+              <span className={`conviction-pill ${convictionKey.toLowerCase()}`}>{convictionLabel}</span>
+              <WatchEyeButton watched={watched} onToggle={toggleWatch} />
+            </div>
           </div>
           <h1 className="display mt-3 text-3xl font-semibold leading-tight break-words">
             {pageTitle}
@@ -235,7 +238,7 @@ export default function ParcelIntelligencePage() {
                   1
                 </span>
                 <div className="min-w-0">
-                  <div className="font-semibold text-sm">Learn this page</div>
+                  <div className="font-semibold text-sm">Learn this land</div>
                     <p className="next-process-note">
                       Skim value, return, why this land, score parts, land checks.
                     </p>
@@ -381,20 +384,8 @@ export default function ParcelIntelligencePage() {
 
           {returnCase.headline ? (
             <div className="return-case mt-5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-                  Buy case for this listing
-                </div>
-                <div className="return-case-actions">
-                  <span className={`conviction-pill ${String(returnCase.conviction || "watch").toLowerCase()}`}>
-                    {String(returnCase.conviction || "WATCH") === "HIGH"
-                      ? "Strong interest"
-                      : String(returnCase.conviction || "WATCH") === "MEDIUM"
-                        ? "Moderate interest"
-                        : "Worth watching"}
-                  </span>
-                  <WatchEyeButton watched={watched} onToggle={toggleWatch} />
-                </div>
+              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+                Buy case for this listing
               </div>
               <div className="mt-1 font-semibold leading-snug break-words">{String(returnCase.headline)}</div>
               <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">
