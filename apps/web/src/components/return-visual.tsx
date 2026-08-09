@@ -530,8 +530,8 @@ export function ReturnVisual({
             </li>
           </ul>
           <p>
-            Pick a hold length (1–100 yr). Drag the chart to read any year. Tap a factor card to see
-            why it lifts or slows the path. First look only — not an appraisal.
+            Pick a hold length (presets or Custom, 1–100 yr). Drag the chart to read any year. Tap a
+            factor card to see why it lifts or slows the path. First look only — not an appraisal.
           </p>
         </div>
       ) : null}
