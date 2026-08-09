@@ -126,6 +126,13 @@ export default function ParcelIntelligencePage() {
   const askYourself = (brief.ask_yourself as AnyRec) || null;
   const story = (brief.score_story as Record<string, string>) || {};
   const returnCase = (brief.return_case as AnyRec) || {};
+  const convictionKey = String(returnCase.conviction || score?.conviction || "WATCH").toUpperCase();
+  const convictionLabel =
+    convictionKey === "HIGH"
+      ? "Strong interest"
+      : convictionKey === "MEDIUM"
+        ? "Moderate interest"
+        : "Worth watching";
   const drivers = (data.score_drivers as AnyRec) || {};
   const oppDrive = (drivers.opportunity as AnyRec) || {};
   const riskDrive = (drivers.risk as AnyRec) || {};

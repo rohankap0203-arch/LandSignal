@@ -1914,6 +1914,16 @@ a.btn-intel:hover {
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
+  margin-left: auto;
+}
+
+.intel-topbar .return-case-actions .conviction-pill {
+  max-width: 100%;
+}
+
+.intel-topbar .watch-eye {
+  height: 26px;
+  min-height: 26px;
 }
 
 .watch-eye {
