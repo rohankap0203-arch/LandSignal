@@ -278,21 +278,6 @@ function MatchCard({
             </div>
           </div>
 
-          {(row.opportunity_indicators?.length || row.risk_indicators?.length) ? (
-            <div className="land-alert-indicators">
-              {row.opportunity_indicators?.slice(0, 2).map((t) => (
-                <span key={t} className="ok">
-                  {t}
-                </span>
-              ))}
-              {row.risk_indicators?.slice(0, 2).map((t) => (
-                <span key={t} className="risk">
-                  {t}
-                </span>
-              ))}
-            </div>
-          ) : null}
-
           <div className="land-alert-back-rail" onClick={(e) => e.stopPropagation()}>
             <AcquireRail
               className="land-alert-acquire"
