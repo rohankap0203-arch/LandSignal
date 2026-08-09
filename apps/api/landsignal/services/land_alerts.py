@@ -678,6 +678,8 @@ def matches_for_user(
 
 
 def match_card(store: MemoryStore, match: LandAlertMatch) -> dict[str, Any]:
+    from landsignal.services.presentation import sourcing_card
+
     parcel = store.parcels.get(match.parcel_id)
     listing = store.listing_for_parcel(match.parcel_id) if parcel else None
     score = store.latest_score(match.parcel_id) if parcel else None
@@ -686,6 +688,28 @@ def match_card(store: MemoryStore, match: LandAlertMatch) -> dict[str, Any]:
     ppa = listing.price_per_acre_usd if listing else None
     if ppa is None and ask and acres:
         ppa = ask / acres
+    source = (
+        sourcing_card(
+            provider_id=listing.provider_id if listing else None,
+            source_url=listing.source_url if listing else None,
+            title=(listing.title if listing else None) or "",
+            apn=parcel.apn if parcel else None,
+            state=parcel.state if parcel else None,
+            county=parcel.county if parcel else None,
+            latitude=parcel.latitude if parcel else None,
+            longitude=parcel.longitude if parcel else None,
+            raw=listing.raw if listing else None,
+        )
+        if parcel
+        else {}
+    )
+    links = list(source.get("links") or [])
+    find = next((L for L in links if L.get("kind") == "lookup" and L.get("available") is not False), None)
+    primary = next((L for L in links if L.get("kind") == "primary" and L.get("available") is not False), None)
+    website = source.get("website") or (primary.get("url") if primary else None) or (
+        listing.source_url if listing else None
+    )
+    phone = source.get("phone")
     return {
         "id": str(match.id),
         "profile_id": str(match.profile_id),
@@ -722,4 +746,11 @@ def match_card(store: MemoryStore, match: LandAlertMatch) -> dict[str, Any]:
         "deep_link": f"/parcels/{match.parcel_id}",
         "opportunity_indicators": (score.why_interesting[:3] if score else []),
         "risk_indicators": (score.what_could_kill[:3] if score else []),
+        "contact_website": website,
+        "contact_phone": phone,
+        "contact_office": source.get("office"),
+        "find_parcel_url": find.get("url") if find else None,
+        "find_parcel_label": (find.get("label") or "").replace("Find parcel ", "ID ") if find else None,
+        "apn": parcel.apn if parcel else None,
+        "links": links,
     }

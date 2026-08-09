@@ -59,6 +59,13 @@ export type LandAlertMatchCard = {
   deep_link: string;
   opportunity_indicators?: string[];
   risk_indicators?: string[];
+  contact_website?: string | null;
+  contact_phone?: string | null;
+  contact_office?: string | null;
+  find_parcel_url?: string | null;
+  find_parcel_label?: string | null;
+  apn?: string | null;
+  links?: ActionLink[];
 };
 
 export type RatingPart = {

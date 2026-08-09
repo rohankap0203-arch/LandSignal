@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertBell } from "@/components/alert-bell";
+import { AcquireRail } from "@/components/acquire-rail";
+import { LiveMagnifier } from "@/components/live-magnifier";
 import { landsignalApi, type LandAlertMatchCard } from "@/lib/api";
 
 type PrefMode = "must" | "prefer" | "flexible";
@@ -120,61 +121,129 @@ function ModeSelect({
 
 function MatchCard({
   row,
-  onOpen,
+  onFlipOpen,
 }: {
   row: LandAlertMatchCard;
-  onOpen: (parcelId: string) => void;
+  onFlipOpen: (parcelId: string) => void;
 }) {
+  const [flipped, setFlipped] = useState(false);
+  const href = row.deep_link || `/parcels/${row.parcel_id}`;
+
+  function flipOpen() {
+    if (!flipped) {
+      setFlipped(true);
+      onFlipOpen(row.parcel_id);
+    } else {
+      setFlipped(false);
+    }
+  }
+
   return (
-    <article className={`land-alert-card${row.status === "new" ? " is-new" : ""}`}>
-      <div className="land-alert-card-top">
-        <div className="land-alert-card-scores">
-          <span className="land-alert-match-pct">{Math.round(row.preference_match_pct)}% Preference Match</span>
-          <span className="land-alert-ls-score">{Math.round(row.landsignal_score)}/100 LandSignal Score</span>
-        </div>
-        <div className="land-alert-card-badges">
-          {row.status === "new" ? <span className="land-alert-new">NEW</span> : null}
-          {row.update_kind && row.update_kind !== "new_listing" ? (
-            <span className="land-alert-update">{row.update_kind.replace(/_/g, " ")}</span>
+    <div className={`land-alert-flip${flipped ? " is-flipped" : ""}${row.status === "new" ? " is-new" : ""}`}>
+      <div className="land-alert-flip-inner">
+        <article
+          className="land-alert-card land-alert-card-front"
+          onClick={flipOpen}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              flipOpen();
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          aria-expanded={flipped}
+          aria-label={`Flip card for ${row.property_name}`}
+        >
+          <div className="land-alert-card-top">
+            <div className="land-alert-card-scores">
+              <span className="land-alert-match-pct">
+                {Math.round(row.preference_match_pct)}% Preference Match
+              </span>
+              <span className="land-alert-ls-score">
+                {Math.round(row.landsignal_score)}/100 LandSignal Score
+              </span>
+            </div>
+            <div className="land-alert-card-badges">
+              {row.status === "new" ? <span className="land-alert-new">NEW</span> : null}
+              {row.update_kind && row.update_kind !== "new_listing" ? (
+                <span className="land-alert-update">{row.update_kind.replace(/_/g, " ")}</span>
+              ) : null}
+              {row.status === "viewed" ? <span className="land-alert-viewed">Viewed</span> : null}
+            </div>
+          </div>
+          <div className="land-alert-card-title">{row.property_name}</div>
+          <div className="land-alert-card-meta">
+            <span>{row.location || row.state || "—"}</span>
+            <span>{row.asking_price_display}</span>
+            <span>{row.acres_display}</span>
+            <span>{row.price_per_acre_display}</span>
+            <span>{row.land_type}</span>
+          </div>
+          {row.why_matched?.length ? (
+            <ul className="land-alert-why">
+              {row.why_matched.slice(0, 5).map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
           ) : null}
-          {row.status === "viewed" ? <span className="land-alert-viewed">Viewed</span> : null}
-        </div>
-      </div>
-      <Link
-        href={row.deep_link || `/parcels/${row.parcel_id}`}
-        className="land-alert-card-title"
-        onClick={() => onOpen(row.parcel_id)}
-      >
-        {row.property_name}
-      </Link>
-      <div className="land-alert-card-meta">
-        <span>{row.location || row.state || "—"}</span>
-        <span>{row.asking_price_display}</span>
-        <span>{row.acres_display}</span>
-        <span>{row.price_per_acre_display}</span>
-        <span>{row.land_type}</span>
-      </div>
-      {row.why_matched?.length ? (
-        <ul className="land-alert-why">
-          {row.why_matched.slice(0, 5).map((r) => (
-            <li key={r}>{r}</li>
-          ))}
-        </ul>
-      ) : null}
-      {row.watch_flags?.length ? (
-        <div className="land-alert-watch">
-          <strong>Watch:</strong> {row.watch_flags[0]}
-        </div>
-      ) : null}
-      {(row.opportunity_indicators?.length || row.risk_indicators?.length) ? (
-        <div className="land-alert-indicators">
-          {row.opportunity_indicators?.[0] ? (
-            <span className="ok">{row.opportunity_indicators[0]}</span>
+          {row.watch_flags?.length ? (
+            <div className="land-alert-watch">
+              <strong>Watch:</strong> {row.watch_flags[0]}
+            </div>
           ) : null}
-          {row.risk_indicators?.[0] ? <span className="risk">{row.risk_indicators[0]}</span> : null}
-        </div>
-      ) : null}
-    </article>
+          {(row.opportunity_indicators?.length || row.risk_indicators?.length) ? (
+            <div className="land-alert-indicators">
+              {row.opportunity_indicators?.[0] ? (
+                <span className="ok">{row.opportunity_indicators[0]}</span>
+              ) : null}
+              {row.risk_indicators?.[0] ? <span className="risk">{row.risk_indicators[0]}</span> : null}
+            </div>
+          ) : null}
+          <div className="land-alert-flip-hint">Tap to reveal contact &amp; next steps</div>
+        </article>
+
+        <article className="land-alert-card land-alert-card-back">
+          <div className="land-alert-back-head">
+            <div>
+              <div className="land-alert-card-title">{row.property_name}</div>
+              <div className="land-alert-card-meta">
+                <span>{row.location || row.state || "—"}</span>
+                <span>{row.asking_price_display}</span>
+                <span>{row.acres_display}</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost land-alert-flip-back"
+              onClick={(e) => {
+                e.stopPropagation();
+                setFlipped(false);
+              }}
+            >
+              Flip back
+            </button>
+          </div>
+
+          <div onClick={(e) => e.stopPropagation()}>
+            <AcquireRail
+              className="mt-2"
+              postingUrl={row.contact_website}
+              phone={row.contact_phone}
+              office={row.contact_office}
+              findUrl={row.find_parcel_url}
+              findLabel={row.find_parcel_label || (row.apn ? `ID ${row.apn}` : undefined)}
+            />
+          </div>
+
+          <div className="land-alert-back-actions">
+            <Link href={href} className="btn-intel" onClick={(e) => e.stopPropagation()}>
+              Open full LandSignal report
+            </Link>
+          </div>
+        </article>
+      </div>
+    </div>
   );
 }
 
@@ -381,7 +450,7 @@ export default function LandAlertsPage() {
             ← Back
           </Link>
           <div className="land-alerts-live" title="LandSignal is scanning live">
-            <AlertBell size={26} animated label="Scanning live" />
+            <LiveMagnifier size={28} />
             <span>Scanning live</span>
           </div>
         </div>
@@ -398,7 +467,7 @@ export default function LandAlertsPage() {
           ← Back
         </Link>
         <div className="land-alerts-live" title="LandSignal is scanning live">
-          <AlertBell size={26} animated label="Scanning live" />
+          <LiveMagnifier size={28} />
           <span>Scanning live</span>
         </div>
       </div>
@@ -419,17 +488,16 @@ export default function LandAlertsPage() {
             <button type="button" className="btn btn-ghost" onClick={() => void togglePause()}>
               {paused ? "Resume Alerts" : "Pause Alerts"}
             </button>
-            {counts.new > 0 ? (
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() =>
-                  void landsignalApi.markAllLandAlertsSeen(profileId || undefined).then(loadMatches)
-                }
-              >
-                Mark all as seen
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={counts.new + counts.unseen === 0}
+              onClick={() =>
+                void landsignalApi.markAllLandAlertsSeen(profileId || undefined).then(loadMatches)
+              }
+            >
+              Mark all as seen
+            </button>
           </div>
         ) : null}
       </div>
@@ -770,7 +838,7 @@ export default function LandAlertsPage() {
 
           <div className="space-y-3">
             {visible.map((row) => (
-              <MatchCard key={row.id} row={row} onOpen={onOpen} />
+              <MatchCard key={row.id} row={row} onFlipOpen={onOpen} />
             ))}
             {!visible.length ? (
               <div className="panel empty-state p-6">
