@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 type ScriptSide = {
   title?: string;
@@ -57,56 +57,81 @@ function buildGuideSteps(kind: "web" | "call", script: ScriptSide | undefined): 
   return steps;
 }
 
-function GuideDropdown({
-  open,
+/** Wide obtuse chevron (not a skinny letter v). */
+function ChevronV({ open }: { open: boolean }) {
+  return (
+    <svg
+      className={`acquire-chevron-icon ${open ? "on" : ""}`}
+      viewBox="0 0 40 14"
+      width="40"
+      height="14"
+      aria-hidden
+    >
+      <path
+        d="M4 3.5 L20 11.5 L36 3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function GuidePanel({
   tone,
   steps,
-  onClose,
 }: {
-  open: boolean;
   tone: "source" | "call";
   steps: Step[];
-  onClose: () => void;
 }) {
   const [i, setI] = useState(0);
-  const panelRef = useRef<HTMLDivElement | null>(null);
+  const measureRef = useRef<HTMLDivElement | null>(null);
+  const [bodyMin, setBodyMin] = useState<number>(0);
 
   useEffect(() => {
-    if (open) setI(0);
-  }, [open]);
+    setI(0);
+  }, [steps]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    const onDoc = (e: MouseEvent) => {
-      if (!panelRef.current) return;
-      if (!panelRef.current.contains(e.target as Node)) onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    // defer so the opening click doesn’t instantly close
-    const t = window.setTimeout(() => document.addEventListener("mousedown", onDoc), 0);
-    return () => {
-      window.clearTimeout(t);
-      window.removeEventListener("keydown", onKey);
-      document.removeEventListener("mousedown", onDoc);
-    };
-  }, [open, onClose]);
+  // Lock body height to the tallest step so ← → never resizes the section
+  useLayoutEffect(() => {
+    const root = measureRef.current;
+    if (!root || !steps.length) {
+      setBodyMin(0);
+      return;
+    }
+    let max = 0;
+    const nodes = root.querySelectorAll<HTMLElement>("[data-step-measure]");
+    nodes.forEach((el) => {
+      max = Math.max(max, el.offsetHeight);
+    });
+    setBodyMin(max);
+  }, [steps]);
 
-  if (!open || !steps.length) return null;
+  if (!steps.length) return null;
   const step = steps[Math.min(i, steps.length - 1)];
   const n = steps.length;
 
   return (
-    <div ref={panelRef} className={`acquire-guide tone-${tone}`} role="dialog" aria-label="Guide steps">
+    <div className={`acquire-guide tone-${tone}`} role="region" aria-label="Guide steps">
       <div className="acquire-guide-head">
         <span className="acquire-kicker">{step.kicker}</span>
         <span className="acquire-step-count">
           {i + 1}/{n}
         </span>
       </div>
-      <p className="acquire-guide-body">{step.body}</p>
+      <div className="acquire-guide-body-wrap" style={bodyMin ? { minHeight: bodyMin } : undefined}>
+        <p className="acquire-guide-body">{step.body}</p>
+      </div>
+      {/* Off-screen measure all steps at the same width */}
+      <div className="acquire-guide-measure" ref={measureRef} aria-hidden>
+        {steps.map((s, idx) => (
+          <p key={idx} data-step-measure className="acquire-guide-body">
+            {s.body}
+          </p>
+        ))}
+      </div>
       <div className="acquire-step-nav">
         <button
           type="button"
@@ -142,7 +167,7 @@ function ActionCard({
   value,
   hint,
   href,
-  steps,
+  hasGuide,
   open,
   onToggle,
 }: {
@@ -151,11 +176,10 @@ function ActionCard({
   value: string;
   hint?: string | null;
   href?: string | null;
-  steps: Step[];
+  hasGuide: boolean;
   open: boolean;
   onToggle: () => void;
 }) {
-  const hasGuide = steps.length > 0;
   return (
     <div className={`acquire-card tone-${tone} ${open ? "open" : ""}`}>
       {href ? (
@@ -177,31 +201,21 @@ function ActionCard({
         </div>
       )}
       {hasGuide ? (
-        <>
-          <button
-            type="button"
-            className={`acquire-chevron ${open ? "on" : ""}`}
-            aria-label={open ? "Hide guide" : "Show guide steps"}
-            aria-expanded={open}
-            onClick={onToggle}
-          >
-            <span aria-hidden>v</span>
-          </button>
-          <GuideDropdown
-            open={open}
-            tone={tone}
-            steps={steps}
-            onClose={() => {
-              if (open) onToggle();
-            }}
-          />
-        </>
+        <button
+          type="button"
+          className={`acquire-chevron ${open ? "on" : ""}`}
+          aria-label={open ? "Hide guide" : "Show guide steps"}
+          aria-expanded={open}
+          onClick={onToggle}
+        >
+          <ChevronV open={open} />
+        </button>
       ) : null}
     </div>
   );
 }
 
-/** Compact Call / Office cards; centered v opens a step-toggle dropdown. */
+/** Equal-height Call / Office cards; wide v expands a full-width step guide below. */
 export function AcquireRail({
   postingUrl,
   postingLabel = "Open site",
@@ -235,6 +249,8 @@ export function AcquireRail({
   const webSteps = useMemo(() => buildGuideSteps("web", outreach?.website), [outreach?.website]);
   const callSteps = useMemo(() => buildGuideSteps("call", outreach?.call), [outreach?.call]);
   const [openGuide, setOpenGuide] = useState<"web" | "call" | null>(null);
+  const activeSteps = openGuide === "web" ? webSteps : openGuide === "call" ? callSteps : [];
+  const activeTone = openGuide === "call" ? "call" : "source";
 
   if (!postingUrl && !tel && !findUrl) return null;
 
@@ -242,33 +258,39 @@ export function AcquireRail({
     <div className={`acquire-rail ${className}`.trim()}>
       {outreach?.one_liner ? <p className="acquire-mission">{outreach.one_liner}</p> : null}
 
-      <ActionCard
-        tone="source"
-        kicker="Office page"
-        value={postingUrl ? `Open ${host}` : "No link yet"}
-        hint={
-          postingUrl
-            ? host.includes("google.")
-              ? "Search for the live county sale / assessor page"
-              : "County / agency page for this inventory"
-            : "Use parcel lookup below if you have it"
-        }
-        href={postingUrl}
-        steps={webSteps}
-        open={openGuide === "web"}
-        onToggle={() => setOpenGuide((v) => (v === "web" ? null : "web"))}
-      />
+      <div className="acquire-card-row">
+        <ActionCard
+          tone="source"
+          kicker="Office page"
+          value={postingUrl ? `Open ${host}` : "No link yet"}
+          hint={
+            postingUrl
+              ? host.includes("google.")
+                ? "Search for the live county sale / assessor page"
+                : "County / agency page for this inventory"
+              : "Use parcel lookup below if you have it"
+          }
+          href={postingUrl}
+          hasGuide={webSteps.length > 0}
+          open={openGuide === "web"}
+          onToggle={() => setOpenGuide((v) => (v === "web" ? null : "web"))}
+        />
 
-      <ActionCard
-        tone="call"
-        kicker="Call the office"
-        value={phoneDisplay || "No public phone listed"}
-        hint={office || (tel ? "County / agency desk" : "Use the official page to contact them")}
-        href={tel}
-        steps={callSteps}
-        open={openGuide === "call"}
-        onToggle={() => setOpenGuide((v) => (v === "call" ? null : "call"))}
-      />
+        <ActionCard
+          tone="call"
+          kicker="Call the office"
+          value={phoneDisplay || "No public phone listed"}
+          hint={office || (tel ? "County / agency desk" : "Use the official page to contact them")}
+          href={tel}
+          hasGuide={callSteps.length > 0}
+          open={openGuide === "call"}
+          onToggle={() => setOpenGuide((v) => (v === "call" ? null : "call"))}
+        />
+      </div>
+
+      {openGuide && activeSteps.length > 0 ? (
+        <GuidePanel key={openGuide} tone={activeTone} steps={activeSteps} />
+      ) : null}
 
       {findUrl ? (
         <a className="acquire-block find" href={findUrl} target="_blank" rel="noreferrer">
