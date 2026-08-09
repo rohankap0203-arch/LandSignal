@@ -1100,7 +1100,6 @@ export function LandViewerModal({
             const isLast = chip.kind === "water";
             const button = (
               <button
-                key={chip.kind}
                 type="button"
                 className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
                 style={{ ["--chip" as string]: chip.color }}
@@ -1110,7 +1109,7 @@ export function LandViewerModal({
                 {chip.label}
               </button>
             );
-            if (!isLast) return button;
+            if (!isLast) return <span key={chip.kind}>{button}</span>;
             return (
               <span key={chip.kind} className="land-viewer-nearby-tail">
                 {button}
@@ -1118,6 +1117,25 @@ export function LandViewerModal({
                   <span className="land-viewer-nearby-loading" role="status" aria-live="polite">
                     <LiveMagnifier size={14} label="Finding closest landmark" />
                     <span>Working</span>
+                  </span>
+                ) : nearbyHits.length > 1 && nearbyHitIndex < nearbyHits.length - 1 ? (
+                  <button
+                    type="button"
+                    className={`land-viewer-nearby-next${nearbyNextPulse ? " is-pulse" : ""}`}
+                    onClick={showNextNearby}
+                    aria-label={`Show next closest (${nearbyHitIndex + 2} of ${nearbyHits.length})`}
+                    title={`Next closest (${nearbyHitIndex + 2}/${nearbyHits.length})`}
+                  >
+                    <span className="land-viewer-nearby-next-count">
+                      {nearbyHitIndex + 1}/{nearbyHits.length}
+                    </span>
+                    <span className="land-viewer-nearby-next-arrow" aria-hidden>
+                      →
+                    </span>
+                  </button>
+                ) : nearbyHits.length > 1 ? (
+                  <span className="land-viewer-nearby-next is-done" title="Furthest of nearby results">
+                    {nearbyHitIndex + 1}/{nearbyHits.length}
                   </span>
                 ) : null}
               </span>
@@ -1150,31 +1168,7 @@ export function LandViewerModal({
               {parcelAcres ? <span>{parcelAcres}</span> : null}
               {elevationFt ? <span>{elevationFt}</span> : null}
               {tool === "measure" ? <span className="land-viewer-measure">{measureInfo}</span> : null}
-              {nearbyStatus ? (
-                <span className="land-viewer-nearby-status">
-                  <span className="land-viewer-nearby-status-text">{nearbyStatus}</span>
-                  {nearbyHits.length > 1 && nearbyHitIndex < nearbyHits.length - 1 ? (
-                    <button
-                      type="button"
-                      className={`land-viewer-nearby-next${nearbyNextPulse ? " is-pulse" : ""}`}
-                      onClick={showNextNearby}
-                      aria-label={`Show next closest (${nearbyHitIndex + 2} of ${nearbyHits.length})`}
-                      title={`Next closest (${nearbyHitIndex + 2}/${nearbyHits.length})`}
-                    >
-                      <span className="land-viewer-nearby-next-count">
-                        {nearbyHitIndex + 1}/{nearbyHits.length}
-                      </span>
-                      <span className="land-viewer-nearby-next-arrow" aria-hidden>
-                        →
-                      </span>
-                    </button>
-                  ) : nearbyHits.length > 1 ? (
-                    <span className="land-viewer-nearby-next is-done" title="Furthest of nearby results">
-                      {nearbyHitIndex + 1}/{nearbyHits.length}
-                    </span>
-                  ) : null}
-                </span>
-              ) : null}
+              {nearbyStatus ? <span className="land-viewer-nearby-status">{nearbyStatus}</span> : null}
             </div>
           </div>
         </div>
