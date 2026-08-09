@@ -646,6 +646,20 @@ def mark_match_viewed(store: MemoryStore, user_id: UUID, parcel_id: UUID) -> int
     return n
 
 
+def mark_match_unviewed(store: MemoryStore, user_id: UUID, parcel_id: UUID) -> int:
+    """Undo viewed — restore to unseen (or new if it was a discovery)."""
+    n = 0
+    now = _utcnow()
+    for key, m in list(store.land_alert_matches.items()):
+        if m.user_id == user_id and m.parcel_id == parcel_id and m.status == "viewed":
+            status = "new" if m.is_new_discovery else "unseen"
+            store.land_alert_matches[key] = m.model_copy(
+                update={"status": status, "viewed_at": None, "updated_at": now}
+            )
+            n += 1
+    return n
+
+
 def mark_all_seen(store: MemoryStore, user_id: UUID, profile_id: UUID | None = None) -> int:
     n = 0
     now = _utcnow()

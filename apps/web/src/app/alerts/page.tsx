@@ -122,11 +122,11 @@ function ModeSelect({
 function MatchCard({
   row,
   dimmed,
-  onCheckSeen,
+  onToggleSeen,
 }: {
   row: LandAlertMatchCard;
   dimmed: boolean;
-  onCheckSeen: (parcelId: string) => void;
+  onToggleSeen: (parcelId: string, nextChecked: boolean) => void;
 }) {
   const [flipped, setFlipped] = useState(false);
   const href = row.deep_link || `/parcels/${row.parcel_id}`;
@@ -136,13 +136,21 @@ function MatchCard({
 
   useLayoutEffect(() => {
     const inner = innerRef.current;
-    const face = flipped ? backRef.current : frontRef.current;
-    if (!inner || !face) return;
-    // Hold the active face height until the user flips back — no temporary tween
-    inner.style.height = `${face.scrollHeight}px`;
+    const front = frontRef.current;
+    const back = backRef.current;
+    if (!inner || !front || !back) return;
+    const apply = () => {
+      if (!innerRef.current || !frontRef.current || !backRef.current) return;
+      // Keep front and back the same size (tallest face)
+      const h = Math.max(frontRef.current.scrollHeight, backRef.current.scrollHeight);
+      innerRef.current.style.height = `${h}px`;
+    };
+    apply();
+    const t = window.setTimeout(apply, 40);
+    return () => window.clearTimeout(t);
   }, [flipped, row, dimmed]);
 
-  function flipOpen() {
+  function flipToggle() {
     setFlipped((v) => !v);
   }
 
@@ -154,11 +162,11 @@ function MatchCard({
         <article
           ref={frontRef}
           className="land-alert-card land-alert-card-front"
-          onClick={flipOpen}
+          onClick={flipToggle}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
-              flipOpen();
+              flipToggle();
             }
           }}
           role="button"
@@ -185,10 +193,7 @@ function MatchCard({
                 <input
                   type="checkbox"
                   checked={dimmed}
-                  disabled={dimmed}
-                  onChange={() => {
-                    if (!dimmed) onCheckSeen(row.parcel_id);
-                  }}
+                  onChange={(e) => onToggleSeen(row.parcel_id, e.target.checked)}
                   aria-label="Mark match as seen"
                 />
                 <span className="land-alert-checkseen-box" aria-hidden>
@@ -223,26 +228,27 @@ function MatchCard({
           <div className="land-alert-flip-hint">Tap to flip</div>
         </article>
 
-        <article ref={backRef} className="land-alert-card land-alert-card-back">
+        <article
+          ref={backRef}
+          className="land-alert-card land-alert-card-back"
+          onClick={flipToggle}
+          role="button"
+          tabIndex={0}
+          aria-label={`Flip back ${row.property_name}`}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              flipToggle();
+            }
+          }}
+        >
           <div className="land-alert-back-head">
-            <div>
-              <div className="land-alert-card-title">{row.property_name}</div>
-              <div className="land-alert-card-meta">
-                <span>{row.location || row.state || "—"}</span>
-                <span>{row.asking_price_display}</span>
-                <span>{row.acres_display}</span>
-              </div>
+            <div className="land-alert-card-title">{row.property_name}</div>
+            <div className="land-alert-card-meta">
+              <span>{row.location || row.state || "—"}</span>
+              <span>{row.asking_price_display}</span>
+              <span>{row.acres_display}</span>
             </div>
-            <button
-              type="button"
-              className="btn btn-ghost land-alert-flip-back"
-              onClick={(e) => {
-                e.stopPropagation();
-                setFlipped(false);
-              }}
-            >
-              Flip back
-            </button>
           </div>
 
           <div className="land-alert-back-rail" onClick={(e) => e.stopPropagation()}>
@@ -256,8 +262,8 @@ function MatchCard({
             />
           </div>
 
-          <div className="land-alert-back-actions">
-            <Link href={href} className="btn-intel" onClick={(e) => e.stopPropagation()}>
+          <div className="land-alert-back-actions" onClick={(e) => e.stopPropagation()}>
+            <Link href={href} className="btn-intel">
               Open full LandSignal report
             </Link>
           </div>
@@ -371,16 +377,18 @@ export default function LandAlertsPage() {
     );
   }, [matches, tab, pendingSeen]);
 
-  async function checkSeen(parcelId: string) {
+  async function toggleSeen(parcelId: string, nextChecked: boolean) {
     setPendingSeen((prev) => {
       const next = new Set(prev);
-      next.add(parcelId);
+      if (nextChecked) next.add(parcelId);
+      else next.delete(parcelId);
       return next;
     });
     try {
-      await landsignalApi.markLandAlertViewed(parcelId);
+      if (nextChecked) await landsignalApi.markLandAlertViewed(parcelId);
+      else await landsignalApi.unmarkLandAlertViewed(parcelId);
     } catch {
-      /* keep greyed locally; will sync on next load */
+      /* local toggle still applied; sync on next load */
     }
   }
 
@@ -876,7 +884,7 @@ export default function LandAlertsPage() {
                 key={row.id}
                 row={row}
                 dimmed={pendingSeen.has(row.parcel_id)}
-                onCheckSeen={checkSeen}
+                onToggleSeen={toggleSeen}
               />
             ))}
             {!visible.length ? (

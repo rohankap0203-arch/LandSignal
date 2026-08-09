@@ -240,6 +240,8 @@ export const landsignalApi = {
     api(`/land-alerts/profile/${profileId}/resume`, { method: "POST" }),
   markLandAlertViewed: (parcelId: string) =>
     api(`/land-alerts/matches/${parcelId}/viewed`, { method: "POST" }),
+  unmarkLandAlertViewed: (parcelId: string) =>
+    api(`/land-alerts/matches/${parcelId}/viewed`, { method: "DELETE" }),
   markAllLandAlertsSeen: (profileId?: string) => {
     const q = profileId ? `?profile_id=${profileId}` : "";
     return api<{ updated: number }>(`/land-alerts/mark-all-seen${q}`, { method: "POST" });

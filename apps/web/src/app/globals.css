@@ -3085,7 +3085,8 @@ a.acquire-block:hover {
   filter: grayscale(0.35);
 }
 
-.land-alert-flip.is-dimmed .land-alert-card {
+.land-alert-flip.is-dimmed .land-alert-card-front > :not(.land-alert-card-top),
+.land-alert-flip.is-dimmed .land-alert-card-back {
   pointer-events: none;
 }
 
@@ -3117,17 +3118,24 @@ a.acquire-block:hover {
   cursor: pointer;
 }
 
+.land-alert-card-front,
+.land-alert-card-back {
+  height: 100%;
+  box-sizing: border-box;
+}
+
 .land-alert-card-back {
   position: absolute;
   left: 0;
   right: 0;
   top: 0;
+  bottom: 0;
   transform: rotateY(180deg);
   overflow: visible;
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
-  height: auto;
+  cursor: pointer;
 }
 
 .land-alert-flip.is-new .land-alert-card-front,
@@ -3145,16 +3153,8 @@ a.acquire-block:hover {
 
 .land-alert-back-head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.land-alert-flip-back {
-  flex: 0 0 auto;
-  white-space: nowrap;
-  padding: 6px 10px !important;
-  font-size: 0.75rem !important;
+  flex-direction: column;
+  gap: 0.2rem;
 }
 
 .land-alert-back-rail {

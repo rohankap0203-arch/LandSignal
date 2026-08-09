@@ -1466,6 +1466,17 @@ async def mark_land_alert_viewed(parcel_id: UUID) -> dict[str, Any]:
     return {"updated": n}
 
 
+@router.delete("/land-alerts/matches/{parcel_id}/viewed")
+async def unmark_land_alert_viewed(parcel_id: UUID) -> dict[str, Any]:
+    from landsignal.services.land_alerts import DEMO_USER_ID, mark_match_unviewed
+    from landsignal.store import persist_store
+
+    store = get_store(get_settings().demo_seed)
+    n = mark_match_unviewed(store, DEMO_USER_ID, parcel_id)
+    persist_store(store)
+    return {"updated": n}
+
+
 @router.post("/land-alerts/mark-all-seen")
 async def mark_all_land_alerts_seen(profile_id: UUID | None = None) -> dict[str, Any]:
     from landsignal.services.land_alerts import DEMO_USER_ID, mark_all_seen
