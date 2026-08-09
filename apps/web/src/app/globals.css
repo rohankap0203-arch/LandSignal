@@ -3281,7 +3281,8 @@ a.acquire-block:hover {
 }
 
 .land-alert-flip.is-dimmed .land-alert-checkseen,
-.land-alert-flip.is-dimmed .land-alert-view-land-wrap {
+.land-alert-flip.is-dimmed .land-alert-view-land-wrap,
+.land-alert-flip.is-dimmed .land-alert-front-actions {
   pointer-events: auto;
 }
 
@@ -3366,8 +3367,8 @@ a.acquire-block:hover {
 
 .land-alert-card-back {
   overflow: visible;
-  padding-top: 1rem;
-  padding-bottom: 0.85rem;
+  padding: 1.05rem 0.85rem 0.75rem;
+  gap: 0.7rem;
 }
 
 .land-alert-flip.is-new .land-alert-card-front,
@@ -3390,37 +3391,65 @@ a.acquire-block:hover {
 .land-alert-back-head {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  margin-bottom: 0.25rem;
+  gap: 0.35rem;
+  margin-bottom: 0.1rem;
+}
+
+.land-alert-back-kicker {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.land-alert-card-back .land-alert-card-title {
+  font-size: 1.05rem;
+}
+
+.land-alert-card-back .land-alert-card-meta {
+  margin-top: 0.2rem;
+  font-size: 0.84rem;
 }
 
 .land-alert-back-rail {
   overflow: visible;
-  margin-top: 0.45rem;
-  margin-bottom: 0.35rem;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: 0.35rem 0 0.15rem;
+  min-height: 0;
 }
 
 .land-alert-acquire.acquire-rail,
 .land-alert-back-rail .acquire-rail {
-  gap: 0.4rem;
+  gap: 0.55rem;
+  width: 100%;
 }
 
 .land-alert-back-rail .acquire-card-row {
-  gap: 0.4rem;
+  gap: 0.5rem;
 }
 
 .land-alert-back-rail .acquire-mission {
   display: none;
 }
 
-.land-alert-back-actions {
+.land-alert-card-back .land-alert-flip-hint {
   margin-top: auto;
-  padding-top: 0.65rem;
-  padding-bottom: 0.15rem;
-  flex: 0 0 auto;
+  padding-top: 0.35rem;
 }
 
-.land-alert-back-actions .btn-intel {
+.land-alert-front-actions {
+  display: flex;
+  width: 100%;
+  margin-top: 0.15rem;
+}
+
+.land-alert-front-actions .btn-intel,
+.land-alert-card-front .btn-intel {
   display: flex;
   width: 100%;
   align-items: center;
@@ -3435,7 +3464,8 @@ a.acquire-block:hover {
   text-decoration: none;
 }
 
-.land-alert-back-actions .btn-intel:hover {
+.land-alert-front-actions .btn-intel:hover,
+.land-alert-card-front .btn-intel:hover {
   background: #000000;
   border-color: #000000;
 }

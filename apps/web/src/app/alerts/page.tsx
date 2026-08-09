@@ -243,6 +243,15 @@ function MatchCard({
               onClick={() => setViewerOpen(true)}
             />
           </div>
+          <div
+            className="land-alert-front-actions"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <Link href={href} className="btn-intel">
+              Open full LandSignal report
+            </Link>
+          </div>
           <div className="land-alert-flip-hint">Tap to flip</div>
         </article>
 
@@ -260,6 +269,7 @@ function MatchCard({
           }}
         >
           <div className="land-alert-back-head">
+            <p className="land-alert-back-kicker">Contact & next steps</p>
             <div className="land-alert-card-title">{row.property_name}</div>
             <div className="land-alert-card-meta">
               <span>{row.location || row.state || "—"}</span>
@@ -267,6 +277,21 @@ function MatchCard({
               <span>{row.acres_display}</span>
             </div>
           </div>
+
+          {(row.opportunity_indicators?.length || row.risk_indicators?.length) ? (
+            <div className="land-alert-indicators">
+              {row.opportunity_indicators?.slice(0, 2).map((t) => (
+                <span key={t} className="ok">
+                  {t}
+                </span>
+              ))}
+              {row.risk_indicators?.slice(0, 2).map((t) => (
+                <span key={t} className="risk">
+                  {t}
+                </span>
+              ))}
+            </div>
+          ) : null}
 
           <div className="land-alert-back-rail" onClick={(e) => e.stopPropagation()}>
             <AcquireRail
@@ -279,11 +304,7 @@ function MatchCard({
             />
           </div>
 
-          <div className="land-alert-back-actions" onClick={(e) => e.stopPropagation()}>
-            <Link href={href} className="btn-intel">
-              Open full LandSignal report
-            </Link>
-          </div>
+          <div className="land-alert-flip-hint">Tap to flip back</div>
         </article>
       </div>
 
