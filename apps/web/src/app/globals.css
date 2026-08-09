@@ -3305,12 +3305,15 @@ a.acquire-block:hover {
   transform: none;
 }
 
+/* Keep both faces in layout so front/back share one height */
 .land-alert-flip:not(.is-animating):not(.is-flipped) .land-alert-card-back {
-  display: none;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .land-alert-flip:not(.is-animating).is-flipped .land-alert-card-front {
-  display: none;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .land-alert-flip.is-animating .land-alert-flip-inner {
@@ -3355,13 +3358,14 @@ a.acquire-block:hover {
   height: auto;
   min-height: 100%;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  box-sizing: border-box;
 }
 
 .land-alert-card-back {
   overflow: visible;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
 }
 
 .land-alert-flip.is-new .land-alert-card-front,
@@ -3371,7 +3375,7 @@ a.acquire-block:hover {
 }
 
 .land-alert-flip-hint {
-  margin-top: 0.05rem;
+  margin-top: 0.1rem;
   margin-bottom: 0;
   padding: 0;
   font-size: 0.62rem;
@@ -3379,6 +3383,11 @@ a.acquire-block:hover {
   letter-spacing: 0.02em;
   line-height: 1;
   text-align: right;
+  margin-top: auto;
+}
+
+.land-alert-card-front .land-alert-view-land-wrap + .land-alert-flip-hint {
+  margin-top: 0.1rem;
 }
 
 .land-alert-back-head {
@@ -3565,18 +3574,19 @@ a.acquire-block:hover {
 }
 
 .land-alert-view-land-wrap {
-  margin: 0.28rem 0 0.22rem;
+  margin: 0.55rem 0 0.45rem;
+  margin-top: auto;
 }
 
 .land-alert-view-land {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
+  gap: 0.4rem;
   width: 100%;
-  min-height: 2.55rem;
-  padding: 0.55rem 0.85rem;
-  border-radius: 8px;
+  min-height: 2rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--brand) 45%, var(--line));
   background:
     linear-gradient(
@@ -3585,7 +3595,7 @@ a.acquire-block:hover {
       color-mix(in srgb, var(--brand) 6%, var(--bg-soft))
     );
   color: var(--ink);
-  font-size: 0.9rem;
+  font-size: 0.84rem;
   font-weight: 600;
   letter-spacing: 0.01em;
   cursor: pointer;
@@ -3632,7 +3642,7 @@ a.acquire-block:hover {
 
 .land-viewer {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   width: 100%;
   height: 100%;
   background:
@@ -3760,10 +3770,118 @@ a.acquire-block:hover {
   cursor: not-allowed;
 }
 
+.land-viewer-tool-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.land-viewer-tool-link:hover {
+  background: color-mix(in srgb, var(--brand) 14%, transparent);
+}
+
+.land-viewer-nearby {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 1rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-elevated) 90%, var(--bg-soft));
+}
+
+.land-viewer-nearby-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: 0.15rem;
+}
+
+.land-viewer-chip {
+  min-height: 1.55rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--chip, var(--brand)) 45%, var(--line));
+  background: color-mix(in srgb, var(--chip, var(--brand)) 10%, var(--bg-elevated));
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.land-viewer-chip:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--chip, var(--brand)) 18%, var(--bg-elevated));
+}
+
+.land-viewer-chip.is-on {
+  background: color-mix(in srgb, var(--chip, var(--brand)) 28%, var(--bg-elevated));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip, var(--brand)) 55%, transparent);
+}
+
+.land-viewer-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .land-viewer-stage {
   position: relative;
   min-height: 0;
   background: #151a18;
+}
+
+.land-viewer-compass {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 500;
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(12, 16, 14, 0.72);
+  color: #f4f1e8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.parcel-map-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.parcel-map-expand {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.parcel-map-expand:hover {
+  border-color: var(--brand);
+  color: color-mix(in srgb, var(--brand) 70%, var(--ink));
 }
 
 .land-viewer-map {
@@ -3815,6 +3933,11 @@ a.acquire-block:hover {
 .land-viewer-hud .land-viewer-measure {
   border-color: color-mix(in srgb, #f2c14e 55%, transparent);
   color: #ffe7a3;
+}
+
+.land-viewer-hud .land-viewer-nearby-status {
+  border-color: color-mix(in srgb, #60a5fa 50%, transparent);
+  color: #dbeafe;
 }
 
 @media (max-width: 720px) {

@@ -2,6 +2,20 @@
 
 import { useEffect, useRef } from "react";
 
+function FullscreenIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M8 3H4v4M16 3h4v4M8 21H4v-4M16 21h4v-4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 type Props = {
   latitude?: number | null;
   longitude?: number | null;
@@ -15,6 +29,8 @@ type Props = {
   scrollWheelZoom?: boolean;
   /** Bump to force Leaflet to remeasure after a parent layout/transform change */
   layoutKey?: string | number;
+  /** Opens the full-screen land viewer from the caption row */
+  onExpand?: () => void;
 };
 
 export function ParcelMap({
@@ -27,6 +43,7 @@ export function ParcelMap({
   className = "",
   scrollWheelZoom = false,
   layoutKey = 0,
+  onExpand,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
@@ -53,7 +70,6 @@ export function ParcelMap({
       const center: [number, number] =
         latitude != null && longitude != null ? [latitude, longitude] : [39.5, -98.35];
 
-      // Match intelligence-results map interaction options exactly
       map = L.map(ref.current, {
         scrollWheelZoom,
         dragging: true,
@@ -150,8 +166,19 @@ export function ParcelMap({
       />
       <div ref={ref} style={{ height, width: "100%" }} />
       {!compact ? (
-        <div className="px-3 py-2 text-[11px] text-[var(--muted)]">
-          OSM + Esri imagery · Toggle layers expand in Phase 2 (flood/wetlands overlays)
+        <div className="parcel-map-caption">
+          <span>OSM + Esri imagery · Toggle layers expand in Phase 2 (flood/wetlands overlays)</span>
+          {onExpand ? (
+            <button
+              type="button"
+              className="parcel-map-expand"
+              onClick={onExpand}
+              aria-label="Open full screen land view"
+              title="Full screen land view"
+            >
+              <FullscreenIcon />
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

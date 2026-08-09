@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { AcquireRail, type OutreachPlaybook } from "@/components/acquire-rail";
 import { AskYourselfTypewriter } from "@/components/ask-yourself-typewriter";
 import { LandLoader } from "@/components/land-loader";
+import { LandViewerModal } from "@/components/land-viewer-modal";
 import { PriceTrajectory } from "@/components/price-trajectory";
 import { ReturnVisual } from "@/components/return-visual";
 import { ScoreBar } from "@/components/score-bar";
@@ -87,6 +88,7 @@ export default function ParcelIntelligencePage() {
   const [watched, setWatched] = useState(false);
   const [watchMsg, setWatchMsg] = useState("");
   const [openRating, setOpenRating] = useState<string | null>(null);
+  const [landViewerOpen, setLandViewerOpen] = useState(false);
 
   useEffect(() => {
     setData(null);
@@ -319,6 +321,26 @@ export default function ParcelIntelligencePage() {
             polygon={parcel.polygon as number[][][]}
             title={listing?.title as string}
             height={280}
+            onExpand={() => setLandViewerOpen(true)}
+          />
+          <LandViewerModal
+            open={landViewerOpen}
+            onClose={() => setLandViewerOpen(false)}
+            title={String(listing?.title || "Parcel")}
+            location={[parcel.county, parcel.state].filter(Boolean).join(", ") || null}
+            acresDisplay={
+              parcel.acres != null && Number.isFinite(Number(parcel.acres))
+                ? `${Number(parcel.acres).toLocaleString(undefined, { maximumFractionDigits: 2 })} ac`
+                : null
+            }
+            priceDisplay={
+              listing?.asking_price != null
+                ? `$${Number(listing.asking_price).toLocaleString()}`
+                : null
+            }
+            latitude={parcel.latitude as number}
+            longitude={parcel.longitude as number}
+            polygon={parcel.polygon as number[][][]}
           />
         </div>
 
