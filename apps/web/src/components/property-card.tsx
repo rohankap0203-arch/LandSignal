@@ -97,6 +97,9 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
         <div className="mt-2 flex flex-wrap gap-2 text-xs">
           <span className="chip">{row.discount_display}</span>
           <span className="chip">{row.best_strategy_label}</span>
+          <span className="chip" title="Detail page builds a year-by-year path from soil, flood, growth, channel, and more">
+            Multi-factor path
+          </span>
         </div>
 
         <TrajectorySpark
@@ -128,7 +131,7 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             className={`btn-intel ${intelPending ? "pending" : ""}`}
             onClick={() => setIntelPending(true)}
           >
-            {intelPending ? "Opening…" : "See full details"}
+            {intelPending ? "Opening…" : "Open return path"}
           </Link>
         </div>
       </div>

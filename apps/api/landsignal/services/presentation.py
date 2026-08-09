@@ -287,11 +287,59 @@ def match_reasons(
     return reasons[:3]
 
 
+def _card_nuance(enrichment) -> str | None:
+    """One cheap nuance clause for search cards (no full path engine)."""
+    if not enrichment:
+        return None
+    bits: list[str] = []
+
+    def _n(attr: str) -> dict:
+        prov = getattr(enrichment, attr, None)
+        if not prov:
+            return {}
+        return prov.normalized or prov.value or {}
+
+    soil = _n("soil")
+    flood = _n("flood")
+    wet = _n("wetlands")
+    growth = _n("growth") or _n("comps")
+    try:
+        prime = float(soil.get("prime_farmland_pct")) if soil.get("prime_farmland_pct") is not None else None
+    except Exception:
+        prime = None
+    try:
+        flood_pct = float(flood.get("flood_zone_pct")) if flood.get("flood_zone_pct") is not None else None
+    except Exception:
+        flood_pct = None
+    try:
+        wet_pct = float(wet.get("wetland_pct")) if wet.get("wetland_pct") is not None else None
+    except Exception:
+        wet_pct = None
+    try:
+        g = growth.get("path_of_growth_score")
+        growth_score = float(g) if g is not None else None
+    except Exception:
+        growth_score = None
+
+    if flood_pct is not None and flood_pct >= 20:
+        bits.append(f"flood ~{flood_pct:.0f}% slows the path")
+    elif wet_pct is not None and wet_pct >= 15:
+        bits.append(f"wetlands ~{wet_pct:.0f}% trim usable acres")
+    elif prime is not None and prime >= 45:
+        bits.append(f"~{prime:.0f}% prime soil supports rent")
+    elif growth_score is not None and growth_score >= 65:
+        bits.append("growth corridor lifts the hold case")
+    if not bits:
+        return "path bends with local screens — not a flat line"
+    return bits[0]
+
+
 def build_return_thesis(
     *,
     score,
     listing,
     auction_path: dict[str, Any] | None = None,
+    enrichment=None,
 ) -> tuple[str | None, str | None]:
     """One plain line for cards: buy price vs our value + conviction."""
     est = getattr(score, "estimated_value_usd", None)
@@ -326,12 +374,15 @@ def build_return_thesis(
         if conviction == "MEDIUM"
         else "Worth watching"
     )
+    nuance = _card_nuance(enrichment)
     if entry and est and gap_pct is not None:
         thesis = f"{interest} · ~${entry:,.0f} buy vs ${est:,.0f} value ({gap_pct:+.0f}%)"
     elif est:
         thesis = f"{interest} · value ~${est:,.0f} · {strat}"
     else:
         thesis = f"{interest} · {strat} possible"
+    if nuance:
+        thesis = f"{thesis} · {nuance}"
     return thesis, conviction
 
 

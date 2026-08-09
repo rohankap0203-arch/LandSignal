@@ -324,6 +324,7 @@ export default function ParcelIntelligencePage() {
 
       <section className="panel p-5">
         <ReturnVisual
+          intel={(data.return_intelligence as AnyRec) || null}
           cases={
             ((data.scenarios_human as AnyRec[]) || scenarios || []) as never[]
           }

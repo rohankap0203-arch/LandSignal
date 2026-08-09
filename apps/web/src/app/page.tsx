@@ -220,8 +220,9 @@ export default function SearchPage() {
             <div className="text-xs uppercase tracking-[0.14em] text-white/70">LandSignal</div>
             <h1>Find land that matches what you want</h1>
             <p>
-              Set price, acres, and location, then click Show matches. Each result shows an opportunity
-              score (0–100), risk, how complete the file is, and a match score for your filters.
+              Set price, acres, and location, then click Show matches. Each file scores opportunity,
+              risk, and completeness — then opens into a multi-factor return path (soil, flood,
+              growth, channel, carry) instead of a flat diagonal.
             </p>
           </div>
         </div>

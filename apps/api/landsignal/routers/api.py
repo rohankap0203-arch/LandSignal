@@ -527,6 +527,7 @@ async def radar(
                 score=score,
                 listing=listing,
                 auction_path=auction_path if isinstance(auction_path, dict) else None,
+                enrichment=enrichment,
             )
             from landsignal.services.market_trajectory import build_market_trajectory
 
@@ -910,6 +911,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     }
 
     from landsignal.services.market_trajectory import build_market_trajectory
+    from landsignal.services.return_path import build_return_intelligence
 
     market_trajectory = build_market_trajectory(
         parcel=parcel,
@@ -923,6 +925,32 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
             "market_trajectory": market_trajectory,
         }
         store.enrichments[parcel_id] = enrichment
+
+    rc = (brief.get("return_case") or {}) if isinstance(brief, dict) else {}
+    entry_for_path = rc.get("entry_usd")
+    if entry_for_path is None and auction_path:
+        entry_for_path = auction_path.get("expected_settle_usd")
+    if entry_for_path is None and isinstance(price, dict):
+        entry_for_path = (
+            price.get("expected_settle_usd")
+            or price.get("amount_usd")
+            or price.get("model_value_usd")
+        )
+    mark_for_path = rc.get("mark_usd") or (score.estimated_value_usd if score else None)
+    traj_annual = None
+    if isinstance(market_trajectory, dict):
+        traj_annual = market_trajectory.get("annual_rate")
+
+    return_intelligence = build_return_intelligence(
+        parcel=parcel,
+        listing=listing,
+        score=score,
+        enrichment=enrichment,
+        entry_usd=float(entry_for_path) if entry_for_path is not None else None,
+        mark_usd=float(mark_for_path) if mark_for_path is not None else None,
+        hold_years=10,
+        trajectory_annual=float(traj_annual) if traj_annual is not None else None,
+    )
 
     return {
         "parcel": parcel,
@@ -940,6 +968,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         "sourcing": source,
         "cockpit": cockpit,
         "market_trajectory": market_trajectory,
+        "return_intelligence": return_intelligence,
         "rating_breakdown": rating_breakdown(score, parcel=parcel, listing=listing) if score else [],
         "score_explained": brief.get("score_story")
         or {
