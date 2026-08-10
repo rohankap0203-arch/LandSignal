@@ -14,6 +14,7 @@ import {
   type InflationMeta,
   type MoneyMode,
 } from "@/lib/inflation";
+import { MoneyModeControl, moneyModeShort } from "@/components/money-mode-control";
 
 type PathPoint = {
   year_offset: number;
@@ -557,8 +558,8 @@ export function ReturnVisual({
           </p>
           <p>
             <strong>Today’s $</strong> shrinks future dollars by a {cpiDisplay} CPI screen so you see
-            purchasing power. <strong>Nominal</strong> is the raw future number. Buy price is already
-            in today’s dollars.
+            purchasing power. <strong>Before inflation</strong> is the raw future number. Buy price
+            is already in today’s dollars.
           </p>
         </div>
       ) : null}
@@ -567,32 +568,6 @@ export function ReturnVisual({
         {intel?.purchase_usd ? ` · buy near ${money(intel.purchase_usd)}` : ""}.
         Pick a case and hold length.
       </p>
-
-      <div className="money-mode-row mt-3" role="group" aria-label="Dollar view">
-        <div className="money-mode-toggle">
-          <button
-            type="button"
-            className={moneyMode === "today" ? "is-active" : undefined}
-            aria-pressed={moneyMode === "today"}
-            onClick={() => setMoneyMode("today")}
-          >
-            Today’s $
-          </button>
-          <button
-            type="button"
-            className={moneyMode === "nominal" ? "is-active" : undefined}
-            aria-pressed={moneyMode === "nominal"}
-            onClick={() => setMoneyMode("nominal")}
-          >
-            Nominal
-          </button>
-        </div>
-        <p className="money-mode-note">
-          {showToday
-            ? `Purchasing power after ~${cpiDisplay} inflation`
-            : `Raw future dollars · CPI screen ~${cpiDisplay}`}
-        </p>
-      </div>
 
       <div className="traj-windows mt-3" role="tablist" aria-label="Return case">
         {CASE_ORDER.map((k) => (
@@ -665,6 +640,25 @@ export function ReturnVisual({
           <span className="hold-custom-hint">1–100 · chart &amp; totals update live</span>
         </div>
       ) : null}
+
+      <MoneyModeControl
+        className="mt-3"
+        mode={moneyMode}
+        onChange={setMoneyMode}
+        cpiDisplay={cpiDisplay}
+        compare={
+          holdYears >= 5 &&
+          endpoint?.total_back_usd != null &&
+          endpoint?.total_back_usd_today != null
+            ? {
+                label: `Total back after ${holdYears} yr · ${caseLabel(activeCase).toLowerCase()}`,
+                today: endpoint.total_back_usd_today,
+                before: endpoint.total_back_usd,
+                format: shortMoney,
+              }
+            : null
+        }
+      />
 
       <div className="return-chart-wrap mt-3">
         <svg
@@ -760,18 +754,16 @@ export function ReturnVisual({
             <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
               After exactly {holdYears} years · {caseLabel(activeCase).toLowerCase()}
             </div>
-            <div className="return-future-basis">
-              {showToday ? "in today’s $" : "nominal"}
-            </div>
+            <div className="return-future-basis">{moneyModeShort(moneyMode)}</div>
           </div>
           <div className="return-future-grid">
             <div>
               <span>Land at exit</span>
               <strong>{money(exitShow)}</strong>
-              {holdYears >= 10 && endpoint.exit_usd != null && endpoint.exit_usd_today != null ? (
+              {holdYears >= 5 && endpoint.exit_usd != null && endpoint.exit_usd_today != null ? (
                 <em className="return-alt-line">
                   {showToday
-                    ? `${shortMoney(Number(endpoint.exit_usd))} nominal`
+                    ? `${shortMoney(Number(endpoint.exit_usd))} before inflation`
                     : `${shortMoney(Number(endpoint.exit_usd_today))} today’s $`}
                 </em>
               ) : null}
@@ -779,12 +771,12 @@ export function ReturnVisual({
             <div>
               <span>Rent along the way</span>
               <strong>{money(rentShow)}</strong>
-              {holdYears >= 10 &&
+              {holdYears >= 5 &&
               endpoint.cumulative_rent_usd != null &&
               endpoint.cumulative_rent_usd_today != null ? (
                 <em className="return-alt-line">
                   {showToday
-                    ? `${shortMoney(Number(endpoint.cumulative_rent_usd))} nominal`
+                    ? `${shortMoney(Number(endpoint.cumulative_rent_usd))} before inflation`
                     : `${shortMoney(Number(endpoint.cumulative_rent_usd_today))} today’s $`}
                 </em>
               ) : null}
@@ -792,12 +784,12 @@ export function ReturnVisual({
             <div>
               <span>Total back</span>
               <strong>{money(totalShow)}</strong>
-              {holdYears >= 10 &&
+              {holdYears >= 5 &&
               endpoint.total_back_usd != null &&
               endpoint.total_back_usd_today != null ? (
                 <em className="return-alt-line">
                   {showToday
-                    ? `${shortMoney(Number(endpoint.total_back_usd))} nominal`
+                    ? `${shortMoney(Number(endpoint.total_back_usd))} before inflation`
                     : `${shortMoney(Number(endpoint.total_back_usd_today))} today’s $`}
                 </em>
               ) : null}
@@ -813,10 +805,21 @@ export function ReturnVisual({
                 </span>
                 {irrPct != null ? (
                   <span className="return-vs-irr">
-                    {irrPct.toFixed(1)}%/yr{showToday ? " real" : ""}
+                    {irrPct.toFixed(1)}%/yr{showToday ? " after inflation" : ""}
                   </span>
                 ) : null}
               </strong>
+              {holdYears >= 5 &&
+              endpoint.irr != null &&
+              endpoint.irr_real != null &&
+              Number.isFinite(endpoint.irr) &&
+              Number.isFinite(endpoint.irr_real) ? (
+                <em className="return-alt-line">
+                  {showToday
+                    ? `${(Number(endpoint.irr) * 100).toFixed(1)}%/yr before inflation`
+                    : `${(Number(endpoint.irr_real) * 100).toFixed(1)}%/yr after inflation`}
+                </em>
+              ) : null}
             </div>
           </div>
         </div>
@@ -904,7 +907,7 @@ export function ReturnVisual({
               </ul>
               <p className="mt-3 text-xs text-[var(--muted)] leading-snug">
                 {holdYears >= 50
-                  ? "Long holds fade on purpose — century dollars are nominal screens, not dynasty math."
+                  ? "Long holds fade on purpose — century dollars before inflation are easy to misread."
                   : "Annualized if you buy, collect rent, and sell at that case’s exit. A screen — not a promise."}
               </p>
             </div>
@@ -936,7 +939,9 @@ export function ReturnVisual({
               <div className="flex items-baseline justify-between gap-2">
                 <span className="font-semibold">{caseLabel(k)}</span>
                 <span className="tabular-nums return-mini-nums">
-                  {pct != null ? `${pct.toFixed(1)}%/yr${showToday ? " real" : ""}` : "n/a"}
+                  {pct != null
+                    ? `${pct.toFixed(1)}%/yr${showToday ? " after inflation" : ""}`
+                    : "n/a"}
                   <span className="return-mini-land"> · land {shortMoney(Number(land || 0))}</span>
                 </span>
               </div>

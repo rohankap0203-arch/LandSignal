@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { cpiFromMeta, deflate, realRate, type InflationMeta, type MoneyMode } from "@/lib/inflation";
+import { MoneyModeControl, moneyModeShort } from "@/components/money-mode-control";
 
 type Point = {
   year: number;
@@ -297,33 +298,12 @@ export function PriceTrajectory({
           </p>
           <p className="mt-1 text-[11px] text-[var(--muted)] leading-snug">
             {horizon >= 50
-              ? "Far years fade hard — compare Today’s $ so inflation doesn’t fake wealth."
+              ? "Far years fade hard — use Today’s $ so inflation doesn’t fake wealth."
               : "Far years fade on purpose — not a straight rocket."}{" "}
             {trajectory?.annual_rate_display
               ? `Near-term pace ~${trajectory.annual_rate_display}.`
               : null}
           </p>
-          <div className="money-mode-row mt-2" role="group" aria-label="Dollar view">
-            <div className="money-mode-toggle">
-              <button
-                type="button"
-                className={moneyMode === "today" ? "is-active" : undefined}
-                aria-pressed={moneyMode === "today"}
-                onClick={() => setMoneyMode("today")}
-              >
-                Today’s $
-              </button>
-              <button
-                type="button"
-                className={moneyMode === "nominal" ? "is-active" : undefined}
-                aria-pressed={moneyMode === "nominal"}
-                onClick={() => setMoneyMode("nominal")}
-              >
-                Nominal
-              </button>
-            </div>
-            <p className="money-mode-note">CPI screen ~{cpiDisplay}</p>
-          </div>
         </div>
         <div className="traj-stats">
           <div>
@@ -338,7 +318,7 @@ export function PriceTrajectory({
             {horizon >= 10 && windowMath.futureUsdToday != null ? (
               <em className="return-alt-line">
                 {showToday
-                  ? `${shortMoney(windowMath.futureUsd)} nominal`
+                  ? `${shortMoney(windowMath.futureUsd)} before inflation`
                   : `${shortMoney(windowMath.futureUsdToday)} today’s $`}
               </em>
             ) : null}
@@ -350,6 +330,23 @@ export function PriceTrajectory({
           </div>
         </div>
       </div>
+
+      <MoneyModeControl
+        className="mt-3"
+        mode={moneyMode}
+        onChange={setMoneyMode}
+        cpiDisplay={cpiDisplay}
+        compare={
+          horizon >= 5 && windowMath.futureUsdToday != null
+            ? {
+                label: `Land value ${horizon} yr ahead`,
+                today: windowMath.futureUsdToday,
+                before: windowMath.futureUsd,
+                format: shortMoney,
+              }
+            : null
+        }
+      />
 
       <div className="traj-windows" role="tablist" aria-label="Chart time window">
         {(windows.length ? windows : TIMEFRAMES).map((y) => (
@@ -583,15 +580,15 @@ export function PriceTrajectory({
         <div className="traj-year-box">
           <span>
             {horizon} year{horizon === 1 ? "" : "s"} ahead
-            {showToday ? " · today’s $" : " · nominal"}
+            {` · ${moneyModeShort(moneyMode)}`}
           </span>
           <strong>
             {money(showToday ? windowMath.futureUsdToday ?? windowMath.futureUsd : windowMath.futureUsd)}
           </strong>
-          {horizon >= 10 && windowMath.futureUsdToday != null ? (
+          {horizon >= 5 && windowMath.futureUsdToday != null ? (
             <em className="return-alt-line">
               {showToday
-                ? `${shortMoney(windowMath.futureUsd)} nominal`
+                ? `${shortMoney(windowMath.futureUsd)} before inflation`
                 : `${shortMoney(windowMath.futureUsdToday)} today’s $`}
             </em>
           ) : null}

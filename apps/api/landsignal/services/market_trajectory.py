@@ -707,7 +707,7 @@ def build_market_trajectory(
     if fwd_mult is not None and years_forward >= 50:
         summary_bullets.append(
             f"At {years_forward} years the faded path is about {fwd_mult:.1f}× today’s mark "
-            f"(~{_money(y_fwd['value_usd'])} nominal · ~{_money(fwd_today)} in today’s $) — "
+            f"(~{_money(y_fwd['value_usd'])} before inflation · ~{_money(fwd_today)} in today’s $) — "
             f"not a promise of generational wealth."
         )
     if has_observed:
@@ -747,7 +747,7 @@ def build_market_trajectory(
         "cagr_10y_display": f"{cagr_10*100:+.1f}%/yr" if cagr_10 is not None else "n/a",
         "cagr_forward_display": f"{cagr_fwd*100:+.1f}%/yr" if cagr_fwd is not None else "n/a",
         "cagr_forward_real_display": (
-            f"{real_rate(cagr_fwd, DEFAULT_CPI_ANNUAL)*100:+.1f}%/yr real"
+            f"{real_rate(cagr_fwd, DEFAULT_CPI_ANNUAL)*100:+.1f}%/yr after inflation"
             if cagr_fwd is not None and real_rate(cagr_fwd, DEFAULT_CPI_ANNUAL) is not None
             else "n/a"
         ),

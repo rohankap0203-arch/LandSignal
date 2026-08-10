@@ -35,7 +35,7 @@ export type OpportunityStandings = {
   why_not_higher?: string[];
   rank_plain?: string;
   ceiling_plain?: string;
-  method_plain?: string;
+  method_plain?: string | null;
 };
 
 /** Clickable red→green meter — opportunity expands into sitewide standings + factors. */
@@ -98,7 +98,7 @@ export function ScoreBar({
       {open ? (
         <div className="score-bar-detail mt-2 text-left" onClick={(e) => e.stopPropagation()}>
           {hasStandings && standings ? (
-            <OpportunityStandingsPanel score={v} standings={standings} verdict={verdict} />
+            <OpportunityStandingsPanel score={v} standings={standings} />
           ) : (
             <>
               {verdict ? <p className="text-sm font-medium leading-snug">{verdict}</p> : null}
@@ -124,28 +124,29 @@ export function ScoreBar({
 function OpportunityStandingsPanel({
   score,
   standings,
-  verdict,
 }: {
   score: number;
   standings: OpportunityStandings;
-  verdict?: string;
 }) {
   const hist = standings.histogram || [];
   const n = standings.sample_n || 0;
   const markerBucket = hist.findIndex((b) => score >= b.lo && score < b.hi);
   const markerIdx =
     markerBucket >= 0 ? markerBucket : score >= 100 ? hist.length - 1 : 0;
+  const topFactors = (standings.factors || []).slice(0, 3);
+  const why = (standings.why_not_higher || [])[0];
 
   return (
-    <div className="opp-standings">
-      <p className="opp-standings-rank">{standings.rank_plain || verdict}</p>
+    <div className="opp-standings opp-standings--compact">
+      <p className="opp-standings-rank">{standings.rank_plain}</p>
+      {standings.ceiling_plain ? (
+        <p className="opp-standings-meaning">{standings.ceiling_plain}</p>
+      ) : null}
 
       <div
         className="opp-hist"
         role="img"
-        aria-label={`Opportunity score ${Math.round(score)} vs ${n.toLocaleString()} live files. Median ${
-          standings.median != null ? Math.round(standings.median) : "n/a"
-        }, site high ${standings.max != null ? Math.round(standings.max) : "n/a"}.`}
+        aria-label={`Your ${Math.round(score)} vs ${n.toLocaleString()} live files`}
       >
         <div className="opp-hist-bars">
           {hist.map((b, i) => (
@@ -158,51 +159,45 @@ function OpportunityStandingsPanel({
                 className="opp-hist-bar"
                 style={{ height: `${Math.max(8, Math.round(b.bar * 100))}%` }}
               />
-              <span className="opp-hist-tick">{b.lo}</span>
             </div>
           ))}
         </div>
-        <div className="opp-hist-legend">
+        <div className="opp-hist-scale" aria-hidden>
+          <span>0</span>
+          <span>you {Math.round(score)}</span>
+          <span>100</span>
+        </div>
+        <div className="opp-standings-meta">
           <span>
-            You · <strong>{Math.round(score)}</strong>
-            {standings.beats_pct != null ? (
-              <span className="opp-hist-beat"> · beats ~{Math.round(standings.beats_pct)}%</span>
-            ) : null}
+            Beats <strong>~{Math.round(standings.beats_pct || 0)}%</strong>
           </span>
           <span>
-            Median · <strong>{standings.median != null ? Math.round(standings.median) : "—"}</strong>
+            Median <strong>{standings.median != null ? Math.round(standings.median) : "—"}</strong>
           </span>
           <span>
-            Site high · <strong>{standings.max != null ? Math.round(standings.max) : "—"}</strong>
+            Site high <strong>{standings.max != null ? Math.round(standings.max) : "—"}</strong>
           </span>
-          <span className="opp-hist-n">{n.toLocaleString()} live files</span>
         </div>
       </div>
 
-      {standings.ceiling_plain ? (
-        <p className="opp-standings-ceiling">{standings.ceiling_plain}</p>
+      {why ? (
+        <p className="opp-why-one">
+          <span className="opp-why-k">Why not 90 · </span>
+          {why}
+        </p>
       ) : null}
 
-      <div className="opp-why-block">
-        <div className="opp-why-k">Why this number — not 90?</div>
-        <ul>
-          {(standings.why_not_higher || []).map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ul>
-      </div>
-
-      {standings.factors && standings.factors.length ? (
+      {topFactors.length ? (
         <div className="opp-factors">
-          <div className="opp-why-k">What builds the score</div>
+          <div className="opp-why-k">What’s in your {Math.round(score)}</div>
           <div className="opp-factor-list">
-            {standings.factors.slice(0, 6).map((f) => (
+            {topFactors.map((f) => (
               <div key={f.key} className={`opp-factor-row tone-${f.direction}`}>
                 <div className="opp-factor-top">
                   <span className="opp-factor-label">{f.label}</span>
                   <span className="opp-factor-score tabular-nums">
                     {Math.round(f.score)}
-                    <span className="opp-factor-w"> · {f.weight_pct}%</span>
+                    <span className="opp-factor-w"> · {f.weight_pct}% wt</span>
                   </span>
                 </div>
                 <div className="opp-factor-track" aria-hidden>
@@ -215,10 +210,6 @@ function OpportunityStandingsPanel({
             ))}
           </div>
         </div>
-      ) : null}
-
-      {standings.method_plain ? (
-        <p className="opp-standings-method">{standings.method_plain}</p>
       ) : null}
     </div>
   );

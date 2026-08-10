@@ -6,8 +6,12 @@ export type InflationMeta = {
   cpi_display?: string;
   plain?: string;
   label_today?: string;
+  /** Display label for raw future dollars (not “nominal”). */
   label_nominal?: string;
 };
+
+export const MONEY_LABEL_TODAY = "Today’s $";
+export const MONEY_LABEL_BEFORE = "Before inflation";
 
 export function cpiFromMeta(meta?: InflationMeta | null): number {
   const n = Number(meta?.cpi_annual);

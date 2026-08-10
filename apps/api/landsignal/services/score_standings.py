@@ -90,7 +90,6 @@ def build_factor_contributions(score) -> list[dict[str, Any]]:
         val = _f(c.get("value")) or 0.0
         weight = _f(c.get("weight")) or 0.0
         help_row = CATEGORY_HELP.get(key, {})
-        # Contribution to 0–100 opportunity (pre-lift) ≈ value * weight
         contribution = val * weight
         gap_to_perfect = max(0.0, (100.0 - val) * weight)
         rows.append(
@@ -115,7 +114,7 @@ def build_opportunity_standings(
     score,
     place: str = "this area",
 ) -> dict[str, Any]:
-    """Compact, true sitewide context for this opportunity score."""
+    """Compact, personal sitewide context for this opportunity score."""
     opp = _f(getattr(score, "opportunity", None)) or 0.0
     opp = max(0.0, min(100.0, opp))
     live = collect_live_opportunity_scores(store)
@@ -129,53 +128,77 @@ def build_opportunity_standings(
     percentile = _percentile_rank(live_sorted, opp)
     beats_pct = round(percentile, 0)
     factors = build_factor_contributions(score)
-    lifts = [f for f in factors if f["direction"] == "up"][:3]
-    drags = sorted(factors, key=lambda r: r["gap"], reverse=True)[:3]
-
-    # Why not 90? — honest ceiling for process/public land screens
-    why_not: list[str] = []
-    if top is not None and opp < 90:
-        if top < 90:
-            why_not.append(
-                f"Across {n:,} live files, the top score right now is {top:.0f} — "
-                f"90 is above anything currently indexed."
-            )
-        else:
-            why_not.append(
-                f"Only the rarest files clear 90. This one sits at {opp:.0f}."
-            )
-    if drags:
-        top_drag = drags[0]
-        if top_drag["gap"] >= 2:
-            why_not.append(
-                f"Biggest hold-back: {top_drag['label']} at {top_drag['score']:.0f}/100 "
-                f"(~{top_drag['gap']:.0f} pts left on the table)."
-            )
+    lifts = [f for f in factors if f["direction"] == "up"][:2]
+    drags = sorted(factors, key=lambda r: r["gap"], reverse=True)[:2]
+    shown = round(opp)
     risk = _f(getattr(score, "risk", None))
-    if risk is not None and risk >= 40:
+
+    # One personal lead line — what THIS number means for the buyer
+    if top is not None and shown >= round(top) and beats_pct >= 90:
+        rank_plain = (
+            f"Your {shown} is as high as anything live right now "
+            f"(beats ~{beats_pct:.0f}% of {n:,} files)."
+        )
+    elif beats_pct >= 90:
+        rank_plain = (
+            f"Your {shown} is elite — ahead of ~{beats_pct:.0f}% of live files "
+            f"(site high ≈ {top:.0f})."
+        )
+    elif beats_pct >= 70:
+        rank_plain = (
+            f"Your {shown} is a strong scout pick — ahead of ~{beats_pct:.0f}% "
+            f"(median ~{median:.0f})."
+        )
+    elif beats_pct >= 50:
+        rank_plain = (
+            f"Your {shown} sits above the middle of the pack (median ~{median:.0f})."
+        )
+    else:
+        rank_plain = (
+            f"Your {shown} is below the site median (~{median:.0f}) — "
+            f"open stronger files first."
+        )
+
+    # Single short "why not 90" — personal + dynamic
+    why_not: list[str] = []
+    if top is not None and shown < 90:
+        if round(top) < 90:
+            why_bits = [f"Nothing live clears 90 — top on site is {top:.0f}"]
+        else:
+            why_bits = [f"90 is rare; you’re at {shown}"]
+        if drags and drags[0]["gap"] >= 2:
+            why_bits.append(
+                f"{drags[0]['label'].lower()} is the main drag "
+                f"({drags[0]['score']:.0f}/100)"
+            )
+        elif risk is not None and risk >= 40:
+            why_bits.append(f"risk screen is still {risk:.0f}")
+        why_not.append(" · ".join(why_bits) + ".")
+    elif drags and drags[0]["gap"] >= 2:
         why_not.append(
-            f"Risk screen is {risk:.0f}/100 — the engine won’t hand out elite scores while that stays elevated."
+            f"Room left mostly in {drags[0]['label'].lower()} "
+            f"({drags[0]['score']:.0f}/100)."
         )
     if not why_not:
         why_not.append(
-            "Scores are a weighted blend of price edge, land quality, growth, access, and risk — "
-            "not a grade for ‘how good the dirt looks’ alone."
+            "It’s a weighted buy-edge screen — price, land, growth, access, risk — "
+            "not a dirt beauty grade."
         )
 
-    shown = round(opp)
-    if top is not None and shown >= round(top) and beats_pct >= 90:
-        rank_plain = (
-            f"{shown} is at the top of the live board "
-            f"(beats ~{beats_pct:.0f}% of {n:,} scored files; site high ≈ {top:.0f})."
+    # Short punch for what the number conveys
+    if beats_pct >= 90:
+        meaning = (
+            f"In {place}, {shown} means this file is already near the ceiling of "
+            f"what LandSignal is indexing."
         )
-    elif beats_pct >= 95:
-        rank_plain = f"{shown} is elite here — beats about {beats_pct:.0f}% of live inventory."
-    elif beats_pct >= 80:
-        rank_plain = f"{shown} is a strong scout file — beats about {beats_pct:.0f}% of live inventory."
-    elif beats_pct >= 50:
-        rank_plain = f"{shown} is above the middle of the pack (median ~{median:.0f})."
+    elif beats_pct >= 60:
+        meaning = (
+            f"In {place}, {shown} means a real scoutable edge vs typical live inventory."
+        )
     else:
-        rank_plain = f"{shown} sits below the site median (~{median:.0f}) — open stronger files first."
+        meaning = (
+            f"In {place}, {shown} means a middling edge — useful context, not a rush."
+        )
 
     return {
         "score": round(opp, 1),
@@ -188,22 +211,11 @@ def build_opportunity_standings(
         "p95": round(p95, 1) if p95 is not None else None,
         "max": round(top, 1) if top is not None else None,
         "histogram": build_histogram(live),
-        "factors": factors[:8],
+        "factors": factors[:3],
         "lifts": lifts,
         "drags": drags,
-        "why_not_higher": why_not[:3],
+        "why_not_higher": why_not[:1],
         "rank_plain": rank_plain,
-        "ceiling_plain": (
-            f"On LandSignal, public-process files rarely clear ~{p95:.0f}–{top:.0f}. "
-            f"A {opp:.0f} in {place} is already near the top of what’s live."
-            if top is not None and p95 is not None and opp >= (p75 or 0)
-            else f"Live inventory median is ~{median:.0f}; top files reach ~{top:.0f}."
-            if median is not None and top is not None
-            else "Standings refresh as live inventory scores."
-        ),
-        "method_plain": (
-            "Opportunity is a 0–100 blend: price vs our estimate, land quality, use options, "
-            "area growth, roads/power, resale ease, scarcity, seller/channel pressure, and risk. "
-            "Chart = every scored live parcel on the site right now."
-        ),
+        "ceiling_plain": meaning,
+        "method_plain": None,
     }
