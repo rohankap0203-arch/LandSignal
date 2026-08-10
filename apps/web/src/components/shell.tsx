@@ -130,15 +130,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
               >
                 {theme === "light" ? "Dark mode" : "Light mode"}
               </button>
-              <div className="shell-menu-close-panel">
-                <button
-                  type="button"
-                  className="shell-menu-close-btn"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Close menu
-                </button>
-              </div>
             </nav>
           </>
         ) : null}
