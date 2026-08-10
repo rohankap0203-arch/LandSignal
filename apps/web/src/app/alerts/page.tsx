@@ -59,7 +59,7 @@ const DEFAULT_FORM: FormState = {
   acres_min: "",
   acres_max: "",
   acres_mode: "prefer",
-  strategies: ["LAND_BANK"],
+  strategies: [],
   land_types: [],
   hold_years_min: "",
   hold_years_max: "",
@@ -71,10 +71,10 @@ const DEFAULT_FORM: FormState = {
     residential_dev: false,
     commercial_dev: false,
     timber: false,
-    land_banking: true,
+    land_banking: false,
     development: false,
   },
-  infrastructure_prefs: ["road_access"],
+  infrastructure_prefs: [],
   email: true,
   sms: false,
   in_app: true,
@@ -170,9 +170,7 @@ const RETURN_PRESETS: { id: string; label: string; value: string }[] = [
   { id: "20", label: "20%+", value: "20" },
 ];
 
-const ALL_STRATEGY_IDS = STRATEGY_OPTS.map((s) => s.id);
 const ALL_INTEREST_KEYS = INTEREST_OPTS.map(([key]) => key);
-const ALL_INFRA_IDS = INFRA_OPTS.map(([id]) => id);
 
 const RISK_OPTS = [
   { id: "low", label: "Low" },
@@ -615,7 +613,7 @@ export default function LandAlertsPage() {
           acres_min: nextAcresMin,
           acres_max: nextAcresMax,
           acres_mode: (prefs.acres_mode as PrefMode) || "prefer",
-          strategies: Array.isArray(prefs.strategies) ? (prefs.strategies as string[]) : ["LAND_BANK"],
+          strategies: Array.isArray(prefs.strategies) ? (prefs.strategies as string[]) : [],
           land_types: Array.isArray(prefs.land_types)
             ? (prefs.land_types as string[]).map((t) => {
                 const hit = LAND_TYPE_OPTS.find((opt) => opt.toLowerCase() === String(t).toLowerCase());
@@ -629,7 +627,7 @@ export default function LandAlertsPage() {
           interests: { ...DEFAULT_FORM.interests, ...interests },
           infrastructure_prefs: Array.isArray(prefs.infrastructure_prefs)
             ? (prefs.infrastructure_prefs as string[])
-            : ["road_access"],
+            : [],
           email: notify.email !== false,
           sms: Boolean(notify.sms),
           in_app: notify.in_app !== false,
@@ -893,16 +891,11 @@ export default function LandAlertsPage() {
   const returnPreset =
     RETURN_PRESETS.find((p) => p.value === form.desired_return_pct)?.id ||
     (form.desired_return_pct ? "custom" : "any");
-  const strategiesAll =
-    form.strategies.length === ALL_STRATEGY_IDS.length &&
-    ALL_STRATEGY_IDS.every((id) => form.strategies.includes(id));
-  const landTypesAll =
-    form.land_types.length === LAND_TYPE_OPTS.length &&
-    LAND_TYPE_OPTS.every((t) => form.land_types.includes(t));
-  const interestsAll = ALL_INTEREST_KEYS.every((key) => form.interests[key]);
-  const infraAll =
-    form.infrastructure_prefs.length === ALL_INFRA_IDS.length &&
-    ALL_INFRA_IDS.every((id) => form.infrastructure_prefs.includes(id));
+  /** Empty selection = Any (assumes all — do not light up every chip). */
+  const strategiesAny = form.strategies.length === 0;
+  const landTypesAny = form.land_types.length === 0;
+  const interestsAny = ALL_INTEREST_KEYS.every((key) => !form.interests[key]);
+  const infraAny = form.infrastructure_prefs.length === 0;
 
   const profileSummary = useMemo(() => {
     const bits: string[] = [];
@@ -912,7 +905,10 @@ export default function LandAlertsPage() {
     if (form.budget_max) bits.push(`≤ $${Number(form.budget_max).toLocaleString()}`);
     else if (form.budget_min) bits.push(`≥ $${Number(form.budget_min).toLocaleString()}`);
     if (form.acres_min) bits.push(`${form.acres_min}+ ac`);
-    if (form.strategies.length) bits.push(form.strategies.length === 1 ? STRATEGY_OPTS.find((s) => s.id === form.strategies[0])?.label || "1 strategy" : `${form.strategies.length} strategies`);
+    if (!form.strategies.length) bits.push("Any strategy");
+    else if (form.strategies.length === 1)
+      bits.push(STRATEGY_OPTS.find((s) => s.id === form.strategies[0])?.label || "1 strategy");
+    else bits.push(`${form.strategies.length} strategies`);
     bits.push(RISK_OPTS.find((r) => r.id === form.max_risk)?.label || "Moderate");
     return bits.join(" · ");
   }, [selectedStates, form.budget_max, form.budget_min, form.acres_min, form.strategies, form.max_risk]);
@@ -1209,14 +1205,9 @@ export default function LandAlertsPage() {
             <div className="land-alert-chips acq-chips-tight">
               <button
                 type="button"
-                className={`land-alert-chip${strategiesAll ? " on" : ""}`}
-                aria-pressed={strategiesAll}
-                onClick={() =>
-                  setForm((f) => ({
-                    ...f,
-                    strategies: strategiesAll ? [] : [...ALL_STRATEGY_IDS],
-                  }))
-                }
+                className={`land-alert-chip${strategiesAny ? " on" : ""}`}
+                aria-pressed={strategiesAny}
+                onClick={() => setForm((f) => ({ ...f, strategies: [] }))}
               >
                 Any
               </button>
@@ -1234,14 +1225,9 @@ export default function LandAlertsPage() {
             <div className="land-alert-chips acq-chips-tight acq-chips-gap">
               <button
                 type="button"
-                className={`land-alert-chip${landTypesAll ? " on" : ""}`}
-                aria-pressed={landTypesAll}
-                onClick={() =>
-                  setForm((f) => ({
-                    ...f,
-                    land_types: landTypesAll ? [] : [...LAND_TYPE_OPTS],
-                  }))
-                }
+                className={`land-alert-chip${landTypesAny ? " on" : ""}`}
+                aria-pressed={landTypesAny}
+                onClick={() => setForm((f) => ({ ...f, land_types: [] }))}
               >
                 Any
               </button>
@@ -1338,12 +1324,12 @@ export default function LandAlertsPage() {
             <div className="land-alert-chips acq-chips-tight">
               <button
                 type="button"
-                className={`land-alert-chip${interestsAll ? " on" : ""}`}
-                aria-pressed={interestsAll}
+                className={`land-alert-chip${interestsAny ? " on" : ""}`}
+                aria-pressed={interestsAny}
                 onClick={() =>
                   setForm((f) => {
                     const next = { ...f.interests };
-                    for (const key of ALL_INTEREST_KEYS) next[key] = !interestsAll;
+                    for (const key of ALL_INTEREST_KEYS) next[key] = false;
                     return { ...f, interests: next };
                   })
                 }
@@ -1369,26 +1355,21 @@ export default function LandAlertsPage() {
             </div>
           </div>
 
-          <div className="acq-section">
+          <div className="acq-section acq-section-tip">
             <div className="acq-section-label acq-label-with-tip">
               <span>Infrastructure</span>
               <HelpTip
                 tone="panel"
-                title="What these mean"
-                body="Road access = legal/physical road frontage or deeded easement potential. Utilities = electric/water/sewer available or nearby. Power nearby = transmission or distribution close enough for service or energy projects. Water access = surface water, irrigation, or well potential. Tap Any for no infrastructure preference."
+                title="Infrastructure prefs"
+                body="Road access: frontage or easement. Utilities: power/water/sewer nearby. Power: grid close enough for service or energy. Water: surface, irrigation, or well potential. Any = no preference."
               />
             </div>
             <div className="land-alert-chips acq-chips-tight">
               <button
                 type="button"
-                className={`land-alert-chip${infraAll ? " on" : ""}`}
-                aria-pressed={infraAll}
-                onClick={() =>
-                  setForm((f) => ({
-                    ...f,
-                    infrastructure_prefs: infraAll ? [] : [...ALL_INFRA_IDS],
-                  }))
-                }
+                className={`land-alert-chip${infraAny ? " on" : ""}`}
+                aria-pressed={infraAny}
+                onClick={() => setForm((f) => ({ ...f, infrastructure_prefs: [] }))}
               >
                 Any
               </button>
@@ -1446,8 +1427,31 @@ export default function LandAlertsPage() {
               />
             </div>
 
+            {form.email ? (
+              <label className="land-alert-field acq-notify-contact">
+                <span>Email address</span>
+                <input
+                  type="email"
+                  value={form.email_address}
+                  placeholder="you@example.com"
+                  onChange={(e) => setForm((f) => ({ ...f, email_address: e.target.value }))}
+                />
+              </label>
+            ) : null}
+            {form.sms ? (
+              <label className="land-alert-field acq-notify-contact">
+                <span>Phone</span>
+                <input
+                  type="tel"
+                  value={form.phone}
+                  placeholder="+1…"
+                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                />
+              </label>
+            ) : null}
+
             <div className="acq-section-label acq-sublabel">Sensitivity</div>
-            <div className="land-alert-chips">
+            <div className="land-alert-chips acq-chips-tight">
               {SENSITIVITY_OPTS.map((o) => (
                 <button
                   key={o.id}
@@ -1461,7 +1465,7 @@ export default function LandAlertsPage() {
             </div>
 
             <div className="acq-section-label acq-sublabel">Frequency</div>
-            <div className="land-alert-chips">
+            <div className="land-alert-chips acq-chips-tight">
               {FREQUENCY_OPTS.map((o) => (
                 <button
                   key={o.id}
@@ -1473,33 +1477,6 @@ export default function LandAlertsPage() {
                 </button>
               ))}
             </div>
-
-            {(form.email || form.sms) && (
-              <div className="acq-range-row acq-chips-gap">
-                {form.email ? (
-                  <label className="land-alert-field">
-                    <span>Email address</span>
-                    <input
-                      type="email"
-                      value={form.email_address}
-                      placeholder="you@example.com"
-                      onChange={(e) => setForm((f) => ({ ...f, email_address: e.target.value }))}
-                    />
-                  </label>
-                ) : null}
-                {form.sms ? (
-                  <label className="land-alert-field">
-                    <span>Phone</span>
-                    <input
-                      type="tel"
-                      value={form.phone}
-                      placeholder="+1…"
-                      onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                    />
-                  </label>
-                ) : null}
-              </div>
-            )}
           </div>
 
           <div className="acq-actions">

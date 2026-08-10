@@ -422,10 +422,14 @@ select {
 .help-tip.tone-panel .help-tip-pop {
   left: 50%;
   right: auto;
-  bottom: auto;
-  top: 2.75rem;
-  width: min(22rem, calc(100% - 2rem));
+  bottom: calc(100% + 6px);
+  top: auto;
+  width: min(16.5rem, 72vw);
   transform: translateX(-50%);
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.35;
+  gap: 3px;
 }
 
 /* Same width as the field’s dropdown; sits above the control, not clipped */
@@ -3362,14 +3366,49 @@ a.acquire-block:hover {
   color: var(--muted);
 }
 
+.acq-section-tip {
+  overflow: visible;
+  position: relative;
+  z-index: 4;
+}
+
 .acq-label-with-tip {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  position: relative;
 }
 
 .acq-label-with-tip .help-tip {
   position: relative;
+  z-index: 5;
+}
+
+.acq-label-with-tip .help-tip-pop {
+  left: auto;
+  right: 0;
+  bottom: calc(100% + 6px);
+  top: auto;
+  width: min(15.5rem, 70vw);
+  transform: none;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.acq-label-with-tip .help-tip-pop strong {
+  white-space: normal;
+  font-size: 11px;
+}
+
+.acq-notify-contact {
+  width: 100%;
+  max-width: none;
+}
+
+.acq-notify-contact input {
+  width: 100%;
 }
 
 .acq-segment {
