@@ -14,6 +14,11 @@ import math
 from typing import Any
 
 from landsignal.scoring.financial import irr as irr_solve
+from landsignal.services.inflation import (
+    DEFAULT_CPI_ANNUAL,
+    enrich_endpoint_inflation,
+    inflation_meta,
+)
 from landsignal.services.market_trajectory import STATE_ANNUAL_APPRECIATION, CHANNEL_MULT, _cycle_shaper
 from landsignal.services.voice import place_phrase, this_property
 
@@ -650,6 +655,7 @@ def build_return_intelligence(
             "factors": model["factors"],
             "all_factors": model["factors"],
             "windows": HOLD_WINDOWS,
+            "inflation": inflation_meta(),
             "model": {
                 "effective_annual": model["effective_annual"],
                 "effective_annual_display": f"{model['effective_annual']*100:.1f}%/yr",
@@ -680,10 +686,13 @@ def build_return_intelligence(
             hold_years=100,
         )
 
+    cpi = DEFAULT_CPI_ANNUAL
+    infl = inflation_meta(cpi)
     endpoints: dict[str, Any] = {}
     for w in HOLD_WINDOWS:
         endpoints[str(w)] = {
-            case: _endpoint_from_path(full_paths[case], w) for case in ("BEAR", "BASE", "BULL")
+            case: enrich_endpoint_inflation(_endpoint_from_path(full_paths[case], w), cpi=cpi)
+            for case in ("BEAR", "BASE", "BULL")
         }
 
     default_hold = hold_years if hold_years in HOLD_WINDOWS else 10
@@ -706,20 +715,35 @@ def build_return_intelligence(
         f"For {this_property(parcel, listing, with_place=True, with_acres=True)}: "
         f"{model['factor_count']} screens bend the path (not a flat line). "
         f"Typical {default_hold}-yr hold screens about "
-        f"{base_case['irr_display'] if base_case.get('irr') is not None else 'n/a'}, "
-        f"with exit near {_money(base_case.get('exit_usd'))} after rent and carry."
+        f"{base_case['irr_display'] if base_case.get('irr') is not None else 'n/a'} nominal"
+        f" ({base_case.get('irr_real_display') or 'n/a'} in today’s $), "
+        f"with exit near {_money(base_case.get('exit_usd'))} "
+        f"(~{_money(base_case.get('exit_usd_today'))} in today’s $)."
     )
     horizon_notes = {
-        "10": "Decade holds mostly track this file’s near-term screens and cycle bends.",
-        "30": "By 30 years, fatigue and site realizations already slow the climb vs a flat compound.",
-        "50": "Half-century marks are faded on purpose — taxes, insurance, and buyer-pool friction stack up.",
-        "75": "75–100 year dollars are nominal screens with hard fade — not a promise of dynasty wealth.",
+        "10": (
+            f"Decade holds mostly track this file’s near-term screens. "
+            f"CPI screen ~{infl['cpi_display']} — toggle Today’s $ to see purchasing power."
+        ),
+        "30": (
+            "By 30 years, fatigue slows the climb — and inflation has already shrunk what "
+            "those future dollars buy. Prefer Today’s $ for the real picture."
+        ),
+        "50": (
+            "Half-century nominal marks look big; in today’s $ they’re much smaller. "
+            "Taxes, insurance, and buyer-pool friction also stack up."
+        ),
+        "75": (
+            "75–100 year nominal dollars are easy to misread — Today’s $ shows purchasing power "
+            "after the CPI screen, with hard path fade still applied."
+        ),
         "100": (
-            f"At 100 years, typical total-back is about {mult_100:.1f}× buy "
-            f"(~{_money(base_100.get('total_back_usd'))}); optimistic tops near "
-            f"{_money(bull_100.get('total_back_usd'))}. Far years fade hard — not a straight rocket."
+            f"At 100 years, typical total-back is about {mult_100:.1f}× buy nominally "
+            f"(~{_money(base_100.get('total_back_usd'))} · ~{_money(base_100.get('total_back_usd_today'))} "
+            f"in today’s $); optimistic tops near {_money(bull_100.get('total_back_usd'))}. "
+            f"Far years fade hard — not a straight rocket."
             if mult_100 is not None
-            else "Century marks fade hard toward a slow real-land pace — not generational lottery math."
+            else "Century marks fade hard — compare Nominal vs Today’s $ so inflation doesn’t fake wealth."
         ),
     }
 
@@ -729,6 +753,7 @@ def build_return_intelligence(
         "mark_usd": round(float(mark_usd), 0) if mark_usd else None,
         "hold_years": default_hold,
         "windows": HOLD_WINDOWS,
+        "inflation": infl,
         "model": {
             "effective_annual": model["effective_annual"],
             "effective_annual_display": f"{model['effective_annual']*100:.1f}%/yr",
@@ -758,6 +783,7 @@ def build_return_intelligence(
             "Year-by-year path uses area land pace, then bends it with soil, flood, wetlands, "
             "growth, access, channel, strategy fit, risk, liquidity, scarcity, power proximity, "
             "cycle shape, carry costs, and an exit haircut. Cautious / typical / optimistic stress "
-            "rent, pace, and exit. Not an appraisal."
+            f"rent, pace, and exit. Dollar views: Nominal (raw future $) vs Today’s $ "
+            f"(deflated at {infl['cpi_display']} CPI screen). Not an appraisal."
         ),
     }

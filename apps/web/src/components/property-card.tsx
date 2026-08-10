@@ -198,7 +198,7 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
 
         <div className="metric-row">
           <div className="metric">
-            <div className="k">Our estimate</div>
+            <div className="k">Our estimate · today’s $</div>
             <div className="v">{row.estimated_value_display}</div>
           </div>
           <div className="metric">

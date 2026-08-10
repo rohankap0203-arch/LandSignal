@@ -8,6 +8,12 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import {
+  cpiFromMeta,
+  withInflation,
+  type InflationMeta,
+  type MoneyMode,
+} from "@/lib/inflation";
 
 type PathPoint = {
   year_offset: number;
@@ -23,11 +29,17 @@ type PathPoint = {
 type CaseEndpoint = {
   irr?: number | null;
   irr_display?: string;
+  irr_real?: number | null;
+  irr_real_display?: string;
   exit_usd?: number | null;
+  exit_usd_today?: number | null;
   land_mark_usd?: number | null;
   cumulative_rent_usd?: number | null;
+  cumulative_rent_usd_today?: number | null;
   total_back_usd?: number | null;
+  total_back_usd_today?: number | null;
   gain_usd?: number | null;
+  gain_usd_today?: number | null;
   path?: PathPoint[];
   starting_noi?: number | null;
   effective_annual_used?: number | null;
@@ -53,6 +65,7 @@ type ReturnIntel = {
   mark_usd?: number | null;
   hold_years?: number;
   windows?: number[];
+  inflation?: InflationMeta | null;
   model?: {
     effective_annual?: number;
     effective_annual_display?: string;
@@ -335,6 +348,9 @@ export function ReturnVisual({
   const [openFactor, setOpenFactor] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [casesHelpOpen, setCasesHelpOpen] = useState(false);
+  const [moneyMode, setMoneyMode] = useState<MoneyMode>("today");
+  const cpi = cpiFromMeta(intel?.inflation);
+  const cpiDisplay = intel?.inflation?.cpi_display || `${(cpi * 100).toFixed(1)}%/yr`;
 
   useEffect(() => {
     setScrubYear((y) => Math.max(1, Math.min(holdYears, y)));
@@ -356,19 +372,15 @@ export function ReturnVisual({
     const out: Record<string, CaseEndpoint> = {};
     for (const c of CASE_ORDER) {
       const fromApi = intel?.endpoints?.[String(holdYears)]?.[c];
-      if (fromApi) {
-        out[c] = fromApi;
-        continue;
-      }
-      const sliced = endpointFromPath(
-        intel?.paths_100?.[c],
-        holdYears,
-        intel?.purchase_usd,
-      );
-      if (sliced) out[c] = sliced;
+      const base =
+        fromApi ||
+        endpointFromPath(intel?.paths_100?.[c], holdYears, intel?.purchase_usd) ||
+        null;
+      const enriched = withInflation(base, cpi);
+      if (enriched) out[c] = enriched;
     }
     return out;
-  }, [intel, holdYears]);
+  }, [intel, holdYears, cpi]);
 
   const endpoint = endpointsAtHold[activeCase];
   const fullPath = intel?.paths_100?.[activeCase]?.path || endpoint?.path || [];
@@ -376,6 +388,18 @@ export function ReturnVisual({
     const pts = fullPath.filter((p) => Number(p.year_offset) >= 1 && Number(p.year_offset) <= holdYears);
     return pts.length ? pts : (endpoint?.path || []).slice(0, holdYears);
   }, [fullPath, holdYears, endpoint?.path]);
+
+  const showToday = moneyMode === "today";
+  const exitShow = showToday ? endpoint?.exit_usd_today ?? endpoint?.exit_usd : endpoint?.exit_usd;
+  const rentShow = showToday
+    ? endpoint?.cumulative_rent_usd_today ?? endpoint?.cumulative_rent_usd
+    : endpoint?.cumulative_rent_usd;
+  const totalShow = showToday
+    ? endpoint?.total_back_usd_today ?? endpoint?.total_back_usd
+    : endpoint?.total_back_usd;
+  const gainShow = showToday ? endpoint?.gain_usd_today ?? endpoint?.gain_usd : endpoint?.gain_usd;
+  const irrShow = showToday ? endpoint?.irr_real ?? endpoint?.irr : endpoint?.irr;
+  const irrPct = irrShow != null ? Number(irrShow) * 100 : null;
 
   // Keep scrub inside the selected hold window
   const scrubClamped = Math.max(1, Math.min(holdYears, scrubYear));
@@ -469,7 +493,6 @@ export function ReturnVisual({
 
   const factors = intel?.factors || [];
   const factorCount = intel?.model?.factor_count ?? factors.length;
-  const irrPct = endpoint?.irr != null ? Number(endpoint.irr) * 100 : null;
 
   // Fallback: legacy flat compound if intel missing
   if (!available) {
@@ -532,6 +555,11 @@ export function ReturnVisual({
             Pick a hold length (presets or Custom, 1–100 yr). Drag the chart to read any year. Tap a
             factor card to see why it lifts or slows the path. First look only — not an appraisal.
           </p>
+          <p>
+            <strong>Today’s $</strong> shrinks future dollars by a {cpiDisplay} CPI screen so you see
+            purchasing power. <strong>Nominal</strong> is the raw future number. Buy price is already
+            in today’s dollars.
+          </p>
         </div>
       ) : null}
       <p className="mt-1 text-sm text-[var(--muted)] leading-snug">
@@ -539,6 +567,32 @@ export function ReturnVisual({
         {intel?.purchase_usd ? ` · buy near ${money(intel.purchase_usd)}` : ""}.
         Pick a case and hold length.
       </p>
+
+      <div className="money-mode-row mt-3" role="group" aria-label="Dollar view">
+        <div className="money-mode-toggle">
+          <button
+            type="button"
+            className={moneyMode === "today" ? "is-active" : undefined}
+            aria-pressed={moneyMode === "today"}
+            onClick={() => setMoneyMode("today")}
+          >
+            Today’s $
+          </button>
+          <button
+            type="button"
+            className={moneyMode === "nominal" ? "is-active" : undefined}
+            aria-pressed={moneyMode === "nominal"}
+            onClick={() => setMoneyMode("nominal")}
+          >
+            Nominal
+          </button>
+        </div>
+        <p className="money-mode-note">
+          {showToday
+            ? `Purchasing power after ~${cpiDisplay} inflation`
+            : `Raw future dollars · CPI screen ~${cpiDisplay}`}
+        </p>
+      </div>
 
       <div className="traj-windows mt-3" role="tablist" aria-label="Return case">
         {CASE_ORDER.map((k) => (
@@ -702,35 +756,65 @@ export function ReturnVisual({
 
       {endpoint && (
         <div className="return-future mt-3">
-          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-            After exactly {holdYears} years · {caseLabel(activeCase).toLowerCase()}
+          <div className="return-future-head">
+            <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+              After exactly {holdYears} years · {caseLabel(activeCase).toLowerCase()}
+            </div>
+            <div className="return-future-basis">
+              {showToday ? "in today’s $" : "nominal"}
+            </div>
           </div>
           <div className="return-future-grid">
             <div>
               <span>Land at exit</span>
-              <strong>{money(endpoint.exit_usd)}</strong>
+              <strong>{money(exitShow)}</strong>
+              {holdYears >= 10 && endpoint.exit_usd != null && endpoint.exit_usd_today != null ? (
+                <em className="return-alt-line">
+                  {showToday
+                    ? `${shortMoney(Number(endpoint.exit_usd))} nominal`
+                    : `${shortMoney(Number(endpoint.exit_usd_today))} today’s $`}
+                </em>
+              ) : null}
             </div>
             <div>
               <span>Rent along the way</span>
-              <strong>{money(endpoint.cumulative_rent_usd)}</strong>
+              <strong>{money(rentShow)}</strong>
+              {holdYears >= 10 &&
+              endpoint.cumulative_rent_usd != null &&
+              endpoint.cumulative_rent_usd_today != null ? (
+                <em className="return-alt-line">
+                  {showToday
+                    ? `${shortMoney(Number(endpoint.cumulative_rent_usd))} nominal`
+                    : `${shortMoney(Number(endpoint.cumulative_rent_usd_today))} today’s $`}
+                </em>
+              ) : null}
             </div>
             <div>
               <span>Total back</span>
-              <strong>{money(endpoint.total_back_usd)}</strong>
+              <strong>{money(totalShow)}</strong>
+              {holdYears >= 10 &&
+              endpoint.total_back_usd != null &&
+              endpoint.total_back_usd_today != null ? (
+                <em className="return-alt-line">
+                  {showToday
+                    ? `${shortMoney(Number(endpoint.total_back_usd))} nominal`
+                    : `${shortMoney(Number(endpoint.total_back_usd_today))} today’s $`}
+                </em>
+              ) : null}
             </div>
             <div className="return-vs-cell">
               <span>Vs buy · annualized</span>
               <strong
-                className={`return-vs-buy ${
-                  (endpoint.gain_usd ?? 0) >= 0 ? "is-pos" : "is-neg"
-                }`}
+                className={`return-vs-buy ${(Number(gainShow) || 0) >= 0 ? "is-pos" : "is-neg"}`}
               >
                 <span className="return-vs-gain">
-                  {(endpoint.gain_usd ?? 0) >= 0 ? "+" : ""}
-                  {shortMoney(Number(endpoint.gain_usd || 0))}
+                  {(Number(gainShow) || 0) >= 0 ? "+" : ""}
+                  {shortMoney(Number(gainShow || 0))}
                 </span>
                 {irrPct != null ? (
-                  <span className="return-vs-irr">{irrPct.toFixed(1)}%/yr</span>
+                  <span className="return-vs-irr">
+                    {irrPct.toFixed(1)}%/yr{showToday ? " real" : ""}
+                  </span>
                 ) : null}
               </strong>
             </div>
@@ -829,10 +913,17 @@ export function ReturnVisual({
         {CASE_ORDER.map((k) => {
           const ep = endpointsAtHold[k];
           if (!ep) return null;
-          const pct = ep.irr != null ? Number(ep.irr) * 100 : null;
+          const rate = showToday ? ep.irr_real ?? ep.irr : ep.irr;
+          const pct = rate != null ? Number(rate) * 100 : null;
+          const land = showToday ? ep.exit_usd_today ?? ep.exit_usd : ep.exit_usd;
           const maxAbs = Math.max(
             12,
-            ...CASE_ORDER.map((x) => Math.abs(Number(endpointsAtHold[x]?.irr || 0) * 100)),
+            ...CASE_ORDER.map((x) => {
+              const r = showToday
+                ? endpointsAtHold[x]?.irr_real ?? endpointsAtHold[x]?.irr
+                : endpointsAtHold[x]?.irr;
+              return Math.abs(Number(r || 0) * 100);
+            }),
           );
           const w = pct != null ? Math.max(6, (Math.abs(pct) / maxAbs) * 100) : 6;
           return (
@@ -844,8 +935,9 @@ export function ReturnVisual({
             >
               <div className="flex items-baseline justify-between gap-2">
                 <span className="font-semibold">{caseLabel(k)}</span>
-                <span className="tabular-nums">
-                  {pct != null ? `${pct.toFixed(1)}%/yr` : "n/a"} · land {money(ep.exit_usd)}
+                <span className="tabular-nums return-mini-nums">
+                  {pct != null ? `${pct.toFixed(1)}%/yr${showToday ? " real" : ""}` : "n/a"}
+                  <span className="return-mini-land"> · land {shortMoney(Number(land || 0))}</span>
                 </span>
               </div>
               <div className="return-track">

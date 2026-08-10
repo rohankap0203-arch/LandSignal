@@ -8,6 +8,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { cpiFromMeta, deflate, realRate, type InflationMeta, type MoneyMode } from "@/lib/inflation";
 
 type Point = {
   year: number;
@@ -41,6 +42,10 @@ type Trajectory = {
   knowledge_label?: string;
   annual_rate_display?: string;
   now_usd?: number;
+  forward_usd_today?: number | null;
+  cagr_forward_real?: number | null;
+  cagr_forward_real_display?: string | null;
+  inflation?: InflationMeta | null;
   points?: Point[];
   hitches?: Hitch[];
   hitch_help?: HitchHelp;
@@ -87,8 +92,12 @@ export function PriceTrajectory({
   const [horizon, setHorizon] = useState(10);
   const [hitchId, setHitchId] = useState<string>("base");
   const [hitchHelpOpen, setHitchHelpOpen] = useState(false);
+  const [moneyMode, setMoneyMode] = useState<MoneyMode>("today");
   const [dragging, setDragging] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const cpi = cpiFromMeta(trajectory?.inflation);
+  const cpiDisplay = trajectory?.inflation?.cpi_display || `${(cpi * 100).toFixed(1)}%/yr`;
+  const showToday = moneyMode === "today";
 
   useEffect(() => {
     if (!hitchHelpOpen) return;
@@ -125,6 +134,8 @@ export function PriceTrajectory({
     if (!start || !today || !future) return null;
     const pastRate = cagr(Number(start.value_usd), Number(today.value_usd), horizon);
     const fwdRate = cagr(Number(today.value_usd), Number(future.value_usd), horizon);
+    const fwdReal = realRate(fwdRate, cpi);
+    const futureToday = deflate(Number(future.value_usd), horizon, cpi);
     const pastChange =
       Number(start.value_usd) > 0
         ? ((Number(today.value_usd) - Number(start.value_usd)) / Number(start.value_usd)) * 100
@@ -141,15 +152,20 @@ export function PriceTrajectory({
       todayUsd: Number(today.value_usd),
       endUsd: Number(today.value_usd),
       futureUsd: Number(future.value_usd),
+      futureUsdToday: futureToday,
       years: horizon,
       pastRate,
       fwdRate,
+      fwdReal,
       pastChange,
       fwdChange,
       cagrDisplay: pastRate != null ? `${pastRate >= 0 ? "+" : ""}${(pastRate * 100).toFixed(1)}%/yr` : "—",
-      forwardCagrDisplay: fwdRate != null ? `${fwdRate >= 0 ? "+" : ""}${(fwdRate * 100).toFixed(1)}%/yr` : "—",
+      forwardCagrDisplay:
+        fwdRate != null ? `${fwdRate >= 0 ? "+" : ""}${(fwdRate * 100).toFixed(1)}%/yr` : "—",
+      forwardCagrRealDisplay:
+        fwdReal != null ? `${fwdReal >= 0 ? "+" : ""}${(fwdReal * 100).toFixed(1)}%/yr real` : "—",
     };
-  }, [points, horizon]);
+  }, [points, horizon, cpi]);
 
   const todayIdx = useMemo(() => {
     const i = points.findIndex((p) => Number(p.offset) === 0);
@@ -281,12 +297,33 @@ export function PriceTrajectory({
           </p>
           <p className="mt-1 text-[11px] text-[var(--muted)] leading-snug">
             {horizon >= 50
-              ? "Far years fade hard — nominal screen, not generational wealth."
+              ? "Far years fade hard — compare Today’s $ so inflation doesn’t fake wealth."
               : "Far years fade on purpose — not a straight rocket."}{" "}
             {trajectory?.annual_rate_display
               ? `Near-term pace ~${trajectory.annual_rate_display}.`
               : null}
           </p>
+          <div className="money-mode-row mt-2" role="group" aria-label="Dollar view">
+            <div className="money-mode-toggle">
+              <button
+                type="button"
+                className={moneyMode === "today" ? "is-active" : undefined}
+                aria-pressed={moneyMode === "today"}
+                onClick={() => setMoneyMode("today")}
+              >
+                Today’s $
+              </button>
+              <button
+                type="button"
+                className={moneyMode === "nominal" ? "is-active" : undefined}
+                aria-pressed={moneyMode === "nominal"}
+                onClick={() => setMoneyMode("nominal")}
+              >
+                Nominal
+              </button>
+            </div>
+            <p className="money-mode-note">CPI screen ~{cpiDisplay}</p>
+          </div>
         </div>
         <div className="traj-stats">
           <div>
@@ -295,11 +332,21 @@ export function PriceTrajectory({
           </div>
           <div>
             <span>Next {horizon} yr</span>
-            <strong>{windowMath.forwardCagrDisplay}</strong>
+            <strong>
+              {showToday ? windowMath.forwardCagrRealDisplay : windowMath.forwardCagrDisplay}
+            </strong>
+            {horizon >= 10 && windowMath.futureUsdToday != null ? (
+              <em className="return-alt-line">
+                {showToday
+                  ? `${shortMoney(windowMath.futureUsd)} nominal`
+                  : `${shortMoney(windowMath.futureUsdToday)} today’s $`}
+              </em>
+            ) : null}
           </div>
           <div>
             <span>Today</span>
             <strong>{money(windowMath.todayUsd)}</strong>
+            <em className="return-alt-line">already today’s $</em>
           </div>
         </div>
       </div>
@@ -536,8 +583,18 @@ export function PriceTrajectory({
         <div className="traj-year-box">
           <span>
             {horizon} year{horizon === 1 ? "" : "s"} ahead
+            {showToday ? " · today’s $" : " · nominal"}
           </span>
-          <strong>{money(windowMath.futureUsd)}</strong>
+          <strong>
+            {money(showToday ? windowMath.futureUsdToday ?? windowMath.futureUsd : windowMath.futureUsd)}
+          </strong>
+          {horizon >= 10 && windowMath.futureUsdToday != null ? (
+            <em className="return-alt-line">
+              {showToday
+                ? `${shortMoney(windowMath.futureUsd)} nominal`
+                : `${shortMoney(windowMath.futureUsdToday)} today’s $`}
+            </em>
+          ) : null}
         </div>
       </div>
     </div>

@@ -698,10 +698,17 @@ def build_market_trajectory(
         f"Highest in the full history: {_money(peak['value_usd'])} ({peak['year']}); "
         f"lowest: {_money(trough['value_usd'])} ({trough['year']}).",
     ]
+    from landsignal.services.inflation import DEFAULT_CPI_ANNUAL, deflate, inflation_meta, real_rate
+
+    infl = inflation_meta(DEFAULT_CPI_ANNUAL)
+    fwd_today = (
+        deflate(y_fwd["value_usd"], years_forward, DEFAULT_CPI_ANNUAL) if y_fwd else None
+    )
     if fwd_mult is not None and years_forward >= 50:
         summary_bullets.append(
             f"At {years_forward} years the faded path is about {fwd_mult:.1f}× today’s mark "
-            f"(~{_money(y_fwd['value_usd'])}) — nominal dollars, not a promise of generational wealth."
+            f"(~{_money(y_fwd['value_usd'])} nominal · ~{_money(fwd_today)} in today’s $) — "
+            f"not a promise of generational wealth."
         )
     if has_observed:
         summary_bullets.append(
@@ -735,11 +742,19 @@ def build_market_trajectory(
         "cagr_5y": cagr_5,
         "cagr_10y": cagr_10,
         "cagr_forward": cagr_fwd,
+        "cagr_forward_real": real_rate(cagr_fwd, DEFAULT_CPI_ANNUAL),
         "cagr_5y_display": f"{cagr_5*100:+.1f}%/yr" if cagr_5 is not None else "n/a",
         "cagr_10y_display": f"{cagr_10*100:+.1f}%/yr" if cagr_10 is not None else "n/a",
         "cagr_forward_display": f"{cagr_fwd*100:+.1f}%/yr" if cagr_fwd is not None else "n/a",
+        "cagr_forward_real_display": (
+            f"{real_rate(cagr_fwd, DEFAULT_CPI_ANNUAL)*100:+.1f}%/yr real"
+            if cagr_fwd is not None and real_rate(cagr_fwd, DEFAULT_CPI_ANNUAL) is not None
+            else "n/a"
+        ),
         "anchor_usd": round(float(anchor), 0),
         "now_usd": y0["value_usd"],
+        "forward_usd_today": round(fwd_today, 0) if fwd_today is not None else None,
+        "inflation": infl,
         "peak": {"year": peak["year"], "value_usd": peak["value_usd"]},
         "trough": {"year": trough["year"], "value_usd": trough["value_usd"]},
         "from_peak_pct": from_peak,

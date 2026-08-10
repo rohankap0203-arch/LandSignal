@@ -235,13 +235,17 @@ def value_display(estimated: float | None, knowledge: str | None) -> dict[str, A
             "label": "Our estimated value",
             "display": "Not enough data yet for a dollar estimate",
             "knowledge_state": knowledge or "UNKNOWN",
+            "basis": "today_dollars",
+            "basis_label": "in today’s $",
         }
     return {
         "amount_usd": estimated,
-            "label": "Our estimated value",
-            "display": f"${estimated:,.0f}",
-            "knowledge_state": knowledge or "ESTIMATED",
-        }
+        "label": "Our estimated value",
+        "display": f"${estimated:,.0f}",
+        "knowledge_state": knowledge or "ESTIMATED",
+        "basis": "today_dollars",
+        "basis_label": "in today’s $",
+    }
 
 
 def match_reasons(
