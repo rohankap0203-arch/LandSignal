@@ -412,6 +412,36 @@ async def radar(
         strategy_soft_miss: bool
         best_strategy: Any
 
+    def _soft_band_penalty(
+        value: float | None,
+        lo: float | None,
+        hi: float | None,
+        *,
+        unknown_penalty: float = 6.0,
+        hard_ratio: float = 1.45,
+    ) -> float | None:
+        """Open-ended Up-to / N+ filters stay flexible: near-misses rank lower; far misses drop."""
+        if lo is None and hi is None:
+            return 0.0
+        if value is None:
+            return unknown_penalty
+        penalty = 0.0
+        if lo is not None and value < lo:
+            if lo <= 0:
+                return None
+            ratio = value / lo
+            if ratio < (1.0 / hard_ratio):
+                return None
+            penalty += min(26.0, (1.0 - ratio) * 55.0)
+        if hi is not None and value > hi:
+            if hi <= 0:
+                return None
+            ratio = value / hi
+            if ratio > hard_ratio:
+                return None
+            penalty += min(28.0, (ratio - 1.0) * 70.0)
+        return penalty
+
     def _sort_cands(cands: list[_Cand], sort_key: str | None) -> list[_Cand]:
         key = (sort_key or "fit_desc").lower()
 
@@ -472,13 +502,14 @@ async def radar(
                 ):
                     continue
 
-            if min_price is not None and (ask is None or ask < min_price):
+            # Soft price / acre bands: keep near-misses, demote them in Fit.
+            price_pen = _soft_band_penalty(ask, min_price, max_price, unknown_penalty=5.0)
+            if price_pen is None:
                 continue
-            if max_price is not None and ask is not None and ask > max_price:
-                continue
-            if min_acres is not None and (parcel.acreage is None or parcel.acreage < min_acres):
-                continue
-            if max_acres is not None and parcel.acreage is not None and parcel.acreage > max_acres:
+            acre_pen = _soft_band_penalty(
+                parcel.acreage, min_acres, max_acres, unknown_penalty=7.0, hard_ratio=1.55
+            )
+            if acre_pen is None:
                 continue
             strategy_soft_miss = False
             if strategy and strategy.upper() not in ("ANY", "CUSTOM", ""):
@@ -516,6 +547,7 @@ async def radar(
             )
             if strategy_soft_miss:
                 fit = max(0, fit - 12)
+            fit = max(0.0, float(fit) - price_pen - acre_pen)
             out.append(
                 _Cand(
                     parcel_id=parcel.id,
@@ -929,13 +961,21 @@ async def radar(
     if broaden and not cands:
         cands = collect_cands(apply_region=False, apply_strict_channel=True)
         broaden_reason = "Loosened city/region a bit so you still get real matches for your other filters."
-    if broaden and not cands and (min_price is not None or max_price is not None):
+    if broaden and not cands and (
+        min_price is not None or max_price is not None or min_acres is not None or max_acres is not None
+    ):
         saved_min, saved_max = min_price, max_price
+        saved_amin, saved_amax = min_acres, max_acres
         min_price = None
         max_price = None
+        min_acres = None
+        max_acres = None
         cands = collect_cands(apply_region=False, apply_strict_channel=False)
         min_price, max_price = saved_min, saved_max
-        broaden_reason = "Your exact price band had no hits — showing the closest live opportunities instead."
+        min_acres, max_acres = saved_amin, saved_amax
+        broaden_reason = (
+            "Your exact price/acre band had no hits — showing the closest live opportunities instead."
+        )
 
     ranked = _sort_cands(cands, sort)
     capped = ranked[: max(1, min(limit, 500))] if ranked else []

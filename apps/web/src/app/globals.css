@@ -3174,6 +3174,15 @@ a.acquire-block:hover {
   gap: 0.45rem;
 }
 
+.acq-chips-tight {
+  gap: 0.28rem;
+}
+
+.acq-chips-tight .land-alert-chip {
+  padding: 0.28rem 0.55rem;
+  font-size: 0.74rem;
+}
+
 .land-alert-chip {
   border: 1px solid var(--line);
   background: transparent;
@@ -3184,10 +3193,284 @@ a.acquire-block:hover {
   cursor: pointer;
 }
 
+.land-alert-field input,
+.land-alert-field select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.88rem;
+}
+
 .land-alert-chip.on {
   border-color: color-mix(in srgb, var(--brand) 55%, var(--line));
   background: color-mix(in srgb, var(--brand) 12%, transparent);
   color: var(--brand);
+}
+
+.land-alert-chip.is-partial {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--brand) 40%, var(--line));
+  color: var(--brand);
+}
+
+/* Acquisition profile editor */
+.acq-profile {
+  display: grid;
+  gap: 1.35rem;
+  padding: 1.35rem 1.25rem 1.25rem;
+}
+
+.acq-profile-head {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.acq-profile-summary {
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-soft));
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 550;
+  line-height: 1.35;
+}
+
+.acq-section {
+  display: grid;
+  gap: 0.65rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.acq-section-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+}
+
+.acq-section-label {
+  font-size: 0.92rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.acq-sublabel {
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+}
+
+.acq-section-hint {
+  margin: 0.15rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.acq-optional-input {
+  max-width: 22rem;
+}
+
+.acq-chips-gap {
+  margin-top: 0.15rem;
+}
+
+.acq-mode {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-soft);
+  gap: 2px;
+}
+
+.acq-mode-btn {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.acq-mode-btn.on {
+  background: var(--bg-elevated);
+  color: var(--brand);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.acq-state-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr));
+  gap: 0.35rem;
+  max-height: 11.5rem;
+  overflow: auto;
+  padding: 0.15rem;
+}
+
+.acq-state {
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border-radius: 8px;
+  min-height: 2.15rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.acq-state.on {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 14%, var(--bg-elevated));
+  color: var(--brand);
+}
+
+.acq-range-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: 0.45rem 0.5rem;
+  max-width: 26rem;
+  width: 100%;
+}
+
+.acq-range-sep {
+  padding-bottom: 0.55rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.acq-segment {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.acq-segment-btn {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  border-radius: 10px;
+  min-height: 2.4rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.acq-segment-btn.on {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  color: var(--brand);
+}
+
+.acq-switch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.acq-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  border-radius: 12px;
+  padding: 0.7rem 0.75rem;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.acq-switch.on {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-elevated));
+}
+
+.acq-switch-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2.35rem;
+  height: 1.3rem;
+  margin-top: 0.1rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 18%, var(--bg-soft));
+  transition: background 140ms ease;
+}
+
+.acq-switch.on .acq-switch-track {
+  background: var(--brand);
+}
+
+.acq-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(1.3rem - 4px);
+  height: calc(1.3rem - 4px);
+  border-radius: 999px;
+  background: #fff;
+  transition: transform 140ms ease;
+}
+
+.acq-switch.on .acq-switch-thumb {
+  transform: translateX(1.05rem);
+}
+
+.acq-switch-copy {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.acq-switch-label {
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.acq-switch-hint {
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.acq-notify {
+  gap: 0.75rem;
+}
+
+.acq-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+@media (max-width: 720px) {
+  .acq-switch-grid,
+  .acq-segment {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .acq-range-row {
+    max-width: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .acq-switch-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .land-alert-checks {
