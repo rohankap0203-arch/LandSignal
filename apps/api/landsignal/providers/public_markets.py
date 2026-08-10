@@ -109,7 +109,7 @@ def _norm_shasta(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": props.get("APPageLink"),
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "minimum_bid"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -183,7 +183,7 @@ def _norm_indy(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": None,
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "minimum_bid"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -297,9 +297,11 @@ def _norm_mahoning(raw: dict) -> dict | None:
         "description": (
             f"Mahoning County, OH land-bank / tax-delinquent inventory (public GIS). "
             f"Land use={props.get('LANDUSE') or 'n/a'}. "
-            f"Market mark=${market}. Distressed public inventory — not MLS."
+            f"Assessor market mark=${market} (not a published bid). "
+            "Distressed public inventory — not MLS."
         ),
-        "asking_price_usd": float(market) if market is not None else None,
+        # TOTALMARKET / MARKETLAND are assessed marks — never treat as a starting bid.
+        "asking_price_usd": None,
         "acreage": float(acreage) if acreage is not None else None,
         "state": "OH",
         "county": "Mahoning",
@@ -417,7 +419,8 @@ def _norm_baltimore_taxsale(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://www.baltimorecity.gov/",
         "status": "ACTIVE",
-        "raw": props,
+        # LIEN_AMOUNT is the published lien — not a guaranteed auction settle price.
+        "raw": {**props, "ask_role": "tax_lien"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -450,7 +453,7 @@ def _norm_ramsey_forfeit(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://www.ramseycounty.us/",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "minimum_bid"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 

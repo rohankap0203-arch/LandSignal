@@ -237,6 +237,19 @@ def _maybe_retag_vacant_gis(listing) -> None:
         return
     if ext.startswith(_VACANT_GIS_PREFIXES) or "cadastral gis" in desc or "public cad gis" in desc:
         listing.provider_id = "public_vacant_gis"
+    # Strip assessed market values that were wrongly stored as asking/starting bids.
+    raw = getattr(listing, "raw", None) or {}
+    props = raw.get("raw") if isinstance(raw.get("raw"), dict) else raw
+    if not isinstance(props, dict):
+        return
+    market = props.get("TOTALMARKET") or props.get("MARKETLAND")
+    ask = getattr(listing, "asking_price_usd", None)
+    if market is not None and ask is not None:
+        try:
+            if abs(float(market) - float(ask)) < 0.02:
+                listing.asking_price_usd = None
+        except Exception:
+            pass
 
 
 def _provider_label(provider_id: str | None, county: str | None = None) -> str:
@@ -648,6 +661,13 @@ async def radar(
                 provider_id=listing.provider_id,
                 state=parcel.state,
             )
+        if isinstance(auction_path, dict) and not auction_path.get("published_price_role"):
+            from landsignal.services.auction import detect_published_price_role
+
+            auction_path = {
+                **auction_path,
+                "published_price_role": detect_published_price_role(listing),
+            }
         comps_n = {}
         if enrichment and enrichment.comps:
             comps_n = enrichment.comps.normalized or enrichment.comps.value or {}
@@ -711,12 +731,23 @@ async def radar(
         if broaden_reason:
             reasons = [broaden_reason, *reasons][:5]
         if isinstance(auction_path, dict) and auction_path.get("expected_settle_usd"):
-            if not any("likely auction finish" in r.lower() or "likely finish" in r.lower() for r in reasons):
+            if not any("finish screen" in r.lower() or "likely finish" in r.lower() for r in reasons):
+                from landsignal.services.auction import published_price_words
+
+                role_short, _ = published_price_words(
+                    str(auction_path.get("published_price_role") or "opening_bid")
+                )
+                lo = auction_path.get("settle_low_usd")
+                hi = auction_path.get("settle_high_usd")
+                if lo and hi and float(hi) > float(lo):
+                    finish_s = f"~${float(lo):,.0f}–${float(hi):,.0f}"
+                else:
+                    finish_s = f"~${auction_path['expected_settle_usd']:,.0f}"
                 reasons = [
                     (
-                        f"Starts at ${auction_path['opening_bid_usd']:,.0f}; auctions like this "
-                        f"usually finish near ${auction_path['expected_settle_usd']:,.0f} "
-                        f"(about {auction_path.get('bid_inflation_mult_base', 0):.1f}× the start)"
+                        f"Published ${auction_path['opening_bid_usd']:,.0f} {role_short}; "
+                        f"finish screen {finish_s} "
+                        f"(~{auction_path.get('bid_inflation_mult_base', 0):.1f}× prior — not a quoted result)"
                     ),
                     *reasons,
                 ][:5]
@@ -727,7 +758,7 @@ async def radar(
             settle_disc = auction_path.get("settle_discount_pct")
         if settle_disc is not None:
             # Keep chip copy short — opener gap belongs in help / reasons, not the label.
-            discount_display = f"Likely finish {settle_disc:+.1f}% vs our value"
+            discount_display = f"Finish screen {settle_disc:+.1f}% vs our value"
         elif score.asking_discount_pct is not None:
             discount_display = f"{score.asking_discount_pct:+.1f}% vs our value"
         else:
@@ -848,15 +879,26 @@ async def radar(
             )
         elif headline_disc is not None and headline_disc < -8:
             headline = (
-                f"Likely finish ~{abs(headline_disc):.0f}% under our value"
+                f"Finish screen ~{abs(headline_disc):.0f}% under our value"
                 if isinstance(auction_path, dict)
                 else f"About {abs(headline_disc):.0f}% under our value"
             )
         elif isinstance(auction_path, dict):
-            headline = (
-                f"Starts ${auction_path.get('opening_bid_usd', 0):,.0f} → "
-                f"likely ~${auction_path.get('expected_settle_usd', 0):,.0f}"
-            )
+            from landsignal.services.auction import published_price_words
+
+            role = str(auction_path.get("published_price_role") or "opening_bid")
+            role_short, _ = published_price_words(role)
+            opener = auction_path.get("opening_bid_usd") or 0
+            lo = auction_path.get("settle_low_usd")
+            hi = auction_path.get("settle_high_usd")
+            if lo and hi and float(hi) > float(lo):
+                headline = (
+                    f"${float(opener):,.0f} {role_short} · finish screen "
+                    f"~${float(lo):,.0f}–${float(hi):,.0f}"
+                )
+            else:
+                settle = auction_path.get("expected_settle_usd") or 0
+                headline = f"${float(opener):,.0f} {role_short} · finish screen ~${float(settle):,.0f}"
         else:
             headline = f"{conviction or 'WATCH'} interest · opportunity score {score.opportunity:.0f}/100"
 

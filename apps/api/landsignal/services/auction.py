@@ -9,6 +9,56 @@ from __future__ import annotations
 from typing import Any
 
 
+def detect_published_price_role(listing_or_raw: Any, provider_id: str | None = None) -> str:
+    """What the published dollar figure actually is — never invent a role."""
+    props: dict[str, Any] = {}
+    pid = provider_id
+    if listing_or_raw is not None and hasattr(listing_or_raw, "raw"):
+        raw = getattr(listing_or_raw, "raw", None) or {}
+        pid = pid or getattr(listing_or_raw, "provider_id", None)
+        props = raw.get("raw") if isinstance(raw.get("raw"), dict) else raw
+        if not isinstance(props, dict):
+            props = {}
+    elif isinstance(listing_or_raw, dict):
+        props = listing_or_raw.get("raw") if isinstance(listing_or_raw.get("raw"), dict) else listing_or_raw
+        if not isinstance(props, dict):
+            props = {}
+
+    if props.get("ask_role"):
+        return str(props["ask_role"])
+    # Case-insensitive field scan — county GIS schemas vary.
+    keyset = {str(k).lower(): v for k, v in props.items()}
+    if keyset.get("lien_amount") is not None:
+        return "tax_lien"
+    min_bid = keyset.get("minimumbid")
+    if min_bid is None:
+        min_bid = keyset.get("minimum_bid")
+    try:
+        min_bid_n = float(min_bid) if min_bid is not None and min_bid != "" else None
+    except Exception:
+        min_bid_n = None
+    if min_bid_n is not None and min_bid_n > 0:
+        return "minimum_bid"
+    if keyset.get("taxsalecost") is not None or keyset.get("tax_sale_cost") is not None:
+        return "minimum_bid"
+    if min_bid is not None:
+        return "minimum_bid"
+    if pid in ("public_tax_sale", "public_surplus"):
+        return "opening_bid"
+    return "asking"
+
+
+def published_price_words(role: str) -> tuple[str, str]:
+    """(short noun for display, human label)."""
+    if role == "tax_lien":
+        return "published lien", "Published tax lien (not a settle price)"
+    if role == "minimum_bid":
+        return "starting bid", "Published starting bid (not a settle price)"
+    if role == "opening_bid":
+        return "opening bid", "Published opening bid (not a settle price)"
+    return "listed price", "Listed price"
+
+
 def expected_auction_clearing(
     *,
     opening_bid: float | None,
@@ -93,15 +143,17 @@ def expected_auction_clearing(
     acres_s = f"{acres:.2f} ac" if acres is not None else "this parcel"
     st = (state or "US").upper()
     note = (
-        f"Auction logic on {acres_s} in {st}: published figure ${opening_bid:,.0f} is an opening / "
-        f"minimum bid, not a settle price. Screening expects ~{mult_base:.1f}× bid-up "
-        f"(band {mult_low:.1f}×–{mult_high:.1f}×) → likely clear near ${expected:,.0f}"
+        f"Screen on {acres_s} in {st}: published ${opening_bid:,.0f} is a floor / lien figure, "
+        f"not what you should expect to pay. Finish screen uses a ~{mult_base:.1f}× bid-up prior "
+        f"(band {mult_low:.1f}×–{mult_high:.1f}×) → roughly "
+        f"${settle_low:,.0f}–${settle_high:,.0f}"
         + (
-            f" (~{settle_vs_model*100:.0f}% of model ${model_value:,.0f})."
+            f" (vs model ${model_value:,.0f})."
             if model_value
             else "."
         )
-        + " Contested urban tax sales bid up fast; thin rural auctions sometimes settle closer to the opener."
+        + " Contested urban sales climb fast; thin rural auctions can finish nearer the published figure. "
+        "This band is a screen — not a quoted auction result."
     )
 
     return {

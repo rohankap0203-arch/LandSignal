@@ -299,8 +299,8 @@ export default function ParcelIntelligencePage() {
             <div className="scroll-to-row">
               {[
                 { id: "sec-bidding", label: "Bidding by price" },
-                { id: "sec-value", label: "Value path" },
-                { id: "sec-return", label: "Return" },
+                { id: "sec-value", label: "Land value" },
+                { id: "sec-return", label: "Hold return" },
                 { id: "sec-why", label: "Why this land" },
                 { id: "sec-score", label: "Score parts" },
                 { id: "sec-land", label: "Land checks" },
@@ -488,8 +488,16 @@ export default function ParcelIntelligencePage() {
       </section>
 
       <section id="sec-why" className="grid gap-4 md:grid-cols-2 scroll-mt-20">
-        <InsightList title="Why this property stands out" items={whyOpp} />
-        <InsightList title="Why it might still be available" items={whyStill} />
+        <InsightList
+          eyebrow="Scout edge"
+          title="What makes this one worth opening"
+          items={whyOpp}
+        />
+        <InsightList
+          eyebrow="Still on the board"
+          title="Why it hasn’t been scooped yet"
+          items={whyStill}
+        />
       </section>
 
       <section id="sec-score" className="panel p-5 scroll-mt-20">
@@ -542,7 +550,10 @@ export default function ParcelIntelligencePage() {
 
       <section id="sec-land" className="scroll-mt-20">
         <div className="mb-2">
-          <h2 className="display text-lg font-semibold">Land checks that move the needle</h2>
+          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+            Ground truth
+          </div>
+          <h2 className="display text-lg font-semibold">Checks that move the score</h2>
         </div>
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           {(
@@ -619,11 +630,22 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function InsightList({ title, items }: { title: string; items: AnyRec[] }) {
+function InsightList({
+  title,
+  items,
+  eyebrow,
+}: {
+  title: string;
+  items: AnyRec[];
+  eyebrow?: string;
+}) {
   const [open, setOpen] = useState(0);
   return (
     <div className="panel p-4 insight-interactive">
-      <h2 className="display text-lg font-semibold">{title}</h2>
+      {eyebrow ? (
+        <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">{eyebrow}</div>
+      ) : null}
+      <h2 className="display text-lg font-semibold leading-snug">{title}</h2>
       <div className="mt-2 space-y-1.5">
         {items.map((item, i) => {
           const active = open === i;

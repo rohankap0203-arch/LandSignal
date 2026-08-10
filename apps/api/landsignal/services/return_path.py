@@ -723,27 +723,27 @@ def build_return_intelligence(
     horizon_notes = {
         "10": (
             f"Decade holds mostly track this file’s near-term screens. "
-            f"CPI screen ~{infl['cpi_display']} — compare Today’s $ vs Before inflation."
+            f"CPI screen ~{infl['cpi_display']} — compare After inflation vs Before inflation."
         ),
         "30": (
             "By 30 years, fatigue slows the climb — and inflation has already shrunk what "
-            "those future dollars buy. Prefer Today’s $ for the real picture."
+            "those future dollars buy. Prefer After inflation for the real picture."
         ),
         "50": (
-            "Half-century dollars look big before inflation; in today’s $ they’re much smaller. "
+            "Half-century dollars look big before inflation; after inflation they’re much smaller. "
             "Taxes, insurance, and buyer-pool friction also stack up."
         ),
         "75": (
-            "75–100 year dollars are easy to misread before inflation — Today’s $ shows "
-            "purchasing power after the CPI screen, with hard path fade still applied."
+            "75–100 year dollars are easy to misread before inflation — After inflation applies "
+            "the CPI screen, with hard path fade still applied."
         ),
         "100": (
             f"At 100 years, typical total-back is about {mult_100:.1f}× buy before inflation "
             f"(~{_money(base_100.get('total_back_usd'))} · ~{_money(base_100.get('total_back_usd_today'))} "
-            f"in today’s $); optimistic tops near {_money(bull_100.get('total_back_usd'))}. "
+            f"after inflation); optimistic tops near {_money(bull_100.get('total_back_usd'))}. "
             f"Far years fade hard — not a straight rocket."
             if mult_100 is not None
-            else "Century marks fade hard — compare Before inflation vs Today’s $ so inflation doesn’t fake wealth."
+            else "Century marks fade hard — compare Before vs After inflation so CPI doesn’t fake wealth."
         ),
     }
 
@@ -783,7 +783,7 @@ def build_return_intelligence(
             "Year-by-year path uses area land pace, then bends it with soil, flood, wetlands, "
             "growth, access, channel, strategy fit, risk, liquidity, scarcity, power proximity, "
             "cycle shape, carry costs, and an exit haircut. Cautious / typical / optimistic stress "
-            f"rent, pace, and exit. Dollar views: Before inflation (raw future $) vs Today’s $ "
+            f"rent, pace, and exit. Dollar views: Before inflation (raw future $) vs After inflation "
             f"(deflated at {infl['cpi_display']} CPI screen). Not an appraisal."
         ),
     }

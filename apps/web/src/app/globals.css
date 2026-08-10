@@ -1979,6 +1979,20 @@ button.score-bar-click:disabled {
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.22);
 }
 
+.help-modal--compact {
+  width: min(380px, 100%);
+  padding: 14px 16px;
+}
+
+.help-modal--compact .help-modal-list {
+  margin-top: 10px;
+  gap: 6px;
+}
+
+.help-modal--compact .help-modal-list li {
+  padding: 7px 9px;
+}
+
 .help-modal-list {
   margin-top: 12px;
   display: grid;

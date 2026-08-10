@@ -18,12 +18,12 @@ def inflation_meta(cpi: float = DEFAULT_CPI_ANNUAL) -> dict[str, Any]:
         "cpi_annual": cpi,
         "cpi_display": f"{cpi * 100:.1f}%/yr",
         "basis": "long_run_cpi_screen",
-        "label_today": "Today’s $",
+        "label_today": "After inflation",
         "label_nominal": "Before inflation",
         "plain": (
             f"We assume prices rise about {cpi * 100:.1f}%/yr. "
-            "Today’s $ = what future dollars buy now. "
-            "Before inflation = the raw future number with no inflation haircut."
+            "After inflation = future dollars with that CPI haircut applied. "
+            "Before inflation = the raw future number with no CPI haircut."
         ),
     }
 

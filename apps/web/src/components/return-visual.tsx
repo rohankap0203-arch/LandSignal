@@ -519,54 +519,77 @@ export function ReturnVisual({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-            Multi-factor return path
+            Hold return
           </div>
-          <h3 className="display text-lg font-semibold">If you hold this property</h3>
+          <h3 className="display text-lg font-semibold">If you buy and hold</h3>
         </div>
         <button
           type="button"
           className={`help-q ${helpOpen ? "on" : ""}`}
-          aria-label="How this return path works"
+          aria-label="How this hold return works"
+          aria-haspopup="dialog"
           aria-expanded={helpOpen}
           title="How this works"
-          onClick={() => setHelpOpen((v) => !v)}
+          onClick={() => setHelpOpen(true)}
         >
           ?
         </button>
       </div>
       {helpOpen ? (
-        <div className="help-panel mt-2">
-          <p>
-            This is not a straight “price goes up X% every year” line. LandSignal bends the path
-            with this property’s own screens — soil, flood, wetlands, growth, how it’s sold, carry
-            costs, and exit friction — then shows three cases:
-          </p>
-          <ul>
-            <li>
-              <strong>Cautious</strong> — slower rents, softer exit, higher carry
-            </li>
-            <li>
-              <strong>Typical</strong> — base path for this file
-            </li>
-            <li>
-              <strong>Optimistic</strong> — stronger rents and exit, still bounded
-            </li>
-          </ul>
-          <p>
-            Pick a hold length (presets or Custom, 1–100 yr). Drag the chart to read any year. Tap a
-            factor card to see why it lifts or slows the path. First look only — not an appraisal.
-          </p>
-          <p>
-            <strong>Today’s $</strong> shrinks future dollars by a {cpiDisplay} CPI screen so you see
-            purchasing power. <strong>Before inflation</strong> is the raw future number. Buy price
-            is already in today’s dollars.
-          </p>
+        <div
+          className="help-modal-backdrop"
+          role="presentation"
+          onClick={() => setHelpOpen(false)}
+        >
+          <div
+            className="help-modal help-modal--compact"
+            role="dialog"
+            aria-modal="true"
+            aria-label="How hold return works"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h4 className="display text-base font-semibold">Hold return · quick read</h4>
+              <button
+                type="button"
+                className="help-q on"
+                aria-label="Close"
+                onClick={() => setHelpOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <p className="mt-2 text-sm leading-snug text-[var(--ink-soft)]">
+              Not a flat %/yr line. Soil, flood, wetlands, growth, channel, carry, and exit bend the
+              path
+              {intel?.purchase_usd ? ` from a ~${money(intel.purchase_usd)} buy` : ""}.
+            </p>
+            <ul className="help-modal-list">
+              <li>
+                <strong>Cautious</strong>
+                <span>Slower rents, softer exit, higher carry.</span>
+              </li>
+              <li>
+                <strong>Typical</strong>
+                <span>Base path for this file.</span>
+              </li>
+              <li>
+                <strong>Optimistic</strong>
+                <span>Stronger rents &amp; exit — still bounded.</span>
+              </li>
+            </ul>
+            <p className="mt-3 text-xs leading-snug text-[var(--muted)]">
+              Drag the chart · tap a factor · 1–100 yr hold.{" "}
+              <strong>After inflation</strong> applies a ~{cpiDisplay} CPI haircut;{" "}
+              <strong>Before inflation</strong> leaves future $ raw. Screen only — not an appraisal.
+            </p>
+          </div>
         </div>
       ) : null}
       <p className="mt-1 text-sm text-[var(--muted)] leading-snug">
-        {factorCount} local screens shape the curve
-        {intel?.purchase_usd ? ` · buy near ${money(intel.purchase_usd)}` : ""}.
-        Pick a case and hold length.
+        Buy → rent → exit math ({factorCount} screens)
+        {intel?.purchase_usd ? ` · entry near ${money(intel.purchase_usd)}` : ""}. Land-value history
+        lives above.
       </p>
 
       <div className="traj-windows mt-3" role="tablist" aria-label="Return case">
@@ -764,7 +787,7 @@ export function ReturnVisual({
                 <em className="return-alt-line">
                   {showToday
                     ? `${shortMoney(Number(endpoint.exit_usd))} before inflation`
-                    : `${shortMoney(Number(endpoint.exit_usd_today))} today’s $`}
+                    : `${shortMoney(Number(endpoint.exit_usd_today))} after inflation`}
                 </em>
               ) : null}
             </div>
@@ -777,7 +800,7 @@ export function ReturnVisual({
                 <em className="return-alt-line">
                   {showToday
                     ? `${shortMoney(Number(endpoint.cumulative_rent_usd))} before inflation`
-                    : `${shortMoney(Number(endpoint.cumulative_rent_usd_today))} today’s $`}
+                    : `${shortMoney(Number(endpoint.cumulative_rent_usd_today))} after inflation`}
                 </em>
               ) : null}
             </div>
@@ -790,7 +813,7 @@ export function ReturnVisual({
                 <em className="return-alt-line">
                   {showToday
                     ? `${shortMoney(Number(endpoint.total_back_usd))} before inflation`
-                    : `${shortMoney(Number(endpoint.total_back_usd_today))} today’s $`}
+                    : `${shortMoney(Number(endpoint.total_back_usd_today))} after inflation`}
                 </em>
               ) : null}
             </div>

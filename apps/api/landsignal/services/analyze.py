@@ -381,6 +381,12 @@ async def analyze_parcel(
         parcel.state,
     )
     if auction_path:
+        from landsignal.services.auction import detect_published_price_role
+
+        auction_path = {
+            **auction_path,
+            "published_price_role": detect_published_price_role(listing),
+        }
         comps_n["auction_path"] = auction_path
         if existing.comps:
             existing.comps.normalized = {**(existing.comps.normalized or {}), "auction_path": auction_path}

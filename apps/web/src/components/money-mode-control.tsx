@@ -3,12 +3,12 @@
 import type { MoneyMode } from "@/lib/inflation";
 
 export const MONEY_MODE_LABELS = {
-  today: "Today’s $",
+  today: "After inflation",
   nominal: "Before inflation",
 } as const;
 
 export function moneyModeShort(mode: MoneyMode): string {
-  return mode === "today" ? "today’s $" : "before inflation";
+  return mode === "today" ? "after inflation" : "before inflation";
 }
 
 type CompareRow = {
@@ -18,7 +18,7 @@ type CompareRow = {
   format: (n: number) => string;
 };
 
-/** Toggle + in-your-face dual comparison for inflation views. */
+/** Toggle + dual comparison for inflation-adjusted vs unadjusted future dollars. */
 export function MoneyModeControl({
   mode,
   onChange,
@@ -43,7 +43,7 @@ export function MoneyModeControl({
 
   return (
     <div className={`money-mode-panel ${className}`.trim()}>
-      <div className="money-mode-row" role="group" aria-label="Dollar view">
+      <div className="money-mode-row" role="group" aria-label="Inflation view">
         <div className="money-mode-toggle">
           <button
             type="button"
@@ -65,8 +65,8 @@ export function MoneyModeControl({
         <p className="money-mode-note">
           {note ||
             (mode === "today"
-              ? `Buying power after ~${cpiDisplay} inflation`
-              : `Raw future dollars · ignores ~${cpiDisplay} inflation`)}
+              ? `Future $ reduced by ~${cpiDisplay} CPI`
+              : `Future $ with no ~${cpiDisplay} CPI haircut`)}
         </p>
       </div>
 
@@ -81,7 +81,7 @@ export function MoneyModeControl({
             >
               <span className="money-compare-tag">{MONEY_MODE_LABELS.today}</span>
               <strong className="tabular-nums">{compare.format(todayN as number)}</strong>
-              <em>what it buys now</em>
+              <em>CPI-adjusted</em>
             </button>
             <div className="money-compare-vs" aria-hidden>
               vs
@@ -93,12 +93,12 @@ export function MoneyModeControl({
             >
               <span className="money-compare-tag">{MONEY_MODE_LABELS.nominal}</span>
               <strong className="tabular-nums">{compare.format(beforeN as number)}</strong>
-              <em>raw future number</em>
+              <em>unadjusted</em>
             </button>
           </div>
           {gap != null && gap > 0 ? (
             <p className="money-compare-gap">
-              Inflation eats about <strong>{gap}%</strong> of that future dollar figure at ~{cpiDisplay}.
+              ~<strong>{gap}%</strong> of that future figure is inflation at {cpiDisplay}.
             </p>
           ) : null}
         </div>

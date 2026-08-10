@@ -98,25 +98,35 @@ def build_intelligence_brief(
     # ---- Why this opportunity ----
     why: list[dict[str, str]] = []
     if auction and ask is not None and est is not None:
+        from landsignal.services.auction import published_price_words
+
         settle_v = settle or ask
+        lo = _n(auction.get("settle_low_usd"))
+        hi = _n(auction.get("settle_high_usd"))
         gap = est - settle_v
+        role = str(auction.get("published_price_role") or "opening_bid")
+        role_short, _ = published_price_words(role)
+        band = (
+            f"{_money(lo)}–{_money(hi)}"
+            if lo is not None and hi is not None and hi > lo
+            else _money(settle_v)
+        )
         why.append(
             {
                 "headline": (
-                    f"Starting bid {_money(ask)} · likely finish ~{_money(settle_v)} · "
+                    f"{_money(ask)} {role_short} · finish screen ~{band} · "
                     f"our value {_money(est)}"
                 ),
                 "detail": (
-                    f"On {prop}, the {_money(ask)} number is only the opening bid — "
-                    f"not what you should expect to pay. Similar auctions usually climb about "
-                    f"{auction.get('bid_inflation_mult_base', 0):.1f}× "
-                    f"(rough range {auction.get('bid_inflation_mult_low', 0):.1f}×–"
-                    f"{auction.get('bid_inflation_mult_high', 0):.1f}×), so a realistic finish is near "
-                    f"{_money(settle_v)}. Compared with our estimated value {_money(est)}, that is about "
+                    f"On {prop}, {_money(ask)} is the published {role_short} from the source feed — "
+                    f"not a promised close price. Our finish screen uses a "
+                    f"~{auction.get('bid_inflation_mult_base', 0):.1f}× bid-up prior "
+                    f"(band {auction.get('bid_inflation_mult_low', 0):.1f}×–"
+                    f"{auction.get('bid_inflation_mult_high', 0):.1f}×) → roughly {band}. "
+                    f"Versus our estimated value {_money(est)}, the screen midpoint is about "
                     f"{_money(abs(gap))} "
                     f"({abs(disc):.0f}% {'cheaper' if (disc or 0) < 0 else 'more expensive'}). "
-                    f"The opener looked {abs(auction.get('opener_discount_pct') or 0):.0f}% under our value — "
-                    f"that teaser is normal for auctions, not a guaranteed bargain."
+                    f"A screen — confirm on the county sale page before you bid."
                 ),
             }
         )
@@ -309,7 +319,7 @@ def build_intelligence_brief(
         still.insert(
             0,
             {
-                "headline": "Low starting bid draws browsers; real finish price weeds them out",
+                "headline": "Low published lien/bid draws browsers; real finish price weeds them out",
                 "detail": (
                     f"The published {_money(ask)} looks cheap next to our {_money(est)} estimate — "
                     f"until you plan on a likely finish near {_money(settle)}. "
@@ -529,9 +539,20 @@ def build_intelligence_brief(
             + "."
         )
     if auction and settle:
+        from landsignal.services.auction import published_price_words
+
+        role_short, _ = published_price_words(str(auction.get("published_price_role") or "opening_bid"))
+        lo = _n(auction.get("settle_low_usd"))
+        hi = _n(auction.get("settle_high_usd"))
+        band = (
+            f"{_money(lo)}–{_money(hi)}"
+            if lo is not None and hi is not None and hi > lo
+            else _money(settle)
+        )
         thesis_bullets.append(
-            f"Ignore the {_money(ask)} starting bid as the real price — auctions like this "
-            f"usually finish near {_money(settle)} (about {auction.get('bid_inflation_mult_base', 0):.1f}× the opener)."
+            f"Treat {_money(ask)} as the published {role_short}, not the close — "
+            f"finish screen ~{band} "
+            f"(~{auction.get('bid_inflation_mult_base', 0):.1f}× prior, not a quoted result)."
         )
     if strategy != "UNDETERMINED":
         strat = strategy.replace("_", " ").title()

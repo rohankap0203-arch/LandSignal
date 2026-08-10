@@ -274,7 +274,7 @@ export function PriceTrajectory({
   if (!trajectory || !layout || !windowMath) {
     return (
       <div className="price-trajectory">
-        <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Value over time</div>
+        <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Land value path</div>
         <p className="mt-1 text-sm text-[var(--muted)]">Building the dollar path…</p>
       </div>
     );
@@ -291,16 +291,19 @@ export function PriceTrajectory({
     <div className={`price-trajectory ${compact ? "compact" : ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Value over time</div>
+          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+            Land value path
+          </div>
           <h3 className="display text-lg font-semibold leading-snug">
             {horizon} yr back · {horizon} yr ahead
           </h3>
           <p className="mt-1 text-xs text-[var(--muted)] break-words">
-            {windowMath.startYear} → today → {windowMath.endYear} · {knowledge}
+            Market mark for this pin — not hold cashflow. {windowMath.startYear} → now →{" "}
+            {windowMath.endYear} · {knowledge}
           </p>
           <p className="mt-1 text-[11px] text-[var(--muted)] leading-snug">
             {horizon >= 50
-              ? "Far years fade hard — use Today’s $ so inflation doesn’t fake wealth."
+              ? "Far years fade hard — After inflation keeps the mark honest."
               : "Far years fade on purpose — not a straight rocket."}{" "}
             {trajectory?.annual_rate_display
               ? `Near-term pace ~${trajectory.annual_rate_display}.`
@@ -321,14 +324,14 @@ export function PriceTrajectory({
               <em className="return-alt-line">
                 {showToday
                   ? `${shortMoney(windowMath.futureUsd)} before inflation`
-                  : `${shortMoney(windowMath.futureUsdToday)} today’s $`}
+                  : `${shortMoney(windowMath.futureUsdToday)} after inflation`}
               </em>
             ) : null}
           </div>
           <div>
-            <span>Today</span>
+            <span>Now</span>
             <strong>{money(windowMath.todayUsd)}</strong>
-            <em className="return-alt-line">already today’s $</em>
+            <em className="return-alt-line">current mark</em>
           </div>
         </div>
       </div>
@@ -591,7 +594,7 @@ export function PriceTrajectory({
             <em className="return-alt-line">
               {showToday
                 ? `${shortMoney(windowMath.futureUsd)} before inflation`
-                : `${shortMoney(windowMath.futureUsdToday)} today’s $`}
+                : `${shortMoney(windowMath.futureUsdToday)} after inflation`}
             </em>
           ) : null}
         </div>
