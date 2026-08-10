@@ -517,11 +517,7 @@ export default function SearchPage() {
         <div className="panel empty-state">
           <div className="display text-2xl text-[var(--ink)]">Find buys others can’t see</div>
           <p className="mx-auto mt-2 max-w-lg">
-            Hit <strong>Top opportunities</strong> for the strongest engine-ranked files nationwide, or
-            set filters and <strong>Show matches</strong> for this page’s search.{" "}
-            <strong>Land Alerts</strong> is separate — a saved watch profile that notifies you over time.
-            Use <strong>Refresh live inventory</strong> to pull new tax-sale / surplus / BLM postings into
-            the queue.
+            Hit <strong>Top opportunities</strong> for the strongest engine-ranked files nationwide.
           </p>
         </div>
       )}
