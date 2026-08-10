@@ -2320,10 +2320,11 @@ a.btn-intel:hover {
   margin-top: 8px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 10px 12px;
 }
 
-@media (min-width: 720px) {
+/* Only go 4-across when the panel is wide enough that values won’t clip */
+@media (min-width: 1100px) {
   .return-future-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -2333,18 +2334,25 @@ a.btn-intel:hover {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
-.return-future-grid span {
+.return-future-grid > div > span {
   font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   color: var(--muted);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
 }
 
 .return-future-grid strong {
   font-size: 0.95rem;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
 }
 
 .return-vs-cell {
@@ -2352,11 +2360,34 @@ a.btn-intel:hover {
 }
 
 .return-vs-buy {
-  display: block;
-  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  white-space: normal;
   overflow: visible;
-  font-size: clamp(0.78rem, 1.9vw, 0.92rem);
+  font-size: 0.95rem;
   letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.return-vs-buy.is-pos {
+  color: var(--positive);
+}
+
+.return-vs-buy.is-neg {
+  color: var(--danger);
+}
+
+.return-vs-gain {
+  display: block;
+}
+
+.return-vs-irr {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 650;
+  opacity: 0.92;
 }
 
 .return-mini {

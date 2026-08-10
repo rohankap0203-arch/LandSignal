@@ -722,12 +722,16 @@ export function ReturnVisual({
               <span>Vs buy · annualized</span>
               <strong
                 className={`return-vs-buy ${
-                  (endpoint.gain_usd ?? 0) >= 0 ? "text-[var(--positive)]" : "text-[var(--danger)]"
+                  (endpoint.gain_usd ?? 0) >= 0 ? "is-pos" : "is-neg"
                 }`}
               >
-                {(endpoint.gain_usd ?? 0) >= 0 ? "+" : ""}
-                {shortMoney(Number(endpoint.gain_usd || 0))}
-                {irrPct != null ? ` · ${irrPct.toFixed(1)}%/yr` : ""}
+                <span className="return-vs-gain">
+                  {(endpoint.gain_usd ?? 0) >= 0 ? "+" : ""}
+                  {shortMoney(Number(endpoint.gain_usd || 0))}
+                </span>
+                {irrPct != null ? (
+                  <span className="return-vs-irr">{irrPct.toFixed(1)}%/yr</span>
+                ) : null}
               </strong>
             </div>
           </div>
