@@ -592,14 +592,15 @@ select {
 .hero-select-menu {
   position: absolute;
   top: calc(100% + 6px);
-  left: 0;
-  right: 0;
+  left: -0.4rem;
+  right: -0.4rem;
   z-index: 70;
   margin: 0;
   padding: 0.35rem;
   list-style: none;
   max-height: min(16.5rem, 48vh);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border-radius: 14px;
   border: 1px solid rgba(247, 250, 248, 0.16);
   background:
@@ -608,6 +609,39 @@ select {
     0 18px 36px rgba(0, 0, 0, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
   animation: hero-select-in 140ms ease-out;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(247, 250, 248, 0.18) transparent;
+}
+
+.hero-select-menu::-webkit-scrollbar {
+  width: 5px;
+}
+
+.hero-select-menu::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 6px 0;
+}
+
+.hero-select-menu::-webkit-scrollbar-thumb {
+  background: rgba(247, 250, 248, 0.14);
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  transition: background 160ms ease;
+}
+
+.hero-select-menu:hover::-webkit-scrollbar-thumb {
+  background: rgba(247, 250, 248, 0.28);
+  background-clip: padding-box;
+}
+
+.hero-select-menu::-webkit-scrollbar-thumb:hover {
+  background: rgba(143, 208, 176, 0.45);
+  background-clip: padding-box;
+}
+
+.hero-select-menu::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 @keyframes hero-select-in {
