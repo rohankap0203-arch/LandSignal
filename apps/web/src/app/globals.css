@@ -1147,10 +1147,12 @@ select {
 .results-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 18px;
+  align-items: stretch;
 }
 
-@media (max-width: 980px) {
+/* Phone only — one column. Laptop/tablet keep two. */
+@media (max-width: 720px) {
   .results-grid {
     grid-template-columns: 1fr;
   }
@@ -1158,11 +1160,15 @@ select {
 
 .property-card {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  /* Stacked by default so 2-col laptop results never squeeze/cut text */
+  grid-template-columns: 1fr;
   overflow: hidden;
   border-radius: var(--radius);
   transition: transform 180ms ease, box-shadow 180ms ease;
   animation: rise 420ms ease both;
+  min-width: 0;
+  align-content: start;
+  height: 100%;
 }
 
 .property-card.card-clickable {
@@ -1172,12 +1178,6 @@ select {
 .property-card.card-clickable:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
-}
-
-@media (max-width: 720px) {
-  .property-card {
-    grid-template-columns: 1fr;
-  }
 }
 
 .property-card:hover {
@@ -1245,7 +1245,7 @@ select {
 }
 
 .card-media {
-  min-height: 220px;
+  min-height: 168px;
   background:
     linear-gradient(160deg, rgba(15, 61, 46, 0.75), rgba(196, 92, 38, 0.45)),
     radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.25), transparent 45%);
@@ -1254,13 +1254,14 @@ select {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  border-radius: var(--radius) 0 0 var(--radius);
+  gap: 12px;
+  border-radius: var(--radius) var(--radius) 0 0;
+  min-width: 0;
 }
 
-@media (max-width: 720px) {
-  .card-media {
-    border-radius: var(--radius) var(--radius) 0 0;
-  }
+.card-media .display {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .headline-with-help {
