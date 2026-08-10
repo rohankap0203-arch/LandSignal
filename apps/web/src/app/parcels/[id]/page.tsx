@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AcquireRail, type OutreachPlaybook } from "@/components/acquire-rail";
-import { AskYourselfTypewriter } from "@/components/ask-yourself-typewriter";
 import { LandLoader } from "@/components/land-loader";
 import { LandViewerModal } from "@/components/land-viewer-modal";
 import { PriceTrajectory } from "@/components/price-trajectory";
@@ -129,7 +128,6 @@ export default function ParcelIntelligencePage() {
   const whyOpp = (brief.why_opportunity as AnyRec[]) || [];
   const whyStill = (brief.why_still_available as AnyRec[]) || [];
   const scenarios = (brief.scenario_cards as AnyRec[]) || (data.scenarios_human as AnyRec[]) || [];
-  const askYourself = (brief.ask_yourself as AnyRec) || null;
   const story = (brief.score_story as Record<string, string>) || {};
   const returnCase = (brief.return_case as AnyRec) || {};
   const drivers = (data.score_drivers as AnyRec) || {};
@@ -304,7 +302,6 @@ export default function ParcelIntelligencePage() {
                 { id: "sec-why", label: "Why this land" },
                 { id: "sec-score", label: "Score parts" },
                 { id: "sec-land", label: "Land checks" },
-                { id: "sec-ask", label: "Ask yourself" },
               ].map((s) => (
                 <button
                   key={s.id}
@@ -613,23 +610,6 @@ export default function ParcelIntelligencePage() {
           })}
         </div>
       </section>
-
-      {askYourself?.question ? (
-        <section id="sec-ask" className="panel ask-yourself scroll-mt-20 p-5 md:p-7">
-          <AskYourselfTypewriter
-            label={String(askYourself.label || "Ask yourself")}
-            question={String(askYourself.question)}
-            because={
-              askYourself.because
-                ? String(askYourself.because)
-                : askYourself.aftertaste
-                  ? String(askYourself.aftertaste)
-                  : null
-            }
-            holdMs={10000}
-          />
-        </section>
-      ) : null}
 
     </div>
   );

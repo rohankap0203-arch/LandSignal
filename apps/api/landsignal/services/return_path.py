@@ -75,6 +75,7 @@ def build_factor_model(
     score,
     enrichment,
     base_annual: float | None = None,
+    channel_already_applied: bool = False,
 ) -> dict[str, Any]:
     """Assemble the nuance ledger that bends the path away from a straight line."""
     state = (getattr(parcel, "state", None) or "US").upper()
@@ -117,23 +118,32 @@ def build_factor_model(
     )
     strat_scores = getattr(score, "strategy_scores", None) or {}
 
+    # If caller passed market_trajectory.annual_rate, channel is already baked in —
+    # do not apply CHANNEL_MULT again (that was double-counting tax/surplus/BLM).
+    from_trajectory = base_annual is not None
+    skip_channel = channel_already_applied or from_trajectory
     base = base_annual if base_annual is not None else STATE_ANNUAL_APPRECIATION.get(state, 0.028)
     ch = CHANNEL_MULT.get(provider or "", 0.9)
     factors: list[dict[str, Any]] = []
 
-    # Start from state prior, then layer parcel-specific bends (in basis points of annual rate)
+    # Start from state prior (or trajectory pace), then layer parcel-specific bends
     rate = base
     factors.append(
         _factor(
             "state_prior",
             "Area land pace",
             base * 10000,
-            f"Typical long-run land pace in {state}: about {base*100:.1f}%/yr before this property’s own screens.",
+            (
+                f"Starting pace from the land-value path for {state}: about {base*100:.1f}%/yr "
+                f"(channel already reflected)."
+                if from_trajectory
+                else f"Typical long-run land pace in {state}: about {base*100:.1f}%/yr before this property’s own screens."
+            ),
         )
     )
 
-    # Channel
-    if ch != 1.0:
+    # Channel — only when we started from raw state prior
+    if not skip_channel and ch != 1.0:
         delta = base * (ch - 1.0)
         rate += delta
         channel_name = {
@@ -493,9 +503,11 @@ def build_case_path(
             shock *= 0.994 if case_u == "BASE" else (0.99 if case_u in ("BEAR", "DOWNSIDE", "STRESS") else 0.997)
 
         year_appr = appr0 * fatigue
-        # Conservative forward vs history + soft structural drag on far years
-        drag = 0.988 if y <= 25 else 0.984 if y <= 50 else 0.980
-        land = land * (1.0 + year_appr * 0.88) * (drag + (1.0 - drag) * shaped) * shock
+        # Mild forward conservatism only — old 0.88× + 0.988 drag stacked with channel
+        # and CPI so after-inflation always crashed, which was a model bug not a market fact.
+        fwd = 0.97 if y <= 20 else 0.95 if y <= 45 else 0.93
+        drag = 1.0 if y <= 30 else 0.998 if y <= 60 else 0.995
+        land = land * (1.0 + year_appr * fwd) * (drag + (1.0 - drag) * shaped) * shock
 
         # Rent drifts with land quality + mild inflation, with usable-acre drag;
         # far years: rents don't compound as fast as a stock model
@@ -520,12 +532,12 @@ def build_case_path(
         rent_series.append(noi)
 
         exit_haircut = scalars["exit_haircut"]
-        # Liquidity exit haircut rises for thin channels on short holds, fades on long holds
+        # Thin-channel exit friction — light on short holds, fades with time
         if model.get("provider") in ("public_tax_sale", "blm_lpad", "public_surplus"):
-            exit_haircut += max(0.0, 0.06 - y * 0.002)
+            exit_haircut += max(0.0, 0.035 - y * 0.0012)
         # Ultra-long exits: buyer pool / estate friction haircut
         if y >= 75:
-            exit_haircut += 0.04 if case_u in ("BEAR", "DOWNSIDE", "STRESS") else 0.02
+            exit_haircut += 0.025 if case_u in ("BEAR", "DOWNSIDE", "STRESS") else 0.012
 
         mark_exit = land * (1.0 - exit_haircut)
         total_back = mark_exit + cum_rent
@@ -646,6 +658,7 @@ def build_return_intelligence(
         score=score,
         enrichment=enrichment,
         base_annual=trajectory_annual,
+        channel_already_applied=trajectory_annual is not None,
     )
     purchase = entry_usd or mark_usd
     if purchase is None or purchase <= 0:
@@ -723,27 +736,27 @@ def build_return_intelligence(
     horizon_notes = {
         "10": (
             f"Decade holds mostly track this file’s near-term screens. "
-            f"CPI screen ~{infl['cpi_display']} — compare After inflation vs Before inflation."
+            f"Compare After inflation vs Before inflation (~{infl['cpi_display']} CPI). "
+            f"Opportunity score is the buy edge — not this hold path."
         ),
         "30": (
-            "By 30 years, fatigue slows the climb — and inflation has already shrunk what "
-            "those future dollars buy. Prefer After inflation for the real picture."
+            "By 30 years, path fatigue slows the climb. After inflation shows purchasing power; "
+            "Before inflation shows the raw future sticker."
         ),
         "50": (
-            "Half-century dollars look big before inflation; after inflation they’re much smaller. "
-            "Taxes, insurance, and buyer-pool friction also stack up."
+            "Half-century: Before inflation can look large; After inflation is the CPI-honest read. "
+            "Judge the deal on entry discount + mid holds, not century marks alone."
         ),
         "75": (
-            "75–100 year dollars are easy to misread before inflation — After inflation applies "
-            "the CPI screen, with hard path fade still applied."
+            "75–100 year screens are illustrative. After inflation applies the CPI haircut; "
+            "far-year fatigue still applies so terminals don’t rocket unrealistically."
         ),
         "100": (
             f"At 100 years, typical total-back is about {mult_100:.1f}× buy before inflation "
             f"(~{_money(base_100.get('total_back_usd'))} · ~{_money(base_100.get('total_back_usd_today'))} "
-            f"after inflation); optimistic tops near {_money(bull_100.get('total_back_usd'))}. "
-            f"Far years fade hard — not a straight rocket."
+            f"after inflation); optimistic tops near {_money(bull_100.get('total_back_usd'))}."
             if mult_100 is not None
-            else "Century marks fade hard — compare Before vs After inflation so CPI doesn’t fake wealth."
+            else "Century marks are a screen — compare Before vs After inflation."
         ),
     }
 

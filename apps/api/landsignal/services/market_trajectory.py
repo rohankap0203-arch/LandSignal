@@ -371,9 +371,11 @@ def _series_from_anchor(
     for k in range(1, years_forward + 1):
         shaper = _cycle_shaper(k)
         fade = _forward_fade(k)
-        # Forward already conservative; fade + soft drag kill runaway 100y terminals
-        drag = 0.988 if k <= 25 else 0.985 if k <= 50 else 0.982
-        factor = (1.0 + annual * 0.78 * fade) * (drag + (1.0 - drag) * shaper)
+        # Mild forward conservatism — old 0.78× + 0.988 drag made after-inflation
+        # almost always fall, which overstated CPI damage vs a normal land hold.
+        fwd = 0.96 if k <= 20 else 0.94 if k <= 45 else 0.90
+        drag = 1.0 if k <= 30 else 0.998 if k <= 60 else 0.995
+        factor = (1.0 + annual * fwd * fade) * (drag + (1.0 - drag) * shaper)
         factor = _apply_hitch(k, factor, hitch, severity=hitch_severity)
         vals[k] = vals[k - 1] * max(factor, 0.82)
     return vals

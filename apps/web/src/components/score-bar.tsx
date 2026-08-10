@@ -33,8 +33,8 @@ export type ScoreStandings = {
     gap: number;
     direction: string;
   }>;
-  lifts?: Array<{ key: string; label: string; score: number; contribution: number }>;
-  drags?: Array<{ key: string; label: string; score: number; gap: number }>;
+  lifts?: Array<{ key: string; label: string; score: number; contribution?: number; gap?: number }>;
+  drags?: Array<{ key: string; label: string; score: number; gap?: number }>;
   why_not_higher?: string[];
   why_label?: string;
   factors_label?: string;
@@ -48,7 +48,7 @@ export type ScoreStandings = {
 /** @deprecated alias — same shape as ScoreStandings */
 export type OpportunityStandings = ScoreStandings;
 
-/** Clickable red→green meter — expands into compact sitewide standings. */
+/** Clickable meter — opportunity uses sitewide standings; risk/completeness use lean lenses. */
 export function ScoreBar({
   label,
   value,
@@ -71,7 +71,8 @@ export function ScoreBar({
   const v = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
   const hue = invert ? 120 - v * 1.2 : v * 1.2;
   const fill = `hsl(${Math.max(0, Math.min(120, hue))} 65% 42%)`;
-  const hasStandings = Boolean(standings?.histogram?.length);
+  const kind = standings?.kind || (invert ? "risk" : undefined);
+  const hasStandings = Boolean(standings?.histogram?.length || standings?.rank_plain);
   const hasDetail = Boolean(hasStandings || (bullets && bullets.length) || verdict || hint);
   const closedHint = standings?.rank_plain || hint;
 
@@ -107,8 +108,12 @@ export function ScoreBar({
       ) : null}
       {open ? (
         <div className="score-bar-detail mt-2 text-left" onClick={(e) => e.stopPropagation()}>
-          {hasStandings && standings ? (
-            <ScoreStandingsPanel score={v} standings={standings} invert={invert} />
+          {kind === "risk" && standings ? (
+            <RiskLens score={v} standings={standings} />
+          ) : kind === "confidence" && standings ? (
+            <CompletenessLens score={v} standings={standings} />
+          ) : hasStandings && standings?.histogram?.length ? (
+            <OpportunityStandingsPanel score={v} standings={standings} />
           ) : (
             <>
               {verdict ? <p className="text-sm font-medium leading-snug">{verdict}</p> : null}
@@ -131,14 +136,93 @@ export function ScoreBar({
   );
 }
 
-function ScoreStandingsPanel({
+/** Risk — spectrum + two chips. Deliberately not a histogram clone. */
+function RiskLens({ score, standings }: { score: number; standings: ScoreStandings }) {
+  const safer = Math.round(standings.beats_pct || 0);
+  const worries = (standings.lifts || []).slice(0, 1);
+  const calms = (standings.drags || []).slice(0, 1);
+  const why = (standings.why_not_higher || [])[0];
+  const band = score <= 35 ? "Calm" : score <= 55 ? "Watch" : "Elevated";
+
+  return (
+    <div className="score-lens score-lens--risk">
+      <div className="score-lens-top">
+        <span className={`score-lens-pill tone-${band.toLowerCase()}`}>{band}</span>
+        <span className="score-lens-stat">
+          Safer than <strong>~{safer}%</strong> of live files
+        </span>
+      </div>
+      <div className="risk-spectrum" aria-hidden>
+        <div className="risk-spectrum-track">
+          <div className="risk-spectrum-you" style={{ left: `${score}%` }} title={`Risk ${Math.round(score)}`} />
+        </div>
+        <div className="risk-spectrum-labels">
+          <span>Calm</span>
+          <span>Hot</span>
+        </div>
+      </div>
+      <div className="score-lens-chips">
+        {worries[0] ? (
+          <span className="score-chip score-chip--warn">
+            Main flag · {worries[0].label}
+          </span>
+        ) : (
+          <span className="score-chip">No loud map flag</span>
+        )}
+        {calms[0] ? (
+          <span className="score-chip score-chip--ok">
+            Helping · {calms[0].label}
+          </span>
+        ) : null}
+      </div>
+      {why ? <p className="score-lens-why">{why}</p> : null}
+    </div>
+  );
+}
+
+/** Completeness — checklist, not a standings clone. */
+function CompletenessLens({ score, standings }: { score: number; standings: ScoreStandings }) {
+  const factors = (standings.factors || []).slice(0, 4);
+  const have = factors.filter((f) => f.direction === "up").length;
+  const total = Math.max(factors.length, 1);
+  const band = score >= 65 ? "Full enough" : score >= 40 ? "Partly filled" : "Thin file";
+  const why = (standings.why_not_higher || [])[0];
+
+  return (
+    <div className="score-lens score-lens--complete">
+      <div className="score-lens-top">
+        <span className={`score-lens-pill tone-${score >= 65 ? "calm" : score >= 40 ? "watch" : "elevated"}`}>
+          {band}
+        </span>
+        <span className="score-lens-stat">
+          <strong>
+            {have}/{total}
+          </strong>{" "}
+          key screens on file
+        </span>
+      </div>
+      <ul className="complete-checks">
+        {factors.map((f) => {
+          const ok = f.direction === "up";
+          return (
+            <li key={f.key} className={ok ? "is-on" : "is-off"}>
+              <span aria-hidden>{ok ? "✓" : "·"}</span>
+              {f.label}
+            </li>
+          );
+        })}
+      </ul>
+      {why ? <p className="score-lens-why">{why}</p> : null}
+    </div>
+  );
+}
+
+function OpportunityStandingsPanel({
   score,
   standings,
-  invert = false,
 }: {
   score: number;
   standings: ScoreStandings;
-  invert?: boolean;
 }) {
   const hist = standings.histogram || [];
   const n = standings.sample_n || 0;
@@ -147,16 +231,8 @@ function ScoreStandingsPanel({
     markerBucket >= 0 ? markerBucket : score >= 100 ? hist.length - 1 : 0;
   const topFactors = (standings.factors || []).slice(0, 3);
   const why = (standings.why_not_higher || [])[0];
-  const whyLabel = standings.why_label || (invert ? "Why not lower" : "Why not 90");
+  const whyLabel = standings.why_label || "Why not 90";
   const factorsLabel = standings.factors_label || `What’s in your ${Math.round(score)}`;
-  const beatsLabel = invert ? "Safer than" : "Beats";
-  const bestLabel = standings.meta_best_label || (invert ? "Site low" : "Site high");
-  const bestValue =
-    standings.meta_best_value != null
-      ? standings.meta_best_value
-      : invert
-        ? standings.min
-        : standings.max;
 
   return (
     <div className="opp-standings opp-standings--compact">
@@ -191,14 +267,13 @@ function ScoreStandingsPanel({
         </div>
         <div className="opp-standings-meta">
           <span>
-            {beatsLabel} <strong>~{Math.round(standings.beats_pct || 0)}%</strong>
+            Beats <strong>~{Math.round(standings.beats_pct || 0)}%</strong>
           </span>
           <span>
             Median <strong>{standings.median != null ? Math.round(standings.median) : "—"}</strong>
           </span>
           <span>
-            {bestLabel}{" "}
-            <strong>{bestValue != null ? Math.round(bestValue) : "—"}</strong>
+            Site high <strong>{standings.max != null ? Math.round(standings.max) : "—"}</strong>
           </span>
         </div>
       </div>

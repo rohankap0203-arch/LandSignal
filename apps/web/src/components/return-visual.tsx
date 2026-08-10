@@ -588,8 +588,9 @@ export function ReturnVisual({
       ) : null}
       <p className="mt-1 text-sm text-[var(--muted)] leading-snug">
         Buy → rent → exit math ({factorCount} screens)
-        {intel?.purchase_usd ? ` · entry near ${money(intel.purchase_usd)}` : ""}. Land-value history
-        lives above.
+        {intel?.purchase_usd ? ` · entry near ${money(intel.purchase_usd)}` : ""}
+        {intel?.mark_usd ? ` · our value ~${money(intel.mark_usd)}` : ""}. Path compounds from the
+        buy — opportunity already scored the gap to our value. Land-value history lives above.
       </p>
 
       <div className="traj-windows mt-3" role="tablist" aria-label="Return case">
@@ -845,10 +846,11 @@ export function ReturnVisual({
               ) : null}
             </div>
           </div>
-          {showToday && holdYears >= 20 ? (
+          {showToday && holdYears >= 20 && totalShow != null && intel?.purchase_usd != null ? (
             <p className="mt-2 text-[11px] leading-snug text-[var(--muted)]">
-              After inflation keeps falling on long holds when land growth trails ~{cpiDisplay} CPI —
-              e.g. (1.025)^100 ≈ 11.8× haircut. Switch to Before inflation to see raw future $.
+              After inflation = future $ ÷ (1.025)^years. Opportunity score is the{" "}
+              <strong>buy edge vs our value</strong>, not a promise this hold beats CPI forever.
+              Toggle Before inflation for the raw future sticker.
             </p>
           ) : null}
         </div>
@@ -862,10 +864,10 @@ export function ReturnVisual({
         </p>
       ) : null}
 
-      <div className="mt-4 space-y-2">
+      <div className="mt-4">
         <div className="flex items-center justify-between gap-2">
           <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-            All cases at {holdYears} years
+            3 outcomes · {holdYears} yr
           </div>
           <button
             type="button"
@@ -905,84 +907,73 @@ export function ReturnVisual({
               </div>
               <p className="mt-2 text-sm leading-snug">
                 Same buy
-                {intel?.purchase_usd ? ` (${money(intel.purchase_usd)})` : ""}. Same hold. Only the
-                story changes.
+                {intel?.purchase_usd ? ` (${money(intel.purchase_usd)})` : ""}. Same hold. Only rent,
+                pace, and exit friction change.
               </p>
               <ul className="help-modal-list">
-                {CASE_ORDER.map((k) => {
-                  const ep = endpointsAtHold[k];
-                  const pct = ep?.irr != null ? Number(ep.irr) * 100 : null;
-                  const blurb =
-                    k === "BEAR"
-                      ? "Soft day — weaker rents, harder exit, more carry."
-                      : k === "BULL"
-                        ? "Strong day — better rents & exit, still faded on long holds."
-                        : "Base path from this property’s own screens.";
-                  return (
-                    <li key={k}>
-                      <strong>
-                        {caseLabel(k)}
-                        {pct != null ? ` · ${pct.toFixed(1)}%/yr` : ""}
-                      </strong>
-                      <span>
-                        {blurb}
-                        {ep?.total_back_usd != null
-                          ? ` Total back ~${money(ep.total_back_usd)}.`
-                          : ""}
-                      </span>
-                    </li>
-                  );
-                })}
+                <li>
+                  <strong>Cautious</strong>
+                  <span> — softer rents, harder exit, more carry.</span>
+                </li>
+                <li>
+                  <strong>Typical</strong>
+                  <span> — base path from this property’s screens.</span>
+                </li>
+                <li>
+                  <strong>Optimistic</strong>
+                  <span> — stronger rents & exit; still not a rocket forever.</span>
+                </li>
               </ul>
               <p className="mt-3 text-xs text-[var(--muted)] leading-snug">
-                {holdYears >= 50
-                  ? "Long holds fade on purpose — century dollars before inflation are easy to misread."
-                  : "Annualized if you buy, collect rent, and sell at that case’s exit. A screen — not a promise."}
+                Numbers are total back (exit + rent along the way). A screen — not a promise.
               </p>
             </div>
           </div>
         ) : null}
-        {CASE_ORDER.map((k) => {
-          const ep = endpointsAtHold[k];
-          if (!ep) return null;
-          const rate = showToday ? ep.irr_real ?? ep.irr : ep.irr;
-          const pct = rate != null ? Number(rate) * 100 : null;
-          const land = showToday ? ep.exit_usd_today ?? ep.exit_usd : ep.exit_usd;
-          const maxAbs = Math.max(
-            12,
-            ...CASE_ORDER.map((x) => {
-              const r = showToday
-                ? endpointsAtHold[x]?.irr_real ?? endpointsAtHold[x]?.irr
-                : endpointsAtHold[x]?.irr;
-              return Math.abs(Number(r || 0) * 100);
-            }),
-          );
-          const w = pct != null ? Math.max(6, (Math.abs(pct) / maxAbs) * 100) : 6;
-          return (
-            <button
-              key={k}
-              type="button"
-              className={`return-mini ${activeCase === k ? "active" : ""} tone-${caseTone(k)}`}
-              onClick={() => setActiveCase(k)}
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="font-semibold">{caseLabel(k)}</span>
-                <span className="tabular-nums return-mini-nums">
-                  {pct != null
-                    ? `${pct.toFixed(1)}%/yr${showToday ? " after inflation" : ""}`
-                    : "n/a"}
-                  <span className="return-mini-land"> · land {shortMoney(Number(land || 0))}</span>
-                </span>
-              </div>
-              <div className="return-track">
+        <div className="case-outcome-grid mt-2" role="list">
+          {CASE_ORDER.map((k) => {
+            const ep = endpointsAtHold[k];
+            if (!ep) return null;
+            const rate = showToday ? ep.irr_real ?? ep.irr : ep.irr;
+            const pct = rate != null && Number.isFinite(Number(rate)) ? Number(rate) * 100 : null;
+            const total = showToday
+              ? ep.total_back_usd_today ?? ep.total_back_usd
+              : ep.total_back_usd;
+            const gain = showToday ? ep.gain_usd_today ?? ep.gain_usd : ep.gain_usd;
+            const gainN = Number(gain);
+            const pos = Number.isFinite(gainN) ? gainN >= 0 : null;
+            return (
+              <button
+                key={k}
+                type="button"
+                role="listitem"
+                className={`case-outcome ${activeCase === k ? "is-active" : ""} tone-${caseTone(k)}`}
+                onClick={() => setActiveCase(k)}
+                aria-pressed={activeCase === k}
+              >
+                <div className="case-outcome-name">{caseLabel(k)}</div>
+                <div className="case-outcome-total tabular-nums">
+                  {total != null ? shortMoney(Number(total)) : "—"}
+                </div>
+                <div className="case-outcome-sub">total back</div>
                 <div
-                  className={`return-fill ${pct != null && pct >= 0 ? "pos" : "neg"}`}
-                  style={{ width: `${w}%` }}
-                />
-              </div>
-            </button>
-          );
-        })}
+                  className={`case-outcome-delta tabular-nums ${
+                    pos === true ? "is-pos" : pos === false ? "is-neg" : ""
+                  }`}
+                >
+                  {Number.isFinite(gainN)
+                    ? `${gainN >= 0 ? "+" : ""}${shortMoney(gainN)} vs buy`
+                    : "vs buy —"}
+                </div>
+                <div className="case-outcome-irr tabular-nums">
+                  {pct != null
+                    ? `${pct.toFixed(1)}%/yr${showToday ? " after infl." : ""}`
+                    : "n/a"}
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {factors.length > 0 && (
