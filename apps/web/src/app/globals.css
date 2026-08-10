@@ -969,6 +969,61 @@ select {
   flex: 1;
 }
 
+.filter-money-field {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-width: 0;
+  flex: 1;
+}
+
+.filter-money-field input {
+  min-width: 0;
+  flex: 1 1 auto;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.filter-unit-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-left: 0;
+  border-radius: 0 12px 12px 0;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.filter-unit-toggle button {
+  min-width: 1.85rem;
+  padding: 0 0.4rem;
+  border: 0;
+  background: transparent;
+  color: rgba(247, 250, 248, 0.72);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.filter-unit-toggle button + button {
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.filter-unit-toggle button.is-active {
+  background: color-mix(in srgb, #8fd0b0 34%, transparent);
+  color: #e8fff3;
+}
+
+.filter-unit-toggle button:hover:not(.is-active) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
 .filter-inventory-note {
   font-size: 0.8125rem;
   line-height: 1.3;

@@ -13,17 +13,21 @@ import {
   type SearchMeta,
 } from "@/lib/api";
 
+type PriceUnit = "K" | "M";
+
 type FormState = {
-  state: string;
+  states: string[];
   region: string;
   regionCustom: string;
   pricePreset: string;
   priceMin: string;
   priceMax: string;
+  priceMinUnit: PriceUnit;
+  priceMaxUnit: PriceUnit;
   acrePreset: string;
   acreMin: string;
   acreMax: string;
-  strategy: string;
+  strategies: string[];
   strategyCustom: string;
   holdYears: string;
   holdCustom: string;
@@ -31,16 +35,18 @@ type FormState = {
 };
 
 const DEFAULT_FORM: FormState = {
-  state: "Any",
+  states: ["Any"],
   region: "Any",
   regionCustom: "",
   pricePreset: "Any",
   priceMin: "",
   priceMax: "",
+  priceMinUnit: "K",
+  priceMaxUnit: "K",
   acrePreset: "Any",
   acreMin: "",
   acreMax: "",
-  strategy: "Any",
+  strategies: ["Any"],
   strategyCustom: "",
   holdYears: "Any",
   holdCustom: "",
@@ -67,9 +73,69 @@ function stateCode(label: string): string {
   return label.split("—")[0]?.trim().toUpperCase() || label;
 }
 
-function parseMoney(v: string): number | undefined {
-  const n = Number(String(v).replace(/[$,\s]/g, ""));
-  return Number.isFinite(n) && n >= 0 ? n : undefined;
+function selectedStates(labels: string[]): string[] {
+  return labels.map(stateCode).filter((c) => c && c !== "Any");
+}
+
+/** Digits + optional single decimal only. */
+function sanitizeDecimal(raw: string): string {
+  let out = String(raw).replace(/[^\d.]/g, "");
+  const firstDot = out.indexOf(".");
+  if (firstDot !== -1) {
+    out = out.slice(0, firstDot + 1) + out.slice(firstDot + 1).replace(/\./g, "");
+  }
+  return out;
+}
+
+/** Whole numbers only, capped. */
+function sanitizeInt(raw: string, max: number): string {
+  const digits = String(raw).replace(/\D/g, "");
+  if (!digits) return "";
+  const n = Number(digits);
+  if (!Number.isFinite(n)) return "";
+  return String(Math.min(max, n));
+}
+
+function parseUnitMoney(v: string, unit: PriceUnit): number | undefined {
+  const n = Number(sanitizeDecimal(v));
+  if (!Number.isFinite(n) || n < 0 || v.trim() === "") return undefined;
+  return n * (unit === "M" ? 1_000_000 : 1_000);
+}
+
+function parseAcres(v: string): number | undefined {
+  const n = Number(sanitizeDecimal(v));
+  return Number.isFinite(n) && n >= 0 && v.trim() !== "" ? n : undefined;
+}
+
+function UnitToggle({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: PriceUnit;
+  onChange: (u: PriceUnit) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <div className="filter-unit-toggle" role="group" aria-label={ariaLabel}>
+      <button
+        type="button"
+        className={value === "K" ? "is-active" : undefined}
+        aria-pressed={value === "K"}
+        onClick={() => onChange("K")}
+      >
+        K
+      </button>
+      <button
+        type="button"
+        className={value === "M" ? "is-active" : undefined}
+        aria-pressed={value === "M"}
+        onClick={() => onChange("M")}
+      >
+        M
+      </button>
+    </div>
+  );
 }
 
 export default function SearchPage() {
@@ -83,28 +149,33 @@ export default function SearchPage() {
   const [hasSearched, setHasSearched] = useState(false);
 
   const regionOptions = useMemo(() => {
-    const code = stateCode(form.state);
-    const byState = meta?.regions_by_state?.[code] || meta?.regions_by_state?.Any || ["Any"];
-    // Canonical investor regions for the selected state (or national macros when Any).
-    const merged = ["Any", ...byState.filter((r) => r && r !== "Any")];
-    // When a state is picked, append live inventory counties as concrete region cues.
-    if (code !== "Any") {
+    const codes = selectedStates(form.states);
+    const catalogs = meta?.regions_by_state || {};
+    const merged = ["Any"];
+    const pushUnique = (r: string) => {
+      if (r && r !== "Any" && !merged.includes(r)) merged.push(r);
+    };
+
+    if (!codes.length) {
+      for (const r of catalogs.Any || []) pushUnique(r);
+    } else {
+      for (const code of codes) {
+        for (const r of catalogs[code] || []) pushUnique(r);
+      }
       const live = (meta?.regions || []).filter((r) => {
         if (!r || r === "Any") return false;
-        // Prefer "County, ST" / region labels tied to the active state.
-        return (
-          r.endsWith(`, ${code}`) ||
-          r.endsWith(` ${code}`) ||
-          r.toUpperCase().includes(`, ${code}`)
+        return codes.some(
+          (code) =>
+            r.endsWith(`, ${code}`) ||
+            r.endsWith(` ${code}`) ||
+            r.toUpperCase().includes(`, ${code}`),
         );
       });
-      for (const r of live) {
-        if (!merged.includes(r)) merged.push(r);
-      }
+      for (const r of live) pushUnique(r);
     }
     if (!merged.includes("Type a region…")) merged.push("Type a region…");
     return merged;
-  }, [form.state, meta]);
+  }, [form.states, meta]);
 
   const filtersFromForm = useCallback(
     (f: FormState): SearchFilters => {
@@ -118,26 +189,34 @@ export default function SearchPage() {
 
       let hold: number | undefined;
       if (f.holdYears === "__custom__") {
-        const n = Number(f.holdCustom);
-        if (Number.isFinite(n)) hold = Math.max(1, Math.min(100, n));
+        const n = Number(sanitizeInt(f.holdCustom, 500));
+        if (Number.isFinite(n) && n >= 1) hold = Math.min(500, n);
       } else if (f.holdYears !== "Any") {
         hold = Number(f.holdYears);
       }
 
-      const strategy =
-        f.strategy === "CUSTOM"
-          ? f.strategyCustom.trim() || undefined
-          : f.strategy === "Any"
-            ? undefined
-            : f.strategy;
+      const pickedStrategies = (f.strategies || []).filter((s) => s && s !== "Any");
+      const strategyParts: string[] = [];
+      for (const s of pickedStrategies) {
+        if (s === "CUSTOM") {
+          const custom = f.strategyCustom.trim();
+          if (custom) strategyParts.push(custom);
+        } else {
+          strategyParts.push(s);
+        }
+      }
+      const strategy = strategyParts.length ? strategyParts.join(",") : undefined;
+
+      const stateCodes = selectedStates(f.states);
+      const state = stateCodes.length ? stateCodes.join(",") : undefined;
 
       return {
-        state: stateCode(f.state),
+        state,
         region,
-        min_price: customPrice ? parseMoney(f.priceMin) : price?.min ?? undefined,
-        max_price: customPrice ? parseMoney(f.priceMax) : price?.max ?? undefined,
-        min_acres: customAcres ? parseMoney(f.acreMin) : acres?.min ?? undefined,
-        max_acres: customAcres ? parseMoney(f.acreMax) : acres?.max ?? undefined,
+        min_price: customPrice ? parseUnitMoney(f.priceMin, f.priceMinUnit) : price?.min ?? undefined,
+        max_price: customPrice ? parseUnitMoney(f.priceMax, f.priceMaxUnit) : price?.max ?? undefined,
+        min_acres: customAcres ? parseAcres(f.acreMin) : acres?.min ?? undefined,
+        max_acres: customAcres ? parseAcres(f.acreMax) : acres?.max ?? undefined,
         strategy,
         hold_years: Number.isFinite(hold as number) ? hold : undefined,
         // Always include unpriced federal / surplus — no UI filter for this
@@ -236,6 +315,7 @@ export default function SearchPage() {
   }, [rows, form.sort]);
 
   const inventoryStates = meta?.inventory_states || [];
+  const strategyHasCustom = form.strategies.includes("CUSTOM");
 
   return (
     <div>
@@ -254,10 +334,11 @@ export default function SearchPage() {
         <div className="filter-grid filter-grid-12">
           <FilterField label="State">
             <HeroSelect
+              multi
               ariaLabel="State"
-              value={form.state}
+              values={form.states}
               options={(meta?.states || ["Any"]).map((s) => ({ value: s, label: s }))}
-              onChange={(v) => setForm((f) => ({ ...f, state: v, region: "Any", regionCustom: "" }))}
+              onChange={(v) => setForm((f) => ({ ...f, states: v, region: "Any", regionCustom: "" }))}
             />
           </FilterField>
 
@@ -296,24 +377,44 @@ export default function SearchPage() {
                 setForm((f) => ({
                   ...f,
                   pricePreset: v,
-                  ...(v.toLowerCase().includes("custom") ? {} : { priceMin: "", priceMax: "" }),
+                  ...(v.toLowerCase().includes("custom")
+                    ? {}
+                    : { priceMin: "", priceMax: "", priceMinUnit: "K", priceMaxUnit: "K" }),
                 }))
               }
             />
             {form.pricePreset.toLowerCase().includes("custom") ? (
               <div className="filter-custom-pair mt-1.5">
-                <input
-                  value={form.priceMin}
-                  placeholder="Min $"
-                  inputMode="decimal"
-                  onChange={(e) => setForm((f) => ({ ...f, priceMin: e.target.value }))}
-                />
-                <input
-                  value={form.priceMax}
-                  placeholder="Max $"
-                  inputMode="decimal"
-                  onChange={(e) => setForm((f) => ({ ...f, priceMax: e.target.value }))}
-                />
+                <div className="filter-money-field">
+                  <input
+                    value={form.priceMin}
+                    placeholder="Min"
+                    inputMode="decimal"
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, priceMin: sanitizeDecimal(e.target.value) }))
+                    }
+                  />
+                  <UnitToggle
+                    value={form.priceMinUnit}
+                    ariaLabel="Min price unit"
+                    onChange={(u) => setForm((f) => ({ ...f, priceMinUnit: u }))}
+                  />
+                </div>
+                <div className="filter-money-field">
+                  <input
+                    value={form.priceMax}
+                    placeholder="Max"
+                    inputMode="decimal"
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, priceMax: sanitizeDecimal(e.target.value) }))
+                    }
+                  />
+                  <UnitToggle
+                    value={form.priceMaxUnit}
+                    ariaLabel="Max price unit"
+                    onChange={(u) => setForm((f) => ({ ...f, priceMaxUnit: u }))}
+                  />
+                </div>
               </div>
             ) : null}
           </FilterField>
@@ -340,13 +441,17 @@ export default function SearchPage() {
                   value={form.acreMin}
                   placeholder="Min ac"
                   inputMode="decimal"
-                  onChange={(e) => setForm((f) => ({ ...f, acreMin: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, acreMin: sanitizeDecimal(e.target.value) }))
+                  }
                 />
                 <input
                   value={form.acreMax}
                   placeholder="Max ac"
                   inputMode="decimal"
-                  onChange={(e) => setForm((f) => ({ ...f, acreMax: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, acreMax: sanitizeDecimal(e.target.value) }))
+                  }
                 />
               </div>
             ) : null}
@@ -360,8 +465,9 @@ export default function SearchPage() {
             }}
           >
             <HeroSelect
+              multi
               ariaLabel="Strategy"
-              value={form.strategy}
+              values={form.strategies}
               options={(meta?.strategies || ["Any"]).map((s) => ({
                 value: s,
                 label: s === "Any" ? "Any" : s === "CUSTOM" ? "Type my own…" : s.replaceAll("_", " "),
@@ -369,12 +475,12 @@ export default function SearchPage() {
               onChange={(v) =>
                 setForm((f) => ({
                   ...f,
-                  strategy: v,
-                  strategyCustom: v === "CUSTOM" ? f.strategyCustom : "",
+                  strategies: v,
+                  strategyCustom: v.includes("CUSTOM") ? f.strategyCustom : "",
                 }))
               }
             />
-            {form.strategy === "CUSTOM" ? (
+            {strategyHasCustom ? (
               <input
                 className="mt-1.5"
                 value={form.strategyCustom}
@@ -413,10 +519,14 @@ export default function SearchPage() {
               <input
                 className="mt-1.5"
                 value={form.holdCustom}
-                placeholder="Years (1–100)"
+                placeholder="Years"
                 inputMode="numeric"
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, holdCustom: e.target.value, holdYears: "__custom__" }))
+                  setForm((f) => ({
+                    ...f,
+                    holdCustom: sanitizeInt(e.target.value, 500),
+                    holdYears: "__custom__",
+                  }))
                 }
               />
             ) : null}

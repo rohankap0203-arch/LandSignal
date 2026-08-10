@@ -5,6 +5,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -15,27 +16,73 @@ export type HeroSelectOption = {
   label: string;
 };
 
-type HeroSelectProps = {
-  value: string;
+type HeroSelectBase = {
   options: HeroSelectOption[];
-  onChange: (value: string) => void;
   ariaLabel?: string;
   disabled?: boolean;
 };
 
-export function HeroSelect({
-  value,
-  options,
-  onChange,
-  ariaLabel,
-  disabled,
-}: HeroSelectProps) {
+type HeroSelectSingleProps = HeroSelectBase & {
+  multi?: false;
+  value: string;
+  onChange: (value: string) => void;
+};
+
+type HeroSelectMultiProps = HeroSelectBase & {
+  multi: true;
+  values: string[];
+  onChange: (values: string[]) => void;
+};
+
+export type HeroSelectProps = HeroSelectSingleProps | HeroSelectMultiProps;
+
+function isAnyValue(v: string) {
+  return !v || v === "Any";
+}
+
+function selectedSet(multi: boolean, value: string | undefined, values: string[] | undefined): Set<string> {
+  if (multi) {
+    const list = (values || []).filter((v) => !isAnyValue(v));
+    return new Set(list);
+  }
+  if (!value || isAnyValue(value)) return new Set();
+  return new Set([value]);
+}
+
+function displayLabel(
+  multi: boolean,
+  options: HeroSelectOption[],
+  value: string | undefined,
+  values: string[] | undefined,
+): string {
+  if (!multi) {
+    return options.find((o) => o.value === value)?.label || value || "Any";
+  }
+  const picked = (values || []).filter((v) => !isAnyValue(v));
+  if (!picked.length) return "Any";
+  const labels = picked.map((v) => options.find((o) => o.value === v)?.label || v);
+  if (labels.length === 1) return labels[0];
+  if (labels.length === 2) return `${labels[0]}, ${labels[1]}`;
+  return `${labels[0]} +${labels.length - 1}`;
+}
+
+export function HeroSelect(props: HeroSelectProps) {
+  const { options, ariaLabel, disabled } = props;
+  const multi = Boolean(props.multi);
+  const value = multi ? undefined : (props as HeroSelectSingleProps).value;
+  const values = multi ? (props as HeroSelectMultiProps).values : undefined;
+
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const listId = useId();
-  const selected = options.find((o) => o.value === value) || options[0];
+
+  const selected = useMemo(
+    () => selectedSet(multi, value, values),
+    [multi, value, values],
+  );
+  const label = displayLabel(multi, options, value, values);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -60,19 +107,43 @@ export function HeroSelect({
 
   useLayoutEffect(() => {
     if (!open) return;
+    const current = multi
+      ? (values || []).find((v) => !isAnyValue(v)) || "Any"
+      : value || "Any";
     const idx = Math.max(
       0,
-      options.findIndex((o) => o.value === value),
+      options.findIndex((o) => o.value === current),
     );
     setActiveIndex(idx);
     listRef.current?.focus({ preventScroll: true });
     const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${idx}"]`);
     el?.scrollIntoView({ block: "nearest" });
-  }, [open, options, value]);
+  }, [open, options, value, values, multi]);
+
+  function emitSingle(next: string) {
+    (props as HeroSelectSingleProps).onChange(next);
+    close();
+  }
+
+  function emitMulti(next: string[]) {
+    const cleaned = next.filter((v) => !isAnyValue(v));
+    (props as HeroSelectMultiProps).onChange(cleaned.length ? cleaned : ["Any"]);
+  }
 
   function pick(next: string) {
-    onChange(next);
-    close();
+    if (!multi) {
+      emitSingle(next);
+      return;
+    }
+    if (isAnyValue(next)) {
+      emitMulti([]);
+      close();
+      return;
+    }
+    const nextSet = new Set(selected);
+    if (nextSet.has(next)) nextSet.delete(next);
+    else nextSet.add(next);
+    emitMulti([...nextSet]);
   }
 
   function onTriggerKey(e: KeyboardEvent<HTMLButtonElement>) {
@@ -108,7 +179,7 @@ export function HeroSelect({
   }
 
   return (
-    <div className={`hero-select${open ? " is-open" : ""}`} ref={rootRef}>
+    <div className={`hero-select${open ? " is-open" : ""}${multi ? " is-multi" : ""}`} ref={rootRef}>
       <button
         type="button"
         className="hero-select-trigger"
@@ -120,7 +191,7 @@ export function HeroSelect({
         onClick={() => setOpen((v) => !v)}
         onKeyDown={onTriggerKey}
       >
-        <span className="hero-select-value">{selected?.label || "Any"}</span>
+        <span className="hero-select-value">{label}</span>
         <span className="hero-select-chevron" aria-hidden>
           ▾
         </span>
@@ -132,13 +203,16 @@ export function HeroSelect({
           className="hero-select-menu"
           role="listbox"
           tabIndex={-1}
+          aria-multiselectable={multi || undefined}
           aria-activedescendant={
             activeIndex >= 0 ? `${listId}-opt-${activeIndex}` : undefined
           }
           onKeyDown={onListKey}
         >
           {options.map((opt, idx) => {
-            const isSelected = opt.value === value;
+            const isSelected = isAnyValue(opt.value)
+              ? selected.size === 0
+              : selected.has(opt.value);
             const isActive = idx === activeIndex;
             return (
               <li key={opt.value} role="presentation">

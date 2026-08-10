@@ -276,6 +276,33 @@ def _normalize_state(state: str | None) -> str | None:
     return raw.upper()[:2] if len(raw) >= 2 else raw.upper()
 
 
+def _normalize_states(state: str | None) -> list[str] | None:
+    """Accept a single state or comma/semicolon-separated multi-select."""
+    if not state or state.upper() in ("ANY", ""):
+        return None
+    parts = [p.strip() for p in state.replace(";", ",").split(",") if p.strip()]
+    codes: list[str] = []
+    for part in parts:
+        code = _normalize_state(part)
+        if code and code not in codes:
+            codes.append(code)
+    return codes or None
+
+
+def _parse_strategies(strategy: str | None) -> list[str]:
+    """Accept a single strategy or comma-separated multi-select (ranking preference)."""
+    if not strategy or strategy.upper() in ("ANY", "CUSTOM", ""):
+        return []
+    out: list[str] = []
+    for part in strategy.replace(";", ",").split(","):
+        raw = part.strip()
+        if not raw or raw.upper() in ("ANY", "CUSTOM"):
+            continue
+        if raw not in out:
+            out.append(raw)
+    return out
+
+
 def _sort_rows(rows: list[RadarRow], sort: str | None) -> list[RadarRow]:
     key = (sort or "fit_desc").lower()
 
@@ -375,9 +402,12 @@ async def radar(
     store = get_store(get_settings().demo_seed)
     # Never block search on enrichment — unscored parcels are omitted until discover finishes them
 
-    state_code = _normalize_state(state)
+    state_codes = _normalize_states(state)
+    strategy_prefs = _parse_strategies(strategy)
+    if hold_years is not None:
+        hold_years = max(1, min(500, int(hold_years)))
     filters = {
-        "state": state_code,
+        "state": ",".join(state_codes) if state_codes else None,
         "region": region,
         "hold_years": hold_years,
         "target_roi": target_roi,
@@ -390,8 +420,13 @@ async def radar(
         profile["max_price_usd"] = max_price
     if min_acres is not None:
         profile["min_acres"] = min_acres
-    if strategy and strategy.upper() not in ("ANY", "CUSTOM", ""):
-        profile["preferred_strategies"] = [strategy.upper()]
+    if strategy_prefs:
+        known = {"FARMLAND", "DEVELOPMENT", "LAND_BANK", "RECREATIONAL", "ENERGY", "TIMBER"}
+        preferred: list[str] = []
+        for s in strategy_prefs:
+            key = s.upper().replace(" ", "_")
+            preferred.append(key if key in known else s.upper())
+        profile["preferred_strategies"] = preferred
 
     mode = (unpriced_mode or ("include" if include_unpriced else "priced")).lower()
     channel = (market_channel or "Any").strip()
@@ -475,7 +510,7 @@ async def radar(
                 continue
             _maybe_retag_vacant_gis(listing)
 
-            if state_code and (parcel.state or "").upper() != state_code:
+            if state_codes and (parcel.state or "").upper() not in state_codes:
                 continue
             if apply_region and not region_matches(
                 region=region,
@@ -512,19 +547,23 @@ async def radar(
             if acre_pen is None:
                 continue
             strategy_soft_miss = False
-            if strategy and strategy.upper() not in ("ANY", "CUSTOM", ""):
+            if strategy_prefs:
                 known = {"FARMLAND", "DEVELOPMENT", "LAND_BANK", "RECREATIONAL", "ENERGY", "TIMBER"}
-                s_up = strategy.upper().replace(" ", "_")
-                if s_up in known:
-                    hit = (score.best_strategy and score.best_strategy.value == s_up) or (
-                        score.secondary_strategy and score.secondary_strategy.value == s_up
-                    )
-                    if not hit:
-                        strategy_soft_miss = True
-                else:
-                    blob = f"{listing.title} {listing.description or ''} {_strategy_label(score.best_strategy)}".lower()
-                    if strategy.lower() not in blob and s_up.lower().replace("_", " ") not in blob:
-                        strategy_soft_miss = True
+                hit_any = False
+                blob = f"{listing.title} {listing.description or ''} {_strategy_label(score.best_strategy)}".lower()
+                for pref in strategy_prefs:
+                    s_up = pref.upper().replace(" ", "_")
+                    if s_up in known:
+                        if (score.best_strategy and score.best_strategy.value == s_up) or (
+                            score.secondary_strategy and score.secondary_strategy.value == s_up
+                        ):
+                            hit_any = True
+                            break
+                    elif pref.lower() in blob or s_up.lower().replace("_", " ") in blob:
+                        hit_any = True
+                        break
+                if not hit_any:
+                    strategy_soft_miss = True
             if min_score is not None and score.opportunity < min_score:
                 continue
             if max_risk is not None and score.risk > max_risk:
