@@ -3042,6 +3042,35 @@ a.btn-intel:hover {
   border: 1px solid var(--line);
   background: var(--bg-elevated);
   padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+
+.return-factor.is-on {
+  border-color: color-mix(in srgb, var(--brand) 40%, var(--line));
+  background: color-mix(in srgb, var(--brand) 6%, var(--bg-elevated));
+}
+
+.return-factor.is-off {
+  opacity: 0.55;
+  background: var(--bg-soft);
+}
+
+.return-factor.is-locked {
+  cursor: default;
+  opacity: 1;
+}
+
+.return-factor-check {
+  display: inline-flex;
+  width: 1rem;
+  justify-content: center;
+  font-weight: 700;
+  color: var(--brand);
+}
+
+.return-factor.is-off .return-factor-check {
+  color: var(--muted);
 }
 
 .return-factor p {

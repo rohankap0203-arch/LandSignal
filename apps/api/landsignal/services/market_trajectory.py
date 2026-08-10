@@ -170,6 +170,33 @@ def _extract_observed_marks(raw: dict | None, ask: float | None) -> list[dict[st
     return [by_year[y] for y in sorted(by_year)]
 
 
+def _pace_factor(
+    key: str,
+    label: str,
+    *,
+    delta_annual: float = 0.0,
+    mult: float | None = None,
+    plain: str,
+    affects: str = "pace",
+    toggleable: bool = True,
+) -> dict[str, Any]:
+    """Decomposable screen — client can toggle and recompute hold/land pace."""
+    direction = "up" if (delta_annual > 0 or (mult or 1) > 1) else "down" if (delta_annual < 0 or (mult or 1) < 1) else "neutral"
+    return {
+        "key": key,
+        "label": label,
+        "delta_annual": round(delta_annual, 6),
+        "mult": mult,
+        "bps": round(delta_annual * 10000, 1) if mult is None else round(((mult or 1.0) - 1.0) * 10000, 1),
+        "plain": plain,
+        "affects": affects,
+        "toggleable": toggleable,
+        "default_on": True,
+        "direction": direction,
+        "kind": affects,
+    }
+
+
 def _base_annual_rate(
     *,
     state: str | None,
@@ -183,9 +210,11 @@ def _base_annual_rate(
     slope_pct: float | None = None,
     liquidity: float | None = None,
     scarcity: float | None = None,
-) -> tuple[float, list[str]]:
+) -> tuple[float, list[str], list[dict[str, Any]]]:
+    """Return (annual_rate, notes, toggleable pace factors). Single source for land + hold."""
     st = (state or "").upper()
     base = STATE_ANNUAL_APPRECIATION.get(st, 0.028)
+    factors: list[dict[str, Any]] = []
     notes = [
         f"Starting point: typical land in {(st or 'this state')} has risen about {base*100:.1f}% per year over long periods."
     ]
@@ -196,59 +225,177 @@ def _base_annual_rate(
         "blm_lpad": "federal BLM land",
         "public_vacant_gis": "vacant land on the public assessor map",
     }.get(provider_id or "", "this listing type")
-    # Owned-land pace tracks the area — channel cheapens the BUY, not lifelong appreciation.
-    # Old base*0.72 (tax sale) left pace under CPI forever, so After inflation always fell.
-    rate = base
+
+    factors.append(
+        _pace_factor(
+            "state_prior",
+            "Area land pace",
+            delta_annual=base,
+            plain=f"Typical long-run land pace in {st or 'this state'}: about {base*100:.1f}%/yr.",
+            toggleable=False,
+        )
+    )
+    # Channel cheapens the BUY — not lifelong owned-land appreciation.
     if ch < 1.0:
         notes.append(
             f"{channel_plain.title()} usually clear cheaper than retail — that shows up in the "
-            f"buy / opportunity math, not by permanently cutting this pin’s land pace "
-            f"(we still use ~{base*100:.1f}%/yr area pace once you own it)."
+            f"buy / opportunity math, not by permanently cutting this pin’s land pace."
+        )
+        factors.append(
+            _pace_factor(
+                "channel_entry",
+                "How it is sold",
+                delta_annual=0.0,
+                plain=(
+                    f"{channel_plain.title()} usually clear cheaper than retail — scored in the buy "
+                    f"vs our value, not as a permanent cut to owned-land pace."
+                ),
+                affects="entry",
+                toggleable=False,
+            )
         )
 
+    rate = base
     if growth_score is not None:
         adj = (growth_score - 50) / 50 * 0.012
         rate += adj
         notes.append(
             f"Local growth signal ({growth_score:.0f}/100) changes the yearly pace by {adj*100:+.1f} percentage points."
         )
+        factors.append(
+            _pace_factor(
+                "growth",
+                "Local growth",
+                delta_annual=adj,
+                plain=f"Growth signal {growth_score:.0f}/100 moves yearly pace by {adj*100:+.1f} pts.",
+            )
+        )
 
     if acres is not None:
         if acres < 2:
-            rate *= 0.97
+            mult = 0.97
+            rate *= mult
             notes.append("Under 2 acres: slightly softer path (−3%) — small lots jump around more year to year.")
+            factors.append(
+                _pace_factor(
+                    "lot_size",
+                    "Small-lot class",
+                    mult=mult,
+                    plain="Under 2 acres: −3% pace — small lots jump around more year to year.",
+                )
+            )
         elif acres >= 80:
-            rate *= 1.05
+            mult = 1.05
+            rate *= mult
             notes.append("80+ acres: slightly stronger path (+5%) — bigger tracts often track farm/fringe land indexes.")
+            factors.append(
+                _pace_factor(
+                    "lot_size",
+                    "Large-tract scale",
+                    mult=mult,
+                    plain=f"{acres:,.0f} acres: +5% pace — bigger tracts often track farm/fringe indexes.",
+                )
+            )
 
     if prime_pct is not None and prime_pct >= 50 and (acres or 0) >= 10:
-        rate += 0.004
+        adj = 0.004
+        rate += adj
         notes.append(f"About {prime_pct:.0f}% prime farmland on the map adds +0.4 percentage points per year.")
+        factors.append(
+            _pace_factor(
+                "soil",
+                "Soil / prime farmland",
+                delta_annual=adj,
+                plain=f"About {prime_pct:.0f}% prime farmland adds +0.4 pts/yr.",
+            )
+        )
     if flood_pct is not None and flood_pct >= 30:
-        rate -= 0.006
+        adj = -0.006
+        rate += adj
         notes.append(f"About {flood_pct:.0f}% flood overlap on the map subtracts −0.6 percentage points per year.")
+        factors.append(
+            _pace_factor(
+                "flood_pace",
+                "Flood (pace)",
+                delta_annual=adj,
+                plain=f"About {flood_pct:.0f}% flood overlap subtracts −0.6 pts/yr from appreciation.",
+            )
+        )
     if wet_pct is not None and wet_pct >= 25:
-        rate -= 0.004
+        adj = -0.004
+        rate += adj
         notes.append(f"About {wet_pct:.0f}% wetlands on the map subtracts −0.4 percentage points per year.")
+        factors.append(
+            _pace_factor(
+                "wetlands_pace",
+                "Wetlands (pace)",
+                delta_annual=adj,
+                plain=f"About {wet_pct:.0f}% wetlands subtracts −0.4 pts/yr from appreciation.",
+            )
+        )
     if access_score is not None and access_score < 40:
-        rate -= 0.005
+        adj = -0.005
+        rate += adj
         notes.append(f"Weak access screen ({access_score:.0f}/100) slows the path (−0.5 pts/yr).")
+        factors.append(
+            _pace_factor(
+                "access",
+                "Road access",
+                delta_annual=adj,
+                plain=f"Weak access ({access_score:.0f}/100) slows pace (−0.5 pts/yr).",
+            )
+        )
     elif access_score is not None and access_score >= 75:
-        rate += 0.002
+        adj = 0.002
+        rate += adj
         notes.append(f"Clearer access ({access_score:.0f}/100) adds a small lift (+0.2 pts/yr).")
+        factors.append(
+            _pace_factor(
+                "access",
+                "Road access",
+                delta_annual=adj,
+                plain=f"Clearer access ({access_score:.0f}/100) adds +0.2 pts/yr.",
+            )
+        )
     if slope_pct is not None and slope_pct >= 15:
-        rate -= 0.003
+        adj = -0.003
+        rate += adj
         notes.append(f"Steeper ground (avg slope ~{slope_pct:.0f}%) softens long-run pace (−0.3 pts/yr).")
+        factors.append(
+            _pace_factor(
+                "slope",
+                "Terrain / slope",
+                delta_annual=adj,
+                plain=f"Avg slope ~{slope_pct:.0f}% softens pace (−0.3 pts/yr).",
+            )
+        )
     if liquidity is not None and liquidity < 40:
-        rate -= 0.003
+        adj = -0.003
+        rate += adj
         notes.append(f"Thin resale ease ({liquidity:.0f}/100) trims the path (−0.3 pts/yr).")
+        factors.append(
+            _pace_factor(
+                "liquidity",
+                "Ease of resale",
+                delta_annual=adj,
+                plain=f"Thin resale ease ({liquidity:.0f}/100) trims pace (−0.3 pts/yr).",
+            )
+        )
     if scarcity is not None and scarcity >= 70:
-        rate += 0.002
+        adj = 0.002
+        rate += adj
         notes.append(f"Higher scarcity ({scarcity:.0f}/100) adds a small support (+0.2 pts/yr).")
+        factors.append(
+            _pace_factor(
+                "scarcity",
+                "Scarcity",
+                delta_annual=adj,
+                plain=f"Higher scarcity ({scarcity:.0f}/100) adds +0.2 pts/yr.",
+            )
+        )
 
-    # Clamp to sane land ranges — long-run land rarely compounds at stock-like rates
     rate = max(-0.04, min(0.08, rate))
-    return rate, notes
+    return rate, notes, factors
 
 
 def _cycle_shaper(offset: int, *, forward: bool = False) -> float:
@@ -432,7 +579,7 @@ def build_market_trajectory(
     liquidity = _f(comps_n.get("liquidity_score"))
     scarcity = _f(comps_n.get("scarcity_score"))
 
-    annual, method_notes = _base_annual_rate(
+    annual, method_notes, pace_factors = _base_annual_rate(
         state=state,
         provider_id=provider,
         acres=acres,
@@ -446,7 +593,7 @@ def build_market_trajectory(
         scarcity=scarcity,
     )
     method_notes.append(
-        "Long horizons fade toward a slower real land pace — 100 years is not the near-term % forever."
+        "Long horizons ease slightly for uncertainty — 100 years is not the near-term % forever."
     )
 
     # Anchor: screening mark preferred; else ask; else synthetic prior
@@ -607,8 +754,8 @@ def build_market_trajectory(
         yrs = max(1, end["year"] - start["year"])
         return (end["value_usd"] / start["value_usd"]) ** (1 / yrs) - 1
 
-    # Value-over-time chart presets (hold-period 5-yr steps live on return paths).
-    windows = [1, 3, 5, 10, 15, 30, 50, 75, 100]
+    # Shared presets with hold-return windows so the intelligence page stays aligned.
+    windows = [1, 3, 5, 10, 15, 25, 40, 60, 80, 100]
     window_stats: dict[str, Any] = {}
     for w in windows:
         start = next((p for p in points if p["offset"] == -w), None)
@@ -738,6 +885,8 @@ def build_market_trajectory(
         "confidence": confidence,
         "annual_rate": annual,
         "annual_rate_display": f"{annual*100:.1f}%/yr",
+        "state_prior_annual": STATE_ANNUAL_APPRECIATION.get((state or "").upper(), 0.028),
+        "pace_factors": pace_factors,
         "cagr_5y": cagr_5,
         "cagr_10y": cagr_10,
         "cagr_forward": cagr_fwd,

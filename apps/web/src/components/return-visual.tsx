@@ -15,6 +15,13 @@ import {
   type MoneyMode,
 } from "@/lib/inflation";
 import { MoneyModeControl, moneyModeShort } from "@/components/money-mode-control";
+import {
+  buildHoldCasePath,
+  enrichHoldEndpoint,
+  rateFromFactors,
+  type HoldCaseKey,
+  type ToggleFactor,
+} from "@/lib/hold-path";
 
 type PathPoint = {
   year_offset: number;
@@ -74,12 +81,18 @@ type ReturnIntel = {
     effective_annual_display?: string;
     uncertainty?: number;
     usable_frac?: number;
+    flood_carry_frac?: number;
     factor_count?: number;
     place?: string;
     strategy?: string;
+    acres?: number;
+    state?: string;
+    provider?: string;
+    prime_pct?: number;
   };
   factors?: Factor[];
   all_factors?: Factor[];
+  toggle_factors?: ToggleFactor[];
   endpoints?: Record<string, Record<string, CaseEndpoint>>;
   paths_100?: Record<
     string,
@@ -326,6 +339,8 @@ export function ReturnVisual({
   entryUsd,
   markUsd,
   annualRate,
+  moneyMode: moneyModeProp,
+  onMoneyModeChange,
 }: {
   intel?: ReturnIntel | null;
   cases?: LegacyCase[];
@@ -335,6 +350,8 @@ export function ReturnVisual({
   entryUsd?: number | null;
   markUsd?: number | null;
   annualRate?: number | null;
+  moneyMode?: MoneyMode;
+  onMoneyModeChange?: (m: MoneyMode) => void;
 }) {
   const windows = (intel?.windows?.length ? intel.windows : [...HOLD_YEARS]).filter((w) =>
     HOLD_YEARS.includes(w as (typeof HOLD_YEARS)[number]),
@@ -348,12 +365,27 @@ export function ReturnVisual({
   const [activeCase, setActiveCase] = useState<(typeof CASE_ORDER)[number]>("BASE");
   const [scrubYear, setScrubYear] = useState(holdYears);
   const [dragging, setDragging] = useState(false);
-  const [openFactor, setOpenFactor] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [casesHelpOpen, setCasesHelpOpen] = useState(false);
-  const [moneyMode, setMoneyMode] = useState<MoneyMode>("today");
+  const [moneyModeLocal, setMoneyModeLocal] = useState<MoneyMode>("today");
+  const moneyMode = moneyModeProp ?? moneyModeLocal;
+  const setMoneyMode = onMoneyModeChange ?? setMoneyModeLocal;
   const cpi = cpiFromMeta(intel?.inflation);
   const cpiDisplay = intel?.inflation?.cpi_display || `${(cpi * 100).toFixed(1)}%/yr`;
+
+  const toggleFactors: ToggleFactor[] = useMemo(() => {
+    const raw = (intel?.toggle_factors || intel?.all_factors || intel?.factors || []) as ToggleFactor[];
+    return raw.filter((f) => f && f.key);
+  }, [intel]);
+
+  const [enabledFactors, setEnabledFactors] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    const next: Record<string, boolean> = {};
+    for (const f of toggleFactors) {
+      next[f.key] = f.default_on !== false;
+    }
+    setEnabledFactors(next);
+  }, [toggleFactors]);
 
   useEffect(() => {
     setScrubYear((y) => Math.max(1, Math.min(holdYears, y)));
@@ -369,11 +401,61 @@ export function ReturnVisual({
   }, [casesHelpOpen]);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
-  const available = intel?.available !== false && Boolean(intel?.endpoints || intel?.paths_100);
+  const available = intel?.available !== false && Boolean(intel?.endpoints || intel?.paths_100 || toggleFactors.length);
+
+  const purchase = Number(intel?.purchase_usd || entryUsd || markUsd || 0);
+  const mark = Number(intel?.mark_usd || markUsd || purchase || 0);
+
+  const liveModel = useMemo(() => {
+    const pace = rateFromFactors(toggleFactors, enabledFactors);
+    const floodOn = enabledFactors.flood_carry !== false;
+    const wetOn = enabledFactors.wetland_usable !== false;
+    const taxOn = enabledFactors.property_tax !== false;
+    const exitOn = enabledFactors.exit_friction !== false;
+    const fadeOn = enabledFactors.long_hold_fade !== false;
+    const floodF = toggleFactors.find((f) => f.key === "flood_carry");
+    const wetF = toggleFactors.find((f) => f.key === "wetland_usable");
+    const taxF = toggleFactors.find((f) => f.key === "property_tax");
+    const exitF = toggleFactors.find((f) => f.key === "exit_friction");
+    return {
+      annual: pace || Number(intel?.model?.effective_annual || annualRate || 0.028),
+      floodCarryFrac: floodOn
+        ? Number(floodF?.flood_carry_frac ?? intel?.model?.flood_carry_frac ?? 0)
+        : 0,
+      usableFrac: wetOn ? Number(wetF?.usable_frac ?? intel?.model?.usable_frac ?? 1) : 1,
+      taxFrac: taxOn ? Number(taxF?.tax_frac ?? 0.009) : 0,
+      exitHaircutAdd: exitOn ? Number(exitF?.exit_haircut_add ?? 0) : 0,
+      applyFade: fadeOn,
+    };
+  }, [toggleFactors, enabledFactors, intel, annualRate]);
 
   const endpointsAtHold = useMemo(() => {
     const out: Record<string, CaseEndpoint> = {};
+    const canLive = purchase > 0 && mark > 0 && toggleFactors.length > 0;
     for (const c of CASE_ORDER) {
+      if (canLive) {
+        const built = buildHoldCasePath({
+          purchase,
+          mark,
+          annual: liveModel.annual,
+          holdYears,
+          caseKey: c as HoldCaseKey,
+          uncertainty: Number(intel?.model?.uncertainty ?? 0.35),
+          acres: Number(intel?.model?.acres ?? 1),
+          strategy: intel?.model?.strategy,
+          provider: intel?.model?.provider,
+          floodCarryFrac: liveModel.floodCarryFrac,
+          usableFrac: liveModel.usableFrac,
+          exitHaircutAdd: liveModel.exitHaircutAdd,
+          taxFrac: liveModel.taxFrac,
+          applyFade: liveModel.applyFade,
+          primePct: intel?.model?.prime_pct,
+          state: intel?.model?.state,
+        });
+        const enriched = enrichHoldEndpoint(built, cpi);
+        if (enriched) out[c] = enriched as CaseEndpoint;
+        continue;
+      }
       const fromApi = intel?.endpoints?.[String(holdYears)]?.[c];
       const base =
         fromApi ||
@@ -383,14 +465,33 @@ export function ReturnVisual({
       if (enriched) out[c] = enriched;
     }
     return out;
-  }, [intel, holdYears, cpi]);
+  }, [
+    purchase,
+    mark,
+    toggleFactors.length,
+    liveModel,
+    holdYears,
+    intel,
+    cpi,
+  ]);
 
   const endpoint = endpointsAtHold[activeCase];
-  const fullPath = intel?.paths_100?.[activeCase]?.path || endpoint?.path || [];
   const path = useMemo(() => {
-    const pts = fullPath.filter((p) => Number(p.year_offset) >= 1 && Number(p.year_offset) <= holdYears);
-    return pts.length ? pts : (endpoint?.path || []).slice(0, holdYears);
-  }, [fullPath, holdYears, endpoint?.path]);
+    const pts = (endpoint?.path || []).filter(
+      (p) => Number(p.year_offset) >= 1 && Number(p.year_offset) <= holdYears,
+    );
+    return pts;
+  }, [endpoint?.path, holdYears]);
+
+  const bandPaths = useMemo(() => {
+    const out: Record<string, PathPoint[]> = {};
+    for (const c of CASE_ORDER) {
+      out[c] = (endpointsAtHold[c]?.path || []).filter(
+        (p) => Number(p.year_offset) >= 1 && Number(p.year_offset) <= holdYears,
+      ) as PathPoint[];
+    }
+    return out;
+  }, [endpointsAtHold, holdYears]);
 
   const showToday = moneyMode === "today";
   const exitShow = showToday ? endpoint?.exit_usd_today ?? endpoint?.exit_usd : endpoint?.exit_usd;
@@ -407,15 +508,6 @@ export function ReturnVisual({
   // Keep scrub inside the selected hold window
   const scrubClamped = Math.max(1, Math.min(holdYears, scrubYear));
   const scrubPoint = path.find((p) => Number(p.year_offset) === scrubClamped) || path[path.length - 1];
-
-  const bandPaths = useMemo(() => {
-    const out: Record<string, PathPoint[]> = {};
-    for (const c of CASE_ORDER) {
-      const src = intel?.paths_100?.[c]?.path || intel?.endpoints?.[String(holdYears)]?.[c]?.path || [];
-      out[c] = src.filter((p) => Number(p.year_offset) >= 1 && Number(p.year_offset) <= holdYears);
-    }
-    return out;
-  }, [intel, holdYears]);
 
   const chart = useMemo(() => {
     const series = bandPaths.BASE.length ? bandPaths : { BASE: path, BEAR: path, BULL: path };
@@ -515,8 +607,10 @@ export function ReturnVisual({
   };
   const onPointerUp = () => setDragging(false);
 
-  const factors = intel?.factors || [];
-  const factorCount = intel?.model?.factor_count ?? factors.length;
+  const factors = toggleFactors;
+  const factorCount = factors.length;
+  const livePaceDisplay = `${(liveModel.annual * 100).toFixed(1)}%/yr`;
+  const toggledOff = factors.filter((f) => f.toggleable !== false && enabledFactors[f.key] === false).length;
 
   // Fallback: legacy flat compound if intel missing
   if (!available) {
@@ -533,9 +627,12 @@ export function ReturnVisual({
   }
 
   const scrubX = chart.xOf(scrubClamped);
-  const scrubY = scrubPoint
-    ? chart.yOf(Number(scrubPoint.total_back_usd ?? scrubPoint.exit_usd ?? 0))
-    : chart.yOf(chart.purchase);
+  const scrubRaw = Number(scrubPoint?.total_back_usd ?? scrubPoint?.exit_usd ?? 0);
+  const scrubVal =
+    showToday && scrubRaw > 0
+      ? scrubRaw / Math.pow(1 + cpi, scrubClamped)
+      : scrubRaw;
+  const scrubY = scrubPoint ? chart.yOf(scrubVal) : chart.yOf(chart.purchase);
 
   return (
     <div className="return-visual">
@@ -610,10 +707,11 @@ export function ReturnVisual({
         </div>
       ) : null}
       <p className="mt-1 text-sm text-[var(--muted)] leading-snug">
-        Buy → rent → exit ({factorCount} screens)
+        Buy → rent → exit · live pace <strong className="text-[var(--ink)]">{livePaceDisplay}</strong>
         {intel?.purchase_usd ? ` · you pay ~${money(intel.purchase_usd)}` : ""}
-        {intel?.mark_usd ? ` · land mark starts ~${money(intel.mark_usd)}` : ""}. Opportunity is that
-        gap on day one; the path grows the mark at area land pace, then CPI-adjusts if you ask.
+        {intel?.mark_usd ? ` · mark starts ~${money(intel.mark_usd)}` : ""}. Toggle screens below —
+        chart and totals recompute. Same owned-land pace math as Land value path.
+        {toggledOff ? ` · ${toggledOff} screen${toggledOff === 1 ? "" : "s"} off` : ""}
       </p>
 
       <div className="traj-windows mt-3" role="tablist" aria-label="Return case">
@@ -1008,34 +1106,71 @@ export function ReturnVisual({
 
       {factors.length > 0 && (
         <div className="return-factors mt-4">
-          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-            What bends this path · {factorCount} screens
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+                Screens that bend this hold · {factorCount}
+              </div>
+              <p className="mt-0.5 text-xs text-[var(--muted)]">
+                Tap to include / exclude. Pace screens change appreciation; carry / exit / fade
+                change cashflow and terminal haircuts.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="text-xs font-semibold text-[var(--brand)]"
+              onClick={() => {
+                const next: Record<string, boolean> = {};
+                for (const f of factors) next[f.key] = true;
+                setEnabledFactors(next);
+              }}
+            >
+              Reset all on
+            </button>
           </div>
           <div className="return-factor-grid mt-2">
             {factors.map((f) => {
-              const id = String(f.key || f.label);
-              const open = openFactor === id;
+              const id = String(f.key);
+              const locked = f.toggleable === false;
+              const on = locked ? true : enabledFactors[id] !== false;
+              const affects = f.affects || f.kind || "pace";
+              const pts =
+                f.affects === "pace" && f.bps != null && Number(f.bps) !== 0
+                  ? `${Number(f.bps) > 0 ? "+" : ""}${(Number(f.bps) / 100).toFixed(2)} pts`
+                  : affects === "entry"
+                    ? "entry"
+                    : affects === "carry"
+                      ? "carry"
+                      : affects === "exit"
+                        ? "exit"
+                        : affects === "fade"
+                          ? "fade"
+                          : "—";
               return (
                 <button
                   key={id}
                   type="button"
-                  className={`return-factor dir-${f.direction || "neutral"} text-left ${open ? "ring-1 ring-[var(--brand-soft)]" : ""}`}
-                  onClick={() => setOpenFactor(open ? null : id)}
+                  aria-pressed={on}
+                  disabled={locked}
+                  className={`return-factor dir-${f.direction || "neutral"} text-left ${
+                    on ? "is-on" : "is-off"
+                  } ${locked ? "is-locked" : ""}`}
+                  onClick={() => {
+                    if (locked) return;
+                    setEnabledFactors((prev) => ({ ...prev, [id]: !on }));
+                  }}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="return-factor-head">
+                      <span className="return-factor-check" aria-hidden>
+                        {locked ? "●" : on ? "✓" : "○"}
+                      </span>
                       <FactorIcon name={f.key || f.label} />
                       <span className="font-semibold">{f.label}</span>
                     </span>
-                    <span className="tabular-nums text-[11px]">
-                      {f.bps != null && f.bps !== 0
-                        ? `${f.bps > 0 ? "+" : ""}${(Number(f.bps) / 100).toFixed(2)} pts`
-                        : f.kind === "entry"
-                          ? "entry"
-                          : "—"}
-                    </span>
+                    <span className="tabular-nums text-[11px]">{pts}</span>
                   </div>
-                  <p className={open ? "" : "line-clamp-3"}>{f.plain}</p>
+                  <p className="line-clamp-3">{f.plain}</p>
                 </button>
               );
             })}

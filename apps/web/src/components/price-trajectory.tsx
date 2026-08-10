@@ -57,7 +57,7 @@ type Trajectory = {
 };
 
 /** Value-over-time presets (not 5-year hold steps — those live on return hold). */
-const TIMEFRAMES = [1, 3, 5, 10, 15, 30, 50, 75, 100] as const;
+const TIMEFRAMES = [1, 3, 5, 10, 15, 25, 40, 60, 80, 100] as const;
 
 function money(v: unknown): string {
   const n = Number(v);
@@ -82,9 +82,13 @@ function cagr(start: number, end: number, years: number): number | null {
 export function PriceTrajectory({
   trajectory,
   compact,
+  moneyMode: moneyModeProp,
+  onMoneyModeChange,
 }: {
   trajectory: Trajectory | null | undefined;
   compact?: boolean;
+  moneyMode?: MoneyMode;
+  onMoneyModeChange?: (m: MoneyMode) => void;
 }) {
   const hitches = trajectory?.hitches || [];
   const windows = (trajectory?.windows?.length ? trajectory.windows : [...TIMEFRAMES]).filter((w) =>
@@ -93,7 +97,9 @@ export function PriceTrajectory({
   const [horizon, setHorizon] = useState(10);
   const [hitchId, setHitchId] = useState<string>("base");
   const [hitchHelpOpen, setHitchHelpOpen] = useState(false);
-  const [moneyMode, setMoneyMode] = useState<MoneyMode>("today");
+  const [moneyModeLocal, setMoneyModeLocal] = useState<MoneyMode>("today");
+  const moneyMode = moneyModeProp ?? moneyModeLocal;
+  const setMoneyMode = onMoneyModeChange ?? setMoneyModeLocal;
   const [dragging, setDragging] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const cpi = cpiFromMeta(trajectory?.inflation);

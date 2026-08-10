@@ -671,6 +671,118 @@ def _endpoint_from_path(
     }
 
 
+def _hold_toggle_factors(
+    *,
+    pace_factors: list[dict[str, Any]] | None,
+    model: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Full toggle ledger for hold return — pace + carry + exit + fade nuances."""
+    out: list[dict[str, Any]] = []
+    for f in pace_factors or []:
+        out.append({**f, "default_on": f.get("default_on", True)})
+
+    flood = model.get("flood_pct")
+    wet = model.get("wet_pct")
+    flood_carry = float(model.get("flood_carry_frac") or 0)
+    usable = float(model.get("usable_frac") or 1.0)
+    provider = model.get("provider")
+    acres = model.get("acres")
+
+    if flood is not None and (flood >= 10 or flood_carry > 0):
+        out.append(
+            {
+                "key": "flood_carry",
+                "label": "Flood carry / insurance",
+                "delta_annual": 0.0,
+                "bps": 0,
+                "plain": (
+                    f"About {flood:.0f}% flood overlap adds carrying cost "
+                    f"(~{flood_carry*100:.1f}% of land value/yr insurance-style reserve)."
+                ),
+                "affects": "carry",
+                "toggleable": True,
+                "default_on": True,
+                "direction": "down",
+                "kind": "carry",
+                "flood_carry_frac": flood_carry if flood_carry > 0 else (flood / 100) * 0.004,
+            }
+        )
+    if wet is not None and wet >= 8:
+        out.append(
+            {
+                "key": "wetland_usable",
+                "label": "Wetland usable acres",
+                "delta_annual": 0.0,
+                "bps": 0,
+                "plain": (
+                    f"About {wet:.0f}% wetlands — usable acres screened at ~{usable*100:.0f}% "
+                    f"of deeded size (cuts rent / income)."
+                ),
+                "affects": "carry",
+                "toggleable": True,
+                "default_on": True,
+                "direction": "down",
+                "kind": "carry",
+                "usable_frac": usable,
+            }
+        )
+    out.append(
+        {
+            "key": "property_tax",
+            "label": "Property tax / carry",
+            "delta_annual": 0.0,
+            "bps": 0,
+            "plain": (
+                "Annual tax + insurance drag on the mark — often overlooked on vacant lots "
+                "with thin rent. Toggle off to see a no-carry screen."
+            ),
+            "affects": "carry",
+            "toggleable": True,
+            "default_on": True,
+            "direction": "down",
+            "kind": "carry",
+            "tax_frac": 0.009 if (acres is None or acres >= 2) else 0.009 * 0.55,
+        }
+    )
+    if provider in ("public_tax_sale", "blm_lpad", "public_surplus"):
+        out.append(
+            {
+                "key": "exit_friction",
+                "label": "Thin-channel exit friction",
+                "delta_annual": 0.0,
+                "bps": 0,
+                "plain": (
+                    "Tax-sale / surplus / BLM exits often need an extra haircut vs retail "
+                    "(title, buyer pool). Toggle off to assume a cleaner resale."
+                ),
+                "affects": "exit",
+                "toggleable": True,
+                "default_on": True,
+                "direction": "down",
+                "kind": "exit",
+                "exit_haircut_add": 0.02,
+            }
+        )
+    out.append(
+        {
+            "key": "long_hold_fade",
+            "label": "Long-hold uncertainty fade",
+            "delta_annual": 0.0,
+            "bps": 0,
+            "plain": (
+                "Far years ease the pace slightly — uncertainty grows with horizon. "
+                "Toggle off for a pure constant-compound screen."
+            ),
+            "affects": "fade",
+            "toggleable": True,
+            "default_on": True,
+            "direction": "neutral",
+            "kind": "fade",
+        }
+    )
+    return out
+
+
 def build_return_intelligence(
     *,
     parcel,
@@ -681,6 +793,7 @@ def build_return_intelligence(
     mark_usd: float | None = None,
     hold_years: int = 10,
     trajectory_annual: float | None = None,
+    pace_factors: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Full interactive return package for the detail page."""
     model = build_factor_model(
@@ -691,13 +804,15 @@ def build_return_intelligence(
         base_annual=trajectory_annual,
         channel_already_applied=trajectory_annual is not None,
     )
+    toggle_factors = _hold_toggle_factors(pace_factors=pace_factors, model=model)
     purchase = entry_usd or mark_usd
     if purchase is None or purchase <= 0:
         return {
             "available": False,
             "reason": "Need a buy price or value estimate before a return path can be built.",
-            "factors": model["factors"],
-            "all_factors": model["factors"],
+            "factors": toggle_factors,
+            "all_factors": toggle_factors,
+            "toggle_factors": toggle_factors,
             "windows": HOLD_WINDOWS,
             "inflation": inflation_meta(),
             "model": {
@@ -705,13 +820,18 @@ def build_return_intelligence(
                 "effective_annual_display": f"{model['effective_annual']*100:.1f}%/yr",
                 "uncertainty": model["uncertainty"],
                 "usable_frac": model["usable_frac"],
-                "factor_count": model["factor_count"],
+                "flood_carry_frac": model.get("flood_carry_frac"),
+                "factor_count": len(toggle_factors),
                 "place": model["place"],
                 "strategy": model.get("strategy"),
+                "acres": model.get("acres"),
+                "state": model.get("state"),
+                "provider": model.get("provider"),
+                "prime_pct": model.get("prime_pct"),
             },
             "method": (
-                "Year-by-year path bends with soil, flood, wetlands, growth, access, channel, "
-                "strategy, risk, liquidity, scarcity, power, cycles, and carry — not a flat line."
+                "Toggle screens below to recompute buy → rent → exit. Owned-land pace matches "
+                "the land-value path; channel cheapens the buy, not lifelong appreciation."
             ),
         }
 
@@ -749,7 +869,7 @@ def build_return_intelligence(
         for case in ("BEAR", "BASE", "BULL")
     }
 
-    top_factors = model["factors"][:8]
+    top_factors = toggle_factors
     base_case = cases["BASE"]
     base_100 = endpoints["100"]["BASE"]
     bull_100 = endpoints["100"]["BULL"]
@@ -804,12 +924,18 @@ def build_return_intelligence(
             "effective_annual_display": f"{model['effective_annual']*100:.1f}%/yr",
             "uncertainty": model["uncertainty"],
             "usable_frac": model["usable_frac"],
-            "factor_count": model["factor_count"],
+            "flood_carry_frac": model.get("flood_carry_frac"),
+            "factor_count": len(toggle_factors),
             "place": model["place"],
             "strategy": model.get("strategy"),
+            "acres": model.get("acres"),
+            "state": model.get("state"),
+            "provider": model.get("provider"),
+            "prime_pct": model.get("prime_pct"),
         },
         "factors": top_factors,
-        "all_factors": model["factors"],
+        "all_factors": toggle_factors,
+        "toggle_factors": toggle_factors,
         "cases": cases,
         "paths_100": {
             case: {

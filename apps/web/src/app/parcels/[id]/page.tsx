@@ -13,6 +13,7 @@ import { ScoreBar } from "@/components/score-bar";
 import { SignalBadge } from "@/components/signal-badge";
 import { SignalCockpit } from "@/components/signal-cockpit";
 import { landsignalApi, type ActionLink } from "@/lib/api";
+import type { MoneyMode } from "@/lib/inflation";
 
 const ParcelMap = dynamic(() => import("@/components/parcel-map").then((m) => m.ParcelMap), {
   ssr: false,
@@ -92,6 +93,7 @@ export default function ParcelIntelligencePage() {
   const [watchMsg, setWatchMsg] = useState("");
   const [openRating, setOpenRating] = useState<string | null>(null);
   const [landViewerOpen, setLandViewerOpen] = useState(false);
+  const [moneyMode, setMoneyMode] = useState<MoneyMode>("today");
 
   useEffect(() => {
     setData(null);
@@ -476,6 +478,8 @@ export default function ParcelIntelligencePage() {
             (data.market_trajectory as Parameters<typeof PriceTrajectory>[0]["trajectory"]) ||
             null
           }
+          moneyMode={moneyMode}
+          onMoneyModeChange={setMoneyMode}
         />
       </section>
 
@@ -495,6 +499,8 @@ export default function ParcelIntelligencePage() {
                 ((data.market_trajectory as AnyRec) || {}).annualRate,
             ) || null
           }
+          moneyMode={moneyMode}
+          onMoneyModeChange={setMoneyMode}
         />
       </section>
 

@@ -1476,8 +1476,10 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         )
     mark_for_path = rc.get("mark_usd") or (score.estimated_value_usd if score else None)
     traj_annual = None
+    pace_factors = None
     if isinstance(market_trajectory, dict):
         traj_annual = market_trajectory.get("annual_rate")
+        pace_factors = market_trajectory.get("pace_factors")
 
     return_intelligence = build_return_intelligence(
         parcel=parcel,
@@ -1488,6 +1490,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         mark_usd=float(mark_for_path) if mark_for_path is not None else None,
         hold_years=10,
         trajectory_annual=float(traj_annual) if traj_annual is not None else None,
+        pace_factors=pace_factors if isinstance(pace_factors, list) else None,
     )
     score_drivers: dict[str, Any] = {}
     if score:
