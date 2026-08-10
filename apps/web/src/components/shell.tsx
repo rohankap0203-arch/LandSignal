@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useId, useLayoutEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { AccountMenu } from "@/components/account-menu";
 import { MapPinMark } from "@/components/map-pin-mark";
 
@@ -33,21 +33,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
     setMenuOpen(false);
   }, [pathname]);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!menuOpen) return;
-    const root = document.documentElement;
-    const scrollbarWidth = Math.max(0, window.innerWidth - root.clientWidth);
-    root.dataset.shellMenu = "open";
-    root.style.setProperty("--shell-sbw", `${scrollbarWidth}px`);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMenuOpen(false);
     };
+    // Do not lock body overflow — hiding the scrollbar reflows the header and shifts this control.
     document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      delete root.dataset.shellMenu;
-      root.style.removeProperty("--shell-sbw");
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
   if (isAuthPage) {

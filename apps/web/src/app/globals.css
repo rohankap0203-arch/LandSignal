@@ -55,18 +55,6 @@ body {
   font-family: var(--font-sans);
 }
 
-/* Always paint the vertical scrollbar lane (even on short pages) so open/close cannot reflow the header. */
-html {
-  overflow-y: scroll;
-}
-
-html[data-shell-menu="open"] {
-  overflow: hidden;
-  /* overflow:hidden drops the bar — put the same width back as padding on the root. */
-  padding-right: var(--shell-sbw, 0px);
-  box-sizing: border-box;
-}
-
 a {
   color: inherit;
   text-decoration: none;
@@ -128,27 +116,29 @@ select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   width: 2.35rem;
   height: 2.35rem;
+  min-width: 2.35rem;
+  max-width: 2.35rem;
+  padding: 0;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--bg-elevated);
   color: var(--ink);
-  flex: 0 0 auto;
+  flex: 0 0 2.35rem;
   cursor: pointer;
   box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent);
 }
 
-.shell-menu-toggle:hover {
+.shell-menu-toggle:hover,
+.shell-menu-toggle[data-open="true"] {
   border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
   color: var(--ink);
 }
 
 .shell-menu-toggle[data-open="true"] {
   border-color: var(--ink);
-  background: var(--bg-elevated);
-  color: var(--ink);
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--ink) 16%, transparent);
 }
 
 .shell-menu-toggle-bars {
