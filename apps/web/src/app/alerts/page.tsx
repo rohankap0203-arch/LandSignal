@@ -1011,12 +1011,7 @@ export default function LandAlertsPage() {
       {editing ? (
         <section className="acq-profile panel">
           <header className="acq-profile-head">
-            <div>
-              <h2 className="display text-xl font-semibold">Acquisition profile</h2>
-              <p className="mt-1 text-sm text-[var(--muted)]">
-                Tap to set preferences. Use Must only for hard constraints — Prefer and Flexible keep near-misses.
-              </p>
-            </div>
+            <h2 className="display text-xl font-semibold">Acquisition profile</h2>
             <p className="acq-profile-summary" aria-live="polite">
               {profileSummary}
             </p>
