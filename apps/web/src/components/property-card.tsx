@@ -222,7 +222,6 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
               Scout pick
             </span>
           )}
-          <span className="chip">{row.discount_display}</span>
           <span className="chip">{row.best_strategy_label}</span>
           <span className="chip" title="Detail page builds a year-by-year path from soil, flood, growth, channel, and more">
             Multi-factor path
