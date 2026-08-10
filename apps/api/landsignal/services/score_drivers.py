@@ -30,8 +30,10 @@ def build_score_drivers(
     enrichment=None,
     price: dict | None = None,
     standings: dict | None = None,
+    risk_standings: dict | None = None,
+    confidence_standings: dict | None = None,
 ) -> dict[str, Any]:
-    """2–4 short, specific reasons — plus optional sitewide opportunity standings."""
+    """2–4 short, specific reasons — plus optional sitewide score standings."""
     place = place_phrase(parcel)
     acres = _f(getattr(parcel, "acreage", None))
     size = f"{acres:,.1f}-acre " if acres is not None else ""
@@ -194,10 +196,26 @@ def build_score_drivers(
         # Prefer standings rank line as the open hint when available.
         opp_block["hint"] = standings.get("rank_plain") or verdict
 
+    risk_block: dict[str, Any] = {
+        "verdict": risk_verdict,
+        "bullets": risk_bullets[:4],
+    }
+    if risk_standings:
+        risk_block["standings"] = risk_standings
+        risk_block["hint"] = risk_standings.get("rank_plain") or risk_verdict
+
+    conf_block: dict[str, Any] = {
+        "verdict": conf_verdict,
+        "bullets": conf_bullets[:3],
+    }
+    if confidence_standings:
+        conf_block["standings"] = confidence_standings
+        conf_block["hint"] = confidence_standings.get("rank_plain") or conf_verdict
+
     return {
         "opportunity": opp_block,
-        "risk": {"verdict": risk_verdict, "bullets": risk_bullets[:4]},
-        "confidence": {"verdict": conf_verdict, "bullets": conf_bullets[:3]},
+        "risk": risk_block,
+        "confidence": conf_block,
         "buy_lens": {
             "headline": verdict,
             "next_step": (

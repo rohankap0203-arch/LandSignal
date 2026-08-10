@@ -368,16 +368,30 @@ export default function ParcelIntelligencePage() {
               label="Risk"
               value={Number(score?.risk || 0)}
               invert
-              hint={String(riskDrive.verdict || "Tap for what could go wrong")}
+              hint={String(
+                (riskDrive.hint as string) ||
+                  riskDrive.verdict ||
+                  "Tap for what could go wrong",
+              )}
               verdict={String(riskDrive.verdict || "")}
               bullets={(riskDrive.bullets as string[]) || []}
+              standings={
+                (riskDrive.standings as Parameters<typeof ScoreBar>[0]["standings"]) || null
+              }
             />
             <ScoreBar
               label="How complete the file is"
               value={Number(score?.confidence || 0)}
-              hint={String(confDrive.verdict || "Tap to see what’s filled in")}
+              hint={String(
+                (confDrive.hint as string) ||
+                  confDrive.verdict ||
+                  "Tap to see what’s filled in",
+              )}
               verdict={String(confDrive.verdict || "")}
               bullets={(confDrive.bullets as string[]) || []}
+              standings={
+                (confDrive.standings as Parameters<typeof ScoreBar>[0]["standings"]) || null
+              }
             />
           </div>
 

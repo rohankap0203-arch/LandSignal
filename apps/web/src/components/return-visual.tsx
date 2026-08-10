@@ -670,7 +670,7 @@ export function ReturnVisual({
         onChange={setMoneyMode}
         cpiDisplay={cpiDisplay}
         compare={
-          holdYears >= 5 &&
+          holdYears >= 1 &&
           endpoint?.total_back_usd != null &&
           endpoint?.total_back_usd_today != null
             ? {
@@ -701,9 +701,9 @@ export function ReturnVisual({
               <stop offset="100%" stopColor="var(--brand)" stopOpacity="0.02" />
             </linearGradient>
           </defs>
-          {/* Grid years */}
-          {[0, Math.round(holdYears / 2), holdYears].map((y) => (
-            <g key={y}>
+          {/* Grid years — dedupe so 1 yr holds don’t emit [0,1,1] React keys */}
+          {Array.from(new Set([0, Math.round(holdYears / 2), holdYears])).map((y) => (
+            <g key={`yr-${y}`}>
               <line
                 x1={chart.xOf(y)}
                 x2={chart.xOf(y)}
@@ -783,7 +783,7 @@ export function ReturnVisual({
             <div>
               <span>Land at exit</span>
               <strong>{money(exitShow)}</strong>
-              {holdYears >= 5 && endpoint.exit_usd != null && endpoint.exit_usd_today != null ? (
+              {holdYears >= 1 && endpoint.exit_usd != null && endpoint.exit_usd_today != null ? (
                 <em className="return-alt-line">
                   {showToday
                     ? `${shortMoney(Number(endpoint.exit_usd))} before inflation`
@@ -794,7 +794,7 @@ export function ReturnVisual({
             <div>
               <span>Rent along the way</span>
               <strong>{money(rentShow)}</strong>
-              {holdYears >= 5 &&
+              {holdYears >= 1 &&
               endpoint.cumulative_rent_usd != null &&
               endpoint.cumulative_rent_usd_today != null ? (
                 <em className="return-alt-line">
@@ -807,7 +807,7 @@ export function ReturnVisual({
             <div>
               <span>Total back</span>
               <strong>{money(totalShow)}</strong>
-              {holdYears >= 5 &&
+              {holdYears >= 1 &&
               endpoint.total_back_usd != null &&
               endpoint.total_back_usd_today != null ? (
                 <em className="return-alt-line">
@@ -832,7 +832,7 @@ export function ReturnVisual({
                   </span>
                 ) : null}
               </strong>
-              {holdYears >= 5 &&
+              {holdYears >= 1 &&
               endpoint.irr != null &&
               endpoint.irr_real != null &&
               Number.isFinite(endpoint.irr) &&
@@ -845,6 +845,12 @@ export function ReturnVisual({
               ) : null}
             </div>
           </div>
+          {showToday && holdYears >= 20 ? (
+            <p className="mt-2 text-[11px] leading-snug text-[var(--muted)]">
+              After inflation keeps falling on long holds when land growth trails ~{cpiDisplay} CPI —
+              e.g. (1.025)^100 ≈ 11.8× haircut. Switch to Before inflation to see raw future $.
+            </p>
+          ) : null}
         </div>
       )}
 

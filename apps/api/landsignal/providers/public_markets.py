@@ -419,7 +419,7 @@ def _norm_baltimore_taxsale(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://www.baltimorecity.gov/",
         "status": "ACTIVE",
-        # LIEN_AMOUNT is the published lien — not a guaranteed auction settle price.
+        # LIEN_AMOUNT is the published opener — not a guaranteed auction settle price.
         "raw": {**props, "ask_role": "tax_lien"} if isinstance(props, dict) else props,
         "is_demo": False,
     }

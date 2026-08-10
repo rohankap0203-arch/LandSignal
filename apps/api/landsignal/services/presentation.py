@@ -159,34 +159,35 @@ def price_display(
     )
     if ask is not None and ask > 0:
         if auction_path and auction_path.get("is_opening_bid"):
-            from landsignal.services.auction import published_price_words
-
-            role = str((auction_path or {}).get("published_price_role") or "opening_bid")
-            role_short, role_label = published_price_words(role)
             settle = (auction_path or {}).get("expected_settle_usd")
             lo = (auction_path or {}).get("settle_low_usd")
             hi = (auction_path or {}).get("settle_high_usd")
-            # Lead with the sourced published figure; finish band is clearly a screen.
-            if lo and hi and float(hi) > float(lo):
-                display = (
-                    f"${ask:,.0f} {role_short} · finish screen "
-                    f"~${float(lo):,.0f}–${float(hi):,.0f}"
-                )
-            elif settle:
-                display = f"${ask:,.0f} {role_short} · finish screen ~${float(settle):,.0f}"
-            else:
-                display = f"${ask:,.0f} {role_short} (usually finishes higher)"
+            if settle:
+                # Prefer a finish band when available; still reads as start → likely finish.
+                if lo and hi and float(hi) > float(lo):
+                    display = (
+                        f"${ask:,.0f} start · ~${float(lo):,.0f}–${float(hi):,.0f} likely finish"
+                    )
+                else:
+                    display = f"${ask:,.0f} start · ~${float(settle):,.0f} likely finish"
+                return {
+                    "amount_usd": ask,
+                    "label": "Starting bid → likely finish",
+                    "display": display,
+                    "kind": "minimum_bid",
+                    "opening_bid_usd": ask,
+                    "expected_settle_usd": settle,
+                    "settle_low_usd": lo,
+                    "settle_high_usd": hi,
+                    "note": (auction_path or {}).get("note"),
+                    "estimate_source": None,
+                }
             return {
                 "amount_usd": ask,
-                "label": role_label,
-                "display": display,
-                "kind": role if role in ("tax_lien", "minimum_bid", "opening_bid") else "minimum_bid",
+                "label": "Starting bid (not final price)",
+                "display": f"${ask:,.0f} start (usually finishes higher)",
+                "kind": "minimum_bid",
                 "opening_bid_usd": ask,
-                "published_price_role": role,
-                "expected_settle_usd": settle,
-                "settle_low_usd": lo,
-                "settle_high_usd": hi,
-                "note": (auction_path or {}).get("note"),
                 "estimate_source": None,
             }
         return {

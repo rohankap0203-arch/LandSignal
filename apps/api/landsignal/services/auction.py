@@ -48,17 +48,6 @@ def detect_published_price_role(listing_or_raw: Any, provider_id: str | None = N
     return "asking"
 
 
-def published_price_words(role: str) -> tuple[str, str]:
-    """(short noun for display, human label)."""
-    if role == "tax_lien":
-        return "published lien", "Published tax lien (not a settle price)"
-    if role == "minimum_bid":
-        return "starting bid", "Published starting bid (not a settle price)"
-    if role == "opening_bid":
-        return "opening bid", "Published opening bid (not a settle price)"
-    return "listed price", "Listed price"
-
-
 def expected_auction_clearing(
     *,
     opening_bid: float | None,

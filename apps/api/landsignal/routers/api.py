@@ -731,12 +731,7 @@ async def radar(
         if broaden_reason:
             reasons = [broaden_reason, *reasons][:5]
         if isinstance(auction_path, dict) and auction_path.get("expected_settle_usd"):
-            if not any("finish screen" in r.lower() or "likely finish" in r.lower() for r in reasons):
-                from landsignal.services.auction import published_price_words
-
-                role_short, _ = published_price_words(
-                    str(auction_path.get("published_price_role") or "opening_bid")
-                )
+            if not any("likely auction finish" in r.lower() or "likely finish" in r.lower() for r in reasons):
                 lo = auction_path.get("settle_low_usd")
                 hi = auction_path.get("settle_high_usd")
                 if lo and hi and float(hi) > float(lo):
@@ -745,9 +740,9 @@ async def radar(
                     finish_s = f"~${auction_path['expected_settle_usd']:,.0f}"
                 reasons = [
                     (
-                        f"Published ${auction_path['opening_bid_usd']:,.0f} {role_short}; "
-                        f"finish screen {finish_s} "
-                        f"(~{auction_path.get('bid_inflation_mult_base', 0):.1f}× prior — not a quoted result)"
+                        f"Starts at ${auction_path['opening_bid_usd']:,.0f}; auctions like this "
+                        f"usually finish near {finish_s} "
+                        f"(about {auction_path.get('bid_inflation_mult_base', 0):.1f}× the start)"
                     ),
                     *reasons,
                 ][:5]
@@ -758,7 +753,7 @@ async def radar(
             settle_disc = auction_path.get("settle_discount_pct")
         if settle_disc is not None:
             # Keep chip copy short — opener gap belongs in help / reasons, not the label.
-            discount_display = f"Finish screen {settle_disc:+.1f}% vs our value"
+            discount_display = f"Likely finish {settle_disc:+.1f}% vs our value"
         elif score.asking_discount_pct is not None:
             discount_display = f"{score.asking_discount_pct:+.1f}% vs our value"
         else:
@@ -879,26 +874,21 @@ async def radar(
             )
         elif headline_disc is not None and headline_disc < -8:
             headline = (
-                f"Finish screen ~{abs(headline_disc):.0f}% under our value"
+                f"Likely finish ~{abs(headline_disc):.0f}% under our value"
                 if isinstance(auction_path, dict)
                 else f"About {abs(headline_disc):.0f}% under our value"
             )
         elif isinstance(auction_path, dict):
-            from landsignal.services.auction import published_price_words
-
-            role = str(auction_path.get("published_price_role") or "opening_bid")
-            role_short, _ = published_price_words(role)
             opener = auction_path.get("opening_bid_usd") or 0
             lo = auction_path.get("settle_low_usd")
             hi = auction_path.get("settle_high_usd")
+            settle = auction_path.get("expected_settle_usd") or 0
             if lo and hi and float(hi) > float(lo):
                 headline = (
-                    f"${float(opener):,.0f} {role_short} · finish screen "
-                    f"~${float(lo):,.0f}–${float(hi):,.0f}"
+                    f"Starts ${float(opener):,.0f} → likely ~${float(lo):,.0f}–${float(hi):,.0f}"
                 )
             else:
-                settle = auction_path.get("expected_settle_usd") or 0
-                headline = f"${float(opener):,.0f} {role_short} · finish screen ~${float(settle):,.0f}"
+                headline = f"Starts ${float(opener):,.0f} → likely ~${float(settle):,.0f}"
         else:
             headline = f"{conviction or 'WATCH'} interest · opportunity score {score.opportunity:.0f}/100"
 
@@ -1501,12 +1491,30 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     )
     score_drivers: dict[str, Any] = {}
     if score:
-        from landsignal.services.score_standings import build_opportunity_standings
+        from landsignal.services.score_standings import (
+            build_confidence_standings,
+            build_opportunity_standings,
+            build_risk_standings,
+        )
 
+        place = f"{parcel.county or 'this county'}, {parcel.state or ''}".strip(", ")
         standings = build_opportunity_standings(
             store=store,
             score=score,
-            place=f"{parcel.county or 'this county'}, {parcel.state or ''}".strip(", "),
+            place=place,
+        )
+        risk_standings = build_risk_standings(
+            store=store,
+            score=score,
+            enrichment=enrichment,
+            listing=listing,
+            place=place,
+        )
+        confidence_standings = build_confidence_standings(
+            store=store,
+            score=score,
+            enrichment=enrichment,
+            place=place,
         )
         score_drivers = build_score_drivers(
             parcel=parcel,
@@ -1515,6 +1523,8 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
             enrichment=enrichment,
             price=price if isinstance(price, dict) else None,
             standings=standings,
+            risk_standings=risk_standings,
+            confidence_standings=confidence_standings,
         )
     outreach = build_outreach_playbook(
         parcel=parcel,

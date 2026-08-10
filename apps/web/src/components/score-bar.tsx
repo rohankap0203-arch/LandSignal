@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 
-export type OpportunityStandings = {
+export type ScoreStandings = {
+  kind?: "opportunity" | "risk" | "confidence" | string;
+  polarity?: "higher_better" | "lower_better" | string;
   score?: number;
   sample_n?: number;
   beats_pct?: number;
@@ -12,6 +14,7 @@ export type OpportunityStandings = {
   p90?: number | null;
   p95?: number | null;
   max?: number | null;
+  min?: number | null;
   histogram?: Array<{
     lo: number;
     hi: number;
@@ -33,12 +36,19 @@ export type OpportunityStandings = {
   lifts?: Array<{ key: string; label: string; score: number; contribution: number }>;
   drags?: Array<{ key: string; label: string; score: number; gap: number }>;
   why_not_higher?: string[];
+  why_label?: string;
+  factors_label?: string;
+  meta_best_label?: string;
+  meta_best_value?: number | null;
   rank_plain?: string;
   ceiling_plain?: string;
   method_plain?: string | null;
 };
 
-/** Clickable red→green meter — opportunity expands into sitewide standings + factors. */
+/** @deprecated alias — same shape as ScoreStandings */
+export type OpportunityStandings = ScoreStandings;
+
+/** Clickable red→green meter — expands into compact sitewide standings. */
 export function ScoreBar({
   label,
   value,
@@ -53,7 +63,7 @@ export function ScoreBar({
   hint?: string;
   bullets?: string[];
   verdict?: string;
-  standings?: OpportunityStandings | null;
+  standings?: ScoreStandings | null;
   /** If true, high values are bad (risk) — bar still fills, color flips */
   invert?: boolean;
 }) {
@@ -98,7 +108,7 @@ export function ScoreBar({
       {open ? (
         <div className="score-bar-detail mt-2 text-left" onClick={(e) => e.stopPropagation()}>
           {hasStandings && standings ? (
-            <OpportunityStandingsPanel score={v} standings={standings} />
+            <ScoreStandingsPanel score={v} standings={standings} invert={invert} />
           ) : (
             <>
               {verdict ? <p className="text-sm font-medium leading-snug">{verdict}</p> : null}
@@ -121,12 +131,14 @@ export function ScoreBar({
   );
 }
 
-function OpportunityStandingsPanel({
+function ScoreStandingsPanel({
   score,
   standings,
+  invert = false,
 }: {
   score: number;
-  standings: OpportunityStandings;
+  standings: ScoreStandings;
+  invert?: boolean;
 }) {
   const hist = standings.histogram || [];
   const n = standings.sample_n || 0;
@@ -135,6 +147,16 @@ function OpportunityStandingsPanel({
     markerBucket >= 0 ? markerBucket : score >= 100 ? hist.length - 1 : 0;
   const topFactors = (standings.factors || []).slice(0, 3);
   const why = (standings.why_not_higher || [])[0];
+  const whyLabel = standings.why_label || (invert ? "Why not lower" : "Why not 90");
+  const factorsLabel = standings.factors_label || `What’s in your ${Math.round(score)}`;
+  const beatsLabel = invert ? "Safer than" : "Beats";
+  const bestLabel = standings.meta_best_label || (invert ? "Site low" : "Site high");
+  const bestValue =
+    standings.meta_best_value != null
+      ? standings.meta_best_value
+      : invert
+        ? standings.min
+        : standings.max;
 
   return (
     <div className="opp-standings opp-standings--compact">
@@ -169,27 +191,28 @@ function OpportunityStandingsPanel({
         </div>
         <div className="opp-standings-meta">
           <span>
-            Beats <strong>~{Math.round(standings.beats_pct || 0)}%</strong>
+            {beatsLabel} <strong>~{Math.round(standings.beats_pct || 0)}%</strong>
           </span>
           <span>
             Median <strong>{standings.median != null ? Math.round(standings.median) : "—"}</strong>
           </span>
           <span>
-            Site high <strong>{standings.max != null ? Math.round(standings.max) : "—"}</strong>
+            {bestLabel}{" "}
+            <strong>{bestValue != null ? Math.round(bestValue) : "—"}</strong>
           </span>
         </div>
       </div>
 
       {why ? (
         <p className="opp-why-one">
-          <span className="opp-why-k">Why not 90 · </span>
+          <span className="opp-why-k">{whyLabel} · </span>
           {why}
         </p>
       ) : null}
 
       {topFactors.length ? (
         <div className="opp-factors">
-          <div className="opp-why-k">What’s in your {Math.round(score)}</div>
+          <div className="opp-why-k">{factorsLabel}</div>
           <div className="opp-factor-list">
             {topFactors.map((f) => (
               <div key={f.key} className={`opp-factor-row tone-${f.direction}`}>
