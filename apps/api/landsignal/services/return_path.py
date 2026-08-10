@@ -158,190 +158,208 @@ def build_factor_model(
             )
         )
 
-    # Growth
-    if growth is not None:
-        adj = (growth - 50) / 50 * 0.012
-        rate += adj
-        factors.append(
-            _factor(
-                "growth",
-                "Local growth",
-                adj * 10000,
-                f"Growth signal {growth:.0f}/100 in {county} moves the yearly pace by {adj*100:+.1f} pts.",
-            )
-        )
-
-    # Soil / prime
-    if prime is not None and acres and acres >= 5:
-        adj = (prime - 40) / 100 * 0.008
-        rate += adj
-        factors.append(
-            _factor(
-                "soil",
-                "Soil quality",
-                adj * 10000,
-                f"About {prime:.0f}% prime farmland on the map — {'helps' if adj >= 0 else 'softens'} cash-rent and resale to ag buyers.",
-            )
-        )
-    elif acres is not None and acres < 2:
-        adj = -0.004
-        rate += adj
-        factors.append(
-            _factor(
-                "lot_class",
-                "Small-lot class",
-                adj * 10000,
-                "Under 2 acres: path is lumpier and less farm-index driven than big rural tracts.",
-            )
-        )
-    elif acres is not None and acres >= 80:
-        adj = 0.003
-        rate += adj
-        factors.append(
-            _factor(
-                "scale",
-                "Large-tract scale",
-                adj * 10000,
-                f"{acres:,.0f} acres: institutional-scale tracts often track farm/fringe indexes a bit more tightly.",
-            )
-        )
-
-    # Flood
-    flood_carry = 0.0  # extra annual $ drag later
+    # Flood/wetland still drive carry + usable acres even when pace comes from trajectory.
+    flood_carry = 0.0
     if flood is not None:
-        adj = -min(0.018, (flood / 100) * 0.02)
-        rate += adj
-        flood_carry = (flood / 100) * 0.004  # fraction of land value as extra insurance/fill reserve
-        factors.append(
-            _factor(
-                "flood",
-                "Flood exposure",
-                adj * 10000,
-                f"About {flood:.0f}% flood overlap — slows appreciation and adds carrying cost (insurance/fill reserve).",
-            )
-        )
-
-    # Wetlands
+        flood_carry = (flood / 100) * 0.004
     usable_frac = 1.0
     if wet is not None:
-        adj = -min(0.012, (wet / 100) * 0.015)
-        rate += adj
         usable_frac = max(0.35, 1.0 - (wet / 100) * 0.55)
-        factors.append(
-            _factor(
-                "wetlands",
-                "Wetlands",
-                adj * 10000,
-                f"About {wet:.0f}% wetlands — usable acres may be ~{usable_frac*100:.0f}% of deeded size, which weighs on exit.",
-            )
-        )
 
-    # Access
-    if access is not None and access < 45:
-        adj = -0.005
-        rate += adj
+    if from_trajectory:
+        # Land-value path already layered growth/soil/flood/size/access/etc.
+        # Re-applying them here double-cut every listing and shoved hold pace ≤ CPI.
         factors.append(
             _factor(
-                "access",
-                "Road access",
-                adj * 10000,
-                f"Access confidence looks soft ({access:.0f}/100) — fewer buyers, slower resale.",
+                "path_sync",
+                "Same pace as land-value path",
+                base * 10000,
+                f"Hold return uses the same ~{base*100:.1f}%/yr owned-land pace as the land-value "
+                f"path for {prop} — screens are not applied twice.",
             )
         )
-    elif access is not None and access >= 70:
-        adj = 0.002
-        rate += adj
-        factors.append(
-            _factor(
-                "access",
-                "Road access",
-                adj * 10000,
-                f"Access looks workable ({access:.0f}/100) — helps resale and any build/farm use.",
-            )
-        )
-
-    # Transmission / energy optionality
-    if tx_m is not None and tx_m < 8000 and (strategy == "ENERGY" or (acres or 0) >= 20):
-        adj = 0.0025
-        rate += adj
-        factors.append(
-            _factor(
-                "power",
-                "Nearby power line",
-                adj * 10000,
-                f"Mapped transmission ~{tx_m/1609:.1f} mi away — a small energy-optionality lift, not a grid connection right.",
-            )
-        )
-
-    # Liquidity / scarcity
-    if liq is not None:
-        adj = (liq - 50) / 50 * 0.004
-        rate += adj
-        factors.append(
-            _factor(
-                "liquidity",
-                "Ease of resale",
-                adj * 10000,
-                f"Resale ease {liq:.0f}/100 for this channel/size in {place}.",
-            )
-        )
-    if scar is not None and scar >= 60:
-        adj = 0.002
-        rate += adj
-        factors.append(
-            _factor(
-                "scarcity",
-                "How rare it is",
-                adj * 10000,
-                f"Scarcity screen {scar:.0f}/100 — fewer substitutes nearby can support exit price.",
-            )
-        )
-
-    # Risk cushion
-    if risk is not None and risk >= 55:
-        adj = -((risk - 50) / 100) * 0.01
-        rate += adj
-        factors.append(
-            _factor(
-                "risk",
-                "Map risk",
-                adj * 10000,
-                f"Risk {risk:.0f}/100 — we slow the path until flood/wetland/access homework is cleaner.",
-            )
-        )
-    elif risk is not None and risk <= 30:
-        adj = 0.0015
-        rate += adj
-        factors.append(
-            _factor(
-                "risk",
-                "Map risk",
-                adj * 10000,
-                f"Risk {risk:.0f}/100 — cleaner desktop map checks support a steadier path.",
-            )
-        )
-
-    # Strategy fit
-    if strategy and isinstance(strat_scores, dict):
-        best = _f(strat_scores.get(strategy))
-        if best is not None:
-            adj = (best - 55) / 100 * 0.006
+    else:
+        # Growth
+        if growth is not None:
+            adj = (growth - 50) / 50 * 0.012
             rate += adj
             factors.append(
                 _factor(
-                    "strategy",
-                    "Best-use fit",
+                    "growth",
+                    "Local growth",
                     adj * 10000,
-                    f"Best use {strategy.replace('_', ' ').title()} scores {best:.0f}/100 on this file — "
-                    f"{'supports' if adj >= 0 else 'softens'} the hold case.",
+                    f"Growth signal {growth:.0f}/100 in {county} moves the yearly pace by {adj*100:+.1f} pts.",
                 )
             )
 
-    # Thin file → wider uncertainty, slightly more conservative base
+        # Soil / prime
+        if prime is not None and acres and acres >= 5:
+            adj = (prime - 40) / 100 * 0.008
+            rate += adj
+            factors.append(
+                _factor(
+                    "soil",
+                    "Soil quality",
+                    adj * 10000,
+                    f"About {prime:.0f}% prime farmland on the map — {'helps' if adj >= 0 else 'softens'} cash-rent and resale to ag buyers.",
+                )
+            )
+        elif acres is not None and acres < 2:
+            adj = -0.004
+            rate += adj
+            factors.append(
+                _factor(
+                    "lot_class",
+                    "Small-lot class",
+                    adj * 10000,
+                    "Under 2 acres: path is lumpier and less farm-index driven than big rural tracts.",
+                )
+            )
+        elif acres is not None and acres >= 80:
+            adj = 0.003
+            rate += adj
+            factors.append(
+                _factor(
+                    "scale",
+                    "Large-tract scale",
+                    adj * 10000,
+                    f"{acres:,.0f} acres: institutional-scale tracts often track farm/fringe indexes a bit more tightly.",
+                )
+            )
+
+        # Flood
+        if flood is not None:
+            adj = -min(0.018, (flood / 100) * 0.02)
+            rate += adj
+            factors.append(
+                _factor(
+                    "flood",
+                    "Flood exposure",
+                    adj * 10000,
+                    f"About {flood:.0f}% flood overlap — slows appreciation and adds carrying cost (insurance/fill reserve).",
+                )
+            )
+
+        # Wetlands
+        if wet is not None:
+            adj = -min(0.012, (wet / 100) * 0.015)
+            rate += adj
+            factors.append(
+                _factor(
+                    "wetlands",
+                    "Wetlands",
+                    adj * 10000,
+                    f"About {wet:.0f}% wetlands — usable acres may be ~{usable_frac*100:.0f}% of deeded size, which weighs on exit.",
+                )
+            )
+
+        # Access
+        if access is not None and access < 45:
+            adj = -0.005
+            rate += adj
+            factors.append(
+                _factor(
+                    "access",
+                    "Road access",
+                    adj * 10000,
+                    f"Access confidence looks soft ({access:.0f}/100) — fewer buyers, slower resale.",
+                )
+            )
+        elif access is not None and access >= 70:
+            adj = 0.002
+            rate += adj
+            factors.append(
+                _factor(
+                    "access",
+                    "Road access",
+                    adj * 10000,
+                    f"Access looks workable ({access:.0f}/100) — helps resale and any build/farm use.",
+                )
+            )
+
+        # Transmission / energy optionality
+        if tx_m is not None and tx_m < 8000 and (strategy == "ENERGY" or (acres or 0) >= 20):
+            adj = 0.0025
+            rate += adj
+            factors.append(
+                _factor(
+                    "power",
+                    "Nearby power line",
+                    adj * 10000,
+                    f"Mapped transmission ~{tx_m/1609:.1f} mi away — a small energy-optionality lift, not a grid connection right.",
+                )
+            )
+
+        # Liquidity / scarcity
+        if liq is not None:
+            adj = (liq - 50) / 50 * 0.004
+            rate += adj
+            factors.append(
+                _factor(
+                    "liquidity",
+                    "Ease of resale",
+                    adj * 10000,
+                    f"Resale ease {liq:.0f}/100 for this channel/size in {place}.",
+                )
+            )
+        if scar is not None and scar >= 60:
+            adj = 0.002
+            rate += adj
+            factors.append(
+                _factor(
+                    "scarcity",
+                    "How rare it is",
+                    adj * 10000,
+                    f"Scarcity screen {scar:.0f}/100 — fewer substitutes nearby can support exit price.",
+                )
+            )
+
+        # Risk cushion
+        if risk is not None and risk >= 55:
+            adj = -((risk - 50) / 100) * 0.01
+            rate += adj
+            factors.append(
+                _factor(
+                    "risk",
+                    "Map risk",
+                    adj * 10000,
+                    f"Risk {risk:.0f}/100 — we slow the path until flood/wetland/access homework is cleaner.",
+                )
+            )
+        elif risk is not None and risk <= 30:
+            adj = 0.0015
+            rate += adj
+            factors.append(
+                _factor(
+                    "risk",
+                    "Map risk",
+                    adj * 10000,
+                    f"Risk {risk:.0f}/100 — cleaner desktop map checks support a steadier path.",
+                )
+            )
+
+        # Strategy fit
+        if strategy and isinstance(strat_scores, dict):
+            best = _f(strat_scores.get(strategy))
+            if best is not None:
+                adj = (best - 55) / 100 * 0.006
+                rate += adj
+                factors.append(
+                    _factor(
+                        "strategy",
+                        "Best-use fit",
+                        adj * 10000,
+                        f"Best use {strategy.replace('_', ' ').title()} scores {best:.0f}/100 on this file — "
+                        f"{'supports' if adj >= 0 else 'softens'} the hold case.",
+                    )
+                )
+
+    # Thin file → wider uncertainty band (case spread), not a second pace haircut
+    # when we already synced to the land-value path.
     uncertainty = 0.35
     if conf is not None:
         uncertainty = max(0.18, min(0.55, 0.55 - (conf / 100) * 0.35))
-        if conf < 45:
+        if conf < 45 and not from_trajectory:
             adj = -0.002
             rate += adj
             factors.append(
@@ -493,17 +511,17 @@ def build_case_path(
         shaper = _cycle_shaper(y)
         amp = scalars["cycle_amp"]
         shaped = 1.0 + (shaper - 1.0) * amp
-        # Long-hold fatigue: ease after mid horizon; keep near-term full so CPI
-        # does not invent a permanent real decline on ordinary land holds.
+        # Long-hold fatigue: light ease only — keep typical state pace able to
+        # clear the CPI screen so After inflation is not a sitewide death slide.
         fatigue = 1.0
-        if y > 15:
-            fatigue = max(0.82, 1.0 - (y - 15) * 0.010)
+        if y > 20:
+            fatigue = max(0.90, 1.0 - (y - 20) * 0.004)
         if y > 40:
-            fatigue = max(0.68, fatigue - (y - 40) * 0.004)
+            fatigue = max(0.84, fatigue - (y - 40) * 0.002)
         if y > 70:
-            fatigue = max(0.55, fatigue - (y - 70) * 0.003)
+            fatigue = max(0.80, fatigue - (y - 70) * 0.0015)
         if case_u in ("BULL", "UPSIDE") and y > 40:
-            fatigue *= max(0.85, 1.0 - (y - 40) * 0.003)
+            fatigue *= max(0.92, 1.0 - (y - 40) * 0.0015)
         # Flood/wetland “realization” years — occasional step downs in bear/base
         shock = 1.0
         if y in (7, 14, 28, 42, 55) and case_u in ("BEAR", "BASE", "DOWNSIDE", "STRESS"):

@@ -262,20 +262,19 @@ def _cycle_shaper(offset: int) -> float:
 
 
 def _forward_fade(year_k: int) -> float:
-    """Long holds ease off — not a stock rocket, but still a land asset.
+    """Long holds ease off slightly — not a stock rocket, still a land asset.
 
-    Keep the first ~15 years near full pace so After inflation can rise when
-    nominal pace beats CPI. Fade gently afterward; do not crush to ~⅙ pace.
+    Keep enough pace that a normal state prior (~3%/yr) can still beat the
+    ~2.5% CPI screen on mid and long holds. Hard fades made every After
+    inflation view look like a permanent loss sitewide.
     """
-    if year_k <= 15:
+    if year_k <= 20:
         return 1.0
-    if year_k <= 30:
-        return max(0.82, 1.0 - (year_k - 15) * 0.012)
-    if year_k <= 50:
-        return max(0.70, 0.82 - (year_k - 30) * 0.006)
-    if year_k <= 75:
-        return max(0.58, 0.70 - (year_k - 50) * 0.005)
-    return max(0.50, 0.58 - (year_k - 75) * 0.003)
+    if year_k <= 40:
+        return max(0.90, 1.0 - (year_k - 20) * 0.005)
+    if year_k <= 70:
+        return max(0.84, 0.90 - (year_k - 40) * 0.002)
+    return max(0.80, 0.84 - (year_k - 70) * 0.0015)
 
 
 def _hitch_severity(

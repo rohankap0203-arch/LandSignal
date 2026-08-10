@@ -98,7 +98,8 @@ export function MoneyModeControl({
           </div>
           {gap != null && gap > 0 ? (
             <p className="money-compare-gap">
-              ~<strong>{gap}%</strong> of that future figure is inflation at {cpiDisplay}.
+              Same outcome, two reads — After inflation divides by ~{cpiDisplay} so you can
+              compare to today’s dollars (~{gap}% CPI haircut on the raw future figure).
             </p>
           ) : null}
         </div>
