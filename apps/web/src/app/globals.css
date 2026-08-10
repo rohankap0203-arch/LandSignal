@@ -43,11 +43,6 @@
   box-sizing: border-box;
 }
 
-html {
-  /* Keep header controls (menu / Sign in) from shifting when overflow locks hide the scrollbar */
-  scrollbar-gutter: stable;
-}
-
 html,
 body {
   margin: 0;
@@ -58,6 +53,18 @@ body {
     var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
+}
+
+/* Always paint the vertical scrollbar lane (even on short pages) so open/close cannot reflow the header. */
+html {
+  overflow-y: scroll;
+}
+
+html[data-shell-menu="open"] {
+  overflow: hidden;
+  /* overflow:hidden drops the bar — put the same width back as padding on the root. */
+  padding-right: var(--shell-sbw, 0px);
+  box-sizing: border-box;
 }
 
 a {

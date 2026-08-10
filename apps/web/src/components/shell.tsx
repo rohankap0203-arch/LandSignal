@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useState } from "react";
 import { AccountMenu } from "@/components/account-menu";
 import { MapPinMark } from "@/components/map-pin-mark";
 
@@ -33,20 +33,20 @@ export function Shell({ children }: { children: React.ReactNode }) {
     setMenuOpen(false);
   }, [pathname]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!menuOpen) return;
+    const root = document.documentElement;
+    const scrollbarWidth = Math.max(0, window.innerWidth - root.clientWidth);
+    root.dataset.shellMenu = "open";
+    root.style.setProperty("--shell-sbw", `${scrollbarWidth}px`);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMenuOpen(false);
     };
-    // Compensate classic scrollbars when overflow lock removes them (gutter alone is not enough in all browsers).
-    const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
     document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-      document.body.style.paddingRight = "";
+      delete root.dataset.shellMenu;
+      root.style.removeProperty("--shell-sbw");
     };
   }, [menuOpen]);
 
