@@ -48,7 +48,7 @@ export type ScoreStandings = {
 /** @deprecated alias — same shape as ScoreStandings */
 export type OpportunityStandings = ScoreStandings;
 
-/** Clickable meter — opportunity uses sitewide standings; risk/completeness use lean lenses. */
+/** Clickable meter — each score kind gets its own lean lens. */
 export function ScoreBar({
   label,
   value,
@@ -64,7 +64,6 @@ export function ScoreBar({
   bullets?: string[];
   verdict?: string;
   standings?: ScoreStandings | null;
-  /** If true, high values are bad (risk) — bar still fills, color flips */
   invert?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -112,8 +111,10 @@ export function ScoreBar({
             <RiskLens score={v} standings={standings} />
           ) : kind === "confidence" && standings ? (
             <CompletenessLens score={v} standings={standings} />
-          ) : hasStandings && standings?.histogram?.length ? (
-            <OpportunityStandingsPanel score={v} standings={standings} />
+          ) : kind === "opportunity" && standings ? (
+            <OpportunityLens score={v} standings={standings} />
+          ) : hasStandings && standings ? (
+            <OpportunityLens score={v} standings={standings} />
           ) : (
             <>
               {verdict ? <p className="text-sm font-medium leading-snug">{verdict}</p> : null}
@@ -136,7 +137,56 @@ export function ScoreBar({
   );
 }
 
-/** Risk — spectrum + two chips. Deliberately not a histogram clone. */
+/** Opportunity — edge dial + two chips. Same bones as Risk, scout twang. */
+function OpportunityLens({ score, standings }: { score: number; standings: ScoreStandings }) {
+  const beats = Math.round(standings.beats_pct || 0);
+  const lifts = (standings.lifts || standings.factors?.filter((f) => f.direction === "up") || []).slice(
+    0,
+    1,
+  );
+  const drags = (
+    standings.drags ||
+    [...(standings.factors || [])].sort((a, b) => (b.gap || 0) - (a.gap || 0))
+  ).slice(0, 1);
+  const why = (standings.why_not_higher || [])[0];
+  const band =
+    score >= 78 ? "Fat edge" : score >= 66 ? "Real edge" : score >= 50 ? "Worth a look" : "Thin edge";
+  const tone = score >= 66 ? "calm" : score >= 50 ? "watch" : "elevated";
+
+  return (
+    <div className="score-lens score-lens--opp">
+      <div className="score-lens-top">
+        <span className={`score-lens-pill tone-${tone}`}>{band}</span>
+        <span className="score-lens-stat">
+          Ahead of <strong>~{beats}%</strong> of live files
+        </span>
+      </div>
+      <div className="opp-edge" aria-hidden>
+        <div className="opp-edge-track">
+          <div className="opp-edge-fill" style={{ width: `${score}%` }} />
+          <div className="opp-edge-you" style={{ left: `${score}%` }} title={`Opportunity ${Math.round(score)}`} />
+        </div>
+        <div className="opp-edge-labels">
+          <span>Soft</span>
+          <span>Fat</span>
+        </div>
+      </div>
+      <div className="score-lens-chips">
+        {lifts[0] ? (
+          <span className="score-chip score-chip--ok">Pull · {lifts[0].label}</span>
+        ) : (
+          <span className="score-chip">No loud buy pull</span>
+        )}
+        {drags[0] ? (
+          <span className="score-chip score-chip--warn">Cap · {drags[0].label}</span>
+        ) : null}
+      </div>
+      {why ? <p className="score-lens-why">{why}</p> : null}
+    </div>
+  );
+}
+
+/** Risk — spectrum + two chips. */
 function RiskLens({ score, standings }: { score: number; standings: ScoreStandings }) {
   const safer = Math.round(standings.beats_pct || 0);
   const worries = (standings.lifts || []).slice(0, 1);
@@ -163,16 +213,12 @@ function RiskLens({ score, standings }: { score: number; standings: ScoreStandin
       </div>
       <div className="score-lens-chips">
         {worries[0] ? (
-          <span className="score-chip score-chip--warn">
-            Main flag · {worries[0].label}
-          </span>
+          <span className="score-chip score-chip--warn">Main flag · {worries[0].label}</span>
         ) : (
           <span className="score-chip">No loud map flag</span>
         )}
         {calms[0] ? (
-          <span className="score-chip score-chip--ok">
-            Helping · {calms[0].label}
-          </span>
+          <span className="score-chip score-chip--ok">Helping · {calms[0].label}</span>
         ) : null}
       </div>
       {why ? <p className="score-lens-why">{why}</p> : null}
@@ -180,7 +226,7 @@ function RiskLens({ score, standings }: { score: number; standings: ScoreStandin
   );
 }
 
-/** Completeness — checklist, not a standings clone. */
+/** Completeness — checklist. */
 function CompletenessLens({ score, standings }: { score: number; standings: ScoreStandings }) {
   const factors = (standings.factors || []).slice(0, 4);
   const have = factors.filter((f) => f.direction === "up").length;
@@ -191,7 +237,9 @@ function CompletenessLens({ score, standings }: { score: number; standings: Scor
   return (
     <div className="score-lens score-lens--complete">
       <div className="score-lens-top">
-        <span className={`score-lens-pill tone-${score >= 65 ? "calm" : score >= 40 ? "watch" : "elevated"}`}>
+        <span
+          className={`score-lens-pill tone-${score >= 65 ? "calm" : score >= 40 ? "watch" : "elevated"}`}
+        >
           {band}
         </span>
         <span className="score-lens-stat">
@@ -213,102 +261,6 @@ function CompletenessLens({ score, standings }: { score: number; standings: Scor
         })}
       </ul>
       {why ? <p className="score-lens-why">{why}</p> : null}
-    </div>
-  );
-}
-
-function OpportunityStandingsPanel({
-  score,
-  standings,
-}: {
-  score: number;
-  standings: ScoreStandings;
-}) {
-  const hist = standings.histogram || [];
-  const n = standings.sample_n || 0;
-  const markerBucket = hist.findIndex((b) => score >= b.lo && score < b.hi);
-  const markerIdx =
-    markerBucket >= 0 ? markerBucket : score >= 100 ? hist.length - 1 : 0;
-  const topFactors = (standings.factors || []).slice(0, 3);
-  const why = (standings.why_not_higher || [])[0];
-  const whyLabel = standings.why_label || "Why not 90";
-  const factorsLabel = standings.factors_label || `What’s in your ${Math.round(score)}`;
-
-  return (
-    <div className="opp-standings opp-standings--compact">
-      <p className="opp-standings-rank">{standings.rank_plain}</p>
-      {standings.ceiling_plain ? (
-        <p className="opp-standings-meaning">{standings.ceiling_plain}</p>
-      ) : null}
-
-      <div
-        className="opp-hist"
-        role="img"
-        aria-label={`Your ${Math.round(score)} vs ${n.toLocaleString()} live files`}
-      >
-        <div className="opp-hist-bars">
-          {hist.map((b, i) => (
-            <div
-              key={b.label}
-              className={`opp-hist-col ${i === markerIdx ? "is-you" : ""}`}
-              title={`${b.label}: ${b.count.toLocaleString()} files`}
-            >
-              <div
-                className="opp-hist-bar"
-                style={{ height: `${Math.max(8, Math.round(b.bar * 100))}%` }}
-              />
-            </div>
-          ))}
-        </div>
-        <div className="opp-hist-scale" aria-hidden>
-          <span>0</span>
-          <span>you {Math.round(score)}</span>
-          <span>100</span>
-        </div>
-        <div className="opp-standings-meta">
-          <span>
-            Beats <strong>~{Math.round(standings.beats_pct || 0)}%</strong>
-          </span>
-          <span>
-            Median <strong>{standings.median != null ? Math.round(standings.median) : "—"}</strong>
-          </span>
-          <span>
-            Site high <strong>{standings.max != null ? Math.round(standings.max) : "—"}</strong>
-          </span>
-        </div>
-      </div>
-
-      {why ? (
-        <p className="opp-why-one">
-          <span className="opp-why-k">{whyLabel} · </span>
-          {why}
-        </p>
-      ) : null}
-
-      {topFactors.length ? (
-        <div className="opp-factors">
-          <div className="opp-why-k">{factorsLabel}</div>
-          <div className="opp-factor-list">
-            {topFactors.map((f) => (
-              <div key={f.key} className={`opp-factor-row tone-${f.direction}`}>
-                <div className="opp-factor-top">
-                  <span className="opp-factor-label">{f.label}</span>
-                  <span className="opp-factor-score tabular-nums">
-                    {Math.round(f.score)}
-                    <span className="opp-factor-w"> · {f.weight_pct}% wt</span>
-                  </span>
-                </div>
-                <div className="opp-factor-track" aria-hidden>
-                  <div
-                    className="opp-factor-fill"
-                    style={{ width: `${Math.max(4, Math.min(100, f.score))}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

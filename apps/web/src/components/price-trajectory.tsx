@@ -32,7 +32,7 @@ type Hitch = {
 type HitchHelp = {
   title?: string;
   body?: string;
-  items?: Array<{ id?: string; label?: string; plain?: string }>;
+  items?: Array<{ id?: string; label?: string; plain?: string; math?: string }>;
 };
 
 type Trajectory = {
@@ -518,7 +518,7 @@ export function PriceTrajectory({
                   title={h.plain || h.label}
                 >
                   <span className="traj-hitch-k">{h.short || h.label}</span>
-                  <span className="traj-hitch-v">{on ? "Future" : "Hitch"}</span>
+                  <span className="traj-hitch-v">{on ? "On" : "Bend"}</span>
                 </button>
               );
             })}
@@ -534,7 +534,7 @@ export function PriceTrajectory({
           onClick={() => setHitchHelpOpen(false)}
         >
           <div
-            className="help-modal"
+            className="help-modal help-modal--compact"
             role="dialog"
             aria-modal="true"
             aria-label="What hitch buttons mean"
@@ -542,7 +542,7 @@ export function PriceTrajectory({
           >
             <div className="flex items-start justify-between gap-3">
               <h4 className="display text-base font-semibold">
-                {trajectory.hitch_help.title || "What these hitch buttons do"}
+                {trajectory.hitch_help.title || "Future bends"}
               </h4>
               <button
                 type="button"
@@ -553,19 +553,20 @@ export function PriceTrajectory({
                 ×
               </button>
             </div>
-            <p className="mt-2 text-sm text-[var(--muted)] leading-snug">
+            <p className="mt-1.5 text-xs text-[var(--muted)] leading-snug">
               {trajectory.hitch_help.body}
             </p>
-            <ul className="help-modal-list">
+            <ul className="help-modal-list hitch-math-list">
               {(trajectory.hitch_help.items || []).map((item) => (
                 <li key={item.id || item.label}>
                   <strong>{item.label}</strong>
-                  <span>{item.plain}</span>
+                  {item.plain ? <span>{item.plain}</span> : null}
+                  {item.math ? <code className="hitch-math">{item.math}</code> : null}
                 </li>
               ))}
             </ul>
-            <p className="mt-3 text-xs text-[var(--muted)] leading-snug">
-              Tap a button to bend only the years ahead. Tap again to clear. Past years never move.
+            <p className="mt-2.5 text-[11px] text-[var(--muted)] leading-snug">
+              Tap to bend ahead only · tap again to clear · past never moves.
             </p>
           </div>
         </div>
@@ -575,7 +576,7 @@ export function PriceTrajectory({
         <p className="traj-hitch-note">{activeHitch.plain}</p>
       ) : !compact && hitches.length > 0 ? (
         <p className="traj-hitch-note">
-          Hitches bend the future only — tap Rates, Growth, or Site (or ? for plain English).
+          Future-only bends — Cool rates · Hot demand · Site hit · ? for math.
         </p>
       ) : null}
 

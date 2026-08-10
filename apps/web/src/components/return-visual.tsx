@@ -992,7 +992,7 @@ export function ReturnVisual({
         </p>
       ) : null}
 
-      <div className="mt-4">
+      <div className="mt-3">
         <div className="flex items-center justify-between gap-2">
           <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
             3 outcomes · {holdYears} yr
@@ -1016,14 +1016,14 @@ export function ReturnVisual({
             onClick={() => setCasesHelpOpen(false)}
           >
             <div
-              className="help-modal"
+              className="help-modal help-modal--compact"
               role="dialog"
               aria-modal="true"
               aria-label="What these cases mean"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-3">
-                <h4 className="display text-base font-semibold">3 cases · {holdYears} yr hold</h4>
+                <h4 className="display text-base font-semibold">3 cases · {holdYears} yr</h4>
                 <button
                   type="button"
                   className="help-q on"
@@ -1033,32 +1033,32 @@ export function ReturnVisual({
                   ×
                 </button>
               </div>
-              <p className="mt-2 text-sm leading-snug">
+              <p className="mt-1.5 text-xs leading-snug text-[var(--muted)]">
                 Same buy
-                {intel?.purchase_usd ? ` (${money(intel.purchase_usd)})` : ""}. Same hold. Only rent,
-                pace, and exit friction change.
+                {intel?.purchase_usd ? ` (${money(intel.purchase_usd)})` : ""} · same hold · rent /
+                pace / exit friction shift.
               </p>
               <ul className="help-modal-list">
                 <li>
                   <strong>Cautious</strong>
-                  <span> — softer rents, harder exit, more carry.</span>
+                  <span>Softer rents, harder exit, more carry.</span>
                 </li>
                 <li>
                   <strong>Typical</strong>
-                  <span> — base path from this property’s screens.</span>
+                  <span>Base path from this property’s screens.</span>
                 </li>
                 <li>
                   <strong>Optimistic</strong>
-                  <span> — stronger rents & exit; still not a rocket forever.</span>
+                  <span>Stronger rents & exit — still not a forever rocket.</span>
                 </li>
               </ul>
-              <p className="mt-3 text-xs text-[var(--muted)] leading-snug">
-                Numbers are total back (exit + rent along the way). A screen — not a promise.
+              <p className="mt-2 text-[11px] text-[var(--muted)] leading-snug">
+                Total back = exit + rent along the way. Screen, not promise.
               </p>
             </div>
           </div>
         ) : null}
-        <div className="case-outcome-grid mt-2" role="list">
+        <div className="case-outcome-grid mt-1.5" role="list">
           {CASE_ORDER.map((k) => {
             const ep = endpointsAtHold[k];
             if (!ep) return null;
@@ -1079,24 +1079,27 @@ export function ReturnVisual({
                 onClick={() => setActiveCase(k)}
                 aria-pressed={activeCase === k}
               >
-                <div className="case-outcome-name">{caseLabel(k)}</div>
-                <div className="case-outcome-total tabular-nums">
-                  {total != null ? shortMoney(Number(total)) : "—"}
+                <div className="case-outcome-row">
+                  <span className="case-outcome-name">{caseLabel(k)}</span>
+                  <span className="case-outcome-total tabular-nums">
+                    {total != null ? shortMoney(Number(total)) : "—"}
+                  </span>
                 </div>
-                <div className="case-outcome-sub">total back</div>
-                <div
-                  className={`case-outcome-delta tabular-nums ${
-                    pos === true ? "is-pos" : pos === false ? "is-neg" : ""
-                  }`}
-                >
-                  {Number.isFinite(gainN)
-                    ? `${gainN >= 0 ? "+" : ""}${shortMoney(gainN)} vs buy`
-                    : "vs buy —"}
-                </div>
-                <div className="case-outcome-irr tabular-nums">
-                  {pct != null
-                    ? `${pct.toFixed(1)}%/yr${showToday ? " after infl." : ""}`
-                    : "n/a"}
+                <div className="case-outcome-meta">
+                  <span
+                    className={`case-outcome-delta tabular-nums ${
+                      pos === true ? "is-pos" : pos === false ? "is-neg" : ""
+                    }`}
+                  >
+                    {Number.isFinite(gainN)
+                      ? `${gainN >= 0 ? "+" : ""}${shortMoney(gainN)}`
+                      : "—"}
+                  </span>
+                  <span className="case-outcome-irr tabular-nums">
+                    {pct != null
+                      ? `${pct.toFixed(1)}%/yr${showToday ? " real" : ""}`
+                      : "n/a"}
+                  </span>
                 </div>
               </button>
             );
@@ -1105,30 +1108,27 @@ export function ReturnVisual({
       </div>
 
       {factors.length > 0 && (
-        <div className="return-factors mt-4">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-                Screens that bend this hold · {factorCount}
-              </div>
-              <p className="mt-0.5 text-xs text-[var(--muted)]">
-                Tap to include / exclude. Pace screens change appreciation; carry / exit / fade
-                change cashflow and terminal haircuts.
-              </p>
+        <div className="return-factors mt-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+              Screens · {factorCount}
+              <span className="ml-1.5 normal-case tracking-normal font-normal text-[11px]">
+                tap on/off
+              </span>
             </div>
             <button
               type="button"
-              className="text-xs font-semibold text-[var(--brand)]"
+              className="text-[11px] font-semibold text-[var(--brand)]"
               onClick={() => {
                 const next: Record<string, boolean> = {};
                 for (const f of factors) next[f.key] = true;
                 setEnabledFactors(next);
               }}
             >
-              Reset all on
+              Reset
             </button>
           </div>
-          <div className="return-factor-grid mt-2">
+          <div className="return-factor-chips mt-1.5">
             {factors.map((f) => {
               const id = String(f.key);
               const locked = f.toggleable === false;
@@ -1136,23 +1136,24 @@ export function ReturnVisual({
               const affects = f.affects || f.kind || "pace";
               const pts =
                 f.affects === "pace" && f.bps != null && Number(f.bps) !== 0
-                  ? `${Number(f.bps) > 0 ? "+" : ""}${(Number(f.bps) / 100).toFixed(2)} pts`
+                  ? `${Number(f.bps) > 0 ? "+" : ""}${(Number(f.bps) / 100).toFixed(1)}`
                   : affects === "entry"
-                    ? "entry"
+                    ? "in"
                     : affects === "carry"
                       ? "carry"
                       : affects === "exit"
                         ? "exit"
                         : affects === "fade"
                           ? "fade"
-                          : "—";
+                          : "";
               return (
                 <button
                   key={id}
                   type="button"
                   aria-pressed={on}
                   disabled={locked}
-                  className={`return-factor dir-${f.direction || "neutral"} text-left ${
+                  title={f.plain || f.label}
+                  className={`return-factor-chip dir-${f.direction || "neutral"} ${
                     on ? "is-on" : "is-off"
                   } ${locked ? "is-locked" : ""}`}
                   onClick={() => {
@@ -1160,17 +1161,12 @@ export function ReturnVisual({
                     setEnabledFactors((prev) => ({ ...prev, [id]: !on }));
                   }}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="return-factor-head">
-                      <span className="return-factor-check" aria-hidden>
-                        {locked ? "●" : on ? "✓" : "○"}
-                      </span>
-                      <FactorIcon name={f.key || f.label} />
-                      <span className="font-semibold">{f.label}</span>
-                    </span>
-                    <span className="tabular-nums text-[11px]">{pts}</span>
-                  </div>
-                  <p className="line-clamp-3">{f.plain}</p>
+                  <span className="return-factor-check" aria-hidden>
+                    {locked ? "●" : on ? "✓" : "○"}
+                  </span>
+                  <FactorIcon name={f.key || f.label} />
+                  <span className="return-factor-chip-label">{f.label}</span>
+                  {pts ? <span className="return-factor-chip-pts tabular-nums">{pts}</span> : null}
                 </button>
               );
             })}

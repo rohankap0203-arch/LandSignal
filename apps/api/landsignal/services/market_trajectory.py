@@ -675,43 +675,42 @@ def build_market_trajectory(
     site_sev = _hitch_severity(
         "site_hitch", flood=flood, wet=wet, access=access_score, growth=growth_score, liquidity=liquidity
     )
-    # Parcel-aware hitch labels — exactly three stress cases for the chart rail
+    # Three future-only stress cases — verb-first names + punchy math for ?
     hitch_catalog = [
         {
             "id": "rate_shock",
-            "label": "Rate bite",
-            "short": "Rates",
+            "label": "Cool rates",
+            "short": "Cool",
             "plain": (
-                f"From today forward: higher borrowing costs cool bids for a few years on this "
-                f"{provider or 'listing'} channel"
-                f"{' (thin resale)' if (liquidity or 100) < 45 else ''} — then a mild catch-up. "
-                f"Past years stay put."
+                f"Dear money cools bids for a few years"
+                f"{' (thin resale here)' if (liquidity or 100) < 45 else ''} — "
+                f"then a mild catch-up. Past locked."
             ),
             "severity": round(rate_sev, 2),
             "points": _points_for("rate_shock"),
         },
         {
             "id": "growth_surge",
-            "label": "Growth surge",
-            "short": "Growth",
+            "label": "Hot demand",
+            "short": "Heat",
             "plain": (
-                f"From today forward: stronger corridor demand around {county or 'this county'} "
-                f"lifts the mid years, then fades. Past years stay on the shared history."
+                f"Corridor heat around {county or 'this county'} lifts mid years, "
+                f"then fades. Past locked."
             ),
             "severity": round(growth_sev, 2),
             "points": _points_for("growth_surge"),
         },
         {
             "id": "site_hitch",
-            "label": "Site hitch",
+            "label": "Site hit",
             "short": "Site",
             "plain": (
                 (
-                    f"From today forward: flood (~{flood:.0f}%), wetlands, or access surprise "
-                    f"steps value down — then a slower climb. History unchanged."
+                    f"Flood (~{flood:.0f}%) / wet / access surprise steps the mark down, "
+                    f"then a slower climb. Past locked."
                     if (flood or 0) >= 15
-                    else "From today forward: a site/title/access surprise steps value down — "
-                    "then a slower climb. History unchanged."
+                    else "Site / title / access surprise steps the mark down, then a slower climb. "
+                    "Past locked."
                 )
             ),
             "severity": round(site_sev, 2),
@@ -719,26 +718,35 @@ def build_market_trajectory(
         },
     ]
     hitch_help = {
-        "title": "What these hitch buttons do",
-        "body": (
-            "They only bend the future (dashed) side of the chart. The past stays the same so you can "
-            "compare “what if” from today’s mark."
-        ),
+        "title": "Future bends",
+        "body": "Past locked. Only ahead moves. Sev = how hard this pin feels it (0.7–1.4).",
         "items": [
             {
                 "id": "rate_shock",
-                "label": "Rates",
-                "plain": "What if borrowing costs cool buyers for a few years, then ease a bit?",
+                "label": "Cool rates",
+                "plain": "Dear money softens near-term bids.",
+                "math": (
+                    f"×(1−10%·{rate_sev:.2f}) yrs 1–3 · ×(1−5%·sev) yrs 4–6 · "
+                    f"+0.8%·sev catch-up yrs 7–14 · sev↑ if thin resale / weak access"
+                ),
             },
             {
                 "id": "growth_surge",
-                "label": "Growth",
-                "plain": f"What if {county or 'this county'} gets a mid-term demand surge — then it fades?",
+                "label": "Hot demand",
+                "plain": "Stronger local absorption lifts the middle years.",
+                "math": (
+                    f"×(1+2.8%·{growth_sev:.2f}) yrs 4–18 · ×(1−0.6%·sev) yrs 19–32 · "
+                    f"×(1−0.3%·sev) after 33 · sev tracks this pin’s growth screen"
+                ),
             },
             {
                 "id": "site_hitch",
-                "label": "Site",
-                "plain": "What if flood, access, or title news steps this pin down after you buy?",
+                "label": "Site hit",
+                "plain": "A realized site surprise — not the base flood/wet haircut.",
+                "math": (
+                    f"×(1−5%·{site_sev:.2f}) at yrs 3–4, 12–13, 28–29 · "
+                    f"×(1−0.2%·sev) after yr 30 · sev↑ with flood / wet / weak access"
+                ),
             },
         ],
     }
@@ -868,7 +876,7 @@ def build_market_trajectory(
     if (flood or 0) >= 20 or (wet or 0) >= 15 or (access_score is not None and access_score < 45):
         summary_bullets.append(
             "Site screens (flood / wetlands / access) already slow this pin’s base path — "
-            "use the Site hitch to stress a sharper surprise."
+            "use Site hit to stress a sharper surprise."
         )
 
     # Card sparkline stays short (last ~10 years)
