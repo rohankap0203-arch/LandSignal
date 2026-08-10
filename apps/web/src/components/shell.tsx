@@ -38,11 +38,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMenuOpen(false);
     };
+    // Compensate classic scrollbars when overflow lock removes them (gutter alone is not enough in all browsers).
+    const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
+      document.body.style.paddingRight = "";
     };
   }, [menuOpen]);
 

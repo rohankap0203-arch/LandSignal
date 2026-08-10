@@ -43,6 +43,11 @@
   box-sizing: border-box;
 }
 
+html {
+  /* Keep header controls (menu / Sign in) from shifting when overflow locks hide the scrollbar */
+  scrollbar-gutter: stable;
+}
+
 html,
 body {
   margin: 0;
