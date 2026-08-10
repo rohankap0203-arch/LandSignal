@@ -960,7 +960,7 @@ async def radar(
     broaden_reason: str | None = None
     if broaden and not cands:
         cands = collect_cands(apply_region=False, apply_strict_channel=True)
-        broaden_reason = "Loosened city/region a bit so you still get real matches for your other filters."
+        broaden_reason = "Loosened region a bit so you still get real matches for your other filters."
     if broaden and not cands and (
         min_price is not None or max_price is not None or min_acres is not None or max_acres is not None
     ):

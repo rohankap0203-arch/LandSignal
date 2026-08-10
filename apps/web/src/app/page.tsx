@@ -85,14 +85,24 @@ export default function SearchPage() {
   const regionOptions = useMemo(() => {
     const code = stateCode(form.state);
     const byState = meta?.regions_by_state?.[code] || meta?.regions_by_state?.Any || ["Any"];
-    const live = (meta?.regions || []).filter((r) => r !== "Any");
-    const merged = ["Any", ...byState.filter((r) => r !== "Any")];
-    for (const r of live) {
-      if (code === "Any" || r.endsWith(`, ${code}`) || r.includes(` ${code}`)) {
+    // Canonical investor regions for the selected state (or national macros when Any).
+    const merged = ["Any", ...byState.filter((r) => r && r !== "Any")];
+    // When a state is picked, append live inventory counties as concrete region cues.
+    if (code !== "Any") {
+      const live = (meta?.regions || []).filter((r) => {
+        if (!r || r === "Any") return false;
+        // Prefer "County, ST" / region labels tied to the active state.
+        return (
+          r.endsWith(`, ${code}`) ||
+          r.endsWith(` ${code}`) ||
+          r.toUpperCase().includes(`, ${code}`)
+        );
+      });
+      for (const r of live) {
         if (!merged.includes(r)) merged.push(r);
       }
     }
-    if (!merged.includes("Type a city / county…")) merged.push("Type a city / county…");
+    if (!merged.includes("Type a region…")) merged.push("Type a region…");
     return merged;
   }, [form.state, meta]);
 
@@ -251,9 +261,9 @@ export default function SearchPage() {
             />
           </FilterField>
 
-          <FilterField label="City / region">
+          <FilterField label="Region">
             <HeroSelect
-              ariaLabel="City or region"
+              ariaLabel="Region"
               value={form.region}
               options={regionOptions.map((s) => ({ value: s, label: s }))}
               onChange={(v) =>
@@ -268,7 +278,7 @@ export default function SearchPage() {
               <input
                 className="mt-1.5"
                 value={form.regionCustom}
-                placeholder="Type city, county, or corridor…"
+                placeholder="e.g. Piedmont, Hill Country, Ozarks…"
                 onChange={(e) => setForm((f) => ({ ...f, regionCustom: e.target.value }))}
               />
             ) : null}
