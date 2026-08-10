@@ -893,6 +893,16 @@ export default function LandAlertsPage() {
   const returnPreset =
     RETURN_PRESETS.find((p) => p.value === form.desired_return_pct)?.id ||
     (form.desired_return_pct ? "custom" : "any");
+  const strategiesAll =
+    form.strategies.length === ALL_STRATEGY_IDS.length &&
+    ALL_STRATEGY_IDS.every((id) => form.strategies.includes(id));
+  const landTypesAll =
+    form.land_types.length === LAND_TYPE_OPTS.length &&
+    LAND_TYPE_OPTS.every((t) => form.land_types.includes(t));
+  const interestsAll = ALL_INTEREST_KEYS.every((key) => form.interests[key]);
+  const infraAll =
+    form.infrastructure_prefs.length === ALL_INFRA_IDS.length &&
+    ALL_INFRA_IDS.every((id) => form.infrastructure_prefs.includes(id));
 
   const profileSummary = useMemo(() => {
     const bits: string[] = [];

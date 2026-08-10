@@ -3335,18 +3335,41 @@ a.acquire-block:hover {
 }
 
 .acq-range-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: end;
-  gap: 0.45rem 0.5rem;
-  max-width: 26rem;
+  display: inline-grid;
+  grid-template-columns: minmax(0, 6.5rem) auto minmax(0, 6.5rem);
+  align-items: center;
+  gap: 0.3rem;
+  width: auto;
+  max-width: 100%;
+}
+
+.acq-range-input {
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 0.28rem 0.45rem;
+  font-size: 0.78rem;
+  line-height: 1.2;
 }
 
 .acq-range-sep {
-  padding-bottom: 0.55rem;
-  font-size: 0.75rem;
+  padding: 0;
+  font-size: 0.72rem;
   color: var(--muted);
+}
+
+.acq-label-with-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.acq-label-with-tip .help-tip {
+  position: relative;
 }
 
 .acq-segment {
