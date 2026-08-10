@@ -1484,16 +1484,22 @@ async def get_land_alert_profile() -> dict[str, Any]:
 
 @router.put("/land-alerts/profile")
 async def upsert_land_alert_profile(body: LandAlertProfileUpsert) -> dict[str, Any]:
-    from landsignal.services.land_alerts import DEMO_USER_ID, match_card, upsert_profile
+    from landsignal.services.land_alerts import (
+        DEMO_USER_ID,
+        filter_mappable_matches,
+        match_card,
+        upsert_profile,
+    )
 
     store = get_store(get_settings().demo_seed)
     profile, matches = upsert_profile(store, body, DEMO_USER_ID)
-    cards = [match_card(store, m) for m in matches]
+    viewable = filter_mappable_matches(store, matches)
+    cards = [match_card(store, m) for m in viewable]
     cards.sort(key=lambda c: (-(c.get("preference_match_pct") or 0), -(c.get("landsignal_score") or 0)))
     return {
         "profile": profile.model_dump(mode="json"),
-        "match_count": len(matches),
-        "new_count": sum(1 for m in matches if m.status == "new"),
+        "match_count": len(viewable),
+        "new_count": sum(1 for m in viewable if m.status == "new"),
         "matches": cards[:100],
         "note": "Matches recalculated against existing inventory. Preference changes do not create 'new listing' notifications.",
     }
@@ -1526,10 +1532,15 @@ async def resume_land_alert(profile_id: UUID) -> dict[str, Any]:
 
 @router.get("/land-alerts/matches")
 async def list_land_alert_matches(profile_id: UUID | None = None, status: str | None = None) -> dict[str, Any]:
-    from landsignal.services.land_alerts import DEMO_USER_ID, match_card, matches_for_user
+    from landsignal.services.land_alerts import (
+        DEMO_USER_ID,
+        filter_mappable_matches,
+        match_card,
+        matches_for_user,
+    )
 
     store = get_store(get_settings().demo_seed)
-    all_rows = matches_for_user(store, DEMO_USER_ID, profile_id)
+    all_rows = filter_mappable_matches(store, matches_for_user(store, DEMO_USER_ID, profile_id))
     rows = [m for m in all_rows if m.status == status] if status else all_rows
     cards = [match_card(store, m) for m in rows]
     return {
@@ -1623,15 +1634,21 @@ async def update_land_alert_notify(body: LandAlertNotify) -> dict[str, Any]:
 
 @router.post("/land-alerts/rescan")
 async def rescan_land_alerts() -> dict[str, Any]:
-    from landsignal.services.land_alerts import DEMO_USER_ID, match_card, rescan_profile
+    from landsignal.services.land_alerts import (
+        DEMO_USER_ID,
+        filter_mappable_matches,
+        match_card,
+        rescan_profile,
+    )
 
     store = get_store(get_settings().demo_seed)
     profiles = [p for p in store.land_alert_profiles.values() if p.user_id == DEMO_USER_ID and not p.paused]
     all_matches = []
     for p in profiles:
         all_matches.extend(rescan_profile(store, p, origin="existing_inventory"))
-    cards = [match_card(store, m) for m in all_matches]
-    return {"match_count": len(all_matches), "matches": cards[:100]}
+    viewable = filter_mappable_matches(store, all_matches)
+    cards = [match_card(store, m) for m in viewable]
+    return {"match_count": len(viewable), "matches": cards[:100]}
 
 
 @router.get("/investor-profile")

@@ -302,9 +302,9 @@ function MatchCard({
           <div className="land-alert-card-title">{row.property_name}</div>
           <div className="land-alert-card-meta">
             <span>{row.location || row.state || "—"}</span>
-            <span>{row.asking_price_display}</span>
-            <span>{row.acres_display}</span>
-            <span>{row.price_per_acre_display}</span>
+            {row.asking_price_display ? <span>{row.asking_price_display}</span> : null}
+            {row.acres_display ? <span>{row.acres_display}</span> : null}
+            {row.price_per_acre_display ? <span>{row.price_per_acre_display}</span> : null}
           </div>
           {row.why_matched?.length ? (
             <ul className="land-alert-why">
@@ -358,8 +358,8 @@ function MatchCard({
             <div className="land-alert-card-title">{row.property_name}</div>
             <div className="land-alert-card-meta">
               <span>{row.location || row.state || "—"}</span>
-              <span>{row.asking_price_display}</span>
-              <span>{row.acres_display}</span>
+              {row.asking_price_display ? <span>{row.asking_price_display}</span> : null}
+              {row.acres_display ? <span>{row.acres_display}</span> : null}
             </div>
           </div>
 

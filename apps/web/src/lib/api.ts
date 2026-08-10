@@ -52,11 +52,11 @@ export type LandAlertMatchCard = {
   state?: string | null;
   county?: string | null;
   asking_price?: number | null;
-  asking_price_display: string;
+  asking_price_display?: string | null;
   acres?: number | null;
-  acres_display: string;
+  acres_display?: string | null;
   price_per_acre?: number | null;
-  price_per_acre_display: string;
+  price_per_acre_display?: string | null;
   land_type: string;
   signal?: string | null;
   best_strategy?: string | null;

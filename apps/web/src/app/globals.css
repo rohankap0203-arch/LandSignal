@@ -139,19 +139,13 @@ select {
   box-shadow: 0 2px 10px color-mix(in srgb, var(--ink) 16%, transparent);
 }
 
-.shell-menu-toggle-bars,
-.shell-menu-toggle-bars::before,
-.shell-menu-toggle-bars::after {
+.shell-menu-toggle-bars {
+  position: relative;
   display: block;
   width: 1rem;
   height: 1.5px;
-  border-radius: 999px;
-  background: currentColor;
-  transition: transform 160ms ease, opacity 160ms ease;
-}
-
-.shell-menu-toggle-bars {
-  position: relative;
+  /* Two-line menu: no middle bar — only ::before / ::after */
+  background: transparent;
 }
 
 .shell-menu-toggle-bars::before,
@@ -159,18 +153,20 @@ select {
   content: "";
   position: absolute;
   left: 0;
+  display: block;
+  width: 1rem;
+  height: 1.5px;
+  border-radius: 999px;
+  background: currentColor;
+  transition: transform 160ms ease, top 160ms ease;
 }
 
 .shell-menu-toggle-bars::before {
-  top: -5px;
+  top: -3.5px;
 }
 
 .shell-menu-toggle-bars::after {
-  top: 5px;
-}
-
-.shell-menu-toggle-bars[data-open="true"] {
-  background: transparent;
+  top: 3.5px;
 }
 
 .shell-menu-toggle-bars[data-open="true"]::before {
