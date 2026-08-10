@@ -15,6 +15,7 @@ import {
   type MoneyMode,
 } from "@/lib/inflation";
 import { MoneyModeControl, moneyModeShort } from "@/components/money-mode-control";
+import { BuyingPowerLogic } from "@/components/buying-power-logic";
 import {
   buildHoldCasePath,
   enrichHoldEndpoint,
@@ -805,6 +806,21 @@ export function ReturnVisual({
         }
       />
 
+      <BuyingPowerLogic
+        className="mt-2"
+        variant="hold"
+        years={holdYears}
+        cpi={cpi}
+        cpiDisplay={cpiDisplay}
+        purchaseUsd={intel?.purchase_usd}
+        markUsd={intel?.mark_usd}
+        futureNominal={endpoint?.exit_usd}
+        futureToday={endpoint?.exit_usd_today}
+        totalBackToday={endpoint?.total_back_usd_today}
+        gainToday={endpoint?.gain_usd_today}
+        paceDisplay={livePaceDisplay}
+      />
+
       <div className="return-chart-wrap mt-3">
         <svg
           ref={svgRef}
@@ -974,13 +990,6 @@ export function ReturnVisual({
               ) : null}
             </div>
           </div>
-          {showToday && holdYears >= 20 && totalShow != null && intel?.purchase_usd != null ? (
-            <p className="mt-2 text-[11px] leading-snug text-[var(--muted)]">
-              After inflation = future $ ÷ (1.025)^years. Opportunity score is the{" "}
-              <strong>buy edge vs our value</strong>, not a promise this hold beats CPI forever.
-              Toggle Before inflation for the raw future sticker.
-            </p>
-          ) : null}
         </div>
       )}
 

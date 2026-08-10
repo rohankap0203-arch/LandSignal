@@ -21,9 +21,13 @@ def inflation_meta(cpi: float = DEFAULT_CPI_ANNUAL) -> dict[str, Any]:
         "label_today": "After inflation",
         "label_nominal": "Before inflation",
         "plain": (
-            f"We assume prices rise about {cpi * 100:.1f}%/yr. "
-            "After inflation = future dollars with that CPI haircut applied. "
-            "Before inflation = the raw future number with no CPI haircut."
+            f"We assume consumer prices rise about {cpi * 100:.1f}%/yr. "
+            "After inflation = what those future land/sale dollars buy in today’s money "
+            f"(future $ ÷ (1+{cpi * 100:.1f}%)^years). "
+            "Before inflation = the raw future sticker. "
+            "A falling After-inflation line means buying power softens vs CPI — "
+            "not that the dirt sells for fewer future dollars, and not what Opportunity scores "
+            "(Opportunity is buy edge vs our value today)."
         ),
     }
 

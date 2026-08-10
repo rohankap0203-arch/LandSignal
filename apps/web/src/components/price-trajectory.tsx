@@ -10,6 +10,7 @@ import {
 } from "react";
 import { cpiFromMeta, deflate, realRate, type InflationMeta, type MoneyMode } from "@/lib/inflation";
 import { MoneyModeControl, moneyModeShort } from "@/components/money-mode-control";
+import { BuyingPowerLogic } from "@/components/buying-power-logic";
 
 type Point = {
   year: number;
@@ -326,8 +327,8 @@ export function PriceTrajectory({
           <p className="mt-1 text-[11px] text-[var(--muted)] leading-snug">
             Screened area land pace
             {trajectory?.annual_rate_display ? ` (~${trajectory.annual_rate_display})` : ""}
-            , with parcel factors once. After inflation = same path ÷ CPI — not a second growth
-            model. Far years ease slightly for uncertainty.
+            , with parcel factors once. After inflation = buying power of that same path — not a
+            second growth model. Far years ease slightly for uncertainty.
           </p>
         </div>
         <div className="traj-stats">
@@ -371,6 +372,18 @@ export function PriceTrajectory({
               }
             : null
         }
+      />
+
+      <BuyingPowerLogic
+        className="mt-2"
+        variant="land"
+        years={horizon}
+        cpi={cpi}
+        cpiDisplay={cpiDisplay}
+        markUsd={windowMath.todayUsd}
+        futureNominal={windowMath.futureUsd}
+        futureToday={windowMath.futureUsdToday}
+        paceDisplay={trajectory?.annual_rate_display}
       />
 
       <div className="traj-windows" role="tablist" aria-label="Chart time window">

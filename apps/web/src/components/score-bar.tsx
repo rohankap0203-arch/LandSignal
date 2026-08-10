@@ -182,6 +182,9 @@ function OpportunityLens({ score, standings }: { score: number; standings: Score
         ) : null}
       </div>
       {why ? <p className="score-lens-why">{why}</p> : null}
+      <p className="score-lens-why">
+        Scores buy edge vs our value today — not whether the dirt outruns CPI forever.
+      </p>
     </div>
   );
 }

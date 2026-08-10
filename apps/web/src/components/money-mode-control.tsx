@@ -65,8 +65,8 @@ export function MoneyModeControl({
         <p className="money-mode-note">
           {note ||
             (mode === "today"
-              ? `Future $ reduced by ~${cpiDisplay} CPI`
-              : `Future $ with no ~${cpiDisplay} CPI haircut`)}
+              ? `Buying power: future $ ÷ (~${cpiDisplay})^years — same sale, today’s dollars`
+              : `Raw future sticker — no ~${cpiDisplay} CPI haircut`)}
         </p>
       </div>
 
@@ -81,7 +81,7 @@ export function MoneyModeControl({
             >
               <span className="money-compare-tag">{MONEY_MODE_LABELS.today}</span>
               <strong className="tabular-nums">{compare.format(todayN as number)}</strong>
-              <em>CPI-adjusted</em>
+              <em>what those $ buy today</em>
             </button>
             <div className="money-compare-vs" aria-hidden>
               vs
@@ -93,13 +93,14 @@ export function MoneyModeControl({
             >
               <span className="money-compare-tag">{MONEY_MODE_LABELS.nominal}</span>
               <strong className="tabular-nums">{compare.format(beforeN as number)}</strong>
-              <em>unadjusted</em>
+              <em>future sticker</em>
             </button>
           </div>
           {gap != null && gap > 0 ? (
             <p className="money-compare-gap">
-              Same outcome, two reads — After inflation divides by ~{cpiDisplay} so you can
-              compare to today’s dollars (~{gap}% CPI haircut on the raw future figure).
+              Same sale. After inflation asks what those future dollars buy{" "}
+              <strong>today</strong> (~{gap}% less purchasing power at ~{cpiDisplay}). It is not
+              “the land became worthless.”
             </p>
           ) : null}
         </div>
