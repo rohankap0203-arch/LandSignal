@@ -252,6 +252,11 @@ select {
   isolation: isolate;
 }
 
+.parcel-map-shell .leaflet-container {
+  width: 100%;
+  background: #151a18;
+}
+
 .panel {
   background: var(--bg-elevated);
   border: 1px solid var(--line);
@@ -4776,33 +4781,47 @@ a.acquire-block:hover {
   pointer-events: none;
 }
 
-.parcel-map-caption {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.65rem;
-  padding: 0.45rem 0.75rem;
-  font-size: 11px;
-  color: var(--muted);
+.parcel-map-shell {
+  position: relative;
+}
+
+.parcel-map-shell .leaflet-control-attribution,
+.land-viewer-map .leaflet-control-attribution {
+  display: none !important;
 }
 
 .parcel-map-expand {
-  flex: 0 0 auto;
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  z-index: 500;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.85rem;
-  height: 1.85rem;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--bg-elevated);
-  color: var(--ink);
+  width: 2.05rem;
+  height: 2.05rem;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(12, 22, 18, 0.72);
+  color: #f4f1e8;
   cursor: pointer;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease;
 }
 
 .parcel-map-expand:hover {
-  border-color: var(--brand);
-  color: color-mix(in srgb, var(--brand) 70%, var(--ink));
+  transform: translateY(-1px) scale(1.04);
+  border-color: rgba(143, 208, 176, 0.55);
+  background: rgba(18, 36, 28, 0.88);
+  color: #e8fff3;
+}
+
+.parcel-map-expand:active {
+  transform: scale(0.96);
 }
 
 .land-viewer-map {
@@ -4817,31 +4836,57 @@ a.acquire-block:hover {
   font: inherit;
 }
 
-.land-viewer-map .leaflet-control-attribution {
-  display: none !important;
-}
-
+/* Clean, dynamic zoom ± for intelligence maps */
+.parcel-map-shell .leaflet-control-zoom,
 .land-viewer-map .leaflet-control-zoom {
   border: none !important;
   margin: 12px !important;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  background: rgba(12, 22, 18, 0.78) !important;
+  backdrop-filter: blur(10px);
 }
 
+.parcel-map-shell .leaflet-control-zoom a,
 .land-viewer-map .leaflet-control-zoom a {
-  width: 34px !important;
-  height: 34px !important;
-  line-height: 34px !important;
-  font-size: 18px !important;
-  font-weight: 700;
-  color: #14201c !important;
-  background: #fff !important;
-  border-bottom: 1px solid rgba(20, 32, 28, 0.12) !important;
+  width: 2.15rem !important;
+  height: 2.15rem !important;
+  line-height: 2.15rem !important;
+  font-size: 1.15rem !important;
+  font-weight: 650;
+  color: #f4f1e8 !important;
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
 }
 
+.parcel-map-shell .leaflet-control-zoom a:last-child,
+.land-viewer-map .leaflet-control-zoom a:last-child {
+  border-bottom: none !important;
+}
+
+.parcel-map-shell .leaflet-control-zoom a:hover,
 .land-viewer-map .leaflet-control-zoom a:hover {
-  background: #f3f1eb !important;
+  background: color-mix(in srgb, #8fd0b0 22%, transparent) !important;
+  color: #e8fff3 !important;
+}
+
+.parcel-map-shell .leaflet-control-zoom a:active,
+.land-viewer-map .leaflet-control-zoom a:active {
+  background: color-mix(in srgb, #8fd0b0 34%, transparent) !important;
+  transform: scale(0.94);
+}
+
+.parcel-map-shell .leaflet-disabled,
+.land-viewer-map .leaflet-disabled {
+  opacity: 0.35 !important;
+  cursor: default !important;
 }
 
 .land-viewer-empty {
@@ -4950,10 +4995,19 @@ a.acquire-block:hover {
     padding: 0.16rem 0.45rem;
   }
 
+  .parcel-map-shell .leaflet-control-zoom a,
   .land-viewer-map .leaflet-control-zoom a {
-    width: 32px !important;
-    height: 32px !important;
-    line-height: 32px !important;
+    width: 2rem !important;
+    height: 2rem !important;
+    line-height: 2rem !important;
+    font-size: 1.05rem !important;
+  }
+
+  .parcel-map-expand {
+    width: 1.9rem;
+    height: 1.9rem;
+    top: 0.5rem;
+    right: 0.5rem;
   }
 }
 
