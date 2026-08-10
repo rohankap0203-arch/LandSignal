@@ -460,8 +460,8 @@ export default function SearchPage() {
           <FilterField
             label="Strategy"
             tip={{
-              title: "What strategy does",
-              body: "Prefers parcels that fit that use (farm, develop, timber…). Others stay in results — they just rank lower.",
+              title: "Strategy",
+              body: "Boosts matching uses (farm, develop, timber…). Other results stay — they just rank lower.",
             }}
           >
             <HeroSelect
@@ -490,13 +490,7 @@ export default function SearchPage() {
             ) : null}
           </FilterField>
 
-          <FilterField
-            label="Hold period"
-            tip={{
-              title: "What hold period does",
-              body: "Doesn’t remove results — only reorders them.",
-            }}
-          >
+          <FilterField label="Hold period">
             <HeroSelect
               ariaLabel="Hold period"
               value={form.holdYears}

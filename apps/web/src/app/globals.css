@@ -391,12 +391,16 @@ select {
 }
 
 .help-tip {
-  position: static;
+  position: relative;
   display: inline-flex;
+  z-index: 2;
+}
+
+.help-tip:has(.help-tip-pop) {
+  z-index: 55;
 }
 
 .help-tip.tone-panel {
-  position: relative;
   z-index: 5;
 }
 
@@ -433,39 +437,40 @@ select {
   gap: 3px;
 }
 
-/* Same width as the field’s dropdown; sits above the control, not clipped */
+/* Compact bubble anchored to the ? — stays above the label, not clipped by the field */
 .help-tip-pop {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(100% - 2px);
+  left: 50%;
+  right: auto;
+  bottom: calc(100% + 6px);
   top: auto;
   z-index: 50;
-  width: 100%;
+  width: min(13.5rem, 70vw);
   box-sizing: border-box;
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 7px 9px;
+  border-radius: 10px;
   background: #10261e;
   color: #f4faf6;
   border: 1px solid rgba(247, 250, 248, 0.14);
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.32);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
   display: grid;
-  gap: 5px;
+  gap: 2px;
   text-transform: none;
   letter-spacing: 0;
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 11px;
+  line-height: 1.32;
   font-weight: 500;
   text-align: left;
-  transform: none;
+  transform: translateX(-50%);
+  white-space: normal;
 }
 
 .help-tip-pop strong {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   color: #fff;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .help-tip-pop span {
@@ -978,6 +983,7 @@ select {
 }
 
 .filter-money-field input {
+  width: 0;
   min-width: 0;
   flex: 1 1 auto;
   border-top-right-radius: 0;
