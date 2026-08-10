@@ -394,9 +394,8 @@ select {
 }
 
 .help-tip.tone-panel {
-  /* Keep static so the pop positions against the section, not the ? */
-  position: static;
-  z-index: 2;
+  position: relative;
+  z-index: 5;
 }
 
 .help-tip-btn {
@@ -3227,6 +3226,7 @@ a.acquire-block:hover {
   display: grid;
   gap: 1.35rem;
   padding: 1.35rem 1.25rem 1.25rem;
+  overflow: visible;
 }
 
 .acq-profile-head {
