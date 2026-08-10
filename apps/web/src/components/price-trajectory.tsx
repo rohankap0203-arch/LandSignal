@@ -164,7 +164,9 @@ export function PriceTrajectory({
       forwardCagrDisplay:
         fwdRate != null ? `${fwdRate >= 0 ? "+" : ""}${(fwdRate * 100).toFixed(1)}%/yr` : "—",
       forwardCagrRealDisplay:
-        fwdReal != null ? `${fwdReal >= 0 ? "+" : ""}${(fwdReal * 100).toFixed(1)}%/yr real` : "—",
+        fwdReal != null
+          ? `${fwdReal >= 0 ? "+" : ""}${(fwdReal * 100).toFixed(1)}%/yr after inflation`
+          : "—",
     };
   }, [points, horizon, cpi]);
 
