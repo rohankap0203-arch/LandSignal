@@ -292,24 +292,38 @@ export default function SearchPage() {
     const list = [...rows];
     const key = form.sort;
     const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    const pid = (r: RadarRow) => String(r.parcel_id || "");
+    // Keep secondary keys aligned with the API — parcel_id last so ties stay stable.
     list.sort((a, b) => {
+      let cmp = 0;
       switch (key) {
         case "score_desc":
-          return num(b.opportunity) - num(a.opportunity);
+          cmp = num(b.opportunity) - num(a.opportunity) || num(b.fit_score) - num(a.fit_score);
+          break;
         case "risk_asc":
-          return num(a.risk) - num(b.risk);
+          cmp = num(a.risk) - num(b.risk) || num(b.fit_score) - num(a.fit_score);
+          break;
         case "confidence_desc":
-          return num(b.confidence) - num(a.confidence);
+          cmp = num(b.confidence) - num(a.confidence) || num(b.opportunity) - num(a.opportunity);
+          break;
         case "price_asc":
-          return (a.ask ?? Number.POSITIVE_INFINITY) - (b.ask ?? Number.POSITIVE_INFINITY);
+          cmp =
+            (a.ask ?? Number.POSITIVE_INFINITY) - (b.ask ?? Number.POSITIVE_INFINITY);
+          break;
         case "acres_desc":
-          return num(b.acres) - num(a.acres);
+          cmp = num(b.acres) - num(a.acres);
+          break;
         case "discount_asc":
-          return num(a.discount_pct ?? 0) - num(b.discount_pct ?? 0);
+          cmp = num(a.discount_pct ?? 999) - num(b.discount_pct ?? 999);
+          break;
         case "fit_desc":
         default:
-          return num(b.fit_score ?? b.opportunity) - num(a.fit_score ?? a.opportunity);
+          cmp =
+            num(b.fit_score ?? b.opportunity) - num(a.fit_score ?? a.opportunity) ||
+            num(b.opportunity) - num(a.opportunity);
+          break;
       }
+      return cmp || pid(a).localeCompare(pid(b));
     });
     return list;
   }, [rows, form.sort]);
@@ -640,7 +654,27 @@ export default function SearchPage() {
         <div className="panel empty-state">
           <div className="display text-2xl text-[var(--ink)]">No matches for this search</div>
           <p className="mx-auto mt-2 max-w-lg">
-            Try Reset to Any, widen price/acres, or pick another state — then click Show matches again.
+            {(() => {
+              const picked = selectedStates(form.states);
+              const live = new Set(inventoryStates || []);
+              const missing = picked.filter((c) => live.size > 0 && !live.has(c));
+              if (missing.length) {
+                return (
+                  <>
+                    No live inventory indexed for{" "}
+                    <strong>{missing.join(", ")}</strong> right now — results stay empty on purpose
+                    (we don’t fill with other states). Reset to Any, pick a state that shows in
+                    inventory, or run Inventory refresh, then Show matches again.
+                  </>
+                );
+              }
+              return (
+                <>
+                  Try Reset to Any, widen price/acres, or pick another state — then click Show
+                  matches again.
+                </>
+              );
+            })()}
           </p>
         </div>
       )}

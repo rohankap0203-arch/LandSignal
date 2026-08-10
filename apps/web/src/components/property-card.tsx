@@ -57,11 +57,33 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
     (row.contact_website
       ? { label: "Open posting", url: row.contact_website, kind: "primary", available: true }
       : null);
-  const findParcel = row.links.find((l) => l.kind === "lookup" && l.available !== false) || null;
+  const findParcel =
+    row.links.find((l) => l.kind === "lookup" && l.available !== false) ||
+    (row.county || row.state
+      ? {
+          label: "Find this parcel",
+          url: `https://www.google.com/search?q=${encodeURIComponent(
+            `${row.county || ""} ${row.state || ""} parcel assessor`.trim(),
+          )}`,
+          kind: "lookup",
+          available: true,
+        }
+      : null);
   const phone =
     row.contact_phone ||
     row.links.find((l) => l.kind === "contact" && String(l.url).startsWith("tel:"))?.label ||
     null;
+  // Always prefer a real http(s) office/posting URL for the rail — never leave buyers without a path.
+  const officeUrl =
+    posting?.url ||
+    row.contact_website ||
+    row.links.find((l) => l.kind === "contact_web" && String(l.url || "").startsWith("http"))?.url ||
+    row.links.find((l) => l.kind === "source" && String(l.url || "").startsWith("http"))?.url ||
+    (row.contact_office || row.county
+      ? `https://www.google.com/search?q=${encodeURIComponent(
+          `${row.contact_office || `${row.county || ""} ${row.state || ""} treasurer`} tax sale`.trim(),
+        )}`
+      : null);
   const conviction = row.conviction || "WATCH";
   const blurb = shortLine(row.return_thesis || row.summary || "", 140);
   const href = `/parcels/${row.parcel_id}`;
@@ -245,11 +267,12 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
         <div onClick={(e) => e.stopPropagation()}>
           <AcquireRail
             className="mt-3"
-            postingUrl={posting?.url}
-            phone={phone}
+            postingUrl={officeUrl}
+            phone={typeof phone === "string" ? phone.replace(/^Call\s+/i, "") : phone}
             office={row.contact_office}
             findUrl={findParcel?.url}
             findLabel={findParcel?.label?.replace(/^Find parcel /, "ID ")}
+            outreach={null}
           />
         </div>
 

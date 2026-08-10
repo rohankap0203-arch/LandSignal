@@ -97,6 +97,52 @@ OFFICES: list[dict[str, Any]] = [
         "how": "Public parcel screen (≥2 ac). Confirm if on upset/tax sale with Treasurer.",
     },
     {
+        "provider_id": "public_tax_sale",
+        "state": "MD",
+        "county": "baltimore city",
+        "source_name": "Baltimore City MD tax sale",
+        "office": "Baltimore City Bureau of Revenue Collections — Tax Sale",
+        "website": "https://www.baltimorecity.gov/tax-sale",
+        "phone": "410-396-3000",
+        "parcel_lookup": "https://taxsale.baltimorecity.gov/",
+        "posting_url": "https://taxsale.baltimorecity.gov/",
+        "how": "City tax-sale auction / lien certificates — Bureau of Revenue Collections runs the sale calendar.",
+    },
+    {
+        "provider_id": "public_tax_sale",
+        "state": "MD",
+        "county": "baltimore",
+        "source_name": "Baltimore City MD tax sale",
+        "office": "Baltimore City Bureau of Revenue Collections — Tax Sale",
+        "website": "https://www.baltimorecity.gov/tax-sale",
+        "phone": "410-396-3000",
+        "parcel_lookup": "https://taxsale.baltimorecity.gov/",
+        "posting_url": "https://taxsale.baltimorecity.gov/",
+        "how": "City tax-sale auction / lien certificates — Bureau of Revenue Collections runs the sale calendar.",
+    },
+    {
+        "provider_id": "public_tax_sale",
+        "state": "MN",
+        "county": "ramsey",
+        "source_name": "Ramsey County MN tax-forfeited public sales",
+        "office": "Ramsey County Productive Properties — Tax-Forfeited Land",
+        "website": "https://www.ramseycountymn.gov/residents/property-home/taxes-values/productive-properties/tax-forfeited-public-sales",
+        "phone": "651-266-2080",
+        "parcel_lookup": "https://www.ramseycountymn.gov/residents/property-home/taxes-values/productive-properties/tax-forfeited-public-sales",
+        "how": "County tax-forfeited land auctions (often via MNBid) — call Productive Properties before you bid.",
+    },
+    {
+        "provider_id": "public_tax_sale",
+        "state": "MN",
+        "county": "dakota",
+        "source_name": "Dakota County MN tax-forfeited property",
+        "office": "Dakota County Property Taxation / Tax-Forfeited Land",
+        "website": "https://www.co.dakota.mn.us/HomeProperty/PropertyTaxes/Pages/default.aspx",
+        "phone": "651-438-4576",
+        "parcel_lookup": "https://gis.co.dakota.mn.us/",
+        "how": "Tax-forfeited / delinquent inventory — Property Taxation confirms auction status and bid rules.",
+    },
+    {
         "provider_id": "public_vacant_gis",
         "state": "TX",
         "county": "dallas",
@@ -296,6 +342,317 @@ BLM_STATE_OFFICES = {
     "WA": ("https://www.blm.gov/oregon-washington", "503-808-6001"),
 }
 
+# State hubs used when a county-specific office isn't curated yet.
+# Prefer real agency pages + public switchboard phones over Google search pages.
+STATE_LAND_HUBS: dict[str, dict[str, str]] = {
+    "MD": {
+        "website": "https://dat.maryland.gov/pages/tax-sale-information.aspx",
+        "phone": "410-767-4994",
+        "office": "Maryland State Tax Sale Ombudsman / local collector",
+        "parcel_lookup": "https://sdat.dat.maryland.gov/RealProperty/Pages/default.aspx",
+    },
+    "MN": {
+        "website": "https://www.mnbid.mn.gov/",
+        "phone": "651-201-2500",
+        "office": "Minnesota tax-forfeited land (county + MNBid)",
+        "parcel_lookup": "https://www.mnbid.mn.gov/",
+    },
+    "SC": {
+        "website": "https://dor.sc.gov/",
+        "phone": "803-898-5000",
+        "office": "South Carolina Department of Revenue / county treasurer",
+        "parcel_lookup": "https://dor.sc.gov/",
+    },
+    "NC": {
+        "website": "https://www.ncdor.gov/",
+        "phone": "877-252-3052",
+        "office": "N.C. Department of Revenue / county tax office",
+        "parcel_lookup": "https://www.ncdor.gov/",
+    },
+    "VA": {
+        "website": "https://www.tax.virginia.gov/",
+        "phone": "804-367-8031",
+        "office": "Virginia Tax / local commissioner of the revenue",
+        "parcel_lookup": "https://www.tax.virginia.gov/",
+    },
+    "GA": {
+        "website": "https://dor.georgia.gov/",
+        "phone": "877-423-6711",
+        "office": "Georgia Department of Revenue / county tax commissioner",
+        "parcel_lookup": "https://qpublic.schneidercorp.com/",
+    },
+    "FL": {
+        "website": "https://floridarevenue.com/property/Pages/Home.aspx",
+        "phone": "850-617-8600",
+        "office": "Florida DOR Property Tax Oversight / county tax collector",
+        "parcel_lookup": "https://floridarevenue.com/property/Pages/Home.aspx",
+    },
+    "TX": {
+        "website": "https://comptroller.texas.gov/taxes/property-tax/",
+        "phone": "800-252-9121",
+        "office": "Texas Comptroller Property Tax Assistance / local CAD",
+        "parcel_lookup": "https://comptroller.texas.gov/taxes/property-tax/",
+    },
+    "CA": {
+        "website": "https://www.sco.ca.gov/ardtax_sale.html",
+        "phone": "916-324-2829",
+        "office": "California State Controller — Tax Sales / county tax collector",
+        "parcel_lookup": "https://www.sco.ca.gov/ardtax_sale.html",
+    },
+    "NY": {
+        "website": "https://www.tax.ny.gov/",
+        "phone": "518-457-5431",
+        "office": "NYS Tax / local assessor & county treasurer",
+        "parcel_lookup": "https://gis.ny.gov/parcels",
+    },
+    "PA": {
+        "website": "https://www.revenue.pa.gov/",
+        "phone": "717-787-8201",
+        "office": "Pennsylvania DOR / county treasurer tax sale",
+        "parcel_lookup": "https://www.revenue.pa.gov/",
+    },
+    "OH": {
+        "website": "https://tax.ohio.gov/",
+        "phone": "800-282-1782",
+        "office": "Ohio Department of Taxation / county auditor or treasurer",
+        "parcel_lookup": "https://tax.ohio.gov/",
+    },
+    "IN": {
+        "website": "https://www.in.gov/dlgf/",
+        "phone": "317-232-3777",
+        "office": "Indiana DLGF / county treasurer tax sale",
+        "parcel_lookup": "https://www.in.gov/dlgf/",
+    },
+    "IL": {
+        "website": "https://tax.illinois.gov/",
+        "phone": "217-782-3336",
+        "office": "Illinois Department of Revenue / county treasurer",
+        "parcel_lookup": "https://tax.illinois.gov/",
+    },
+    "MI": {
+        "website": "https://www.michigan.gov/taxes",
+        "phone": "517-636-4486",
+        "office": "Michigan Treasury / county treasurer or land bank",
+        "parcel_lookup": "https://www.michigan.gov/taxes",
+    },
+    "WI": {
+        "website": "https://www.revenue.wi.gov/",
+        "phone": "608-266-2486",
+        "office": "Wisconsin DOR / county treasurer",
+        "parcel_lookup": "https://www.revenue.wi.gov/",
+    },
+    "NJ": {
+        "website": "https://www.nj.gov/treasury/taxation/",
+        "phone": "609-292-6400",
+        "office": "NJ Division of Taxation / municipal tax collector",
+        "parcel_lookup": "https://www.njparcels.com/",
+    },
+    "MA": {
+        "website": "https://www.mass.gov/orgs/division-of-local-services",
+        "phone": "617-626-2300",
+        "office": "Mass. Division of Local Services / local assessor",
+        "parcel_lookup": "https://www.mass.gov/info-details/massachusetts-interactive-property-map",
+    },
+    "AR": {
+        "website": "https://www.dfa.arkansas.gov/",
+        "phone": "501-682-7106",
+        "office": "Arkansas DFA / county collector",
+        "parcel_lookup": "https://gis.arkansas.gov/",
+    },
+    "TN": {
+        "website": "https://www.tn.gov/revenue.html",
+        "phone": "615-253-0600",
+        "office": "Tennessee Department of Revenue / county trustee",
+        "parcel_lookup": "https://www.padctn.org/",
+    },
+    "WA": {
+        "website": "https://dor.wa.gov/",
+        "phone": "360-705-6705",
+        "office": "Washington DOR / county treasurer",
+        "parcel_lookup": "https://dor.wa.gov/",
+    },
+    "UT": {
+        "website": "https://tax.utah.gov/",
+        "phone": "801-297-2200",
+        "office": "Utah State Tax Commission / county treasurer",
+        "parcel_lookup": "https://tax.utah.gov/",
+    },
+    "AZ": {
+        "website": "https://azdor.gov/",
+        "phone": "602-255-3381",
+        "office": "Arizona DOR / county treasurer",
+        "parcel_lookup": "https://azdor.gov/",
+    },
+    "CO": {
+        "website": "https://tax.colorado.gov/",
+        "phone": "303-238-7378",
+        "office": "Colorado Department of Revenue / county treasurer",
+        "parcel_lookup": "https://tax.colorado.gov/",
+    },
+    "OR": {
+        "website": "https://www.oregon.gov/dor/",
+        "phone": "503-378-4988",
+        "office": "Oregon DOR / county tax collector",
+        "parcel_lookup": "https://www.oregon.gov/dor/",
+    },
+    "NM": {
+        "website": "https://www.tax.newmexico.gov/",
+        "phone": "505-827-0700",
+        "office": "New Mexico Taxation & Revenue / county treasurer",
+        "parcel_lookup": "https://www.tax.newmexico.gov/",
+    },
+    "NV": {
+        "website": "https://tax.nv.gov/",
+        "phone": "775-684-2000",
+        "office": "Nevada Department of Taxation / county treasurer",
+        "parcel_lookup": "https://tax.nv.gov/",
+    },
+    "ID": {
+        "website": "https://tax.idaho.gov/",
+        "phone": "208-334-7660",
+        "office": "Idaho State Tax Commission / county treasurer",
+        "parcel_lookup": "https://tax.idaho.gov/",
+    },
+    "MT": {
+        "website": "https://mtrevenue.gov/",
+        "phone": "406-444-6900",
+        "office": "Montana DOR / county treasurer",
+        "parcel_lookup": "https://mtrevenue.gov/",
+    },
+    "WY": {
+        "website": "https://www.wyoming.gov/agencies/department-of-revenue/",
+        "phone": "307-777-7961",
+        "office": "Wyoming Department of Revenue / county treasurer",
+        "parcel_lookup": "https://wyo.gov/",
+    },
+    "AK": {
+        "website": "https://tax.alaska.gov/",
+        "phone": "907-269-6620",
+        "office": "Alaska Tax Division / borough assessor",
+        "parcel_lookup": "https://tax.alaska.gov/",
+    },
+    "AL": {
+        "website": "https://www.revenue.alabama.gov/",
+        "phone": "334-242-1170",
+        "office": "Alabama DOR / county revenue commissioner",
+        "parcel_lookup": "https://www.revenue.alabama.gov/",
+    },
+    "MS": {
+        "website": "https://www.dor.ms.gov/",
+        "phone": "601-923-7700",
+        "office": "Mississippi DOR / county tax collector",
+        "parcel_lookup": "https://www.dor.ms.gov/",
+    },
+    "LA": {
+        "website": "https://www.revenue.louisiana.gov/",
+        "phone": "855-307-3893",
+        "office": "Louisiana Department of Revenue / parish sheriff tax sale",
+        "parcel_lookup": "https://www.revenue.louisiana.gov/",
+    },
+    "MO": {
+        "website": "https://dor.mo.gov/",
+        "phone": "573-751-3505",
+        "office": "Missouri DOR / county collector",
+        "parcel_lookup": "https://dor.mo.gov/",
+    },
+    "KS": {
+        "website": "https://www.ksrevenue.gov/",
+        "phone": "785-368-8222",
+        "office": "Kansas Department of Revenue / county treasurer",
+        "parcel_lookup": "https://www.ksrevenue.gov/",
+    },
+    "NE": {
+        "website": "https://revenue.nebraska.gov/",
+        "phone": "402-471-5729",
+        "office": "Nebraska Department of Revenue / county treasurer",
+        "parcel_lookup": "https://revenue.nebraska.gov/",
+    },
+    "IA": {
+        "website": "https://tax.iowa.gov/",
+        "phone": "515-281-3114",
+        "office": "Iowa Department of Revenue / county treasurer",
+        "parcel_lookup": "https://tax.iowa.gov/",
+    },
+    "OK": {
+        "website": "https://oklahoma.gov/tax.html",
+        "phone": "405-521-3160",
+        "office": "Oklahoma Tax Commission / county treasurer",
+        "parcel_lookup": "https://oklahoma.gov/tax.html",
+    },
+    "CT": {
+        "website": "https://portal.ct.gov/DRS",
+        "phone": "860-297-5962",
+        "office": "Connecticut DRS / municipal tax collector",
+        "parcel_lookup": "https://portal.ct.gov/DRS",
+    },
+    "DE": {
+        "website": "https://revenue.delaware.gov/",
+        "phone": "302-577-8200",
+        "office": "Delaware Division of Revenue / county tax office",
+        "parcel_lookup": "https://revenue.delaware.gov/",
+    },
+    "WV": {
+        "website": "https://tax.wv.gov/",
+        "phone": "304-558-3333",
+        "office": "West Virginia Tax Department / county sheriff",
+        "parcel_lookup": "https://tax.wv.gov/",
+    },
+    "KY": {
+        "website": "https://revenue.ky.gov/",
+        "phone": "502-564-4581",
+        "office": "Kentucky Department of Revenue / county PVA / sheriff",
+        "parcel_lookup": "https://revenue.ky.gov/",
+    },
+    "ND": {
+        "website": "https://www.tax.nd.gov/",
+        "phone": "701-328-3127",
+        "office": "North Dakota Tax Commissioner / county treasurer",
+        "parcel_lookup": "https://www.tax.nd.gov/",
+    },
+    "SD": {
+        "website": "https://dor.sd.gov/",
+        "phone": "605-773-3311",
+        "office": "South Dakota DOR / county treasurer",
+        "parcel_lookup": "https://dor.sd.gov/",
+    },
+    "VT": {
+        "website": "https://tax.vermont.gov/",
+        "phone": "802-828-2865",
+        "office": "Vermont Department of Taxes / town clerk / treasurer",
+        "parcel_lookup": "https://tax.vermont.gov/",
+    },
+    "NH": {
+        "website": "https://www.revenue.nh.gov/",
+        "phone": "603-230-5000",
+        "office": "New Hampshire DRA / municipal tax collector",
+        "parcel_lookup": "https://www.revenue.nh.gov/",
+    },
+    "ME": {
+        "website": "https://www.maine.gov/revenue/",
+        "phone": "207-624-5600",
+        "office": "Maine Revenue Services / municipal tax collector",
+        "parcel_lookup": "https://www.maine.gov/revenue/",
+    },
+    "RI": {
+        "website": "https://tax.ri.gov/",
+        "phone": "401-574-8829",
+        "office": "Rhode Island Division of Taxation / municipal collector",
+        "parcel_lookup": "https://tax.ri.gov/",
+    },
+    "HI": {
+        "website": "https://tax.hawaii.gov/",
+        "phone": "808-587-4242",
+        "office": "Hawaii Department of Taxation / county real property tax",
+        "parcel_lookup": "https://tax.hawaii.gov/",
+    },
+    "DC": {
+        "website": "https://otr.cfo.dc.gov/",
+        "phone": "202-727-4829",
+        "office": "DC Office of Tax and Revenue",
+        "parcel_lookup": "https://otr.cfo.dc.gov/",
+    },
+}
+
 
 def resolve_office(
     *,
@@ -335,18 +692,53 @@ def resolve_office(
         }
 
     if best is None:
-        q = quote_plus(f"{county or ''} {state or ''} property tax sale treasurer assessor".strip())
-        best = {
-            "provider_id": provider,
-            "state": st,
-            "county": co,
-            "source_name": f"Public land inventory · {county or 'County'}, {st or 'US'}",
-            "office": f"{county or 'County'} {st} Treasurer / Assessor".strip(),
-            "website": f"https://www.google.com/search?q={q}",
-            "phone": None,
-            "parcel_lookup": f"https://www.google.com/search?q={quote_plus((county or '') + ' ' + (st or '') + ' parcel viewer assessor')}",
-            "how": "Public GIS inventory — confirm sale status with the county Treasurer or Assessor.",
-        }
+        hub = STATE_LAND_HUBS.get(st) if st else None
+        if hub:
+            place = f"{county.title()} County, {st}" if county else (st or "US")
+            best = {
+                "provider_id": provider,
+                "state": st,
+                "county": co,
+                "source_name": f"Public land inventory · {place}",
+                "office": (
+                    f"{county.title()} County · {hub['office']}"
+                    if county
+                    else hub["office"]
+                ),
+                "website": hub["website"],
+                "phone": hub.get("phone"),
+                "parcel_lookup": hub.get("parcel_lookup") or hub["website"],
+                "how": (
+                    "Public inventory screen — confirm current sale / owner status with the "
+                    "county treasurer, tax collector, or assessor before you bid."
+                ),
+            }
+        else:
+            q = quote_plus(f"{county or ''} {state or ''} property tax sale treasurer assessor".strip())
+            best = {
+                "provider_id": provider,
+                "state": st,
+                "county": co,
+                "source_name": f"Public land inventory · {county or 'County'}, {st or 'US'}",
+                "office": f"{county or 'County'} {st} Treasurer / Assessor".strip(),
+                "website": f"https://www.google.com/search?q={q}",
+                "phone": None,
+                "parcel_lookup": (
+                    "https://www.google.com/search?q="
+                    + quote_plus((county or "") + " " + (st or "") + " parcel viewer assessor")
+                ),
+                "how": "Public GIS inventory — confirm sale status with the county Treasurer or Assessor.",
+            }
+    # Fill missing phone/website from the state hub when a county row is incomplete.
+    if best and st:
+        hub = STATE_LAND_HUBS.get(st)
+        if hub:
+            if not best.get("phone"):
+                best["phone"] = hub.get("phone")
+            if not best.get("website") or "google.com/search" in str(best.get("website") or ""):
+                best["website"] = hub["website"]
+            if not best.get("parcel_lookup") or "google.com/search" in str(best.get("parcel_lookup") or ""):
+                best["parcel_lookup"] = hub.get("parcel_lookup") or hub["website"]
     return best
 
 

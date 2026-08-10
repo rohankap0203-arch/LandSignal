@@ -336,7 +336,19 @@ export function AcquireRail({
   const activeSteps = openGuide === "web" ? webSteps : openGuide === "call" ? callSteps : [];
   const activeTone = openGuide === "call" ? "call" : "source";
 
-  if (!postingUrl && !tel && !findUrl) return null;
+  // Always keep a reachable office path — never drop the rail for missing fields.
+  const officeHref =
+    postingUrl ||
+    (office
+      ? `https://www.google.com/search?q=${encodeURIComponent(`${office} official website`)}`
+      : "https://www.google.com/search?q=county+treasurer+tax+sale+land");
+  const officeHost = (() => {
+    try {
+      return new URL(officeHref).hostname.replace(/^www\./, "");
+    } catch {
+      return postingLabel;
+    }
+  })();
 
   return (
     <div className={`acquire-rail ${className}`.trim()}>
@@ -346,15 +358,13 @@ export function AcquireRail({
         <ActionCard
           tone="source"
           kicker="Office page"
-          value={postingUrl ? `Open ${host}` : "No link yet"}
+          value={`Open ${postingUrl ? host : officeHost}`}
           hint={
-            postingUrl
-              ? host.includes("google.")
-                ? "Search for the live county sale / assessor page"
-                : "County / agency page for this inventory"
-              : "Use parcel lookup below if you have it"
+            officeHost.includes("google.")
+              ? "Search for the live county sale / assessor page"
+              : "County / agency page for this inventory"
           }
-          href={postingUrl}
+          href={officeHref}
           stepCount={webSteps.length}
           open={openGuide === "web"}
           onToggle={() => setOpenGuide((v) => (v === "web" ? null : "web"))}
@@ -363,9 +373,9 @@ export function AcquireRail({
         <ActionCard
           tone="call"
           kicker="Call the office"
-          value={phoneDisplay || "No public phone listed"}
-          hint={office || (tel ? "County / agency desk" : "Use the official page to contact them")}
-          href={tel}
+          value={phoneDisplay || "Use office page for phone"}
+          hint={office || (tel ? "County / agency desk" : "Official page lists the public desk number")}
+          href={tel || officeHref}
           stepCount={callSteps.length}
           open={openGuide === "call"}
           onToggle={() => setOpenGuide((v) => (v === "call" ? null : "call"))}

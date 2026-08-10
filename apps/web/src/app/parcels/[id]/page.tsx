@@ -353,9 +353,16 @@ export default function ParcelIntelligencePage() {
             <ScoreBar
               label="Opportunity score"
               value={Number(score?.opportunity || 0)}
-              hint={String(oppDrive.verdict || "Tap for why this file scored here")}
+              hint={String(
+                (oppDrive.hint as string) ||
+                  oppDrive.verdict ||
+                  "Tap to see how this stacks up across the site",
+              )}
               verdict={String(oppDrive.verdict || "")}
               bullets={(oppDrive.bullets as string[]) || []}
+              standings={
+                (oppDrive.standings as Parameters<typeof ScoreBar>[0]["standings"]) || null
+              }
             />
             <ScoreBar
               label="Risk"

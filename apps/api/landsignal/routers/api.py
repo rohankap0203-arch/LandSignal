@@ -310,22 +310,26 @@ def _sort_rows(rows: list[RadarRow], sort: str | None) -> list[RadarRow]:
         # more negative discount = bigger bargain
         return r.discount_pct if r.discount_pct is not None else 999.0
 
+    def pid(r: RadarRow) -> str:
+        return str(r.parcel_id)
+
+    # Negated numerics + ascending parcel_id — deterministic, never shuffled on refresh.
     if key == "score_desc":
-        rows.sort(key=lambda r: (r.opportunity, r.fit_score or 0), reverse=True)
+        rows.sort(key=lambda r: (-r.opportunity, -(r.fit_score or 0), pid(r)))
     elif key == "risk_asc":
-        rows.sort(key=lambda r: (r.risk, -(r.fit_score or 0)))
+        rows.sort(key=lambda r: (r.risk, -(r.fit_score or 0), pid(r)))
     elif key == "confidence_desc":
-        rows.sort(key=lambda r: (r.confidence, r.opportunity), reverse=True)
+        rows.sort(key=lambda r: (-r.confidence, -r.opportunity, pid(r)))
     elif key == "price_asc":
-        rows.sort(key=lambda r: (r.ask is None, r.ask if r.ask is not None else 0))
+        rows.sort(key=lambda r: (r.ask is None, r.ask if r.ask is not None else 0, pid(r)))
     elif key == "price_desc":
-        rows.sort(key=lambda r: (r.ask is None, -(r.ask or 0)))
+        rows.sort(key=lambda r: (r.ask is None, -(r.ask or 0), pid(r)))
     elif key == "acres_desc":
-        rows.sort(key=lambda r: (r.acres is None, -(r.acres or 0)))
+        rows.sort(key=lambda r: (r.acres is None, -(r.acres or 0), pid(r)))
     elif key == "discount_asc":
-        rows.sort(key=discount_key)
+        rows.sort(key=lambda r: (discount_key(r), pid(r)))
     else:
-        rows.sort(key=lambda r: (r.fit_score or 0, r.opportunity), reverse=True)
+        rows.sort(key=lambda r: (-(r.fit_score or 0), -r.opportunity, pid(r)))
     return rows
 
 
@@ -364,6 +368,7 @@ def _apply_hold_priority(rows: list[RadarRow], hold_years: int | None) -> list[R
 @router.get("/radar", response_model=list[RadarRow])
 async def radar(
     state: str | None = None,
+    states: str | None = None,  # alias used by some clients / bookmarks
     region: str | None = None,
     min_price: float | None = None,
     max_price: float | None = None,
@@ -402,7 +407,8 @@ async def radar(
     store = get_store(get_settings().demo_seed)
     # Never block search on enrichment — unscored parcels are omitted until discover finishes them
 
-    state_codes = _normalize_states(state)
+    # Prefer explicit `state`; accept `states` as a synonym so filters never silently drop.
+    state_codes = _normalize_states(state or states)
     strategy_prefs = _parse_strategies(strategy)
     if hold_years is not None:
         hold_years = max(1, min(500, int(hold_years)))
@@ -483,27 +489,36 @@ async def radar(
         def discount_key(r: _Cand) -> float:
             return r.discount_pct if r.discount_pct is not None else 999.0
 
+        # Final key is always ascending parcel_id so equal scores stay stable across refreshes.
+        # Use negated numerics (not reverse=True) so the id tie-break never flips.
+        def pid(r: _Cand) -> str:
+            return str(r.parcel_id)
+
         if key == "score_desc":
-            cands.sort(key=lambda r: (r.opportunity, r.fit), reverse=True)
+            cands.sort(key=lambda r: (-r.opportunity, -r.fit, pid(r)))
         elif key == "risk_asc":
-            cands.sort(key=lambda r: (r.risk, -r.fit))
+            cands.sort(key=lambda r: (r.risk, -r.fit, pid(r)))
         elif key == "confidence_desc":
-            cands.sort(key=lambda r: (r.confidence, r.opportunity), reverse=True)
+            cands.sort(key=lambda r: (-r.confidence, -r.opportunity, pid(r)))
         elif key == "price_asc":
-            cands.sort(key=lambda r: (r.ask is None, r.ask if r.ask is not None else 0))
+            cands.sort(key=lambda r: (r.ask is None, r.ask if r.ask is not None else 0, pid(r)))
         elif key == "price_desc":
-            cands.sort(key=lambda r: (r.ask is None, -(r.ask or 0)))
+            cands.sort(key=lambda r: (r.ask is None, -(r.ask or 0), pid(r)))
         elif key == "acres_desc":
-            cands.sort(key=lambda r: (r.acres is None, -(r.acres or 0)))
+            cands.sort(key=lambda r: (r.acres is None, -(r.acres or 0), pid(r)))
         elif key == "discount_asc":
-            cands.sort(key=discount_key)
+            cands.sort(key=lambda r: (discount_key(r), pid(r)))
         else:
-            cands.sort(key=lambda r: (r.fit, r.opportunity), reverse=True)
+            cands.sort(key=lambda r: (-r.fit, -r.opportunity, pid(r)))
         return cands
 
     def collect_cands(*, apply_region: bool, apply_strict_channel: bool) -> list[_Cand]:
         out: list[_Cand] = []
-        for parcel in store.parcels.values():
+        # Snapshot keys so a concurrent discover can't reshuffle mid-search.
+        for pid in sorted(store.parcels.keys(), key=str):
+            parcel = store.parcels.get(pid)
+            if not parcel:
+                continue
             score = store.latest_score(parcel.id)
             listing = store.listing_for_parcel(parcel.id)
             if not score or not listing or parcel.is_demo:
@@ -980,8 +995,25 @@ async def radar(
             confidence_label=conf_label,
             source_name=source.get("source_name"),
             contact_office=source.get("office"),
-            contact_phone=source.get("phone"),
-            contact_website=source.get("website"),
+            contact_phone=source.get("phone")
+            or next(
+                (
+                    str(l.get("phone") or l.get("label"))
+                    for l in annotated
+                    if l.get("kind") == "contact" and str(l.get("url") or "").startswith("tel:")
+                ),
+                None,
+            ),
+            # Prefer the concrete posting / primary link over a bare hub page.
+            contact_website=next(
+                (
+                    str(l["url"])
+                    for l in annotated
+                    if l.get("kind") == "primary" and str(l.get("url") or "").startswith("http")
+                ),
+                None,
+            )
+            or source.get("website"),
             how_to_buy=source.get("how_to_buy"),
             return_thesis=thesis,
             conviction=conviction,
@@ -1425,17 +1457,23 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         hold_years=10,
         trajectory_annual=float(traj_annual) if traj_annual is not None else None,
     )
-    score_drivers = (
-        build_score_drivers(
+    score_drivers: dict[str, Any] = {}
+    if score:
+        from landsignal.services.score_standings import build_opportunity_standings
+
+        standings = build_opportunity_standings(
+            store=store,
+            score=score,
+            place=f"{parcel.county or 'this county'}, {parcel.state or ''}".strip(", "),
+        )
+        score_drivers = build_score_drivers(
             parcel=parcel,
             listing=listing,
             score=score,
             enrichment=enrichment,
             price=price if isinstance(price, dict) else None,
+            standings=standings,
         )
-        if score
-        else {}
-    )
     outreach = build_outreach_playbook(
         parcel=parcel,
         listing=listing,
