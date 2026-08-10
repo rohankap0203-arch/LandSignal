@@ -76,12 +76,14 @@ def enrich_endpoint_inflation(
         }
 
     rent_today = 0.0
+    noi_today = 0.0
     flows_real = [-purchase]
     for i, pt in enumerate(path):
         y = float(pt.get("year_offset") or (i + 1))
         noi = float(pt.get("noi_usd") or 0.0)
-        # Match path accounting: cumulative rent only banks non-negative NOI.
+        # Positive rent line for display; net NOI (can be negative) for total back.
         rent_today += max(0.0, noi) / ((1.0 + cpi) ** y)
+        noi_today += noi / ((1.0 + cpi) ** y)
         if i == len(path) - 1:
             cf = noi + float(pt.get("exit_usd") or pt.get("land_usd") or 0.0)
         else:
@@ -89,7 +91,7 @@ def enrich_endpoint_inflation(
         flows_real.append(cf / ((1.0 + cpi) ** y))
 
     exit_today = deflate(endpoint.get("exit_usd"), years, cpi)
-    total_today = (exit_today or 0.0) + rent_today
+    total_today = (exit_today or 0.0) + noi_today
     gain_today = total_today - purchase
     irr_real = irr_solve(flows_real)
 
@@ -97,6 +99,7 @@ def enrich_endpoint_inflation(
         **endpoint,
         "exit_usd_today": round(exit_today, 0) if exit_today is not None else None,
         "cumulative_rent_usd_today": round(rent_today, 0),
+        "cumulative_noi_usd_today": round(noi_today, 0),
         "total_back_usd_today": round(total_today, 0),
         "gain_usd_today": round(gain_today, 0),
         "irr_real": irr_real,

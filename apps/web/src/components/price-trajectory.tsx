@@ -180,12 +180,24 @@ export function PriceTrajectory({
     setActive(todayIdx);
   }, [todayIdx, horizon]);
 
+  const displayPoints = useMemo(() => {
+    // After inflation: future marks in today’s purchasing power. Past/today stay as recorded.
+    return points.map((p) => {
+      const off = Number(p.offset ?? 0);
+      const raw = Number(p.value_usd);
+      if (!showToday || !(off > 0) || !Number.isFinite(raw)) {
+        return { ...p, display_usd: raw };
+      }
+      return { ...p, display_usd: deflate(raw, off, cpi) ?? raw };
+    });
+  }, [points, showToday, cpi]);
+
   const layout = useMemo(() => {
-    if (points.length < 2) return null;
-    const years = points.map((p) => Number(p.year));
+    if (displayPoints.length < 2) return null;
+    const years = displayPoints.map((p) => Number(p.year));
     const minYear = Math.min(...years);
     const maxYear = Math.max(...years);
-    const ys = points.map((p) => Number(p.value_usd));
+    const ys = displayPoints.map((p) => Number(p.display_usd));
     const minY = Math.min(...ys) * 0.92;
     const maxY = Math.max(...ys) * 1.06;
     const padL = 52;
@@ -197,10 +209,10 @@ export function PriceTrajectory({
     const span = Math.max(1, maxYear - minYear);
     const xScale = (year: number) => padL + ((year - minYear) / span) * (w - padL - padR);
     const yScale = (y: number) => padT + (1 - (y - minY) / Math.max(1, maxY - minY)) * (h - padT - padB);
-    const mapped = points.map((p) => ({
+    const mapped = displayPoints.map((p) => ({
       ...p,
       cx: xScale(Number(p.year)),
-      cy: yScale(Number(p.value_usd)),
+      cy: yScale(Number(p.display_usd)),
     }));
     const hist = mapped.filter((p) => Number(p.offset ?? 0) <= 0);
     const fut = mapped.filter((p) => Number(p.offset ?? 0) >= 0);
@@ -231,7 +243,7 @@ export function PriceTrajectory({
       xScale,
       todayCx: today?.cx,
     };
-  }, [points, compact]);
+  }, [displayPoints, compact]);
 
   const indexFromClientX = useCallback(
     (clientX: number) => {
@@ -280,8 +292,12 @@ export function PriceTrajectory({
     );
   }
 
-  const selected = points[Math.min(Math.max(0, active), points.length - 1)];
+  const selected = displayPoints[Math.min(Math.max(0, active), displayPoints.length - 1)];
   const sel = layout.mapped[Math.min(Math.max(0, active), layout.mapped.length - 1)];
+  const selectedDisplay =
+    selected && Number.isFinite(Number(selected.display_usd))
+      ? Number(selected.display_usd)
+      : Number(selected?.value_usd || 0);
   const knowledge = String(trajectory.knowledge_label || "Estimated from similar land nearby").replace(
     /_/g,
     " ",
@@ -570,7 +586,12 @@ export function PriceTrajectory({
                   ? ` · ${Math.abs(Number(selected.offset))} yr ago`
                   : ` · ${Number(selected.offset)} yr ahead`}
             </strong>
-            <span className="traj-readout-value">{money(selected.value_usd)}</span>
+            <span className="traj-readout-value">
+              {money(selectedDisplay)}
+              {showToday && Number(selected.offset) > 0 ? (
+                <em className="return-alt-line"> after inflation</em>
+              ) : null}
+            </span>
           </div>
         </div>
       )}

@@ -118,15 +118,12 @@ def build_factor_model(
     )
     strat_scores = getattr(score, "strategy_scores", None) or {}
 
-    # If caller passed market_trajectory.annual_rate, channel is already baked in —
-    # do not apply CHANNEL_MULT again (that was double-counting tax/surplus/BLM).
+    # Channel cheapens the BUY (opportunity / entry). Once owned, land tracks area pace.
     from_trajectory = base_annual is not None
-    skip_channel = channel_already_applied or from_trajectory
     base = base_annual if base_annual is not None else STATE_ANNUAL_APPRECIATION.get(state, 0.028)
     ch = CHANNEL_MULT.get(provider or "", 0.9)
     factors: list[dict[str, Any]] = []
 
-    # Start from state prior (or trajectory pace), then layer parcel-specific bends
     rate = base
     factors.append(
         _factor(
@@ -134,18 +131,16 @@ def build_factor_model(
             "Area land pace",
             base * 10000,
             (
-                f"Starting pace from the land-value path for {state}: about {base*100:.1f}%/yr "
-                f"(channel already reflected)."
+                f"Starting pace from the land-value path for {state}: about {base*100:.1f}%/yr."
                 if from_trajectory
                 else f"Typical long-run land pace in {state}: about {base*100:.1f}%/yr before this property’s own screens."
             ),
         )
     )
 
-    # Channel — only when we started from raw state prior
-    if not skip_channel and ch != 1.0:
-        delta = base * (ch - 1.0)
-        rate += delta
+    # Document channel as entry edge — do not cut lifelong appreciation (that made
+    # After inflation always fall below CPI for tax-sale files).
+    if ch < 1.0:
         channel_name = {
             "public_tax_sale": "county tax-sale channel",
             "public_vacant_gis": "vacant public-map screen",
@@ -156,8 +151,10 @@ def build_factor_model(
             _factor(
                 "channel",
                 "How it is sold",
-                delta * 10000,
-                f"{channel_name.title()} usually clears slower than retail land — we use {ch*100:.0f}% of the area pace for {prop}.",
+                0.0,
+                f"{channel_name.title()} usually clears cheaper than retail — that shows up in "
+                f"your buy vs our value for {prop}, not by permanently slowing the land once you own it.",
+                kind="entry",
             )
         )
 
@@ -451,8 +448,13 @@ def build_case_path(
     model: dict[str, Any],
     case: str,
     hold_years: int,
+    mark_usd: float | None = None,
 ) -> dict[str, Any]:
-    """Year-by-year land + rent path for one case and hold length."""
+    """Year-by-year land + rent path for one case and hold length.
+
+    Land mark starts at our value (when above buy), not at the distressed entry.
+    Cash IRR still uses purchase as the outflow — that is the opportunity edge.
+    """
     hold_years = max(1, min(100, int(hold_years)))
     scalars = _case_scalars(case, float(model["uncertainty"]))
     acres = float(model.get("acres") or 1.0)
@@ -462,13 +464,25 @@ def build_case_path(
     # Vacancy / opex / taxes / insurance as fractions of rent or value
     vacancy = 0.08 if case.upper() in ("BEAR", "DOWNSIDE", "STRESS") else 0.05
     opex_frac = 0.18 * scalars["carry_mult"]
-    tax_frac = 0.011 * scalars["carry_mult"]  # of land value / yr
+    # Property-tax screen — full 1.1% of mark on a 0.8ac vacant lot with tiny rent
+    # made every hold look like a CPI death spiral. Soften on small / non-income uses.
+    tax_frac = 0.009 * scalars["carry_mult"]
+    if acres < 2:
+        tax_frac *= 0.55
+    if (model.get("strategy") or "") in ("LAND_BANK", "DEVELOPMENT"):
+        tax_frac *= 0.7
     insure_frac = (0.002 + float(model.get("flood_carry_frac") or 0)) * scalars["carry_mult"]
     mgmt_frac = 0.06  # of EGI
 
     path: list[dict[str, Any]] = []
-    land = float(purchase)
+    # Day-one mark: what the dirt is worth vs what you pay. Growing from purchase
+    # at a suppressed rate made After inflation look like a permanent loss.
+    mark0 = float(mark_usd) if mark_usd and mark_usd > 0 else float(purchase)
+    if mark0 < purchase:
+        mark0 = float(purchase)
+    land = mark0
     cum_rent = 0.0
+    cum_noi = 0.0
     cum_carry = 0.0
     flows = [-purchase]
     rent_series = []
@@ -479,18 +493,17 @@ def build_case_path(
         shaper = _cycle_shaper(y)
         amp = scalars["cycle_amp"]
         shaped = 1.0 + (shaper - 1.0) * amp
-        # Long-hold fatigue: near-term can track the ledger; century marks fade hard
-        # so $30M+ “generational” terminals only appear when the file truly earns them.
+        # Long-hold fatigue: ease after mid horizon; keep near-term full so CPI
+        # does not invent a permanent real decline on ordinary land holds.
         fatigue = 1.0
         if y > 15:
-            fatigue = max(0.70, 1.0 - (y - 15) * 0.006)
+            fatigue = max(0.82, 1.0 - (y - 15) * 0.010)
         if y > 40:
-            fatigue = max(0.42, fatigue - (y - 40) * 0.0045)
+            fatigue = max(0.68, fatigue - (y - 40) * 0.004)
         if y > 70:
-            fatigue = max(0.28, fatigue - (y - 70) * 0.003)
-        # Bull cools on ultra-long holds (optimistic ≠ rocket forever)
-        if case_u in ("BULL", "UPSIDE") and y > 35:
-            fatigue *= max(0.75, 1.0 - (y - 35) * 0.004)
+            fatigue = max(0.55, fatigue - (y - 70) * 0.003)
+        if case_u in ("BULL", "UPSIDE") and y > 40:
+            fatigue *= max(0.85, 1.0 - (y - 40) * 0.003)
         # Flood/wetland “realization” years — occasional step downs in bear/base
         shock = 1.0
         if y in (7, 14, 28, 42, 55) and case_u in ("BEAR", "BASE", "DOWNSIDE", "STRESS"):
@@ -503,11 +516,8 @@ def build_case_path(
             shock *= 0.994 if case_u == "BASE" else (0.99 if case_u in ("BEAR", "DOWNSIDE", "STRESS") else 0.997)
 
         year_appr = appr0 * fatigue
-        # Mild forward conservatism only — old 0.88× + 0.988 drag stacked with channel
-        # and CPI so after-inflation always crashed, which was a model bug not a market fact.
-        fwd = 0.97 if y <= 20 else 0.95 if y <= 45 else 0.93
-        drag = 1.0 if y <= 30 else 0.998 if y <= 60 else 0.995
-        land = land * (1.0 + year_appr * fwd) * (drag + (1.0 - drag) * shaped) * shock
+        fwd = 1.0 if y <= 15 else 0.97 if y <= 40 else 0.94
+        land = land * (1.0 + year_appr * fwd) * shaped * shock
 
         # Rent drifts with land quality + mild inflation, with usable-acre drag;
         # far years: rents don't compound as fast as a stock model
@@ -527,6 +537,7 @@ def build_case_path(
         if (model.get("strategy") or "") in ("LAND_BANK", "DEVELOPMENT") and noi < 0:
             noi = min(noi, -land * 0.004)
 
+        cum_noi += noi
         cum_rent += max(0.0, noi)
         cum_carry += max(0.0, taxes + insure)
         rent_series.append(noi)
@@ -540,7 +551,9 @@ def build_case_path(
             exit_haircut += 0.025 if case_u in ("BEAR", "DOWNSIDE", "STRESS") else 0.012
 
         mark_exit = land * (1.0 - exit_haircut)
-        total_back = mark_exit + cum_rent
+        # Net cash back = exit + all NOI (including negative tax years). Old code
+        # only banked positive rent, so tiny lots looked profitable while IRR died.
+        total_back = mark_exit + cum_noi
         path.append(
             {
                 "year_offset": y,
@@ -548,11 +561,14 @@ def build_case_path(
                 "exit_usd": round(mark_exit, 0),
                 "noi_usd": round(noi, 0),
                 "cumulative_rent_usd": round(cum_rent, 0),
+                "cumulative_noi_usd": round(cum_noi, 0),
                 "cumulative_carry_usd": round(cum_carry, 0),
                 "total_back_usd": round(total_back, 0),
                 "gain_usd": round(total_back - purchase, 0),
                 "year_appreciation": year_appr,
                 "fatigue": round(fatigue, 3),
+                "starting_mark_usd": round(mark0, 0),
+                "purchase_usd": round(purchase, 0),
             }
         )
         flows.append(noi)
@@ -576,6 +592,7 @@ def build_case_path(
         }.get(case.upper(), case.title()),
         "hold_years": hold_years,
         "purchase_usd": round(purchase, 0),
+        "starting_mark_usd": round(mark0, 0),
         "irr": irr_v,
         "irr_display": f"{irr_v*100:.1f}%/yr" if irr_v is not None else "n/a",
         "exit_usd": last["exit_usd"] if last else None,
@@ -697,6 +714,7 @@ def build_return_intelligence(
             model=model,
             case=case,
             hold_years=100,
+            mark_usd=float(mark_usd) if mark_usd else None,
         )
 
     cpi = DEFAULT_CPI_ANNUAL

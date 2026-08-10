@@ -198,12 +198,15 @@ def _base_annual_rate(
         "blm_lpad": "federal BLM land",
         "public_vacant_gis": "vacant land on the public assessor map",
     }.get(provider_id or "", "this listing type")
-    if ch != 1.0:
+    # Owned-land pace tracks the area — channel cheapens the BUY, not lifelong appreciation.
+    # Old base*0.72 (tax sale) left pace under CPI forever, so After inflation always fell.
+    rate = base
+    if ch < 1.0:
         notes.append(
-            f"For {channel_plain}, we use {ch*100:.0f}% of that pace because these sales usually "
-            f"move slower than normal retail land."
+            f"{channel_plain.title()} usually clear cheaper than retail — that shows up in the "
+            f"buy / opportunity math, not by permanently cutting this pin’s land pace "
+            f"(we still use ~{base*100:.1f}%/yr area pace once you own it)."
         )
-    rate = base * ch
 
     if growth_score is not None:
         adj = (growth_score - 50) / 50 * 0.012
@@ -214,8 +217,8 @@ def _base_annual_rate(
 
     if acres is not None:
         if acres < 2:
-            rate *= 0.85
-            notes.append("Under 2 acres: we use a softer path (−15%) because small lots jump around more year to year.")
+            rate *= 0.97
+            notes.append("Under 2 acres: slightly softer path (−3%) — small lots jump around more year to year.")
         elif acres >= 80:
             rate *= 1.05
             notes.append("80+ acres: slightly stronger path (+5%) — bigger tracts often track farm/fringe land indexes.")
@@ -259,21 +262,20 @@ def _cycle_shaper(offset: int) -> float:
 
 
 def _forward_fade(year_k: int) -> float:
-    """Long holds mean-revert — 100y is not the same % forever.
+    """Long holds ease off — not a stock rocket, but still a land asset.
 
-    Near-term can track the parcel rate; after ~15y fade hard toward a slow
-    long-run real land pace so terminals stay grounded (not generational rockets).
+    Keep the first ~15 years near full pace so After inflation can rise when
+    nominal pace beats CPI. Fade gently afterward; do not crush to ~⅙ pace.
     """
-    if year_k <= 8:
+    if year_k <= 15:
         return 1.0
-    if year_k <= 20:
-        return max(0.55, 1.0 - (year_k - 8) * 0.035)
-    if year_k <= 40:
-        return max(0.34, 0.55 - (year_k - 20) * 0.010)
-    if year_k <= 70:
-        return max(0.22, 0.34 - (year_k - 40) * 0.004)
-    # Century mark: mostly real-land drift (~¼ of near-term pace)
-    return max(0.16, 0.22 - (year_k - 70) * 0.002)
+    if year_k <= 30:
+        return max(0.82, 1.0 - (year_k - 15) * 0.012)
+    if year_k <= 50:
+        return max(0.70, 0.82 - (year_k - 30) * 0.006)
+    if year_k <= 75:
+        return max(0.58, 0.70 - (year_k - 50) * 0.005)
+    return max(0.50, 0.58 - (year_k - 75) * 0.003)
 
 
 def _hitch_severity(
@@ -371,11 +373,9 @@ def _series_from_anchor(
     for k in range(1, years_forward + 1):
         shaper = _cycle_shaper(k)
         fade = _forward_fade(k)
-        # Mild forward conservatism — old 0.78× + 0.988 drag made after-inflation
-        # almost always fall, which overstated CPI damage vs a normal land hold.
-        fwd = 0.96 if k <= 20 else 0.94 if k <= 45 else 0.90
-        drag = 1.0 if k <= 30 else 0.998 if k <= 60 else 0.995
-        factor = (1.0 + annual * fwd * fade) * (drag + (1.0 - drag) * shaper)
+        # Near-term tracks the ledger; light long-run ease only.
+        fwd = 1.0 if k <= 15 else 0.97 if k <= 40 else 0.94
+        factor = (1.0 + annual * fwd * fade) * shaper
         factor = _apply_hitch(k, factor, hitch, severity=hitch_severity)
         vals[k] = vals[k - 1] * max(factor, 0.82)
     return vals

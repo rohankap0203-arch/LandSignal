@@ -25,6 +25,8 @@ type PathPoint = {
   cumulative_carry_usd?: number;
   total_back_usd?: number;
   gain_usd?: number;
+  starting_mark_usd?: number;
+  purchase_usd?: number;
 };
 
 type CaseEndpoint = {
@@ -417,12 +419,24 @@ export function ReturnVisual({
 
   const chart = useMemo(() => {
     const series = bandPaths.BASE.length ? bandPaths : { BASE: path, BEAR: path, BULL: path };
+    const purchase = Number(intel?.purchase_usd || endpoint?.purchase_usd || entryUsd || markUsd || 0);
+    const startMark = Number(
+      intel?.mark_usd ||
+        (path[0] as PathPoint | undefined)?.starting_mark_usd ||
+        purchase,
+    );
+    const valOf = (p: PathPoint) => {
+      const y = Number(p.year_offset || 0);
+      const raw = Number(p.total_back_usd ?? p.exit_usd ?? p.land_usd ?? 0);
+      if (!showToday || !(y > 0) || !(raw > 0)) return raw;
+      return raw / Math.pow(1 + cpi, y);
+    };
     const allVals = Object.values(series)
       .flat()
-      .map((p) => Number(p.total_back_usd ?? p.exit_usd ?? p.land_usd ?? 0))
+      .map(valOf)
       .filter((v) => v > 0);
-    const purchase = Number(intel?.purchase_usd || endpoint?.purchase_usd || entryUsd || markUsd || 0);
     if (purchase > 0) allVals.push(purchase);
+    if (startMark > 0) allVals.push(startMark);
     const minV = allVals.length ? Math.min(...allVals) * 0.92 : 0;
     const maxV = allVals.length ? Math.max(...allVals) * 1.06 : 1;
     const W = 640;
@@ -438,16 +452,13 @@ export function ReturnVisual({
     };
     const lineFor = (pts: PathPoint[]) => {
       if (!pts.length) return "";
+      // Chart starts at buy cash outlay; first land mark is usually higher (the edge).
       const start = `M ${xOf(0)} ${yOf(purchase)}`;
       const rest = pts
-        .map((p) => {
-          const v = Number(p.total_back_usd ?? p.exit_usd ?? p.land_usd ?? 0);
-          return `L ${xOf(Number(p.year_offset))} ${yOf(v)}`;
-        })
+        .map((p) => `L ${xOf(Number(p.year_offset))} ${yOf(valOf(p))}`)
         .join(" ");
       return `${start} ${rest}`;
     };
-    // Sample for smooth-looking polyline (every year for short holds; step for long)
     const step = holdYears > 40 ? 2 : 1;
     const sample = (pts: PathPoint[]) => pts.filter((_, i) => i % step === 0 || i === pts.length - 1);
     return {
@@ -460,13 +471,25 @@ export function ReturnVisual({
       xOf,
       yOf,
       purchase,
+      startMark,
       minV,
       maxV,
       bearD: lineFor(sample(series.BEAR || [])),
       baseD: lineFor(sample(series.BASE || [])),
       bullD: lineFor(sample(series.BULL || [])),
     };
-  }, [bandPaths, path, holdYears, intel?.purchase_usd, endpoint?.purchase_usd, entryUsd, markUsd]);
+  }, [
+    bandPaths,
+    path,
+    holdYears,
+    intel?.purchase_usd,
+    intel?.mark_usd,
+    endpoint?.purchase_usd,
+    entryUsd,
+    markUsd,
+    showToday,
+    cpi,
+  ]);
 
   const yearFromClientX = useCallback(
     (clientX: number) => {
@@ -587,10 +610,10 @@ export function ReturnVisual({
         </div>
       ) : null}
       <p className="mt-1 text-sm text-[var(--muted)] leading-snug">
-        Buy → rent → exit math ({factorCount} screens)
-        {intel?.purchase_usd ? ` · entry near ${money(intel.purchase_usd)}` : ""}
-        {intel?.mark_usd ? ` · our value ~${money(intel.mark_usd)}` : ""}. Path compounds from the
-        buy — opportunity already scored the gap to our value. Land-value history lives above.
+        Buy → rent → exit ({factorCount} screens)
+        {intel?.purchase_usd ? ` · you pay ~${money(intel.purchase_usd)}` : ""}
+        {intel?.mark_usd ? ` · land mark starts ~${money(intel.mark_usd)}` : ""}. Opportunity is that
+        gap on day one; the path grows the mark at area land pace, then CPI-adjusts if you ask.
       </p>
 
       <div className="traj-windows mt-3" role="tablist" aria-label="Return case">
@@ -768,7 +791,14 @@ export function ReturnVisual({
         </svg>
         <div className="return-scrub-hint">
           Drag the chart · year {scrubClamped} of {holdYears} · total back{" "}
-          <strong>{money(scrubPoint?.total_back_usd)}</strong>
+          <strong>
+            {money(
+              showToday && scrubPoint?.total_back_usd != null
+                ? Number(scrubPoint.total_back_usd) / Math.pow(1 + cpi, scrubClamped)
+                : scrubPoint?.total_back_usd,
+            )}
+          </strong>
+          {showToday ? " after inflation" : ""}
         </div>
       </div>
 

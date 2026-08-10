@@ -84,20 +84,22 @@ export function withInflation<T extends {
   }
 
   let rentToday = 0;
+  let noiToday = 0;
   const flowsReal = [-purchase];
   for (let i = 0; i < path.length; i++) {
     const pt = path[i];
     const y = Number(pt.year_offset || i + 1);
     const noi = Number(pt.noi_usd || 0);
-    // Match path accounting: cumulative rent only banks non-negative NOI.
+    // Positive rent for the rent line; net NOI (incl. tax years) for total back.
     rentToday += Math.max(0, noi) / Math.pow(1 + cpi, y);
+    noiToday += noi / Math.pow(1 + cpi, y);
     const exitBit =
       i === path.length - 1 ? Number(pt.exit_usd ?? pt.land_usd ?? 0) : 0;
     flowsReal.push((noi + exitBit) / Math.pow(1 + cpi, y));
   }
 
   const exitToday = deflate(endpoint.exit_usd, years, cpi);
-  const totalToday = (exitToday || 0) + rentToday;
+  const totalToday = (exitToday || 0) + noiToday;
   const gainToday = totalToday - purchase;
   const irrReal = solveIrr(flowsReal);
 
