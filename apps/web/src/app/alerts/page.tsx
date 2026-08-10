@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
+import { HelpTip } from "@/components/filter-field";
 import { LandAlertsLoader } from "@/components/land-alerts-loader";
 import { LandViewerModal, ViewLandButton } from "@/components/land-viewer-modal";
 import { LiveMagnifier } from "@/components/live-magnifier";
@@ -154,17 +155,24 @@ const HOLD_PRESETS: { id: string; label: string; min: string; max: string }[] = 
   { id: "flip", label: "1–5 yrs", min: "1", max: "5" },
   { id: "mid", label: "5–15 yrs", min: "5", max: "15" },
   { id: "long", label: "10–25 yrs", min: "10", max: "25" },
-  { id: "legacy", label: "25+ yrs", min: "25", max: "" },
+  { id: "mid_long", label: "25–50 yrs", min: "25", max: "50" },
+  { id: "long_hold", label: "50–75 yrs", min: "50", max: "75" },
+  { id: "legacy", label: "75–100+ yrs", min: "75", max: "" },
   { id: "custom", label: "Custom", min: "", max: "" },
 ];
 
 const RETURN_PRESETS: { id: string; label: string; value: string }[] = [
   { id: "any", label: "Any return", value: "" },
+  { id: "4", label: "4%+", value: "4" },
   { id: "8", label: "8%+", value: "8" },
   { id: "12", label: "12%+", value: "12" },
   { id: "15", label: "15%+", value: "15" },
   { id: "20", label: "20%+", value: "20" },
 ];
+
+const ALL_STRATEGY_IDS = STRATEGY_OPTS.map((s) => s.id);
+const ALL_INTEREST_KEYS = INTEREST_OPTS.map(([key]) => key);
+const ALL_INFRA_IDS = INFRA_OPTS.map(([id]) => id);
 
 const RISK_OPTS = [
   { id: "low", label: "Low" },
@@ -1111,27 +1119,25 @@ export default function LandAlertsPage() {
             </div>
             {budgetPresetId === "custom" ? (
               <div className="acq-range-row">
-                <label className="land-alert-field">
-                  <span>Min $</span>
-                  <input
-                    inputMode="numeric"
-                    value={form.budget_min}
-                    placeholder="No min"
-                    onChange={(e) => setForm((f) => ({ ...f, budget_min: e.target.value.replace(/[^\d]/g, "") }))}
-                  />
-                </label>
+                <input
+                  className="acq-range-input"
+                  inputMode="numeric"
+                  aria-label="Budget min"
+                  value={form.budget_min}
+                  placeholder="Min $"
+                  onChange={(e) => setForm((f) => ({ ...f, budget_min: e.target.value.replace(/[^\d]/g, "") }))}
+                />
                 <span className="acq-range-sep" aria-hidden>
-                  to
+                  –
                 </span>
-                <label className="land-alert-field">
-                  <span>Max $</span>
-                  <input
-                    inputMode="numeric"
-                    value={form.budget_max}
-                    placeholder="No max"
-                    onChange={(e) => setForm((f) => ({ ...f, budget_max: e.target.value.replace(/[^\d]/g, "") }))}
-                  />
-                </label>
+                <input
+                  className="acq-range-input"
+                  inputMode="numeric"
+                  aria-label="Budget max"
+                  value={form.budget_max}
+                  placeholder="Max $"
+                  onChange={(e) => setForm((f) => ({ ...f, budget_max: e.target.value.replace(/[^\d]/g, "") }))}
+                />
               </div>
             ) : null}
           </div>
@@ -1165,35 +1171,45 @@ export default function LandAlertsPage() {
             </div>
             {acrePresetId === "custom" ? (
               <div className="acq-range-row">
-                <label className="land-alert-field">
-                  <span>Min ac</span>
-                  <input
-                    inputMode="decimal"
-                    value={form.acres_min}
-                    placeholder="No min"
-                    onChange={(e) => setForm((f) => ({ ...f, acres_min: e.target.value.replace(/[^\d.]/g, "") }))}
-                  />
-                </label>
+                <input
+                  className="acq-range-input"
+                  inputMode="decimal"
+                  aria-label="Acres min"
+                  value={form.acres_min}
+                  placeholder="Min ac"
+                  onChange={(e) => setForm((f) => ({ ...f, acres_min: e.target.value.replace(/[^\d.]/g, "") }))}
+                />
                 <span className="acq-range-sep" aria-hidden>
-                  to
+                  –
                 </span>
-                <label className="land-alert-field">
-                  <span>Max ac</span>
-                  <input
-                    inputMode="decimal"
-                    value={form.acres_max}
-                    placeholder="No max"
-                    onChange={(e) => setForm((f) => ({ ...f, acres_max: e.target.value.replace(/[^\d.]/g, "") }))}
-                  />
-                </label>
+                <input
+                  className="acq-range-input"
+                  inputMode="decimal"
+                  aria-label="Acres max"
+                  value={form.acres_max}
+                  placeholder="Max ac"
+                  onChange={(e) => setForm((f) => ({ ...f, acres_max: e.target.value.replace(/[^\d.]/g, "") }))}
+                />
               </div>
             ) : null}
           </div>
 
           <div className="acq-section">
             <div className="acq-section-label">Strategy & land type</div>
-            <p className="acq-section-hint">Tap all that fit — leave empty for any</p>
-            <div className="land-alert-chips">
+            <div className="land-alert-chips acq-chips-tight">
+              <button
+                type="button"
+                className={`land-alert-chip${strategiesAll ? " on" : ""}`}
+                aria-pressed={strategiesAll}
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    strategies: strategiesAll ? [] : [...ALL_STRATEGY_IDS],
+                  }))
+                }
+              >
+                Any
+              </button>
               {STRATEGY_OPTS.map((s) => (
                 <button
                   key={s.id}
@@ -1205,7 +1221,20 @@ export default function LandAlertsPage() {
                 </button>
               ))}
             </div>
-            <div className="land-alert-chips acq-chips-gap">
+            <div className="land-alert-chips acq-chips-tight acq-chips-gap">
+              <button
+                type="button"
+                className={`land-alert-chip${landTypesAll ? " on" : ""}`}
+                aria-pressed={landTypesAll}
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    land_types: landTypesAll ? [] : [...LAND_TYPE_OPTS],
+                  }))
+                }
+              >
+                Any
+              </button>
               {LAND_TYPE_OPTS.map((t) => (
                 <button
                   key={t}
@@ -1242,30 +1271,28 @@ export default function LandAlertsPage() {
             </div>
             {holdPresetId === "custom" ? (
               <div className="acq-range-row">
-                <label className="land-alert-field">
-                  <span>Min yrs</span>
-                  <input
-                    inputMode="numeric"
-                    value={form.hold_years_min}
-                    placeholder="No min"
-                    onChange={(e) => setForm((f) => ({ ...f, hold_years_min: e.target.value.replace(/[^\d]/g, "") }))}
-                  />
-                </label>
+                <input
+                  className="acq-range-input"
+                  inputMode="numeric"
+                  aria-label="Hold years min"
+                  value={form.hold_years_min}
+                  placeholder="Min yrs"
+                  onChange={(e) => setForm((f) => ({ ...f, hold_years_min: e.target.value.replace(/[^\d]/g, "") }))}
+                />
                 <span className="acq-range-sep" aria-hidden>
-                  to
+                  –
                 </span>
-                <label className="land-alert-field">
-                  <span>Max yrs</span>
-                  <input
-                    inputMode="numeric"
-                    value={form.hold_years_max}
-                    placeholder="No max"
-                    onChange={(e) => setForm((f) => ({ ...f, hold_years_max: e.target.value.replace(/[^\d]/g, "") }))}
-                  />
-                </label>
+                <input
+                  className="acq-range-input"
+                  inputMode="numeric"
+                  aria-label="Hold years max"
+                  value={form.hold_years_max}
+                  placeholder="Max yrs"
+                  onChange={(e) => setForm((f) => ({ ...f, hold_years_max: e.target.value.replace(/[^\d]/g, "") }))}
+                />
               </div>
             ) : null}
-            <div className="land-alert-chips acq-chips-gap">
+            <div className="land-alert-chips acq-chips-tight acq-chips-gap">
               {RETURN_PRESETS.map((p) => (
                 <button
                   key={p.id}
@@ -1298,7 +1325,21 @@ export default function LandAlertsPage() {
 
           <div className="acq-section">
             <div className="acq-section-label">Interests</div>
-            <div className="land-alert-chips">
+            <div className="land-alert-chips acq-chips-tight">
+              <button
+                type="button"
+                className={`land-alert-chip${interestsAll ? " on" : ""}`}
+                aria-pressed={interestsAll}
+                onClick={() =>
+                  setForm((f) => {
+                    const next = { ...f.interests };
+                    for (const key of ALL_INTEREST_KEYS) next[key] = !interestsAll;
+                    return { ...f, interests: next };
+                  })
+                }
+              >
+                Any
+              </button>
               {INTEREST_OPTS.map(([key, label]) => (
                 <button
                   key={key}
@@ -1319,8 +1360,28 @@ export default function LandAlertsPage() {
           </div>
 
           <div className="acq-section">
-            <div className="acq-section-label">Infrastructure</div>
-            <div className="land-alert-chips">
+            <div className="acq-section-label acq-label-with-tip">
+              <span>Infrastructure</span>
+              <HelpTip
+                tone="panel"
+                title="What these mean"
+                body="Road access = legal/physical road frontage or deeded easement potential. Utilities = electric/water/sewer available or nearby. Power nearby = transmission or distribution close enough for service or energy projects. Water access = surface water, irrigation, or well potential. Tap Any for no infrastructure preference."
+              />
+            </div>
+            <div className="land-alert-chips acq-chips-tight">
+              <button
+                type="button"
+                className={`land-alert-chip${infraAll ? " on" : ""}`}
+                aria-pressed={infraAll}
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    infrastructure_prefs: infraAll ? [] : [...ALL_INFRA_IDS],
+                  }))
+                }
+              >
+                Any
+              </button>
               {INFRA_OPTS.map(([id, label]) => {
                 const on = form.infrastructure_prefs.includes(id);
                 return (
