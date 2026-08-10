@@ -12,7 +12,11 @@ function shortLine(text: string, max = 120): string {
   const s = (text || "").trim();
   if (!s) return "";
   const first = s.split(/(?<=[.!?])\s+/)[0] || s;
-  return first.length > max ? first.slice(0, max - 1).trimEnd() + "…" : first;
+  if (first.length <= max) return first;
+  const cut = first.slice(0, max);
+  const at = Math.max(cut.lastIndexOf(" "), cut.lastIndexOf("·"), cut.lastIndexOf("—"));
+  const base = (at > max * 0.55 ? cut.slice(0, at) : cut).trimEnd().replace(/[.,;:]+$/, "");
+  return `${base}…`;
 }
 
 function convictionLabel(c: string): string {
@@ -25,7 +29,10 @@ function shortPrice(display: string): string {
   const s = (display || "").trim();
   if (!s) return "No public price";
   if (s.length <= 28) return s;
-  return s.slice(0, 27).trimEnd() + "…";
+  const cut = s.slice(0, 28);
+  const at = cut.lastIndexOf(" ");
+  const base = (at > 12 ? cut.slice(0, at) : cut).trimEnd();
+  return `${base}…`;
 }
 
 /** Modal title mirrors the headline (or discount line) left of the ? */

@@ -25,7 +25,11 @@ function firstSentence(text: unknown, max = 140): string {
   const s = String(text || "").trim();
   if (!s) return "";
   const cut = s.split(/(?<=[.!?])\s+/)[0] || s;
-  return cut.length > max ? cut.slice(0, max - 1).trimEnd() + "…" : cut;
+  if (cut.length <= max) return cut;
+  const head = cut.slice(0, max);
+  const at = Math.max(head.lastIndexOf(" "), head.lastIndexOf("·"), head.lastIndexOf("—"));
+  const base = (at > max * 0.55 ? head.slice(0, at) : head).trimEnd().replace(/[.,;:]+$/, "");
+  return `${base}…`;
 }
 
 

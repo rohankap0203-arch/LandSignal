@@ -1236,8 +1236,12 @@ select {
 }
 
 .card-chip-line .chip {
-  flex-shrink: 0;
-  white-space: nowrap;
+  flex: 0 1 auto;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.3;
 }
 
 .card-media {

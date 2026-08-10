@@ -711,10 +711,8 @@ async def radar(
         if isinstance(auction_path, dict):
             settle_disc = auction_path.get("settle_discount_pct")
         if settle_disc is not None:
-            discount_display = (
-                f"Likely finish {settle_disc:+.1f}% vs our value "
-                f"(start bid looked {auction_path.get('opener_discount_pct', 0):+.0f}%)"
-            )
+            # Keep chip copy short — opener gap belongs in help / reasons, not the label.
+            discount_display = f"Likely finish {settle_disc:+.1f}% vs our value"
         elif score.asking_discount_pct is not None:
             discount_display = f"{score.asking_discount_pct:+.1f}% vs our value"
         else:
