@@ -965,51 +965,61 @@ select {
 
 .filter-custom-pair {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 
 .filter-custom-pair input {
   min-width: 0;
   flex: 1;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.filter-custom-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
 }
 
 .filter-money-field {
   display: flex;
-  align-items: stretch;
-  gap: 0;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-  flex: 1;
 }
 
 .filter-money-field input {
   width: 0;
   min-width: 0;
   flex: 1 1 auto;
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
+  border-radius: 12px;
+  padding: 11px 12px;
+  letter-spacing: 0.01em;
 }
 
 .filter-unit-toggle {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: stretch;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  border-left: 0;
-  border-radius: 0 12px 12px 0;
+  align-self: stretch;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 9px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .filter-unit-toggle button {
-  min-width: 1.85rem;
-  padding: 0 0.4rem;
+  min-width: 1.15rem;
+  padding: 0 0.22rem;
   border: 0;
   background: transparent;
-  color: rgba(247, 250, 248, 0.72);
-  font-size: 0.72rem;
+  color: rgba(247, 250, 248, 0.62);
+  font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
+  line-height: 1;
   cursor: pointer;
   transition:
     background 140ms ease,
@@ -1017,16 +1027,16 @@ select {
 }
 
 .filter-unit-toggle button + button {
-  border-left: 1px solid rgba(255, 255, 255, 0.16);
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .filter-unit-toggle button.is-active {
-  background: color-mix(in srgb, #8fd0b0 34%, transparent);
+  background: color-mix(in srgb, #8fd0b0 28%, transparent);
   color: #e8fff3;
 }
 
 .filter-unit-toggle button:hover:not(.is-active) {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   color: #fff;
 }
 

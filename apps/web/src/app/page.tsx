@@ -384,7 +384,7 @@ export default function SearchPage() {
               }
             />
             {form.pricePreset.toLowerCase().includes("custom") ? (
-              <div className="filter-custom-pair mt-1.5">
+              <div className="filter-custom-stack mt-1.5">
                 <div className="filter-money-field">
                   <input
                     value={form.priceMin}
