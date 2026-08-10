@@ -318,12 +318,10 @@ export function PriceTrajectory({
             {windowMath.endYear} · {knowledge}
           </p>
           <p className="mt-1 text-[11px] text-[var(--muted)] leading-snug">
-            {horizon >= 50
-              ? "Far years fade hard — After inflation keeps the mark honest."
-              : "Far years fade on purpose — not a straight rocket."}{" "}
-            {trajectory?.annual_rate_display
-              ? `Near-term pace ~${trajectory.annual_rate_display}.`
-              : null}
+            Screened area land pace
+            {trajectory?.annual_rate_display ? ` (~${trajectory.annual_rate_display})` : ""}
+            , with parcel factors once. After inflation = same path ÷ CPI — not a second growth
+            model. Far years ease slightly for uncertainty.
           </p>
         </div>
         <div className="traj-stats">
@@ -336,7 +334,7 @@ export function PriceTrajectory({
             <strong>
               {showToday ? windowMath.forwardCagrRealDisplay : windowMath.forwardCagrDisplay}
             </strong>
-            {horizon >= 10 && windowMath.futureUsdToday != null ? (
+            {horizon >= 1 && windowMath.futureUsdToday != null ? (
               <em className="return-alt-line">
                 {showToday
                   ? `${shortMoney(windowMath.futureUsd)} before inflation`
@@ -358,7 +356,7 @@ export function PriceTrajectory({
         onChange={setMoneyMode}
         cpiDisplay={cpiDisplay}
         compare={
-          horizon >= 5 && windowMath.futureUsdToday != null
+          horizon >= 1 && windowMath.futureUsdToday != null
             ? {
                 label: `Land value ${horizon} yr ahead`,
                 today: windowMath.futureUsdToday,
@@ -611,7 +609,7 @@ export function PriceTrajectory({
           <strong>
             {money(showToday ? windowMath.futureUsdToday ?? windowMath.futureUsd : windowMath.futureUsd)}
           </strong>
-          {horizon >= 5 && windowMath.futureUsdToday != null ? (
+          {horizon >= 1 && windowMath.futureUsdToday != null ? (
             <em className="return-alt-line">
               {showToday
                 ? `${shortMoney(windowMath.futureUsd)} before inflation`

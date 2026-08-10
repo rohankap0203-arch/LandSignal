@@ -507,21 +507,18 @@ def build_case_path(
 
     case_u = case.upper()
     for y in range(1, hold_years + 1):
-        # Cycle bend — not a straight diagonal
-        shaper = _cycle_shaper(y)
-        amp = scalars["cycle_amp"]
-        shaped = 1.0 + (shaper - 1.0) * amp
-        # Long-hold fatigue: light ease only — keep typical state pace able to
-        # clear the CPI screen so After inflation is not a sitewide death slide.
+        # Mild cycle (dampened) — full ±3% swings made After inflation bounce.
+        raw_shaper = _cycle_shaper(y, forward=True)
+        amp = scalars["cycle_amp"] * 0.35
+        shaped = 1.0 + (raw_shaper - 1.0) * amp
+        # Long-hold fatigue mirrors land-value path fade — uncertainty, not a CPI hack.
         fatigue = 1.0
-        if y > 20:
-            fatigue = max(0.90, 1.0 - (y - 20) * 0.004)
-        if y > 40:
-            fatigue = max(0.84, fatigue - (y - 40) * 0.002)
-        if y > 70:
-            fatigue = max(0.80, fatigue - (y - 70) * 0.0015)
-        if case_u in ("BULL", "UPSIDE") and y > 40:
-            fatigue *= max(0.92, 1.0 - (y - 40) * 0.0015)
+        if y > 15:
+            fatigue = max(0.88, 1.0 - (y - 15) * 0.006)
+        if y > 35:
+            fatigue = max(0.80, fatigue - (y - 35) * 0.003)
+        if y > 60:
+            fatigue = max(0.74, fatigue - (y - 60) * 0.0015)
         # Flood/wetland “realization” years — occasional step downs in bear/base
         shock = 1.0
         if y in (7, 14, 28, 42, 55) and case_u in ("BEAR", "BASE", "DOWNSIDE", "STRESS"):
@@ -534,8 +531,7 @@ def build_case_path(
             shock *= 0.994 if case_u == "BASE" else (0.99 if case_u in ("BEAR", "DOWNSIDE", "STRESS") else 0.997)
 
         year_appr = appr0 * fatigue
-        fwd = 1.0 if y <= 15 else 0.97 if y <= 40 else 0.94
-        land = land * (1.0 + year_appr * fwd) * shaped * shock
+        land = land * (1.0 + year_appr) * shaped * shock
 
         # Rent drifts with land quality + mild inflation, with usable-acre drag;
         # far years: rents don't compound as fast as a stock model
@@ -829,10 +825,10 @@ def build_return_intelligence(
         "horizon_notes": horizon_notes,
         "summary": summary,
         "method": (
-            "Year-by-year path uses area land pace, then bends it with soil, flood, wetlands, "
-            "growth, access, channel, strategy fit, risk, liquidity, scarcity, power proximity, "
-            "cycle shape, carry costs, and an exit haircut. Cautious / typical / optimistic stress "
-            f"rent, pace, and exit. Dollar views: Before inflation (raw future $) vs After inflation "
-            f"(deflated at {infl['cpi_display']} CPI screen). Not an appraisal."
+            "Owned-land pace matches the land-value path (state prior + parcel screens once). "
+            "Auction/tax-sale channel cheapens the buy, not lifelong appreciation. Land mark "
+            "starts at our value; IRR still uses what you pay. Carry, exit haircut, and light "
+            "long-hold fade apply. Before inflation = raw future $; After inflation = ÷ "
+            f"(1+CPI)^years at {infl['cpi_display']}. Screen — not an appraisal."
         ),
     }

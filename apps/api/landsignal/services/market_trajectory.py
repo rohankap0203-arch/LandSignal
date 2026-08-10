@@ -78,8 +78,9 @@ CHANNEL_MULT = {
     "csv": 1.0,
 }
 
-# Soft drawdowns / spikes by year offset (relative to today) for realism —
-# 2020–21 land boom, 2022–23 rate-shock cooling, then re-acceleration in Sun Belt.
+# Soft drawdowns / spikes by year offset — HISTORY only (past boom/bust texture).
+# Forward outlook uses a dampened cycle so After inflation doesn’t bounce around
+# from invented near-term spikes (old +1/+2/+3% forward shapers).
 CYCLE_SHAPERS = {
     -10: 0.96,
     -9: 0.97,
@@ -92,9 +93,6 @@ CYCLE_SHAPERS = {
     -2: 0.97,  # rate shock
     -1: 0.99,
     0: 1.00,
-    1: 1.01,
-    2: 1.02,
-    3: 1.03,
 }
 
 
@@ -253,28 +251,29 @@ def _base_annual_rate(
     return rate, notes
 
 
-def _cycle_shaper(offset: int) -> float:
-    """Mild year-to-year wiggle so long paths are not a perfect straight compound."""
-    if offset in CYCLE_SHAPERS:
+def _cycle_shaper(offset: int, *, forward: bool = False) -> float:
+    """Year-to-year wiggle — full texture on history, dampened on outlook."""
+    if not forward and offset in CYCLE_SHAPERS:
         return CYCLE_SHAPERS[offset]
-    # Longer history: soft multi-year cycle (±3%)
-    return 1.0 + 0.03 * math.sin(offset * 0.55)
+    # Soft multi-year cycle (±3% history, ±0.6% forward)
+    amp = 0.006 if forward else 0.03
+    return 1.0 + amp * math.sin(offset * 0.55)
 
 
 def _forward_fade(year_k: int) -> float:
-    """Long holds ease off slightly — not a stock rocket, still a land asset.
+    """Gentle long-hold mean reversion — not a rocket, not a collapse.
 
-    Keep enough pace that a normal state prior (~3%/yr) can still beat the
-    ~2.5% CPI screen on mid and long holds. Hard fades made every After
-    inflation view look like a permanent loss sitewide.
+    Near-term tracks the parcel’s screened pace. Far years ease toward a
+    slightly slower long-run land pace (uncertainty grows with horizon).
+    This is NOT tuned to force a beat vs CPI; real vs CPI is an output.
     """
-    if year_k <= 20:
+    if year_k <= 15:
         return 1.0
-    if year_k <= 40:
-        return max(0.90, 1.0 - (year_k - 20) * 0.005)
-    if year_k <= 70:
-        return max(0.84, 0.90 - (year_k - 40) * 0.002)
-    return max(0.80, 0.84 - (year_k - 70) * 0.0015)
+    if year_k <= 35:
+        return max(0.88, 1.0 - (year_k - 15) * 0.006)
+    if year_k <= 60:
+        return max(0.80, 0.88 - (year_k - 35) * 0.003)
+    return max(0.74, 0.80 - (year_k - 60) * 0.0015)
 
 
 def _hitch_severity(
@@ -363,18 +362,17 @@ def _series_from_anchor(
 ) -> dict[int, float]:
     """Build offset→value with cycle + long-run fade + optional future hitch."""
     vals: dict[int, float] = {0: float(anchor)}
-    # History is shared across hitch modes — only the forward path bends
+    # History: full cycle texture. Forward: dampened cycle + gentle fade only
+    # (no stacked fwd×fade haircuts — those invented permanent real decline).
     for k in range(1, years_back + 1):
-        shaper = _cycle_shaper(-k)
-        fade = _forward_fade(k)
-        factor = (1.0 + annual * fade) * shaper
+        shaper = _cycle_shaper(-k, forward=False)
+        # History uses the same long-run prior without forward fade
+        factor = (1.0 + annual) * shaper
         vals[-k] = vals[-k + 1] / max(factor, 0.82)
     for k in range(1, years_forward + 1):
-        shaper = _cycle_shaper(k)
+        shaper = _cycle_shaper(k, forward=True)
         fade = _forward_fade(k)
-        # Near-term tracks the ledger; light long-run ease only.
-        fwd = 1.0 if k <= 15 else 0.97 if k <= 40 else 0.94
-        factor = (1.0 + annual * fwd * fade) * shaper
+        factor = (1.0 + annual * fade) * shaper
         factor = _apply_hitch(k, factor, hitch, severity=hitch_severity)
         vals[k] = vals[k - 1] * max(factor, 0.82)
     return vals
