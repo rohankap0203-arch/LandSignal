@@ -268,6 +268,8 @@ select {
   padding: 28px;
   box-shadow: var(--shadow);
   overflow: visible;
+  position: relative;
+  z-index: 2;
 }
 
 .hero-brand-row {
