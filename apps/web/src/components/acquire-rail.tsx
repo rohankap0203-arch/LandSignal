@@ -118,28 +118,21 @@ function cleanFulfills(text: string): string {
   return clean;
 }
 
-/** Fallback if API didn’t send fulfills — keep the step useful (no Why-prefix; UI has Why ·). */
+/** Fallback if API didn’t send fulfills — one short plain reason (UI already shows Why ·). */
 function fallbackFulfills(tone: "source" | "call", step: Step): string {
   if (step.fulfills?.trim()) return cleanFulfills(step.fulfills);
   const k = step.kicker.toLowerCase();
   if (tone === "call") {
-    if (k.includes("first"))
-      return "They should hear a buyer on this exact file and channel — not a general county info call.";
-    if (k.includes("ask"))
-      return "A yes/no here changes whether you keep spending time, survey cash, or title work on this pin.";
-    if (k.includes("watch"))
-      return "Flags the local trap (title, access, redemption, flood) before it eats this underwrite.";
-    if (k.includes("close"))
-      return "Leaves a clean reason to call back with sale date, deposit, or owner facts — not another cold loop.";
-    return "Advances status, price path, or who can actually sell this exact pin.";
+    if (k.includes("first")) return "So they know you’re a buyer on this land.";
+    if (k.includes("ask")) return "A yes/no here tells you whether to keep going.";
+    if (k.includes("watch")) return "Avoids the local trap before you spend money.";
+    if (k.includes("close")) return "Ends clean so you can call back with real facts.";
+    return "Gets you closer to knowing if you can buy this pin.";
   }
-  if (k.includes("start"))
-    return "Live status on the office site decides if this pin is obtainable at all.";
-  if (k.includes("do next"))
-    return "Turns the page dig into the three facts you need in the first 20 seconds of What to say.";
-  if (k.includes("watch"))
-    return "Stops a dead-end dig on a pin that isn’t buyable yet.";
-  return "Pulls the fact you need before you dial, bid, or calendar diligence.";
+  if (k.includes("start")) return "Status first: can you buy this pin, or not?";
+  if (k.includes("do next")) return "Gathers the few facts you need before you call.";
+  if (k.includes("watch")) return "Stops you digging on land you can’t buy.";
+  return "Pulls the one fact you need before you dial.";
 }
 
 /** Compact animated reveal — clearer than a bare V for “open the guide”. */
