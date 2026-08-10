@@ -459,7 +459,7 @@ export default function SearchPage() {
                 onClick={scanFresh}
                 disabled={scanning}
               >
-                {scanning ? "Starting refresh…" : "Refresh live inventory"}
+                {scanning ? "Refreshing" : "Refresh live inventory"}
               </button>
               <button
                 type="button"
