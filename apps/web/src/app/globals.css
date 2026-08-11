@@ -3707,10 +3707,10 @@ a.btn-intel:hover {
 .return-manage-screens {
   flex: 0 0 auto;
   margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  padding: 0.12rem 0.35rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--line));
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-elevated));
   color: color-mix(in srgb, var(--brand) 55%, var(--ink));
   font-size: 0.52rem;
   font-weight: 700;
@@ -3723,6 +3723,8 @@ a.btn-intel:hover {
 }
 
 .return-manage-screens:hover {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+  background: color-mix(in srgb, var(--brand) 14%, var(--bg-elevated));
   color: var(--brand);
 }
 
@@ -3730,7 +3732,7 @@ a.btn-intel:hover {
   flex: 0 0 auto;
   width: 22px;
   height: 22px;
-  margin-left: 0.1rem;
+  margin-left: 0.35rem;
   font-size: 0.8rem;
 }
 
