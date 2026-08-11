@@ -161,6 +161,11 @@ const OVERPASS_ENDPOINTS = [
   "https://overpass.kumi.systems/api/interpreter",
 ];
 
+/** Hard ceiling for one Closest chip search — UI must never spin past this. */
+const NEARBY_SEARCH_DEADLINE_MS = 12_000;
+const NEARBY_MIRROR_TIMEOUT_MS = 5_500;
+const NEARBY_NOMINATIM_TIMEOUT_MS = 4_000;
+
 const nearbyCache = new Map<string, NearbyHit[]>();
 /** In-flight Overpass aborts when the user switches Closest chips. */
 let nearbyOverpassAbort: AbortController | null = null;
@@ -169,6 +174,35 @@ function beginNearbyOverpass() {
   nearbyOverpassAbort?.abort();
   nearbyOverpassAbort = new AbortController();
   return nearbyOverpassAbort;
+}
+
+function abortError(message = "Aborted") {
+  return new DOMException(message, "AbortError");
+}
+
+/** Reject (and optionally abort) when a Closest lookup outlives its budget. */
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+  abort?: () => void,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      abort?.();
+      reject(new Error(`${label} timed out`));
+    }, ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        window.clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
 }
 
 function haversineMeters(a: [number, number], b: [number, number]) {
@@ -440,43 +474,54 @@ function radiusToBbox(lat: number, lon: number, radiusM: number): [number, numbe
 
 async function overpassQuery(
   query: string,
-  timeoutMs = 6000,
+  timeoutMs = NEARBY_MIRROR_TIMEOUT_MS,
   externalSignal?: AbortSignal,
 ): Promise<OverpassElement[]> {
-  // Race public Overpass mirrors — first valid payload wins (wetland geom used to stall for 14s+).
+  // Race public Overpass mirrors — prefer a non-empty payload; never hang past budget.
+  const budget = Math.max(1500, Math.min(timeoutMs, NEARBY_MIRROR_TIMEOUT_MS));
   const controllers = OVERPASS_ENDPOINTS.map(() => new AbortController());
   const abortAll = () => controllers.forEach((c) => c.abort());
-  const timer = window.setTimeout(abortAll, timeoutMs);
   const onExternalAbort = () => abortAll();
   if (externalSignal) {
-    if (externalSignal.aborted) {
-      window.clearTimeout(timer);
-      throw new DOMException("Aborted", "AbortError");
-    }
+    if (externalSignal.aborted) throw abortError();
     externalSignal.addEventListener("abort", onExternalAbort, { once: true });
   }
+
+  const mirrorFetch = async (endpoint: string, i: number): Promise<OverpassElement[]> => {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      body: query,
+      headers: { "Content-Type": "text/plain" },
+      signal: controllers[i].signal,
+    });
+    if (!res.ok) throw new Error(`Overpass ${res.status}`);
+    const data = (await res.json()) as { elements?: OverpassElement[] };
+    return data.elements || [];
+  };
+
   try {
-    const elements = await Promise.any(
-      OVERPASS_ENDPOINTS.map(async (endpoint, i) => {
-        const res = await fetch(endpoint, {
-          method: "POST",
-          body: query,
-          headers: { "Content-Type": "text/plain" },
-          signal: controllers[i].signal,
-        });
-        if (!res.ok) throw new Error(`Overpass ${res.status}`);
-        const data = (await res.json()) as { elements?: OverpassElement[] };
-        // Empty is a valid answer for this radius — still prefer a mirror that responded.
-        return data.elements || [];
-      }),
+    const settled = await withTimeout(
+      Promise.allSettled(OVERPASS_ENDPOINTS.map((endpoint, i) => mirrorFetch(endpoint, i))),
+      budget,
+      "Overpass",
+      abortAll,
     );
     abortAll();
-    return elements;
+    const fulfilled = settled
+      .filter((r): r is PromiseFulfilledResult<OverpassElement[]> => r.status === "fulfilled")
+      .map((r) => r.value);
+    if (!fulfilled.length) {
+      if (externalSignal?.aborted) throw abortError();
+      throw new Error("Overpass unavailable");
+    }
+    const withHits = fulfilled.find((els) => els.length > 0);
+    return withHits ?? fulfilled[0];
   } catch (e) {
-    if (externalSignal?.aborted) throw new DOMException("Aborted", "AbortError");
+    abortAll();
+    if (externalSignal?.aborted) throw abortError();
+    if (e instanceof DOMException && e.name === "AbortError") throw e;
     throw e instanceof Error ? e : new Error("Overpass unavailable");
   } finally {
-    window.clearTimeout(timer);
     externalSignal?.removeEventListener("abort", onExternalAbort);
   }
 }
@@ -491,63 +536,77 @@ async function nominatimSettlements(
   const [s, w, n, e] = radiusToBbox(lat, lon, radiusM);
   const viewbox = `${w},${n},${e},${s}`;
   const queries = ["city", "town", "village"];
-  const rows = (
-    await Promise.all(
-      queries.map(async (q) => {
-        const params = new URLSearchParams({
-          format: "jsonv2",
-          limit: "6",
-          dedupe: "1",
-          bounded: "1",
-          q,
-          featuretype: "settlement",
-          viewbox,
-        });
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-          signal,
-          headers: { Accept: "application/json" },
-        });
-        if (!res.ok) return [];
-        return (await res.json()) as Array<{
-          lat?: string;
-          lon?: string;
-          name?: string;
-          display_name?: string;
-          type?: string;
-          class?: string;
-          osm_type?: string;
-          osm_id?: number;
-        }>;
-      }),
-    )
-  ).flat();
+  const local = new AbortController();
+  const onParentAbort = () => local.abort();
+  if (signal.aborted) throw abortError();
+  signal.addEventListener("abort", onParentAbort, { once: true });
 
-  const out: OverpassElement[] = [];
-  const seen = new Set<string>();
-  for (const row of rows) {
-    const place = String(row.type || "").toLowerCase();
-    if (!/^(city|town|village)$/.test(place)) continue;
-    if (row.class && row.class !== "place") continue;
-    const rLat = Number(row.lat);
-    const rLon = Number(row.lon);
-    if (!Number.isFinite(rLat) || !Number.isFinite(rLon)) continue;
-    // Keep inside the requested radius (Nominatim viewbox can still spill).
-    if (haversineMeters([lat, lon], [rLat, rLon]) > radiusM * 1.05) continue;
-    const key = `${row.osm_type || "node"}/${row.osm_id ?? `${rLat}:${rLon}`}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({
-      type: row.osm_type === "way" || row.osm_type === "relation" ? row.osm_type : "node",
-      id: row.osm_id,
-      lat: rLat,
-      lon: rLon,
-      tags: {
-        name: row.name || row.display_name?.split(",")[0] || titleCaseTag(place),
-        place,
-      },
-    });
+  try {
+    const rows = (
+      await withTimeout(
+        Promise.all(
+          queries.map(async (q) => {
+            const params = new URLSearchParams({
+              format: "jsonv2",
+              limit: "6",
+              dedupe: "1",
+              bounded: "1",
+              q,
+              featuretype: "settlement",
+              viewbox,
+            });
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+              signal: local.signal,
+              headers: { Accept: "application/json" },
+            });
+            if (!res.ok) return [];
+            return (await res.json()) as Array<{
+              lat?: string;
+              lon?: string;
+              name?: string;
+              display_name?: string;
+              type?: string;
+              class?: string;
+              osm_type?: string;
+              osm_id?: number;
+            }>;
+          }),
+        ),
+        NEARBY_NOMINATIM_TIMEOUT_MS,
+        "Nominatim",
+        () => local.abort(),
+      )
+    ).flat();
+
+    const out: OverpassElement[] = [];
+    const seen = new Set<string>();
+    for (const row of rows) {
+      const place = String(row.type || "").toLowerCase();
+      if (!/^(city|town|village)$/.test(place)) continue;
+      if (row.class && row.class !== "place") continue;
+      const rLat = Number(row.lat);
+      const rLon = Number(row.lon);
+      if (!Number.isFinite(rLat) || !Number.isFinite(rLon)) continue;
+      // Keep inside the requested radius (Nominatim viewbox can still spill).
+      if (haversineMeters([lat, lon], [rLat, rLon]) > radiusM * 1.05) continue;
+      const key = `${row.osm_type || "node"}/${row.osm_id ?? `${rLat}:${rLon}`}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        type: row.osm_type === "way" || row.osm_type === "relation" ? row.osm_type : "node",
+        id: row.osm_id,
+        lat: rLat,
+        lon: rLon,
+        tags: {
+          name: row.name || row.display_name?.split(",")[0] || titleCaseTag(place),
+          place,
+        },
+      });
+    }
+    return out;
+  } finally {
+    signal.removeEventListener("abort", onParentAbort);
   }
-  return out;
 }
 
 function pickTopHits(
@@ -633,6 +692,7 @@ function verifyNearbyHits(origin: [number, number], hits: NearbyHit[]): NearbyHi
 /**
  * Progressive Overpass search. Calls onPartial as soon as #1 is known so the UI
  * can paint immediately, then keeps expanding radii in the background for #2/#3.
+ * Hard-deadline capped so Closest chips never spin forever.
  */
 async function fetchNearby(
   kind: NearbyKind,
@@ -661,6 +721,9 @@ async function fetchNearby(
   let best: NearbyHit[] = [];
   let lastPartialSig = "";
   const overpassCtl = beginNearbyOverpass();
+  const startedAt = Date.now();
+  const timeLeft = () => NEARBY_SEARCH_DEADLINE_MS - (Date.now() - startedAt);
+  const pastDeadline = () => timeLeft() <= 0;
 
   const emit = (hits: NearbyHit[]) => {
     if (!hits.length || !onPartial) return;
@@ -691,18 +754,22 @@ ${outClause}
   // Use bbox (not `around`) — same client-side distance filter, much less Overpass CPU.
   for (let i = 0; i < meta.radiiM.length; i++) {
     const radius = meta.radiiM[i];
-    if (isCancelled?.() || overpassCtl.signal.aborted) break;
+    if (isCancelled?.() || overpassCtl.signal.aborted || pastDeadline()) break;
     try {
-      const timeoutMs =
+      const remaining = timeLeft();
+      if (remaining < 800) break;
+      const timeoutMs = Math.min(
+        remaining - 200,
         i === 0
           ? kind === "town"
-            ? 5000
+            ? 4500
             : meta.outMode === "geom"
-              ? 7000
-              : 6000
+              ? 5500
+              : 5000
           : meta.outMode === "geom"
-            ? 9000
-            : 8000;
+            ? 5500
+            : 5000,
+      );
       const nonEmpty = async (p: Promise<OverpassElement[]>) => {
         const els = await p;
         if (!els.length) throw new Error("empty");
@@ -710,13 +777,17 @@ ${outClause}
       };
       let elements: OverpassElement[] = [];
       if (kind === "town" && i === 0) {
+        // Race Nominatim vs Overpass — each path has its own timeout so a hung
+        // Nominatim can never keep Closest spinning forever.
         elements = await Promise.any([
           nonEmpty(nominatimSettlements(lat, lon, radius, overpassCtl.signal)),
           nonEmpty(runParts(meta.overpassParts, radius, timeoutMs)),
         ]).catch(async () => {
-          if (isCancelled?.() || overpassCtl.signal.aborted) return [];
+          if (isCancelled?.() || overpassCtl.signal.aborted || pastDeadline()) return [];
+          const retryBudget = Math.min(3500, timeLeft() - 200);
+          if (retryBudget < 800) return [];
           try {
-            return await runParts(meta.overpassParts, radius, 4000);
+            return await runParts(meta.overpassParts, radius, retryBudget);
           } catch {
             return [];
           }
@@ -734,13 +805,17 @@ ${outClause}
         !hits.length &&
         meta.overpassPartsFallback?.length &&
         !isCancelled?.() &&
-        !overpassCtl.signal.aborted
+        !overpassCtl.signal.aborted &&
+        !pastDeadline()
       ) {
         try {
-          const fallbackEls = await runParts(meta.overpassPartsFallback, radius, timeoutMs);
-          hits = pickTopHits(kind, meta.label, origin, fallbackEls, NEARBY_RESULT_LIMIT).filter(
-            (h) => h.meters / 1609.344 <= meta.maxMiles && h.meters <= radius * 1.15,
-          );
+          const fallbackBudget = Math.min(timeoutMs, timeLeft() - 200);
+          if (fallbackBudget >= 800) {
+            const fallbackEls = await runParts(meta.overpassPartsFallback, radius, fallbackBudget);
+            hits = pickTopHits(kind, meta.label, origin, fallbackEls, NEARBY_RESULT_LIMIT).filter(
+              (h) => h.meters / 1609.344 <= meta.maxMiles && h.meters <= radius * 1.15,
+            );
+          }
         } catch {
           // keep empty — try next radius
         }
@@ -763,16 +838,19 @@ ${outClause}
         if (best.length >= NEARBY_RESULT_LIMIT && farthestKept.meters <= radius * 1.05) break;
       }
     } catch (e) {
-      if (isCancelled?.() || overpassCtl.signal.aborted) break;
+      if (isCancelled?.() || overpassCtl.signal.aborted || pastDeadline()) break;
       if (e instanceof DOMException && e.name === "AbortError") break;
       // Try next radius / endpoint path; do not invent a fake location.
       continue;
     }
   }
 
+  // Ensure in-flight mirror work stops when we leave — even on empty miss.
+  if (!overpassCtl.signal.aborted) overpassCtl.abort();
+
   best = verifyNearbyHits(origin, best);
   // Never cache empty misses — allow a real retry on the next click.
-  if (!isCancelled?.() && !overpassCtl.signal.aborted && best.length) {
+  if (!isCancelled?.() && best.length) {
     nearbyCache.set(cacheKey, best);
   }
   return best;
@@ -892,6 +970,8 @@ export function LandViewerModal({
     setNearbyHitIndex(0);
     nearbyHitIndexRef.current = 0;
     nearbySearchGen.current += 1;
+    nearbyOverpassAbort?.abort();
+    setNearbyLoading(false);
     setElevationFt(null);
     setZoom(null);
     {
@@ -1133,6 +1213,8 @@ export function LandViewerModal({
       group?.clearLayers();
 
       let paintedKey: string | null = null;
+      let hits: NearbyHit[] = [];
+      let timedOut = false;
       const applyPartial = (partial: NearbyHit[]) => {
         if (gen !== nearbySearchGen.current || !partial.length) return;
         setNearbyLoading(false);
@@ -1148,42 +1230,50 @@ export function LandViewerModal({
         }
       };
 
-      let hits: NearbyHit[] = [];
+      // Absolute UI watchdog — Closest must never show "Working" forever.
+      const watchdog = window.setTimeout(() => {
+        if (gen !== nearbySearchGen.current) return;
+        timedOut = true;
+        nearbyOverpassAbort?.abort();
+        setNearbyLoading(false);
+        if (!paintedKey) {
+          setNearbyStatus(
+            `Couldn’t find ${chip?.label?.toLowerCase() ?? "that"} nearby — tap again to retry`,
+          );
+        }
+      }, NEARBY_SEARCH_DEADLINE_MS + 500);
+
       try {
         hits = await fetchNearby(
           kind,
           latitude!,
           longitude!,
           applyPartial,
-          () => gen !== nearbySearchGen.current,
+          () => gen !== nearbySearchGen.current || timedOut,
         );
-        // One short retry only when nothing painted — avoids doubling a slow empty miss
-        // (Town/Hospital used to wait through every radius twice).
-        if (!hits.length && !paintedKey && gen === nearbySearchGen.current) {
-          nearbyCache.delete(`v3:${kind}:${latitude!.toFixed(4)}:${longitude!.toFixed(4)}`);
-          hits = await fetchNearby(
-            kind,
-            latitude!,
-            longitude!,
-            applyPartial,
-            () => gen !== nearbySearchGen.current,
-          );
-        }
       } catch {
         hits = [];
+      } finally {
+        window.clearTimeout(watchdog);
+        if (gen === nearbySearchGen.current) {
+          setNearbyLoading(false);
+        }
       }
-      if (gen !== nearbySearchGen.current) return;
-      setNearbyLoading(false);
 
+      if (gen !== nearbySearchGen.current) return;
       if (!mapRef.current || !layersRef.current.nearby) return;
 
       if (!hits.length) {
         setNearbyHits([]);
         setNearbyHitIndex(0);
         nearbyHitIndexRef.current = 0;
-        setNearbyStatus(
-          `No mapped ${chip?.label?.toLowerCase() ?? "feature"} within ~${chip?.maxMiles ?? 10} mi`,
-        );
+        if (!paintedKey) {
+          setNearbyStatus(
+            timedOut
+              ? `Couldn’t find ${chip?.label?.toLowerCase() ?? "that"} nearby — tap again to retry`
+              : `No mapped ${chip?.label?.toLowerCase() ?? "feature"} within ~${chip?.maxMiles ?? 10} mi`,
+          );
+        }
         return;
       }
 
