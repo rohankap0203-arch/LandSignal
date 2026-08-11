@@ -801,7 +801,7 @@ export function ReturnVisual({
         </div>
       ) : null}
 
-      <div className="traj-head-row">
+      <div className="traj-head-row traj-head-row--hold">
         <h3 className="display text-lg font-semibold leading-snug">
           {holdYears} yr hold · {livePaceDisplay}
           {toggledOff ? ` · ${toggledOff} screens off` : ""}
@@ -813,7 +813,7 @@ export function ReturnVisual({
               type="button"
               role="tab"
               aria-selected={activeCase === k}
-              className={`traj-window-btn ${activeCase === k ? "active" : ""}`}
+              className={`traj-window-btn traj-window-btn--case ${activeCase === k ? "active" : ""}`}
               onClick={() => setActiveCase(k)}
             >
               {caseLabel(k)}
