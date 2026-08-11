@@ -560,6 +560,7 @@ export function CatalystSimulator({
   engine: Engine | null | undefined;
 }) {
   const [open, setOpen] = useState(false);
+  const [revealing, setRevealing] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [stress, setStress] = useState("custom");
   const [burst, setBurst] = useState<{ id: number; tone: "up" | "down" } | null>(null);
@@ -608,7 +609,10 @@ export function CatalystSimulator({
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        setOpen(false);
+        setRevealing(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -616,6 +620,29 @@ export function CatalystSimulator({
       window.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!revealing) return;
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      setRevealing(false);
+      return;
+    }
+    const t = window.setTimeout(() => setRevealing(false), 1150);
+    return () => window.clearTimeout(t);
+  }, [revealing]);
+
+  const openEngine = () => {
+    setOpen(true);
+    setRevealing(true);
+  };
+
+  const closeEngine = () => {
+    setOpen(false);
+    setRevealing(false);
+  };
 
   if (!engine) return null;
 
@@ -659,7 +686,7 @@ export function CatalystSimulator({
         className={`fse-launch ${open ? "is-open" : ""}`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => setOpen(true)}
+        onClick={openEngine}
       >
         <span className="fse-launch-scene" aria-hidden>
           <span className="fse-scene-actor fse-scene-shovel">
@@ -722,15 +749,45 @@ export function CatalystSimulator({
         <div
           className="fse-backdrop"
           role="presentation"
-          onClick={() => setOpen(false)}
+          onClick={closeEngine}
         >
           <div
-            className="fse-modal"
+            className={`fse-modal${revealing ? " is-revealing" : ""}`}
             role="dialog"
             aria-modal="true"
             aria-label="Future Scenario Engine"
             onClick={(e) => e.stopPropagation()}
           >
+            {revealing ? (
+              <div className="fse-dirt-reveal" aria-hidden>
+                <div className="fse-dirt-layer">
+                  <span className="fse-dirt-grain" />
+                  <span className="fse-dirt-grain fse-dirt-grain-b" />
+                  <span className="fse-dirt-grain fse-dirt-grain-c" />
+                </div>
+                <div className="fse-dirt-shovel-wrap">
+                  <svg className="fse-dirt-shovel" viewBox="0 0 48 48" width="52" height="52" fill="none">
+                    <path
+                      className="fse-dirt-shovel-shaft"
+                      d="M28.5 6.5l5 5L16.2 28.8c-1.1 1.1-2.9.9-3.8-.4l-1.2-1.7c-.9-1.2-.7-3 .4-4.1L28.5 6.5z"
+                      stroke="#2a2118"
+                      strokeWidth="1.6"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      className="fse-dirt-shovel-blade"
+                      d="M12.2 29.5c-2.4 1.8-3.6 5.1-2.3 7.6.8 1.5 2.5 2.4 4.2 2 2.7-.6 5.2-3.1 6.2-5.6"
+                      stroke="#2a2118"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <circle cx="33.5" cy="9.5" r="1.4" fill="#2a2118" opacity="0.35" />
+                  </svg>
+                  <span className="fse-dirt-spray" />
+                </div>
+              </div>
+            ) : null}
             <DollarBurst burst={burst} />
             <header className="fse-modal-head">
               <div className="fse-modal-head-main">
@@ -765,7 +822,7 @@ export function CatalystSimulator({
                 type="button"
                 className="help-q on fse-close"
                 aria-label="Close"
-                onClick={() => setOpen(false)}
+                onClick={closeEngine}
               >
                 ×
               </button>
