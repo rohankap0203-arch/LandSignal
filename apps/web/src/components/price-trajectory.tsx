@@ -60,6 +60,11 @@ type Trajectory = {
 /** Value-over-time presets (not 5-year hold steps — those live on return hold). */
 const TIMEFRAMES = [1, 3, 5, 10, 15, 25, 40, 60, 80, 100] as const;
 
+function clampHorizonYears(n: number): number {
+  if (!Number.isFinite(n)) return 10;
+  return Math.max(1, Math.min(100, Math.round(n)));
+}
+
 function money(v: unknown): string {
   const n = Number(v);
   if (!Number.isFinite(n)) return "—";
@@ -95,7 +100,10 @@ export function PriceTrajectory({
   const windows = (trajectory?.windows?.length ? trajectory.windows : [...TIMEFRAMES]).filter((w) =>
     TIMEFRAMES.includes(w as (typeof TIMEFRAMES)[number]),
   );
-  const [horizon, setHorizon] = useState(10);
+  const [horizonPreset, setHorizonPreset] = useState<number | "custom">(10);
+  const [customHorizon, setCustomHorizon] = useState("10");
+  const horizon =
+    horizonPreset === "custom" ? clampHorizonYears(Number(customHorizon) || 10) : horizonPreset;
   const [hitchId, setHitchId] = useState<string>("base");
   const [hitchHelpOpen, setHitchHelpOpen] = useState(false);
   const [moneyModeLocal, setMoneyModeLocal] = useState<MoneyMode>("today");
@@ -317,14 +325,49 @@ export function PriceTrajectory({
             key={y}
             type="button"
             role="tab"
-            aria-selected={horizon === y}
-            className={`traj-window-btn ${horizon === y ? "active" : ""}`}
-            onClick={() => setHorizon(y)}
+            aria-selected={horizonPreset === y}
+            className={`traj-window-btn ${horizonPreset === y ? "active" : ""}`}
+            onClick={() => {
+              setHorizonPreset(y);
+              setCustomHorizon(String(y));
+            }}
           >
             {y} yr
           </button>
         ))}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={horizonPreset === "custom"}
+          className={`traj-window-btn ${horizonPreset === "custom" ? "active" : ""}`}
+          onClick={() => setHorizonPreset("custom")}
+        >
+          Custom
+        </button>
       </div>
+      {horizonPreset === "custom" ? (
+        <div className="hold-custom-row">
+          <label className="hold-custom-label">
+            Years
+            <input
+              type="number"
+              min={1}
+              max={100}
+              step={1}
+              value={customHorizon}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setCustomHorizon(raw);
+              }}
+              onBlur={() => {
+                const n = clampHorizonYears(Number(customHorizon) || horizon);
+                setCustomHorizon(String(n));
+              }}
+            />
+          </label>
+          <span className="hold-custom-hint">1–100 years · same span back and ahead</span>
+        </div>
+      ) : null}
 
       <div className="traj-head-row">
         <h3 className="display text-lg font-semibold leading-snug">
