@@ -12,6 +12,7 @@ import {
   type SearchFilters,
   type SearchMeta,
 } from "@/lib/api";
+import { SEARCH_META_FALLBACK } from "@/lib/search-meta-fallback";
 
 type PriceUnit = "K" | "M";
 
@@ -140,7 +141,8 @@ function UnitToggle({
 
 export default function SearchPage() {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
-  const [meta, setMeta] = useState<SearchMeta | null>(null);
+  // Seed full catalogs immediately so phones never flash/stuck on only "Any".
+  const [meta, setMeta] = useState<SearchMeta>(SEARCH_META_FALLBACK);
   const [rows, setRows] = useState<RadarRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -247,7 +249,13 @@ export default function SearchPage() {
         }
         setRows(data);
         const metaNow = await landsignalApi.searchMeta().catch(() => null);
-        if (metaNow) setMeta(metaNow);
+        if (metaNow) {
+          setMeta({
+            ...SEARCH_META_FALLBACK,
+            ...metaNow,
+            states: metaNow.states?.length ? metaNow.states : SEARCH_META_FALLBACK.states,
+          });
+        }
         const total = metaNow?.inventory_count ?? data.length;
         setStatus(
           data.length
@@ -276,11 +284,32 @@ export default function SearchPage() {
   );
 
   useEffect(() => {
-    // Load filter catalogs only — do NOT auto-search
+    // Load live catalogs (inventory counts, regions) — keep fallback if this fails
+    let cancelled = false;
     landsignalApi
       .searchMeta()
-      .then(setMeta)
-      .catch(() => setMeta(null));
+      .then((live) => {
+        if (cancelled || !live) return;
+        setMeta({
+          ...SEARCH_META_FALLBACK,
+          ...live,
+          states: live.states?.length ? live.states : SEARCH_META_FALLBACK.states,
+          strategies: live.strategies?.length ? live.strategies : SEARCH_META_FALLBACK.strategies,
+          price_presets: live.price_presets?.length
+            ? live.price_presets
+            : SEARCH_META_FALLBACK.price_presets,
+          acre_presets: live.acre_presets?.length
+            ? live.acre_presets
+            : SEARCH_META_FALLBACK.acre_presets,
+          hold_years: live.hold_years?.length ? live.hold_years : SEARCH_META_FALLBACK.hold_years,
+        });
+      })
+      .catch(() => {
+        /* keep SEARCH_META_FALLBACK — absolute localhost API bases fail on phones */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function scanFresh() {
@@ -289,7 +318,11 @@ export default function SearchPage() {
     try {
       await landsignalApi.discover(10000, 0.1, false, undefined, true);
       const nextMeta = await landsignalApi.searchMeta();
-      setMeta(nextMeta);
+      setMeta({
+        ...SEARCH_META_FALLBACK,
+        ...nextMeta,
+        states: nextMeta.states?.length ? nextMeta.states : SEARCH_META_FALLBACK.states,
+      });
       setStatus(
         `Inventory refresh running · ${nextMeta.inventory_count?.toLocaleString() ?? 0} parcels indexed so far. Click Show matches to search.`,
       );
@@ -363,7 +396,10 @@ export default function SearchPage() {
               multi
               ariaLabel="State"
               values={form.states}
-              options={(meta?.states || ["Any"]).map((s) => ({ value: s, label: s }))}
+              options={(meta.states?.length ? meta.states : SEARCH_META_FALLBACK.states).map((s) => ({
+                value: s,
+                label: s,
+              }))}
               onChange={(v) => setForm((f) => ({ ...f, states: v, region: "Any", regionCustom: "" }))}
             />
           </FilterField>
@@ -395,7 +431,10 @@ export default function SearchPage() {
             <HeroSelect
               ariaLabel="Price range"
               value={form.pricePreset}
-              options={(meta?.price_presets || [{ label: "Any" }]).map((p) => ({
+              options={(meta.price_presets?.length
+                ? meta.price_presets
+                : SEARCH_META_FALLBACK.price_presets
+              ).map((p) => ({
                 value: p.label,
                 label: p.label,
               }))}
@@ -449,7 +488,10 @@ export default function SearchPage() {
             <HeroSelect
               ariaLabel="Acreage"
               value={form.acrePreset}
-              options={(meta?.acre_presets || [{ label: "Any" }]).map((p) => ({
+              options={(meta.acre_presets?.length
+                ? meta.acre_presets
+                : SEARCH_META_FALLBACK.acre_presets
+              ).map((p) => ({
                 value: p.label,
                 label: p.label,
               }))}
@@ -494,7 +536,10 @@ export default function SearchPage() {
               multi
               ariaLabel="Strategy"
               values={form.strategies}
-              options={(meta?.strategies || ["Any"]).map((s) => ({
+              options={(meta.strategies?.length
+                ? meta.strategies
+                : SEARCH_META_FALLBACK.strategies
+              ).map((s) => ({
                 value: s,
                 label: s === "Any" ? "Any" : s === "CUSTOM" ? "Type my own…" : s.replaceAll("_", " "),
               }))}
