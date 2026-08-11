@@ -32,7 +32,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "high_impact",
         "correlation_group": "commercial_growth",
         "distance_half_life_mi": 1.2,
-        "base_channels": {"immediate": 0.045, "rate": 0.004, "hbu": 0.02},
+        "base_channels": {"immediate": 0.126, "rate": 0.0112, "hbu": 0.056},
         "preferred_strategies": {"flip", "hold_develop", "subdivide"},
         "needs_road_access": True,
         "chain": ["utility_expansion", "residential_growth", "land_use_intensification"],
@@ -43,7 +43,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "likely",
         "correlation_group": "commercial_growth",
         "distance_half_life_mi": 0.55,
-        "base_channels": {"immediate": 0.02, "rate": 0.002, "hbu": 0.01},
+        "base_channels": {"immediate": 0.07, "rate": 0.007, "hbu": 0.035},
         "preferred_strategies": {"flip", "hold_develop"},
         "needs_road_access": True,
         "chain": ["traffic_increase", "commercial_growth"],
@@ -54,7 +54,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "high_impact",
         "correlation_group": "commercial_growth",
         "distance_half_life_mi": 2.0,
-        "base_channels": {"immediate": 0.06, "rate": 0.006, "hbu": 0.04},
+        "base_channels": {"immediate": 0.156, "rate": 0.0156, "hbu": 0.104},
         "preferred_strategies": {"flip", "hold_develop", "subdivide"},
         "needs_road_access": True,
         "chain": ["residential_growth", "utility_expansion", "road_expansion"],
@@ -65,7 +65,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "high_impact",
         "correlation_group": "suburban_expansion",
         "distance_half_life_mi": 3.5,
-        "base_channels": {"immediate": 0.05, "rate": 0.01, "hbu": 0.05},
+        "base_channels": {"immediate": 0.12, "rate": 0.024, "hbu": 0.12},
         "preferred_strategies": {"hold_appreciate", "hold_develop", "subdivide", "flip"},
         "needs_road_access": False,
         "chain": ["utility_expansion", "school_opening", "retail_follow_on", "population_growth"],
@@ -76,7 +76,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "likely",
         "correlation_group": "suburban_expansion",
         "distance_half_life_mi": 8.0,
-        "base_channels": {"immediate": 0.03, "rate": 0.012, "hbu": 0.04},
+        "base_channels": {"immediate": 0.084, "rate": 0.0336, "hbu": 0.112},
         "preferred_strategies": {"hold_appreciate", "hold_develop", "subdivide", "flip"},
         "needs_road_access": False,
         "chain": ["annexation", "utility_expansion", "zoning_change", "residential_growth"],
@@ -87,7 +87,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "high_impact",
         "correlation_group": "employment_node",
         "distance_half_life_mi": 6.0,
-        "base_channels": {"immediate": 0.04, "rate": 0.008, "hbu": 0.03},
+        "base_channels": {"immediate": 0.1, "rate": 0.02, "hbu": 0.075},
         "preferred_strategies": {"hold_appreciate", "hold_develop", "subdivide", "flip"},
         "needs_road_access": False,
         "chain": ["residential_growth", "retail_follow_on", "road_expansion"],
@@ -98,7 +98,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "high_impact",
         "correlation_group": "access_upgrade",
         "distance_half_life_mi": 4.5,
-        "base_channels": {"immediate": 0.07, "rate": 0.009, "hbu": 0.08},
+        "base_channels": {"immediate": 0.168, "rate": 0.0216, "hbu": 0.192},
         "preferred_strategies": {"hold_develop", "flip", "subdivide", "hold_appreciate"},
         "needs_road_access": True,
         "chain": ["commercial_development", "utility_expansion", "residential_growth", "land_use_intensification"],
@@ -109,7 +109,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "likely",
         "correlation_group": "access_upgrade",
         "distance_half_life_mi": 1.5,
-        "base_channels": {"immediate": 0.025, "rate": 0.004, "hbu": 0.02},
+        "base_channels": {"immediate": 0.055, "rate": 0.0088, "hbu": 0.044},
         "preferred_strategies": {"flip", "hold_develop", "subdivide"},
         "needs_road_access": True,
         "chain": ["commercial_growth", "traffic_increase"],
@@ -120,7 +120,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "likely",
         "correlation_group": "access_upgrade",
         "distance_half_life_mi": 0.8,
-        "base_channels": {"immediate": 0.04, "rate": 0.003, "hbu": 0.035},
+        "base_channels": {"immediate": 0.092, "rate": 0.0069, "hbu": 0.0805},
         "preferred_strategies": {"hold_appreciate", "hold_develop", "flip", "subdivide"},
         "needs_road_access": True,
         "chain": ["residential_growth", "entitlement_easier"],
@@ -131,7 +131,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "high_impact",
         "correlation_group": "utility_infrastructure",
         "distance_half_life_mi": 1.0,
-        "base_channels": {"immediate": 0.08, "rate": 0.006, "hbu": 0.12},
+        "base_channels": {"immediate": 0.2, "rate": 0.015, "hbu": 0.3},
         "preferred_strategies": {"hold_develop", "subdivide", "flip"},
         "needs_road_access": False,
         "service_boundary_sensitive": True,
@@ -143,7 +143,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "high_impact",
         "correlation_group": "utility_infrastructure",
         "distance_half_life_mi": 1.2,
-        "base_channels": {"immediate": 0.06, "rate": 0.005, "hbu": 0.09},
+        "base_channels": {"immediate": 0.15, "rate": 0.0125, "hbu": 0.225},
         "preferred_strategies": {"hold_develop", "subdivide", "flip"},
         "needs_road_access": False,
         "service_boundary_sensitive": True,
@@ -155,7 +155,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "likely",
         "correlation_group": "utility_infrastructure",
         "distance_half_life_mi": 2.0,
-        "base_channels": {"immediate": 0.02, "rate": 0.002, "hbu": 0.03},
+        "base_channels": {"immediate": 0.044, "rate": 0.0044, "hbu": 0.066},
         "preferred_strategies": {"hold_develop", "flip"},
         "needs_road_access": False,
         "chain": ["industrial_feasibility", "residential_growth"],
@@ -166,7 +166,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "likely",
         "correlation_group": "utility_infrastructure",
         "distance_half_life_mi": 3.0,
-        "base_channels": {"immediate": 0.015, "rate": 0.003, "hbu": 0.015},
+        "base_channels": {"immediate": 0.03, "rate": 0.006, "hbu": 0.03},
         "preferred_strategies": {"hold_appreciate", "hold_develop", "flip"},
         "needs_road_access": False,
         "chain": ["remote_work_demand", "residential_growth"],
@@ -177,7 +177,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "likely",
         "correlation_group": "amenity_demand",
         "distance_half_life_mi": 3.0,
-        "base_channels": {"immediate": 0.03, "rate": 0.005, "hbu": 0.02},
+        "base_channels": {"immediate": 0.066, "rate": 0.011, "hbu": 0.044},
         "preferred_strategies": {"hold_appreciate", "subdivide", "flip"},
         "needs_road_access": False,
         "chain": ["residential_growth", "retail_follow_on"],
@@ -188,7 +188,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "high_impact",
         "correlation_group": "employment_node",
         "distance_half_life_mi": 4.0,
-        "base_channels": {"immediate": 0.04, "rate": 0.006, "hbu": 0.025},
+        "base_channels": {"immediate": 0.092, "rate": 0.0138, "hbu": 0.0575},
         "preferred_strategies": {"hold_appreciate", "hold_develop", "flip"},
         "needs_road_access": False,
         "chain": ["residential_growth", "medical_office_demand"],
@@ -199,7 +199,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "likely",
         "correlation_group": "access_upgrade",
         "distance_half_life_mi": 2.5,
-        "base_channels": {"immediate": 0.035, "rate": 0.005, "hbu": 0.03},
+        "base_channels": {"immediate": 0.0805, "rate": 0.0115, "hbu": 0.069},
         "preferred_strategies": {"hold_develop", "flip", "subdivide"},
         "needs_road_access": False,
         "chain": ["density_entitlement", "residential_growth"],
@@ -210,7 +210,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "high_impact",
         "correlation_group": "access_upgrade",
         "distance_half_life_mi": 8.0,
-        "base_channels": {"immediate": 0.03, "rate": 0.004, "hbu": 0.04},
+        "base_channels": {"immediate": 0.066, "rate": 0.0088, "hbu": 0.088},
         "preferred_strategies": {"hold_develop", "flip"},
         "needs_road_access": False,
         "chain": ["industrial_demand", "employment_growth"],
@@ -222,7 +222,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "likely",
         "correlation_group": "employment_node",
         "distance_half_life_mi": 5.0,
-        "base_channels": {"immediate": 0.025, "rate": 0.005, "hbu": 0.02},
+        "base_channels": {"immediate": 0.055, "rate": 0.011, "hbu": 0.044},
         "preferred_strategies": {"hold_appreciate", "hold_develop", "flip"},
         "needs_road_access": False,
         "chain": ["residential_demand", "road_expansion"],
@@ -234,7 +234,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "high_impact",
         "correlation_group": "entitlement",
         "distance_half_life_mi": 0.3,
-        "base_channels": {"immediate": 0.1, "rate": 0.004, "hbu": 0.14},
+        "base_channels": {"immediate": 0.24, "rate": 0.0096, "hbu": 0.336},
         "preferred_strategies": {"hold_develop", "flip", "subdivide"},
         "needs_road_access": False,
         "chain": ["density_entitlement", "land_use_intensification"],
@@ -245,7 +245,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "likely",
         "correlation_group": "entitlement",
         "distance_half_life_mi": 0.5,
-        "base_channels": {"immediate": 0.05, "rate": 0.006, "hbu": 0.07},
+        "base_channels": {"immediate": 0.12, "rate": 0.0144, "hbu": 0.168},
         "preferred_strategies": {"hold_develop", "flip", "subdivide"},
         "needs_road_access": False,
         "chain": ["utility_expansion", "zoning_change"],
@@ -256,7 +256,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "high_impact",
         "correlation_group": "entitlement",
         "distance_half_life_mi": 0.3,
-        "base_channels": {"immediate": 0.08, "rate": 0.005, "hbu": 0.12},
+        "base_channels": {"immediate": 0.192, "rate": 0.012, "hbu": 0.288},
         "preferred_strategies": {"hold_develop", "subdivide", "flip"},
         "needs_road_access": False,
         "chain": ["land_use_intensification"],
@@ -267,7 +267,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "likely",
         "correlation_group": "suburban_expansion",
         "distance_half_life_mi": 0.75,
-        "base_channels": {"immediate": 0.03, "rate": 0.004, "hbu": 0.025},
+        "base_channels": {"immediate": 0.066, "rate": 0.0088, "hbu": 0.055},
         "preferred_strategies": {"hold_appreciate", "hold_develop", "flip", "subdivide"},
         "needs_road_access": False,
         "chain": ["utility_expansion", "retail_follow_on"],
@@ -278,7 +278,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "likely",
         "correlation_group": "amenity_demand",
         "distance_half_life_mi": 2.0,
-        "base_channels": {"immediate": 0.02, "rate": 0.002, "hbu": 0.01},
+        "base_channels": {"immediate": 0.04, "rate": 0.004, "hbu": 0.02},
         "preferred_strategies": {"hold_appreciate", "recreation"},
         "needs_road_access": False,
         "chain": ["scarcity_premium"],
@@ -290,7 +290,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "likely",
         "correlation_group": "amenity_demand",
         "distance_half_life_mi": 1.5,
-        "base_channels": {"immediate": 0.025, "rate": 0.003, "hbu": 0.01},
+        "base_channels": {"immediate": 0.05, "rate": 0.006, "hbu": 0.02},
         "preferred_strategies": {"hold_appreciate", "flip", "recreation"},
         "needs_road_access": False,
         "chain": ["residential_premium"],
@@ -301,7 +301,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "likely",
         "correlation_group": "suburban_expansion",
         "distance_half_life_mi": 12.0,
-        "base_channels": {"immediate": 0.02, "rate": 0.01, "hbu": 0.02},
+        "base_channels": {"immediate": 0.05, "rate": 0.025, "hbu": 0.05},
         "preferred_strategies": {"hold_appreciate", "hold_develop", "subdivide", "flip"},
         "needs_road_access": False,
         "chain": ["retail_follow_on", "school_opening"],
@@ -312,7 +312,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "downside",
         "correlation_group": "economic_stress",
         "distance_half_life_mi": 15.0,
-        "base_channels": {"immediate": -0.04, "rate": -0.008, "hbu": -0.02},
+        "base_channels": {"immediate": -0.104, "rate": -0.0208, "hbu": -0.052},
         "preferred_strategies": set(),
         "needs_road_access": False,
         "chain": ["population_contraction", "oversupply"],
@@ -324,7 +324,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "downside",
         "correlation_group": "economic_stress",
         "distance_half_life_mi": 10.0,
-        "base_channels": {"immediate": -0.05, "rate": -0.01, "hbu": -0.025},
+        "base_channels": {"immediate": -0.13, "rate": -0.026, "hbu": -0.065},
         "preferred_strategies": set(),
         "needs_road_access": False,
         "chain": ["employment_decline", "population_contraction"],
@@ -336,7 +336,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "downside",
         "correlation_group": "environmental_risk",
         "distance_half_life_mi": 1.0,
-        "base_channels": {"immediate": -0.06, "rate": -0.004, "hbu": -0.05},
+        "base_channels": {"immediate": -0.168, "rate": -0.0112, "hbu": -0.14},
         "preferred_strategies": set(),
         "needs_road_access": False,
         "chain": ["insurance_deterioration", "lending_friction"],
@@ -348,7 +348,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "correlation_group": "environmental_risk",
         "default_bucket": "downside",
         "distance_half_life_mi": 4.0,
-        "base_channels": {"immediate": -0.05, "rate": -0.005, "hbu": -0.04},
+        "base_channels": {"immediate": -0.13, "rate": -0.013, "hbu": -0.104},
         "preferred_strategies": set(),
         "needs_road_access": False,
         "chain": ["insurance_deterioration"],
@@ -360,7 +360,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "downside",
         "correlation_group": "environmental_risk",
         "distance_half_life_mi": 1.5,
-        "base_channels": {"immediate": -0.08, "rate": -0.003, "hbu": -0.07},
+        "base_channels": {"immediate": -0.208, "rate": -0.0078, "hbu": -0.182},
         "preferred_strategies": set(),
         "needs_road_access": False,
         "chain": ["lending_friction", "entitlement_harder"],
@@ -372,7 +372,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "likely",
         "correlation_group": "environmental_remediation",
         "distance_half_life_mi": 2.0,
-        "base_channels": {"immediate": 0.035, "rate": 0.004, "hbu": 0.03},
+        "base_channels": {"immediate": 0.077, "rate": 0.0088, "hbu": 0.066},
         "preferred_strategies": {"hold_appreciate", "hold_develop", "flip"},
         "needs_road_access": False,
         "chain": ["residential_growth", "commercial_development"],
@@ -383,7 +383,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "downside",
         "correlation_group": "nuisance",
         "distance_half_life_mi": 3.0,
-        "base_channels": {"immediate": -0.07, "rate": -0.004, "hbu": -0.05},
+        "base_channels": {"immediate": -0.196, "rate": -0.0112, "hbu": -0.14},
         "preferred_strategies": set(),
         "needs_road_access": False,
         "chain": ["amenity_decline"],
@@ -395,7 +395,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "downside",
         "correlation_group": "nuisance",
         "distance_half_life_mi": 2.5,
-        "base_channels": {"immediate": -0.05, "rate": -0.003, "hbu": -0.04},
+        "base_channels": {"immediate": -0.125, "rate": -0.0075, "hbu": -0.1},
         "preferred_strategies": set(),
         "needs_road_access": False,
         "chain": ["amenity_decline"],
@@ -407,7 +407,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "downside",
         "correlation_group": "resource_constraint",
         "distance_half_life_mi": 20.0,
-        "base_channels": {"immediate": -0.04, "rate": -0.006, "hbu": -0.08},
+        "base_channels": {"immediate": -0.104, "rate": -0.0156, "hbu": -0.208},
         "preferred_strategies": set(),
         "needs_road_access": False,
         "chain": ["development_moratorium"],
@@ -419,7 +419,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "downside",
         "correlation_group": "entitlement_friction",
         "distance_half_life_mi": 5.0,
-        "base_channels": {"immediate": -0.03, "rate": -0.003, "hbu": -0.06},
+        "base_channels": {"immediate": -0.072, "rate": -0.0072, "hbu": -0.144},
         "preferred_strategies": set(),
         "needs_road_access": False,
         "chain": ["entitlement_harder"],
@@ -431,7 +431,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "likely",
         "correlation_group": "ag_cycle",
         "distance_half_life_mi": 25.0,
-        "base_channels": {"immediate": 0.015, "rate": 0.004, "hbu": 0.01},
+        "base_channels": {"immediate": 0.03, "rate": 0.008, "hbu": 0.02},
         "preferred_strategies": {"farm", "hold_appreciate"},
         "needs_road_access": False,
         "chain": [],
@@ -442,7 +442,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "high_impact",
         "correlation_group": "suburban_expansion",
         "distance_half_life_mi": 2.5,
-        "base_channels": {"immediate": 0.045, "rate": 0.008, "hbu": 0.035},
+        "base_channels": {"immediate": 0.108, "rate": 0.0192, "hbu": 0.084},
         "preferred_strategies": {"hold_appreciate", "hold_develop", "flip", "subdivide"},
         "needs_road_access": False,
         "chain": ["retail_follow_on", "school_opening", "utility_expansion"],
@@ -453,7 +453,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "high_impact",
         "correlation_group": "employment_node",
         "distance_half_life_mi": 7.0,
-        "base_channels": {"immediate": 0.035, "rate": 0.007, "hbu": 0.03},
+        "base_channels": {"immediate": 0.0875, "rate": 0.0175, "hbu": 0.075},
         "preferred_strategies": {"hold_appreciate", "hold_develop", "flip"},
         "needs_road_access": True,
         "chain": ["road_expansion", "residential_demand", "retail_follow_on"],
@@ -465,7 +465,7 @@ EVENT_TAXONOMY: dict[str, dict[str, Any]] = {
         "default_bucket": "downside",
         "correlation_group": "nuisance",
         "distance_half_life_mi": 0.6,
-        "base_channels": {"immediate": -0.04, "rate": -0.003, "hbu": -0.035},
+        "base_channels": {"immediate": -0.104, "rate": -0.0078, "hbu": -0.091},
         "preferred_strategies": set(),
         "needs_road_access": False,
         "chain": ["amenity_decline"],
@@ -861,12 +861,29 @@ def compute_scenario_impact(
     supply_f = supply_demand_adjustment(screens, acres)
 
     channels = meta["base_channels"]
-    factor = decay * compat_f * sens * scale_f * stage_f * infra_f * zoning_f * hbu_f * cycle_f * supply_f
+    # Core drivers (must stay strong): distance, parcel fit, project certainty.
+    # Secondary modulators refine the estimate but are dampened toward 1.0 so
+    # multiplying ~7 adjustments cannot crush a real catalyst to ~0%.
+    core = decay * (0.22 + 0.78 * compat_f) * (0.40 + 0.60 * stage_f)
+
+    def _dampen(m: float, weight: float = 0.55) -> float:
+        return 1.0 + (float(m) - 1.0) * weight
+
+    mod = (
+        _dampen(sens, 0.6)
+        * _dampen(scale_f, 0.7)
+        * _dampen(infra_f, 0.55)
+        * _dampen(zoning_f, 0.55)
+        * _dampen(hbu_f, 0.65)
+        * _dampen(cycle_f, 0.5)
+        * _dampen(supply_f, 0.45)
+    )
+    factor = core * mod
 
     # Externality haircut for catalysts that can help markets but hurt amenity parcels.
     ext = float(meta.get("externality_risk") or 0.0)
     if ext > 0 and strategy in {"recreation", "hold_appreciate"} and compat < 55:
-        factor *= max(0.15, 1.0 - ext - (55 - compat) / 100.0)
+        factor *= max(0.2, 1.0 - ext * 0.85 - (55 - compat) / 140.0)
 
     immediate = float(channels.get("immediate", 0.0)) * factor
     rate = float(channels.get("rate", 0.0)) * factor
@@ -878,6 +895,8 @@ def compute_scenario_impact(
 
     # Combined multiperiod impact proxy used for UI ranges (10-year horizon lens).
     combined = immediate + hbu + rate * 8.0
+    # Soft absolute cap — keep institutional, not fantasy.
+    combined = _clip(combined, -0.55, 0.75)
 
     # Confidence / dispersion from evidence quality proxies (no fabricated comps).
     evidence_n = 0  # real comps not yet wired — do not invent
@@ -902,8 +921,11 @@ def compute_scenario_impact(
     p50 = combined
     p10 = combined * (1.0 - dispersion) if combined >= 0 else combined * (1.0 + dispersion)
     p90 = combined * (1.0 + dispersion) if combined >= 0 else combined * (1.0 - dispersion)
-    # Keep ordering for negatives.
+    # Keep ordering for negatives; bound display bands to institutional ranges.
     lo, mid, hi = sorted([p10, p50, p90])
+    lo = _clip(lo, -0.5, 0.55)
+    mid = _clip(mid, -0.5, 0.55)
+    hi = _clip(hi, -0.5, 0.55)
 
     return {
         "event_key": event_key,
@@ -1058,7 +1080,10 @@ def select_auto_scenarios(
     if access >= 55 and strategy in {"flip", "hold_develop", "subdivide"}:
         add("major_retailer", "high_impact", 75)
         add("shopping_center", "high_impact", 68)
-    elif access < 55:
+        add("major_restaurant", "likely", 72)
+    elif access >= 45:
+        add("major_restaurant", "likely", 58)
+    else:
         add("major_restaurant", "likely", 40)  # may be externality — still show with honest impact
     if growth >= 60:
         add("master_planned_community", "high_impact", 78)
@@ -1435,7 +1460,7 @@ def build_stress_cases(
 
 CUSTOM_PATTERNS: list[tuple[re.Pattern[str], str, dict[str, Any]]] = [
     (re.compile(r"\bwalmart\b|\bmajor retailer\b|\bhome depot\b|\bcostco\b", re.I), "major_retailer", {"scale": "major"}),
-    (re.compile(r"\bchick[- ]?fil[- ]?a\b|\brestaurant\b|\bfranchise\b", re.I), "major_restaurant", {"scale": "local"}),
+    (re.compile(r"\bchick[- ]?fil[- ]?a\b|\brestaurant\b|\bfranchise\b", re.I), "major_restaurant", {"scale": "neighborhood"}),
     (re.compile(r"\bshopping center\b|\bstrip (mall|center)\b", re.I), "shopping_center", {"scale": "corridor"}),
     (re.compile(r"\bmaster[- ]?planned\b|\bHOA community\b", re.I), "master_planned_community", {"scale": "municipal"}),
     (re.compile(r"\bcity\b.*\b(expand|annex)|\bannex(ed|ation)?\b|\bpart of the city\b", re.I), "annexation", {"scale": "municipal"}),

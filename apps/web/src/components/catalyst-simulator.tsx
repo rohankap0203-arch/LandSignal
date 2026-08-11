@@ -74,9 +74,14 @@ function pctRange(impact?: Impact): string {
   const lo = Number(impact.display_low_pct);
   const hi = Number(impact.display_high_pct);
   if (!Number.isFinite(lo) || !Number.isFinite(hi)) return "—";
-  const fmt = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(0)}%`;
-  if (lo === hi) return fmt(lo);
-  if (lo < 0 && hi < 0) return `${fmt(Math.max(lo, hi))} to ${fmt(Math.min(lo, hi))}`;
+  const fmt = (n: number) => {
+    const rounded = Math.abs(n) >= 10 ? Math.round(n) : Math.round(n * 10) / 10;
+    const body = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    return `${rounded > 0 ? "+" : ""}${body}%`;
+  };
+  if (Math.abs(lo - hi) < 0.05) return fmt(lo);
+  // Upside: +low to +high · Downside: more-negative to less-negative
+  if (lo < 0 && hi <= 0) return `${fmt(Math.min(lo, hi))} to ${fmt(Math.max(lo, hi))}`;
   return `${fmt(Math.min(lo, hi))} to ${fmt(Math.max(lo, hi))}`;
 }
 
@@ -224,7 +229,7 @@ function Tip({ label, children }: { label: string; children: ReactNode }) {
   }, [on]);
 
   return (
-    <span className="help-tip tone-panel fse-tip" onClick={(e) => e.stopPropagation()}>
+    <span className={`help-tip tone-panel fse-tip ${on ? "is-open" : ""}`} onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
         className={`help-tip-btn ${on ? "on" : ""}`}
@@ -238,7 +243,11 @@ function Tip({ label, children }: { label: string; children: ReactNode }) {
       >
         ?
       </button>
-      {on ? <span className="help-tip-pop">{children}</span> : null}
+      {on ? (
+        <span className="help-tip-pop fse-tip-pop" role="tooltip">
+          {children}
+        </span>
+      ) : null}
     </span>
   );
 }

@@ -7144,24 +7144,12 @@ a.acquire-block:hover {
   background: color-mix(in srgb, var(--ink) 42%, transparent);
   backdrop-filter: blur(3px);
   animation: fse-fade 0.18s ease both;
+  overflow: auto;
 }
 
 @keyframes fse-fade {
   from { opacity: 0; }
   to { opacity: 1; }
-}
-
-.fse-modal {
-  width: min(920px, 100%);
-  max-height: min(92vh, 860px);
-  overflow: auto;
-  border-radius: 18px;
-  border: 1px solid var(--line);
-  background: var(--bg-elevated);
-  color: var(--ink);
-  padding: 1rem 1.1rem 1.15rem;
-  box-shadow: 0 24px 60px color-mix(in srgb, var(--ink) 28%, transparent);
-  animation: fse-pop 0.22s ease both;
 }
 
 @keyframes fse-pop {
@@ -7172,6 +7160,40 @@ a.acquire-block:hover {
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+.fse-modal {
+  width: min(920px, 100%);
+  max-height: min(92vh, 860px);
+  overflow: visible;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  padding: 1rem 1.1rem 1.15rem;
+  box-shadow: 0 24px 60px color-mix(in srgb, var(--ink) 28%, transparent);
+  animation: fse-pop 0.22s ease both;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.fse-body {
+  display: grid;
+  gap: 1rem;
+  margin-top: 0.85rem;
+  overflow: auto;
+  min-height: 0;
+  padding-bottom: 0.35rem;
+  /* leave room so below-tips aren't clipped at the bottom edge */
+  padding-right: 0.15rem;
+}
+
+@media (min-width: 820px) {
+  .fse-body {
+    grid-template-columns: 1.05fr 0.95fr;
+    align-items: start;
   }
 }
 
@@ -7262,19 +7284,6 @@ a.acquire-block:hover {
   color: var(--brand);
 }
 
-.fse-body {
-  display: grid;
-  gap: 1rem;
-  margin-top: 0.85rem;
-}
-
-@media (min-width: 820px) {
-  .fse-body {
-    grid-template-columns: 1.05fr 0.95fr;
-    align-items: start;
-  }
-}
-
 .fse-bucket {
   margin-bottom: 0.7rem;
 }
@@ -7363,7 +7372,13 @@ a.acquire-block:hover {
 }
 
 .fse-tip {
+  position: relative;
   flex-shrink: 0;
+  z-index: 2;
+}
+
+.fse-tip.is-open {
+  z-index: 95;
 }
 
 .fse-tip .help-tip-btn {
@@ -7372,9 +7387,18 @@ a.acquire-block:hover {
   font-size: 10px;
 }
 
-.fse-tip .help-tip-pop {
-  z-index: 90;
-  width: min(18rem, 78vw);
+/* Force tip below the ? so modal overflow never clips it upward */
+.fse-tip .help-tip-pop,
+.fse-tip .fse-tip-pop {
+  top: calc(100% + 8px);
+  bottom: auto;
+  left: auto;
+  right: 0;
+  transform: none;
+  z-index: 96;
+  width: min(19rem, 82vw);
+  max-height: min(42vh, 280px);
+  overflow: auto;
 }
 
 .fse-custom {
