@@ -1576,6 +1576,22 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         mark_usd=float(mark_for_path) if mark_for_path is not None else None,
     )
 
+    from landsignal.services.catalyst_engine import (
+        build_catalyst_engine,
+        flood_zone_label,
+        normalize_strategy,
+        screens_from_score_context,
+    )
+
+    catalyst_screens = screens_from_score_context(score, enrichment)
+    catalyst_engine = build_catalyst_engine(
+        screens=catalyst_screens,
+        strategy=normalize_strategy(score.best_strategy if score else None),
+        acres=float(parcel.acreage) if parcel.acreage is not None else None,
+        flood_zone=flood_zone_label(enrichment),
+        market_trajectory=market_trajectory if isinstance(market_trajectory, dict) else None,
+    )
+
     return {
         "parcel": parcel,
         "listing": listing,
@@ -1595,6 +1611,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         "return_intelligence": return_intelligence,
         "score_drivers": score_drivers,
         "outreach": outreach,
+        "catalyst_engine": catalyst_engine,
         "rating_breakdown": rating_breakdown(score, parcel=parcel, listing=listing) if score else [],
         "score_explained": brief.get("score_story")
         or {
@@ -1614,6 +1631,73 @@ async def parcel_scores(parcel_id: UUID) -> dict[str, Any]:
     if parcel_id not in store.parcels:
         raise HTTPException(404, "Parcel not found")
     return {"scores": store.scores.get(parcel_id, [])}
+
+
+@router.post("/parcels/{parcel_id}/catalyst-simulate")
+async def parcel_catalyst_simulate(parcel_id: UUID, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Run Catalyst Simulator selection and/or natural-language custom scenarios."""
+    from landsignal.services.catalyst_engine import (
+        build_catalyst_engine,
+        build_custom_scenario_from_text,
+        flood_zone_label,
+        normalize_strategy,
+        screens_from_score_context,
+        simulate_selection,
+    )
+    from landsignal.services.market_trajectory import build_market_trajectory
+
+    store = get_store(get_settings().demo_seed)
+    parcel = store.parcels.get(parcel_id)
+    if not parcel:
+        raise HTTPException(404, "Parcel not found")
+    score = store.latest_score(parcel_id)
+    listing = store.listing_for_parcel(parcel_id)
+    enrichment = store.enrichments.get(parcel_id)
+    market_trajectory = build_market_trajectory(
+        parcel=parcel,
+        listing=listing,
+        score=score,
+        enrichment=enrichment,
+    )
+    screens = screens_from_score_context(score, enrichment)
+    strategy = normalize_strategy(score.best_strategy if score else None)
+    acres = float(parcel.acreage) if parcel.acreage is not None else None
+    flood_zone = flood_zone_label(enrichment)
+    engine = build_catalyst_engine(
+        screens=screens,
+        strategy=strategy,
+        acres=acres,
+        flood_zone=flood_zone,
+        market_trajectory=market_trajectory if isinstance(market_trajectory, dict) else None,
+    )
+
+    payload = body or {}
+    custom_text = str(payload.get("custom_text") or "").strip()
+    custom_built = None
+    custom_scenarios: list[dict[str, Any]] = []
+    if custom_text:
+        custom_built = build_custom_scenario_from_text(
+            custom_text,
+            screens=screens,
+            strategy=strategy,
+            acres=acres,
+            flood_zone=flood_zone,
+        )
+        if custom_built.get("ok") and custom_built.get("scenario"):
+            custom_scenarios.append(custom_built["scenario"])
+
+    scenario_ids = [str(x) for x in (payload.get("scenario_ids") or [])]
+    stress_key = str(payload.get("stress_case") or "").strip().lower()
+    if stress_key and stress_key != "custom":
+        stress = (engine.get("stress_cases") or {}).get(stress_key) or {}
+        scenario_ids = list(stress.get("scenario_ids") or [])
+
+    sim = simulate_selection(engine, scenario_ids, custom_scenarios=custom_scenarios or None)
+    return {
+        "engine": engine,
+        "custom": custom_built,
+        "simulation": sim,
+    }
 
 
 @router.post("/parcels/{parcel_id}/memo")

@@ -218,6 +218,14 @@ export const landsignalApi = {
   providers: () =>
     api<Array<{ id: string; kind: string; name: string; status: string; detail?: string }>>("/providers"),
   parcel: (id: string) => api<Record<string, unknown>>(`/parcels/${id}`),
+  catalystSimulate: (
+    id: string,
+    body: { scenario_ids?: string[]; custom_text?: string; stress_case?: string },
+  ) =>
+    api<Record<string, unknown>>(`/parcels/${id}/catalyst-simulate`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   parcelGeometry: (id: string) =>
     api<{
       parcel_id: string;

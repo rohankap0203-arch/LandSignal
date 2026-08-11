@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { AcquireRail, type OutreachPlaybook } from "@/components/acquire-rail";
 import { LandLoader } from "@/components/land-loader";
 import { LandViewerModal } from "@/components/land-viewer-modal";
+import { CatalystSimulator } from "@/components/catalyst-simulator";
 import { PriceTrajectory } from "@/components/price-trajectory";
 import { ReturnVisual } from "@/components/return-visual";
 import { ScoreBar } from "@/components/score-bar";
@@ -305,6 +306,7 @@ export default function ParcelIntelligencePage() {
                 { id: "sec-bidding", label: "Bidding by price" },
                 { id: "sec-value", label: "Land value" },
                 { id: "sec-return", label: "Hold return" },
+                { id: "sec-catalyst", label: "Future scenarios" },
                 { id: "sec-why", label: "Why this land" },
                 { id: "sec-score", label: "Score parts" },
                 { id: "sec-land", label: "Land checks" },
@@ -509,6 +511,11 @@ export default function ParcelIntelligencePage() {
           onMoneyModeChange={setMoneyMode}
         />
       </section>
+
+      <CatalystSimulator
+        parcelId={String(params.id)}
+        engine={(data.catalyst_engine as Parameters<typeof CatalystSimulator>[0]["engine"]) || null}
+      />
 
       <section id="sec-why" className="insight-pair scroll-mt-20">
         <InsightList

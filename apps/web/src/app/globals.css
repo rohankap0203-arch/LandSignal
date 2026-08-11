@@ -7079,3 +7079,566 @@ a.acquire-block:hover {
 }
 
 /* Auth & account UI */
+
+/* —— Future Scenario Engine / Catalyst Simulator —— */
+.fse-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.fse-launch {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 0.15rem 1rem;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 0.95rem 1.15rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--line));
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--brand) 10%, var(--bg-elevated)) 0%,
+      var(--bg-elevated) 55%,
+      color-mix(in srgb, #c4a574 8%, var(--bg-soft)) 100%
+    );
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.25s ease;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.fse-launch:hover {
+  border-color: color-mix(in srgb, var(--brand) 55%, var(--line));
+  transform: translateY(-1px);
+}
+
+.fse-launch.is-open {
+  border-color: color-mix(in srgb, var(--brand) 50%, var(--line));
+}
+
+.fse-launch-label {
+  grid-column: 1;
+  font-family: var(--font-display, "Fraunces", Georgia, serif);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.fse-launch-meta {
+  grid-column: 1;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.fse-launch-meta strong {
+  color: var(--brand);
+  font-weight: 650;
+}
+
+.fse-launch-chevron {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand) 12%, var(--bg-soft));
+  color: var(--brand);
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+.fse-panel {
+  padding: 1.15rem 1.2rem 1.35rem;
+  animation: fse-in 0.35s ease both;
+}
+
+@keyframes fse-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.fse-head {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 900px) {
+  .fse-head {
+    grid-template-columns: 1.3fr 1fr;
+    align-items: start;
+  }
+}
+
+.fse-eyebrow {
+  margin: 0 0 0.2rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.fse-opp {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-start;
+  padding: 0.85rem 0.95rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--brand) 7%, var(--bg-soft));
+  border: 1px solid color-mix(in srgb, var(--brand) 18%, var(--line));
+}
+
+.fse-opp-score {
+  flex: 0 0 auto;
+  min-width: 3.6rem;
+  text-align: center;
+  line-height: 1;
+}
+
+.fse-opp-score span {
+  display: block;
+  font-family: var(--font-display, "Fraunces", Georgia, serif);
+  font-size: 1.85rem;
+  font-weight: 650;
+  color: var(--brand);
+}
+
+.fse-opp-score small {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.fse-opp-label {
+  font-size: 0.82rem;
+  font-weight: 650;
+  margin-bottom: 0.25rem;
+}
+
+.fse-opp-reason {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.fse-integrity,
+.fse-detect,
+.fse-method,
+.fse-analogs {
+  margin: 0.85rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.fse-analogs.muted {
+  font-style: italic;
+}
+
+.fse-stress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.fse-stress-btn {
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fse-stress-btn.active {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+  background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
+  color: var(--brand);
+}
+
+.fse-columns {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1.1rem;
+}
+
+@media (min-width: 960px) {
+  .fse-columns {
+    grid-template-columns: 1.15fr 0.95fr;
+    align-items: start;
+  }
+}
+
+.fse-bucket {
+  margin-bottom: 1rem;
+}
+
+.fse-bucket h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.fse-bucket ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.fse-row {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-soft);
+  padding: 0.55rem 0.65rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.35rem 0.5rem;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.fse-row.is-on {
+  border-color: color-mix(in srgb, var(--brand) 40%, var(--line));
+  background: color-mix(in srgb, var(--brand) 6%, var(--bg-elevated));
+}
+
+.fse-row.downside.is-on {
+  border-color: color-mix(in srgb, var(--danger, #a33) 35%, var(--line));
+  background: color-mix(in srgb, var(--danger, #a33) 6%, var(--bg-elevated));
+}
+
+.fse-toggle {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  cursor: pointer;
+  grid-column: 1;
+}
+
+.fse-toggle input {
+  margin-top: 0.2rem;
+  accent-color: var(--brand);
+}
+
+.fse-toggle-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.fse-row-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.fse-row-impact {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.fse-why-btn {
+  grid-column: 2;
+  align-self: start;
+  border: none;
+  background: transparent;
+  color: var(--brand);
+  font-size: 0.75rem;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 0.15rem 0.25rem;
+}
+
+.fse-detail {
+  grid-column: 1 / -1;
+  padding: 0.55rem 0.15rem 0.2rem;
+  border-top: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  animation: fse-in 0.25s ease both;
+}
+
+.fse-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem 0.75rem;
+  margin: 0.55rem 0 0.65rem;
+}
+
+.fse-meta-grid span {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fse-meta-grid strong {
+  font-size: 0.84rem;
+}
+
+.fse-integrity-tag {
+  display: inline-block;
+  margin: 0 0 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+}
+
+.fse-detail h4 {
+  margin: 0.25rem 0 0.35rem;
+  font-size: 0.9rem;
+}
+
+.fse-because,
+.fse-counter ul,
+.fse-notes {
+  margin: 0;
+  padding-left: 1.05rem;
+  font-size: 0.78rem;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.fse-counter,
+.fse-chain {
+  margin-top: 0.55rem;
+}
+
+.fse-counter > span,
+.fse-chain > span {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.fse-chain ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.fse-chain li {
+  font-size: 0.78rem;
+  font-weight: 600;
+  position: relative;
+  padding-left: 0.9rem;
+}
+
+.fse-chain li + li::before {
+  content: "↓";
+  position: absolute;
+  left: 0;
+  color: var(--brand);
+  font-size: 0.7rem;
+  top: 0.1rem;
+}
+
+.fse-custom {
+  margin-top: 0.5rem;
+}
+
+.fse-add {
+  width: 100%;
+  border: 1px dashed color-mix(in srgb, var(--brand) 35%, var(--line));
+  background: color-mix(in srgb, var(--brand) 4%, var(--bg-elevated));
+  color: var(--brand);
+  border-radius: 12px;
+  padding: 0.7rem;
+  font-weight: 650;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.fse-custom-box {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.fse-custom-box label {
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.fse-custom-box textarea {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+  color: var(--ink);
+  padding: 0.55rem 0.65rem;
+  font: inherit;
+  resize: vertical;
+}
+
+.fse-custom-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.fse-error {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--danger, #a33);
+}
+
+.fse-path h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.fse-path-stats {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.85rem 0;
+}
+
+.fse-path-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background: var(--bg-soft);
+}
+
+.fse-path-stats span {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fse-path-stats strong {
+  font-size: 1.05rem;
+  font-family: var(--font-display, "Fraunces", Georgia, serif);
+}
+
+.fse-path-stats em {
+  font-style: normal;
+  font-size: 0.8rem;
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.fse-path-delta strong {
+  color: var(--brand);
+}
+
+.fse-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-top: 0.35rem;
+  border-radius: 12px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--brand) 5%, var(--bg-soft)) 0%,
+      var(--bg-soft) 100%
+    );
+}
+
+.fse-chart-base {
+  fill: none;
+  stroke: color-mix(in srgb, var(--ink) 45%, transparent);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 5 4;
+}
+
+.fse-chart-scen {
+  fill: none;
+  stroke: var(--brand);
+  stroke-width: 2.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: fse-draw 0.7s ease both;
+}
+
+@keyframes fse-draw {
+  from {
+    stroke-dasharray: 800;
+    stroke-dashoffset: 800;
+  }
+  to {
+    stroke-dasharray: 800;
+    stroke-dashoffset: 0;
+  }
+}
+
+.fse-chart-label {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.fse-legend {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.45rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.fse-legend .base::before,
+.fse-legend .scen::before {
+  content: "";
+  display: inline-block;
+  width: 1rem;
+  height: 2px;
+  margin-right: 0.35rem;
+  vertical-align: middle;
+}
+
+.fse-legend .base::before {
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+  border-top: 1px dashed transparent;
+}
+
+.fse-legend .scen::before {
+  background: var(--brand);
+  height: 3px;
+}
+
+.fse-notes {
+  margin-top: 0.75rem;
+  color: var(--muted);
+}
