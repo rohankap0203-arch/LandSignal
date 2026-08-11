@@ -2704,60 +2704,110 @@ a.btn-intel:hover {
   background: var(--bg-soft);
 }
 
-/* Starting bid → likely finish — admit-one ticket (above Buy case) */
+/* Starting bid → likely finish — admit-one ticket (above Buy case)
+   Notch circles are px-sized radial masks so they stay round (SVG stretch was the mismatch). */
 .bid-ticket {
+  --stub: 3.35rem;
+  --cut-sm: 7px;
+  --cut-lg: 13px;
+  --perf-cut: 8px;
   --ticket-fill: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--brand-soft) 42%, #fff) 0%,
-    color-mix(in srgb, var(--brand) 24%, #f2f9f5) 48%,
-    color-mix(in srgb, var(--brand-soft) 36%, #fff) 100%
+    118deg,
+    color-mix(in srgb, var(--brand-soft) 55%, #fff) 0%,
+    color-mix(in srgb, var(--brand) 18%, #eef8f2) 38%,
+    color-mix(in srgb, var(--brand-soft) 42%, #fff) 72%,
+    color-mix(in srgb, var(--brand) 14%, #f7fcf9) 100%
   );
   position: relative;
   display: grid;
-  grid-template-columns: 3.75rem 1px minmax(0, 1fr);
+  grid-template-columns: var(--stub) 1px minmax(0, 1fr);
   align-items: stretch;
   width: 100%;
-  min-height: 5.75rem;
+  min-height: 4.85rem;
   padding: 0;
   border: 0;
   color: var(--ink);
-  background: var(--ticket-fill);
-  /* Admit-one: side scallops + perforation notches at stub seam */
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 120' preserveAspectRatio='none'%3E%3Cpath fill-rule='evenodd' fill='black' d='M0 0H360V120H0ZM0 20a6 6 0 1 0 .01 0ZM0 40a5 5 0 1 0 .01 0ZM0 60a11 11 0 1 0 .01 0ZM0 80a5 5 0 1 0 .01 0ZM0 100a6 6 0 1 0 .01 0ZM360 20a6 6 0 1 0 .01 0ZM360 40a5 5 0 1 0 .01 0ZM360 60a11 11 0 1 0 .01 0ZM360 80a5 5 0 1 0 .01 0ZM360 100a6 6 0 1 0 .01 0ZM100 0a7 7 0 1 0 .01 0ZM100 120a7 7 0 1 0 .01 0Z'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 120' preserveAspectRatio='none'%3E%3Cpath fill-rule='evenodd' fill='black' d='M0 0H360V120H0ZM0 20a6 6 0 1 0 .01 0ZM0 40a5 5 0 1 0 .01 0ZM0 60a11 11 0 1 0 .01 0ZM0 80a5 5 0 1 0 .01 0ZM0 100a6 6 0 1 0 .01 0ZM360 20a6 6 0 1 0 .01 0ZM360 40a5 5 0 1 0 .01 0ZM360 60a11 11 0 1 0 .01 0ZM360 80a5 5 0 1 0 .01 0ZM360 100a6 6 0 1 0 .01 0ZM100 0a7 7 0 1 0 .01 0ZM100 120a7 7 0 1 0 .01 0Z'/%3E%3C/svg%3E");
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  filter: drop-shadow(0 8px 16px rgba(20, 32, 28, 0.14));
+  background:
+    linear-gradient(
+      105deg,
+      transparent 0%,
+      color-mix(in srgb, #fff 55%, transparent) 42%,
+      transparent 68%
+    ),
+    var(--ticket-fill);
+  background-size: 220% 100%, 100% 100%;
+  animation: bid-ticket-sheen 7.5s ease-in-out infinite;
+  /* sm / lg / sm side bites + perforation bites — intersect keeps circles circular */
+  -webkit-mask-image:
+    radial-gradient(circle var(--cut-sm) at 0% 22%, transparent 97%, #000 99%),
+    radial-gradient(circle var(--cut-lg) at 0% 50%, transparent 97%, #000 99%),
+    radial-gradient(circle var(--cut-sm) at 0% 78%, transparent 97%, #000 99%),
+    radial-gradient(circle var(--cut-sm) at 100% 22%, transparent 97%, #000 99%),
+    radial-gradient(circle var(--cut-lg) at 100% 50%, transparent 97%, #000 99%),
+    radial-gradient(circle var(--cut-sm) at 100% 78%, transparent 97%, #000 99%),
+    radial-gradient(circle var(--perf-cut) at var(--stub) 0%, transparent 97%, #000 99%),
+    radial-gradient(circle var(--perf-cut) at var(--stub) 100%, transparent 97%, #000 99%);
+  mask-image:
+    radial-gradient(circle var(--cut-sm) at 0% 22%, transparent 97%, #000 99%),
+    radial-gradient(circle var(--cut-lg) at 0% 50%, transparent 97%, #000 99%),
+    radial-gradient(circle var(--cut-sm) at 0% 78%, transparent 97%, #000 99%),
+    radial-gradient(circle var(--cut-sm) at 100% 22%, transparent 97%, #000 99%),
+    radial-gradient(circle var(--cut-lg) at 100% 50%, transparent 97%, #000 99%),
+    radial-gradient(circle var(--cut-sm) at 100% 78%, transparent 97%, #000 99%),
+    radial-gradient(circle var(--perf-cut) at var(--stub) 0%, transparent 97%, #000 99%),
+    radial-gradient(circle var(--perf-cut) at var(--stub) 100%, transparent 97%, #000 99%);
+  -webkit-mask-composite: source-in, source-in, source-in, source-in, source-in, source-in, source-in;
+  mask-composite: intersect;
+  filter: drop-shadow(0 7px 14px rgba(20, 32, 28, 0.16));
+}
+
+@keyframes bid-ticket-sheen {
+  0%,
+  100% {
+    background-position: 120% 0, 0 0;
+  }
+  50% {
+    background-position: -20% 0, 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bid-ticket {
+    animation: none;
+    background-size: 100% 100%, 100% 100%;
+  }
 }
 
 .bid-ticket-stub {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0.65rem 0.2rem;
+  padding: 0.55rem 0.15rem;
   text-align: center;
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
 }
 
 .bid-ticket-stub-k {
-  font-size: 0.72rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.12rem;
+  font-size: 0.78rem;
   font-weight: 800;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--brand);
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
   line-height: 1;
 }
 
 .bid-ticket-perf {
   width: 1px;
-  margin: 0.65rem 0;
+  margin: 0.7rem 0;
   background: repeating-linear-gradient(
     180deg,
-    color-mix(in srgb, var(--brand) 48%, var(--line)) 0 4px,
-    transparent 4px 8px
+    color-mix(in srgb, var(--brand) 55%, var(--line)) 0 3px,
+    transparent 3px 7px
   );
 }
 
@@ -2765,43 +2815,96 @@ a.btn-intel:hover {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 0.45rem;
+  gap: 0.35rem;
   min-width: 0;
-  padding: 0.85rem 1.35rem 0.85rem 0.95rem;
+  padding: 0.7rem 1.2rem 0.7rem 0.85rem;
 }
 
 .bid-ticket-kicker {
   min-width: 0;
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--brand) 40%, var(--muted));
+  color: color-mix(in srgb, var(--brand) 45%, var(--muted));
   overflow-wrap: anywhere;
 }
 
 .bid-ticket-prices {
   display: grid;
-  gap: 0.2rem;
+  grid-template-columns: minmax(0, 0.9fr) 1px minmax(0, 1.2fr);
+  gap: 0.55rem 0.65rem;
+  align-items: stretch;
   min-width: 0;
+}
+
+.bid-ticket-split {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.15rem 0;
+  background: repeating-linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--brand) 35%, var(--line)) 0 3px,
+    transparent 3px 6px
+  );
+}
+
+.bid-ticket-cell {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.bid-ticket-tag {
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
+.bid-ticket-cell.is-start .bid-ticket-tag {
+  color: color-mix(in srgb, var(--brand) 70%, var(--muted));
+}
+
+.bid-ticket-cell.is-finish .bid-ticket-tag {
+  color: color-mix(in srgb, var(--brand) 40%, var(--muted));
 }
 
 .bid-ticket-val {
   display: block;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: clamp(0.98rem, 2.6vw, 1.18rem);
+  font-size: clamp(1.02rem, 2.7vw, 1.22rem);
   font-weight: 800;
-  line-height: 1.3;
-  letter-spacing: -0.02em;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
   font-variant-numeric: tabular-nums;
   color: var(--brand);
   overflow-wrap: anywhere;
 }
 
-.bid-ticket-val.is-finish {
-  font-size: clamp(0.92rem, 2.4vw, 1.08rem);
+.bid-ticket-cell.is-finish .bid-ticket-val {
+  font-size: clamp(0.95rem, 2.4vw, 1.12rem);
   font-weight: 750;
-  color: color-mix(in srgb, var(--brand) 72%, var(--ink));
+  color: color-mix(in srgb, var(--brand) 55%, var(--ink));
+}
+
+@media (max-width: 420px) {
+  .bid-ticket-prices {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+
+  .bid-ticket-split {
+    width: 100%;
+    height: 1px;
+    margin: 0;
+    background: repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--brand) 35%, var(--line)) 0 4px,
+      transparent 4px 8px
+    );
+  }
 }
 
 .bid-track {

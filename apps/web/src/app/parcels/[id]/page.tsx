@@ -632,25 +632,53 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Peel "$1,013 start" / "~$29,228–$56,208 likely finish" into amount + role. */
+function peelBidFace(raw: string): { amount: string; role: "start" | "finish" | null } {
+  const t = raw.trim();
+  if (/\blikely finish\b/i.test(t)) {
+    return { amount: t.replace(/\s*likely finish\s*$/i, "").trim(), role: "finish" };
+  }
+  if (/\bstart\b/i.test(t)) {
+    return { amount: t.replace(/\s*start\s*$/i, "").trim(), role: "start" };
+  }
+  return { amount: t, role: null };
+}
+
 /** Starting bid → likely finish — admit-one ticket (above Buy case). */
 function PriceStat({ label, value, kind }: { label: string; value: string; kind?: string }) {
   const isBid = kind === "minimum_bid" || /starting bid/i.test(label);
   if (!isBid) return <Stat label={label} value={value} />;
 
   const parts = value.split(/\s·\s/).map((p) => p.trim()).filter(Boolean);
+  const faces = parts.map(peelBidFace);
+  const start = faces.find((f) => f.role === "start") || (faces[0] ? { ...faces[0], role: "start" as const } : null);
+  const finish =
+    faces.find((f) => f.role === "finish") ||
+    (faces.length >= 2 ? { amount: faces.slice(1).map((f) => f.amount).join(" · "), role: "finish" as const } : null);
 
   return (
     <div className="bid-ticket" aria-label={`${label}: ${value}`}>
-      <div className="bid-ticket-stub">
-        <span className="bid-ticket-stub-k">BID</span>
+      <div className="bid-ticket-stub" aria-hidden>
+        <span className="bid-ticket-stub-k">
+          <span>B</span>
+          <span>I</span>
+          <span>D</span>
+        </span>
       </div>
       <span className="bid-ticket-perf" aria-hidden />
       <div className="bid-ticket-main">
         <span className="bid-ticket-kicker">{label}</span>
-        {parts.length >= 2 ? (
+        {start && finish ? (
           <div className="bid-ticket-prices">
-            <span className="bid-ticket-val">{parts[0]}</span>
-            <span className="bid-ticket-val is-finish">{parts.slice(1).join(" · ")}</span>
+            <div className="bid-ticket-cell is-start">
+              <span className="bid-ticket-tag">START</span>
+              <span className="bid-ticket-val">{start.amount}</span>
+            </div>
+            <span className="bid-ticket-split" aria-hidden />
+            <div className="bid-ticket-cell is-finish">
+              <span className="bid-ticket-tag">LIKELY FINISH</span>
+              <span className="bid-ticket-val">{finish.amount}</span>
+            </div>
           </div>
         ) : (
           <span className="bid-ticket-val">{value}</span>
