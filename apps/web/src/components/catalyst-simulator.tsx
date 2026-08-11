@@ -622,13 +622,15 @@ export function CatalystSimulator({
             <div className="fse-work">
               <nav className="fse-steps" aria-label="How to use">
                 <div className={`fse-step ${!hasSel ? "is-active" : "is-done"}`}>
-                  <span className="fse-step-num">1</span>
-                  <span className="fse-step-label">Choose catalysts</span>
+                  <span className="fse-step-num" title="Choose catalysts">
+                    1
+                  </span>
                 </div>
                 <div className="fse-step-rail" aria-hidden />
                 <div className={`fse-step ${hasSel ? "is-active" : ""}`}>
-                  <span className="fse-step-num">2</span>
-                  <span className="fse-step-label">See value shift</span>
+                  <span className="fse-step-num" title="See value shift">
+                    2
+                  </span>
                 </div>
               </nav>
 

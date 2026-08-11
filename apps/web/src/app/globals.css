@@ -7183,55 +7183,42 @@ a.acquire-block:hover {
 .fse-work {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.65rem;
+  gap: 0.35rem;
   margin-top: 0.85rem;
   min-height: 0;
   flex: 1;
   align-items: stretch;
+  margin-left: -0.35rem;
 }
 
 .fse-steps {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.15rem 0.1rem 0.35rem;
-  width: 1.55rem;
+  gap: 0.3rem;
+  padding: 0.2rem 0 0.35rem;
+  width: 0.95rem;
 }
 
 .fse-step {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.2rem;
   width: 100%;
 }
 
 .fse-step-num {
-  width: 1.15rem;
-  height: 1.15rem;
+  width: 0.95rem;
+  height: 0.95rem;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--bg-soft);
   color: var(--muted);
-  font-size: 0.62rem;
+  font-size: 0.55rem;
   font-weight: 750;
   display: grid;
   place-items: center;
   line-height: 1;
-}
-
-.fse-step-label {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  font-size: 0.58rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  font-weight: 650;
-  line-height: 1.1;
-  max-height: 5.5rem;
-  overflow: hidden;
 }
 
 .fse-step-rail {
@@ -7244,10 +7231,6 @@ a.acquire-block:hover {
 .fse-step.is-active .fse-step-num {
   border-color: color-mix(in srgb, var(--brand) 50%, var(--line));
   background: color-mix(in srgb, var(--brand) 14%, var(--bg-elevated));
-  color: var(--brand);
-}
-
-.fse-step.is-active .fse-step-label {
   color: var(--brand);
 }
 
