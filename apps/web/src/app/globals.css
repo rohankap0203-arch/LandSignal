@@ -3920,8 +3920,19 @@ a.btn-intel:hover {
   overflow: visible;
 }
 
+.traj-head-row--hold {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
 .traj-windows--cases {
-  flex: 0 1 auto;
+  display: flex;
+  flex-wrap: nowrap;
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 100%;
+  gap: 0.35rem;
 }
 
 .traj-window-btn {
@@ -3936,6 +3947,14 @@ a.btn-intel:hover {
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.traj-window-btn--case {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 0.7rem;
+  text-align: center;
 }
 
 .traj-window-btn:hover {
@@ -4094,7 +4113,7 @@ a.btn-intel:hover {
 }
 
 @media (max-width: 520px) {
-  .traj-head-row {
+  .traj-head-row:not(.traj-head-row--hold) {
     flex-direction: column;
     align-items: stretch;
   }
@@ -4102,6 +4121,11 @@ a.btn-intel:hover {
   .traj-stats {
     width: 100%;
     flex: none;
+  }
+
+  .traj-window-btn--case {
+    padding: 6px 6px;
+    font-size: 0.66rem;
   }
 }
 
