@@ -271,7 +271,8 @@ function Tip({ label, children }: { label: string; children: ReactNode }) {
     const place = () => {
       const r = btnRef.current!.getBoundingClientRect();
       const width = Math.min(304, window.innerWidth - 24);
-      let left = r.right - width;
+      // Prefer anchoring under the ?, shifted slightly left of the control.
+      let left = r.right - width - 18;
       left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
       const top = r.bottom + 8;
       setPos({ top, left, width });
@@ -655,7 +656,7 @@ export function CatalystSimulator({
     <section id="sec-catalyst" className="fse-wrap scroll-mt-20">
       <button
         type="button"
-        className="fse-launch"
+        className={`fse-launch ${open ? "is-open" : ""}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen(true)}
@@ -699,10 +700,8 @@ export function CatalystSimulator({
                       land’s future price path could move.
                     </span>
                     <span>
-                      Numbers are built from this site’s access, growth, size, and risks — not a
-                      flat “restaurants always add 5%” rule.
+                      Numbers are built from this site’s access, growth, size, risks, and nuances.
                     </span>
-                    <span>These are hypotheticals unless Land Signal cites a real project.</span>
                   </Tip>
                 </div>
                 {opp?.score != null ? (

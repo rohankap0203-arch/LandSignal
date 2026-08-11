@@ -7086,6 +7086,9 @@ a.acquire-block:hover {
 }
 
 .fse-launch {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -7094,7 +7097,7 @@ a.acquire-block:hover {
   text-align: left;
   padding: 0.85rem 1.05rem;
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--line));
+  border: 1.5px solid #111;
   background:
     linear-gradient(
       125deg,
@@ -7104,12 +7107,44 @@ a.acquire-block:hover {
     );
   color: var(--ink);
   cursor: pointer;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  overflow: visible;
+}
+
+/* Glistening black outline — highlight travels counter-clockwise */
+.fse-launch::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 16px;
+  background: conic-gradient(
+    from 0deg,
+    #0a0a0a 0deg,
+    #0a0a0a 250deg,
+    #3a3a3a 280deg,
+    #f4f4f4 302deg,
+    #6e6e6e 318deg,
+    #0a0a0a 338deg,
+    #0a0a0a 360deg
+  );
+  z-index: -1;
+  pointer-events: none;
+  animation: fse-launch-glisten 3.2s linear infinite;
+}
+
+@keyframes fse-launch-glisten {
+  to {
+    transform: rotate(-360deg);
+  }
 }
 
 .fse-launch:hover {
-  border-color: color-mix(in srgb, var(--brand) 55%, var(--line));
   transform: translateY(-1px);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.fse-launch.is-open {
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--ink) 10%, transparent);
 }
 
 .fse-launch-label {
