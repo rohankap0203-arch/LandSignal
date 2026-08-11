@@ -3,12 +3,12 @@
 import type { MoneyMode } from "@/lib/inflation";
 
 export const MONEY_MODE_LABELS = {
-  today: "After inflation",
-  nominal: "Before inflation",
+  today: "Today's dollars",
+  nominal: "Future dollars",
 } as const;
 
 export function moneyModeShort(mode: MoneyMode): string {
-  return mode === "today" ? "after inflation" : "before inflation";
+  return mode === "today" ? "today's dollars" : "future dollars";
 }
 
 type CompareRow = {
@@ -18,7 +18,7 @@ type CompareRow = {
   format: (n: number) => string;
 };
 
-/** Toggle + dual comparison for inflation-adjusted vs unadjusted future dollars. */
+/** Toggle: projected future sale price vs that price in today's purchasing power. */
 export function MoneyModeControl({
   mode,
   onChange,
@@ -38,21 +38,11 @@ export function MoneyModeControl({
   const beforeN =
     compare?.before != null && Number.isFinite(Number(compare.before)) ? Number(compare.before) : null;
   const hasCompare = todayN != null && beforeN != null;
-  const gap =
-    hasCompare && beforeN > 0 ? Math.round(((beforeN - (todayN as number)) / beforeN) * 100) : null;
 
   return (
     <div className={`money-mode-panel ${className}`.trim()}>
-      <div className="money-mode-row" role="group" aria-label="Inflation view">
+      <div className="money-mode-row" role="group" aria-label="Dollar view">
         <div className="money-mode-toggle">
-          <button
-            type="button"
-            className={mode === "today" ? "is-active" : undefined}
-            aria-pressed={mode === "today"}
-            onClick={() => onChange("today")}
-          >
-            {MONEY_MODE_LABELS.today}
-          </button>
           <button
             type="button"
             className={mode === "nominal" ? "is-active" : undefined}
@@ -61,12 +51,20 @@ export function MoneyModeControl({
           >
             {MONEY_MODE_LABELS.nominal}
           </button>
+          <button
+            type="button"
+            className={mode === "today" ? "is-active" : undefined}
+            aria-pressed={mode === "today"}
+            onClick={() => onChange("today")}
+          >
+            {MONEY_MODE_LABELS.today}
+          </button>
         </div>
         <p className="money-mode-note">
           {note ||
-            (mode === "today"
-              ? `Buying power: future $ ÷ (~${cpiDisplay})^years — same sale, today’s dollars`
-              : `Raw future sticker — no ~${cpiDisplay} CPI haircut`)}
+            (mode === "nominal"
+              ? "Projected sale price in the dollars of that future year"
+              : `Same sale, measured in what money buys today (~${cpiDisplay} inflation)`)}
         </p>
       </div>
 
@@ -76,33 +74,30 @@ export function MoneyModeControl({
           <div className="money-compare-grid">
             <button
               type="button"
-              className={`money-compare-cell ${mode === "today" ? "is-active" : ""}`}
-              onClick={() => onChange("today")}
-            >
-              <span className="money-compare-tag">{MONEY_MODE_LABELS.today}</span>
-              <strong className="tabular-nums">{compare.format(todayN as number)}</strong>
-              <em>what those $ buy today</em>
-            </button>
-            <div className="money-compare-vs" aria-hidden>
-              vs
-            </div>
-            <button
-              type="button"
               className={`money-compare-cell ${mode === "nominal" ? "is-active" : ""}`}
               onClick={() => onChange("nominal")}
             >
               <span className="money-compare-tag">{MONEY_MODE_LABELS.nominal}</span>
               <strong className="tabular-nums">{compare.format(beforeN as number)}</strong>
-              <em>future sticker</em>
+              <em>projected sale price</em>
+            </button>
+            <div className="money-compare-vs" aria-hidden>
+              →
+            </div>
+            <button
+              type="button"
+              className={`money-compare-cell ${mode === "today" ? "is-active" : ""}`}
+              onClick={() => onChange("today")}
+            >
+              <span className="money-compare-tag">{MONEY_MODE_LABELS.today}</span>
+              <strong className="tabular-nums">{compare.format(todayN as number)}</strong>
+              <em>purchasing power today</em>
             </button>
           </div>
-          {gap != null && gap > 0 ? (
-            <p className="money-compare-gap">
-              Same sale. After inflation asks what those future dollars buy{" "}
-              <strong>today</strong> (~{gap}% less purchasing power at ~{cpiDisplay}). It is not
-              “the land became worthless.”
-            </p>
-          ) : null}
+          <p className="money-compare-gap">
+            Inflation does <strong>not</strong> cut the sale price. It tells you whether that future
+            sale still creates wealth after money loses buying power (~{cpiDisplay}).
+          </p>
         </div>
       ) : null}
     </div>

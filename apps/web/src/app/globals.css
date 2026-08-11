@@ -2861,7 +2861,7 @@ a.btn-intel:hover {
   background: color-mix(in srgb, var(--brand) 6%, var(--bg-soft));
 }
 
-/* Buying-power logic — why After inflation ≠ “land rotting” */
+/* Did this beat inflation? — sale price vs purchasing power */
 .buy-power {
   border-radius: 12px;
   border: 1px solid var(--line);
@@ -2873,8 +2873,7 @@ a.btn-intel:hover {
   display: flex;
   width: 100%;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.45rem;
   text-align: left;
   background: transparent;
   border: 0;
@@ -2884,11 +2883,34 @@ a.btn-intel:hover {
 }
 
 .buy-power-k {
+  flex: 1;
   font-size: 0.66rem;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+.buy-power-verdict {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+}
+
+.buy-power-verdict.is-pos {
+  color: #145a38;
+  border-color: color-mix(in srgb, #1f7a4d 40%, var(--line));
+  background: color-mix(in srgb, #1f7a4d 12%, var(--bg));
+}
+
+.buy-power-verdict.is-neg {
+  color: #8a1c14;
+  border-color: color-mix(in srgb, #b42318 40%, var(--line));
+  background: color-mix(in srgb, #b42318 12%, var(--bg));
 }
 
 .buy-power-chev {
@@ -2911,39 +2933,56 @@ a.btn-intel:hover {
   margin-top: 0.35rem;
 }
 
-.buy-power-rails {
+.buy-power-table {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.35rem;
-}
-
-.buy-power-rails > div {
-  border-radius: 8px;
+  gap: 0;
   border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
   background: var(--bg-elevated);
-  padding: 0.4rem 0.45rem;
+}
+
+.buy-power-row {
   display: grid;
-  gap: 0.1rem;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.4rem 0.55rem;
+  border-top: 1px solid var(--line);
 }
 
-.buy-power-rails span {
-  font-size: 0.6rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+.buy-power-row:first-child {
+  border-top: 0;
+}
+
+.buy-power-row span {
+  font-size: 0.74rem;
   color: var(--muted);
-  font-weight: 650;
+  line-height: 1.3;
 }
 
-.buy-power-rails strong {
-  font-size: 0.92rem;
-  line-height: 1.1;
+.buy-power-row strong {
+  font-size: 0.82rem;
+  text-align: right;
   color: var(--ink);
+  line-height: 1.3;
 }
 
-.buy-power-rails em {
-  font-style: normal;
-  font-size: 0.62rem;
-  color: var(--muted);
+.buy-power-row strong.is-pos {
+  color: #1f7a4d;
+}
+
+.buy-power-row strong.is-neg {
+  color: #b42318;
+}
+
+.buy-power-row--focus {
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-elevated));
+}
+
+.buy-power-row--focus span {
+  color: var(--ink);
+  font-weight: 650;
 }
 
 .buy-power-points {
@@ -2969,12 +3008,6 @@ a.btn-intel:hover {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.68rem;
   color: var(--ink);
-}
-
-@media (max-width: 720px) {
-  .buy-power-rails {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 .money-compare {

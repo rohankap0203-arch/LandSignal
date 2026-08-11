@@ -701,8 +701,9 @@ export function ReturnVisual({
             </ul>
             <p className="mt-3 text-xs leading-snug text-[var(--muted)]">
               Drag the chart · tap a factor · 1–100 yr hold.{" "}
-              <strong>After inflation</strong> applies a ~{cpiDisplay} CPI haircut;{" "}
-              <strong>Before inflation</strong> leaves future $ raw. Screen only — not an appraisal.
+              <strong>Future dollars</strong> = projected money back.{" "}
+              <strong>Today’s dollars</strong> = that same money in purchasing power (~{cpiDisplay}{" "}
+              inflation). Screen only — not an appraisal.
             </p>
           </div>
         </div>
@@ -817,8 +818,7 @@ export function ReturnVisual({
         futureNominal={endpoint?.exit_usd}
         futureToday={endpoint?.exit_usd_today}
         totalBackToday={endpoint?.total_back_usd_today}
-        gainToday={endpoint?.gain_usd_today}
-        paceDisplay={livePaceDisplay}
+        totalBackNominal={endpoint?.total_back_usd}
       />
 
       <div className="return-chart-wrap mt-3">
@@ -912,7 +912,7 @@ export function ReturnVisual({
                 : scrubPoint?.total_back_usd,
             )}
           </strong>
-          {showToday ? " after inflation" : ""}
+          {showToday ? " in today’s dollars" : " in future dollars"}
         </div>
       </div>
 
@@ -931,8 +931,8 @@ export function ReturnVisual({
               {holdYears >= 1 && endpoint.exit_usd != null && endpoint.exit_usd_today != null ? (
                 <em className="return-alt-line">
                   {showToday
-                    ? `${shortMoney(Number(endpoint.exit_usd))} before inflation`
-                    : `${shortMoney(Number(endpoint.exit_usd_today))} after inflation`}
+                    ? `${shortMoney(Number(endpoint.exit_usd))} future dollars`
+                    : `${shortMoney(Number(endpoint.exit_usd_today))} today’s dollars`}
                 </em>
               ) : null}
             </div>
@@ -944,8 +944,8 @@ export function ReturnVisual({
               endpoint.cumulative_rent_usd_today != null ? (
                 <em className="return-alt-line">
                   {showToday
-                    ? `${shortMoney(Number(endpoint.cumulative_rent_usd))} before inflation`
-                    : `${shortMoney(Number(endpoint.cumulative_rent_usd_today))} after inflation`}
+                    ? `${shortMoney(Number(endpoint.cumulative_rent_usd))} future dollars`
+                    : `${shortMoney(Number(endpoint.cumulative_rent_usd_today))} today’s dollars`}
                 </em>
               ) : null}
             </div>
@@ -957,8 +957,8 @@ export function ReturnVisual({
               endpoint.total_back_usd_today != null ? (
                 <em className="return-alt-line">
                   {showToday
-                    ? `${shortMoney(Number(endpoint.total_back_usd))} before inflation`
-                    : `${shortMoney(Number(endpoint.total_back_usd_today))} after inflation`}
+                    ? `${shortMoney(Number(endpoint.total_back_usd))} future dollars`
+                    : `${shortMoney(Number(endpoint.total_back_usd_today))} today’s dollars`}
                 </em>
               ) : null}
             </div>
@@ -973,7 +973,7 @@ export function ReturnVisual({
                 </span>
                 {irrPct != null ? (
                   <span className="return-vs-irr">
-                    {irrPct.toFixed(1)}%/yr{showToday ? " after inflation" : ""}
+                    {irrPct.toFixed(1)}%/yr{showToday ? " real" : ""}
                   </span>
                 ) : null}
               </strong>
@@ -984,8 +984,8 @@ export function ReturnVisual({
               Number.isFinite(endpoint.irr_real) ? (
                 <em className="return-alt-line">
                   {showToday
-                    ? `${(Number(endpoint.irr) * 100).toFixed(1)}%/yr before inflation`
-                    : `${(Number(endpoint.irr_real) * 100).toFixed(1)}%/yr after inflation`}
+                    ? `${(Number(endpoint.irr) * 100).toFixed(1)}%/yr in future dollars`
+                    : `${(Number(endpoint.irr_real) * 100).toFixed(1)}%/yr in today’s dollars`}
                 </em>
               ) : null}
             </div>

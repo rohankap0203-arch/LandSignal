@@ -137,7 +137,7 @@ export function ScoreBar({
   );
 }
 
-/** Opportunity — edge dial + two chips. Same bones as Risk, scout twang. */
+/** Opportunity — plain-language dial for everyday land buyers. */
 function OpportunityLens({ score, standings }: { score: number; standings: ScoreStandings }) {
   const beats = Math.round(standings.beats_pct || 0);
   const lifts = (standings.lifts || standings.factors?.filter((f) => f.direction === "up") || []).slice(
@@ -150,7 +150,13 @@ function OpportunityLens({ score, standings }: { score: number; standings: Score
   ).slice(0, 1);
   const why = (standings.why_not_higher || [])[0];
   const band =
-    score >= 78 ? "Fat edge" : score >= 66 ? "Real edge" : score >= 50 ? "Worth a look" : "Thin edge";
+    score >= 78
+      ? "Strong buy"
+      : score >= 66
+        ? "Good buy"
+        : score >= 50
+          ? "Fair"
+          : "Weak";
   const tone = score >= 66 ? "calm" : score >= 50 ? "watch" : "elevated";
 
   return (
@@ -158,7 +164,7 @@ function OpportunityLens({ score, standings }: { score: number; standings: Score
       <div className="score-lens-top">
         <span className={`score-lens-pill tone-${tone}`}>{band}</span>
         <span className="score-lens-stat">
-          Ahead of <strong>~{beats}%</strong> of live files
+          Better than <strong>~{beats}%</strong> of listings we show
         </span>
       </div>
       <div className="opp-edge" aria-hidden>
@@ -167,23 +173,24 @@ function OpportunityLens({ score, standings }: { score: number; standings: Score
           <div className="opp-edge-you" style={{ left: `${score}%` }} title={`Opportunity ${Math.round(score)}`} />
         </div>
         <div className="opp-edge-labels">
-          <span>Soft</span>
-          <span>Fat</span>
+          <span>Weak</span>
+          <span>Strong</span>
         </div>
       </div>
       <div className="score-lens-chips">
         {lifts[0] ? (
-          <span className="score-chip score-chip--ok">Pull · {lifts[0].label}</span>
+          <span className="score-chip score-chip--ok">Helps · {lifts[0].label}</span>
         ) : (
-          <span className="score-chip">No loud buy pull</span>
+          <span className="score-chip">No clear price advantage</span>
         )}
         {drags[0] ? (
-          <span className="score-chip score-chip--warn">Cap · {drags[0].label}</span>
+          <span className="score-chip score-chip--warn">Holds back · {drags[0].label}</span>
         ) : null}
       </div>
       {why ? <p className="score-lens-why">{why}</p> : null}
       <p className="score-lens-why">
-        Scores buy edge vs our value today — not whether the dirt outruns CPI forever.
+        This score asks: is today’s buy price a good deal versus our value? It does not promise the
+        land will beat inflation years from now.
       </p>
     </div>
   );

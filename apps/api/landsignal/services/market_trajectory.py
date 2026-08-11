@@ -675,42 +675,42 @@ def build_market_trajectory(
     site_sev = _hitch_severity(
         "site_hitch", flood=flood, wet=wet, access=access_score, growth=growth_score, liquidity=liquidity
     )
-    # Three future-only stress cases — verb-first names + punchy math for ?
+    # Three future-only what-if cases — plain names for everyday buyers
     hitch_catalog = [
         {
             "id": "rate_shock",
-            "label": "Cool rates",
-            "short": "Cool",
+            "label": "Higher rates",
+            "short": "Rates",
             "plain": (
-                f"Dear money cools bids for a few years"
-                f"{' (thin resale here)' if (liquidity or 100) < 45 else ''} — "
-                f"then a mild catch-up. Past locked."
+                f"If borrowing costs rise, buyers may pay less for a few years"
+                f"{' (resale is already thin here)' if (liquidity or 100) < 45 else ''} — "
+                f"then prices ease back toward the base path. Past years stay the same."
             ),
             "severity": round(rate_sev, 2),
             "points": _points_for("rate_shock"),
         },
         {
             "id": "growth_surge",
-            "label": "Hot demand",
-            "short": "Heat",
+            "label": "Stronger demand",
+            "short": "Demand",
             "plain": (
-                f"Corridor heat around {county or 'this county'} lifts mid years, "
-                f"then fades. Past locked."
+                f"If demand around {county or 'this county'} runs hotter than the base case, "
+                f"mid-year values rise, then settle. Past years stay the same."
             ),
             "severity": round(growth_sev, 2),
             "points": _points_for("growth_surge"),
         },
         {
             "id": "site_hitch",
-            "label": "Site hit",
+            "label": "Site problem",
             "short": "Site",
             "plain": (
                 (
-                    f"Flood (~{flood:.0f}%) / wet / access surprise steps the mark down, "
-                    f"then a slower climb. Past locked."
+                    f"If flood (~{flood:.0f}%), wetlands, or access turns out worse than expected, "
+                    f"the value steps down, then climbs more slowly. Past years stay the same."
                     if (flood or 0) >= 15
-                    else "Site / title / access surprise steps the mark down, then a slower climb. "
-                    "Past locked."
+                    else "If a site, title, or access problem shows up, the value steps down, "
+                    "then climbs more slowly. Past years stay the same."
                 )
             ),
             "severity": round(site_sev, 2),
@@ -718,34 +718,42 @@ def build_market_trajectory(
         },
     ]
     hitch_help = {
-        "title": "Future bends",
-        "body": "Past locked. Only ahead moves. Sev = how hard this pin feels it (0.7–1.4).",
+        "title": "What-if cases for the future",
+        "body": (
+            "These buttons only change years ahead. History does not move. "
+            "Each case is scaled to this property (severity shown in the math)."
+        ),
         "items": [
             {
                 "id": "rate_shock",
-                "label": "Cool rates",
-                "plain": "Dear money softens near-term bids.",
+                "label": "Higher rates",
+                "plain": "Borrowing costs rise → buyers bid less for a while.",
                 "math": (
-                    f"×(1−10%·{rate_sev:.2f}) yrs 1–3 · ×(1−5%·sev) yrs 4–6 · "
-                    f"+0.8%·sev catch-up yrs 7–14 · sev↑ if thin resale / weak access"
+                    f"Years 1–3: yearly path × (1 − 10% × {rate_sev:.2f}). "
+                    f"Years 4–6: × (1 − 5% × severity). "
+                    f"Years 7–14: mild rebound +0.8% × severity. "
+                    f"Severity rises if resale is thin or access is weak."
                 ),
             },
             {
                 "id": "growth_surge",
-                "label": "Hot demand",
-                "plain": "Stronger local absorption lifts the middle years.",
+                "label": "Stronger demand",
+                "plain": "Local demand runs hotter than the base case for a stretch.",
                 "math": (
-                    f"×(1+2.8%·{growth_sev:.2f}) yrs 4–18 · ×(1−0.6%·sev) yrs 19–32 · "
-                    f"×(1−0.3%·sev) after 33 · sev tracks this pin’s growth screen"
+                    f"Years 4–18: path × (1 + 2.8% × {growth_sev:.2f}). "
+                    f"Years 19–32: × (1 − 0.6% × severity). "
+                    f"After year 33: × (1 − 0.3% × severity). "
+                    f"Severity follows this property’s growth screen."
                 ),
             },
             {
                 "id": "site_hitch",
-                "label": "Site hit",
-                "plain": "A realized site surprise — not the base flood/wet haircut.",
+                "label": "Site problem",
+                "plain": "A flood, wetlands, title, or access surprise hits after you buy.",
                 "math": (
-                    f"×(1−5%·{site_sev:.2f}) at yrs 3–4, 12–13, 28–29 · "
-                    f"×(1−0.2%·sev) after yr 30 · sev↑ with flood / wet / weak access"
+                    f"Step-downs at years 3–4, 12–13, and 28–29: path × (1 − 5% × {site_sev:.2f}). "
+                    f"After year 30: slight drag −0.2% × severity. "
+                    f"Severity rises with flood, wetlands, or weak access."
                 ),
             },
         ],
@@ -875,8 +883,8 @@ def build_market_trajectory(
         )
     if (flood or 0) >= 20 or (wet or 0) >= 15 or (access_score is not None and access_score < 45):
         summary_bullets.append(
-            "Site screens (flood / wetlands / access) already slow this pin’s base path — "
-            "use Site hit to stress a sharper surprise."
+            "Site screens (flood / wetlands / access) already slow this property’s base path — "
+            "use Site problem to test a sharper surprise."
         )
 
     # Card sparkline stays short (last ~10 years)

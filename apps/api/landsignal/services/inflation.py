@@ -18,16 +18,16 @@ def inflation_meta(cpi: float = DEFAULT_CPI_ANNUAL) -> dict[str, Any]:
         "cpi_annual": cpi,
         "cpi_display": f"{cpi * 100:.1f}%/yr",
         "basis": "long_run_cpi_screen",
-        "label_today": "After inflation",
-        "label_nominal": "Before inflation",
+        "label_today": "Today's dollars",
+        "label_nominal": "Future dollars",
         "plain": (
-            f"We assume consumer prices rise about {cpi * 100:.1f}%/yr. "
-            "After inflation = what those future land/sale dollars buy in today’s money "
+            f"We assume inflation of about {cpi * 100:.1f}%/yr. "
+            "Future dollars = the projected sale price in that year’s money. "
+            "Today’s dollars = what that same sale is worth in today’s purchasing power "
             f"(future $ ÷ (1+{cpi * 100:.1f}%)^years). "
-            "Before inflation = the raw future sticker. "
-            "A falling After-inflation line means buying power softens vs CPI — "
-            "not that the dirt sells for fewer future dollars, and not what Opportunity scores "
-            "(Opportunity is buy edge vs our value today)."
+            "Inflation does not lower the sale price — it tells you whether the investment "
+            "created real wealth. Opportunity score is a separate question: is today’s buy "
+            "a good deal versus our value?"
         ),
     }
 

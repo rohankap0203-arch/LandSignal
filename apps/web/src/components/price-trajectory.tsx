@@ -172,7 +172,7 @@ export function PriceTrajectory({
         fwdRate != null ? `${fwdRate >= 0 ? "+" : ""}${(fwdRate * 100).toFixed(1)}%/yr` : "—",
       forwardCagrRealDisplay:
         fwdReal != null
-          ? `${fwdReal >= 0 ? "+" : ""}${(fwdReal * 100).toFixed(1)}%/yr after inflation`
+          ? `${fwdReal >= 0 ? "+" : ""}${(fwdReal * 100).toFixed(1)}%/yr in today’s dollars`
           : "—",
     };
   }, [points, horizon, cpi]);
@@ -327,8 +327,8 @@ export function PriceTrajectory({
           <p className="mt-1 text-[11px] text-[var(--muted)] leading-snug">
             Screened area land pace
             {trajectory?.annual_rate_display ? ` (~${trajectory.annual_rate_display})` : ""}
-            , with parcel factors once. After inflation = buying power of that same path — not a
-            second growth model. Far years ease slightly for uncertainty.
+            , with parcel factors once. Future dollars = projected price. Today’s dollars = that
+            same price in purchasing power. Far years ease slightly for uncertainty.
           </p>
         </div>
         <div className="traj-stats">
@@ -344,8 +344,8 @@ export function PriceTrajectory({
             {horizon >= 1 && windowMath.futureUsdToday != null ? (
               <em className="return-alt-line">
                 {showToday
-                  ? `${shortMoney(windowMath.futureUsd)} before inflation`
-                  : `${shortMoney(windowMath.futureUsdToday)} after inflation`}
+                  ? `${shortMoney(windowMath.futureUsd)} future dollars`
+                  : `${shortMoney(windowMath.futureUsdToday)} today’s dollars`}
               </em>
             ) : null}
           </div>
@@ -383,7 +383,6 @@ export function PriceTrajectory({
         markUsd={windowMath.todayUsd}
         futureNominal={windowMath.futureUsd}
         futureToday={windowMath.futureUsdToday}
-        paceDisplay={trajectory?.annual_rate_display}
       />
 
       <div className="traj-windows" role="tablist" aria-label="Chart time window">
@@ -531,7 +530,7 @@ export function PriceTrajectory({
                   title={h.plain || h.label}
                 >
                   <span className="traj-hitch-k">{h.short || h.label}</span>
-                  <span className="traj-hitch-v">{on ? "On" : "Bend"}</span>
+                  <span className="traj-hitch-v">{on ? "On" : "Off"}</span>
                 </button>
               );
             })}
@@ -555,7 +554,7 @@ export function PriceTrajectory({
           >
             <div className="flex items-start justify-between gap-3">
               <h4 className="display text-base font-semibold">
-                {trajectory.hitch_help.title || "Future bends"}
+                {trajectory.hitch_help.title || "What-if cases for the future"}
               </h4>
               <button
                 type="button"
@@ -579,7 +578,8 @@ export function PriceTrajectory({
               ))}
             </ul>
             <p className="mt-2.5 text-[11px] text-[var(--muted)] leading-snug">
-              Tap to bend ahead only · tap again to clear · past never moves.
+              Tap a button to change only the future. Tap again to turn it off. Past years never
+              change.
             </p>
           </div>
         </div>
@@ -589,7 +589,8 @@ export function PriceTrajectory({
         <p className="traj-hitch-note">{activeHitch.plain}</p>
       ) : !compact && hitches.length > 0 ? (
         <p className="traj-hitch-note">
-          Future-only bends — Cool rates · Hot demand · Site hit · ? for math.
+          What-if cases for years ahead — Higher rates · Stronger demand · Site problem. Tap ? for
+          plain English and the math.
         </p>
       ) : null}
 
@@ -607,7 +608,7 @@ export function PriceTrajectory({
             <span className="traj-readout-value">
               {money(selectedDisplay)}
               {showToday && Number(selected.offset) > 0 ? (
-                <em className="return-alt-line"> after inflation</em>
+                <em className="return-alt-line"> today’s dollars</em>
               ) : null}
             </span>
           </div>
@@ -632,8 +633,8 @@ export function PriceTrajectory({
           {horizon >= 1 && windowMath.futureUsdToday != null ? (
             <em className="return-alt-line">
               {showToday
-                ? `${shortMoney(windowMath.futureUsd)} before inflation`
-                : `${shortMoney(windowMath.futureUsdToday)} after inflation`}
+                ? `${shortMoney(windowMath.futureUsd)} future dollars`
+                : `${shortMoney(windowMath.futureUsdToday)} today’s dollars`}
             </em>
           ) : null}
         </div>
