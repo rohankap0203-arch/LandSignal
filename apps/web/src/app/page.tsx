@@ -234,6 +234,7 @@ export default function SearchPage() {
       setLoading(true);
       setError(null);
       setHasSearched(true);
+      setRows([]);
       // Smooth-scroll to results as soon as search starts
       requestAnimationFrame(() => {
         document.getElementById("search-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -241,6 +242,9 @@ export default function SearchPage() {
       try {
         const active = override ?? form;
         const data = await landsignalApi.radar(filtersFromForm(active));
+        if (!Array.isArray(data)) {
+          throw new Error("Search returned an unexpected response. Try Show matches again.");
+        }
         setRows(data);
         const metaNow = await landsignalApi.searchMeta().catch(() => null);
         if (metaNow) setMeta(metaNow);
@@ -255,7 +259,15 @@ export default function SearchPage() {
           document.getElementById("search-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
         });
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Search failed");
+        const raw = e instanceof Error ? e.message : "Search failed";
+        const friendly =
+          /Failed to fetch|NetworkError|Load failed|timeout|abort/i.test(raw)
+            ? "Search couldn’t finish on this connection. Check your signal and tap Show matches again."
+            : raw.length > 280
+              ? "Search failed. Tap Show matches again — if it keeps failing, try Reset to Any first."
+              : raw;
+        setError(friendly);
+        setStatus(null);
       } finally {
         setLoading(false);
       }

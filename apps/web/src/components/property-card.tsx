@@ -52,13 +52,14 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
   const router = useRouter();
   const [intelPending, setIntelPending] = useState(false);
   const [gapHelpOpen, setGapHelpOpen] = useState(false);
+  const links = Array.isArray(row.links) ? row.links : [];
   const posting =
-    row.links.find((l) => l.kind === "primary" && l.available !== false) ||
+    links.find((l) => l.kind === "primary" && l.available !== false) ||
     (row.contact_website
       ? { label: "Open posting", url: row.contact_website, kind: "primary", available: true }
       : null);
   const findParcel =
-    row.links.find((l) => l.kind === "lookup" && l.available !== false) ||
+    links.find((l) => l.kind === "lookup" && l.available !== false) ||
     (row.county || row.state
       ? {
           label: "Find this parcel",
@@ -71,14 +72,14 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
       : null);
   const phone =
     row.contact_phone ||
-    row.links.find((l) => l.kind === "contact" && String(l.url).startsWith("tel:"))?.label ||
+    links.find((l) => l.kind === "contact" && String(l.url).startsWith("tel:"))?.label ||
     null;
   // Always prefer a real http(s) office/posting URL for the rail — never leave buyers without a path.
   const officeUrl =
     posting?.url ||
     row.contact_website ||
-    row.links.find((l) => l.kind === "contact_web" && String(l.url || "").startsWith("http"))?.url ||
-    row.links.find((l) => l.kind === "source" && String(l.url || "").startsWith("http"))?.url ||
+    links.find((l) => l.kind === "contact_web" && String(l.url || "").startsWith("http"))?.url ||
+    links.find((l) => l.kind === "source" && String(l.url || "").startsWith("http"))?.url ||
     (row.contact_office || row.county
       ? `https://www.google.com/search?q=${encodeURIComponent(
           `${row.contact_office || `${row.county || ""} ${row.state || ""} treasurer`} tax sale`.trim(),

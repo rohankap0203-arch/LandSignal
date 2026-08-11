@@ -413,7 +413,6 @@ async def radar(
         build_return_thesis,
         match_reasons,
         price_display,
-        rating_breakdown,
         sourcing_card,
         value_display,
     )
@@ -1016,7 +1015,9 @@ async def radar(
             fit_score=fit,
             summary=summary,
             match_reasons=reasons,
-            rating_breakdown=rating_breakdown(score, parcel=parcel, listing=listing),
+            # List cards don't render rating breakdown — omit to keep /radar
+            # payloads small enough for phones (was ~3MB of a ~3.6MB response).
+            rating_breakdown=[],
             links=annotated,
             latitude=parcel.latitude,
             longitude=parcel.longitude,
