@@ -161,19 +161,14 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
                 key={`${String(p.label)}-leg-${i}`}
                 type="button"
                 role="listitem"
-                className={`bid-tag tilt-${(i % 5) + 1} ${active === i ? "is-live" : ""}`}
+                className={`bid-tag ${active === i ? "is-live" : ""}`}
                 onClick={() => setActive(i)}
                 aria-pressed={active === i}
               >
-                <span className="bid-tag-eye" aria-hidden />
-                <span className="bid-tag-band">
-                  <span className="bid-tag-lot">LOT</span>
-                  <span className="bid-tag-num">{String(i + 1).padStart(2, "0")}</span>
-                </span>
-                <span className="bid-tag-body">
+                <span className="bid-tag-punch" aria-hidden />
+                <span className="bid-tag-inner">
                   <strong>{String(p.label)}</strong>
                   <span className="bid-tag-price">{money(p.x)}</span>
-                  <span className="bid-tag-bars" aria-hidden />
                 </span>
               </button>
             ))}
@@ -181,9 +176,6 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
 
           {selected && (
             <div className="bid-slip">
-              <div className="bid-slip-stamp" aria-hidden>
-                BID
-              </div>
               <strong>{String(selected.label)}</strong>
               <span>
                 {money(selected.x)} · about {Number(selected.y).toFixed(0)}% of buyers still bidding

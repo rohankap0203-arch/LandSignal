@@ -2704,47 +2704,36 @@ a.btn-intel:hover {
   background: var(--bg-soft);
 }
 
-/* Starting bid — hang-tag coupon strip */
+/* Starting bid — clean diagonal tag strip */
 .bid-ticket {
   position: relative;
-  border-radius: 4px;
-  border: 1.5px solid color-mix(in srgb, #0f3d2e 40%, var(--line));
-  background:
-    linear-gradient(180deg, #0f3d2e 0 2.1rem, transparent 2.1rem),
-    repeating-linear-gradient(
-      90deg,
-      transparent,
-      transparent 5px,
-      rgba(20, 32, 28, 0.03) 5px,
-      rgba(20, 32, 28, 0.03) 6px
-    ),
-    linear-gradient(180deg, #fffdf7, #f6f1e6);
-  padding: 0.55rem 0.85rem 0.85rem;
-  overflow: hidden;
-  box-shadow: 0 12px 22px rgba(20, 32, 28, 0.1);
-  color: #14201c;
+  border: 1px solid color-mix(in srgb, var(--brand) 22%, var(--line));
+  background: #fff;
+  padding: 0.85rem 1rem 0.9rem 1.35rem;
+  clip-path: polygon(16px 0, 100% 0, 100% 100%, 16px 100%, 0 50%);
+  box-shadow: 0 8px 18px rgba(20, 32, 28, 0.08);
+  color: var(--ink);
 }
 
 .bid-ticket::before {
   content: "";
   position: absolute;
-  top: 0.55rem;
-  left: 0.7rem;
-  width: 0.7rem;
-  height: 0.7rem;
+  top: 50%;
+  left: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   background: var(--bg-elevated);
-  border: 1.5px solid #0f3d2e;
-  box-shadow: 0 0 0 2px #1f6b4f;
+  border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--line));
+  transform: translate(-50%, -50%);
 }
 
 .bid-ticket-head {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
-  margin: 0 0 0.85rem 1.35rem;
+  gap: 0.5rem;
+  margin: 0 0 0.65rem;
   min-width: 0;
-  min-height: 1.2rem;
 }
 
 .bid-ticket-mark {
@@ -2752,104 +2741,77 @@ a.btn-intel:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 2.5rem;
-  padding: 0.18rem 0.4rem;
-  border: 1.5px solid #ffe29a;
-  border-radius: 2px;
-  color: #ffe29a;
-  background: transparent;
+  padding: 0.16rem 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand) 12%, #fff);
+  color: var(--brand);
   font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  transform: rotate(-2deg);
+  font-weight: 750;
+  letter-spacing: 0.1em;
 }
 
 .bid-ticket-kicker {
   min-width: 0;
-  font-size: 0.62rem;
-  font-weight: 750;
-  letter-spacing: 0.1em;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #b8f0d0;
+  color: var(--muted);
 }
 
 .bid-ticket-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 14px minmax(0, 1.25fr);
-  gap: 0.2rem;
+  grid-template-columns: minmax(0, 1fr) 10px minmax(0, 1.25fr);
+  gap: 0.35rem;
   align-items: stretch;
   min-width: 0;
 }
 
 .bid-ticket-face {
   min-width: 0;
-  border: 1.5px dashed color-mix(in srgb, #0f3d2e 35%, var(--line));
-  background: rgba(255, 255, 255, 0.72);
-  padding: 0.7rem 0.75rem;
-}
-
-.bid-ticket-face.is-open {
-  border-radius: 3px 0 0 3px;
-  border-style: solid;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--brand) 5%, var(--bg-soft));
+  padding: 0.65rem 0.75rem;
 }
 
 .bid-ticket-face.is-finish {
-  border-radius: 0 3px 3px 0;
-  border-style: solid;
-  border-color: #0f3d2e;
-  background: color-mix(in srgb, #0f3d2e 8%, #fff);
+  background: color-mix(in srgb, var(--brand) 10%, #fff);
 }
 
 .bid-ticket-face.is-solo {
-  border-radius: 3px;
-  border-style: solid;
+  background: color-mix(in srgb, var(--brand) 6%, var(--bg-soft));
 }
 
 .bid-ticket-tear {
-  position: relative;
-  align-self: stretch;
-  background:
-    repeating-linear-gradient(
-      180deg,
-      #0f3d2e 0 2px,
-      transparent 2px 6px
-    );
-  width: 2px;
+  align-self: center;
   justify-self: center;
-  margin: 0.15rem 0;
-  opacity: 0.45;
-}
-
-.bid-ticket-tear::before,
-.bid-ticket-tear::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  width: 12px;
-  height: 12px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: #f6f1e6;
-  border: 1px solid color-mix(in srgb, #0f3d2e 35%, var(--line));
-  transform: translateX(-50%);
-}
-
-.bid-ticket-tear::before {
-  top: -8px;
-}
-
-.bid-ticket-tear::after {
-  bottom: -8px;
+  background: color-mix(in srgb, var(--brand) 45%, var(--line));
 }
 
 .bid-ticket-val {
   display: block;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: clamp(0.92rem, 2.5vw, 1.12rem);
-  font-weight: 800;
+  font-size: clamp(0.92rem, 2.5vw, 1.1rem);
+  font-weight: 750;
   line-height: 1.3;
   letter-spacing: -0.02em;
-  color: #0f3d2e;
+  color: var(--brand);
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 420px) {
+  .bid-ticket-row {
+    grid-template-columns: 1fr;
+  }
+
+  .bid-ticket-tear {
+    width: 100%;
+    height: 2px;
+    border-radius: 999px;
+  }
 }
 
 @media (max-width: 420px) {
@@ -3008,282 +2970,131 @@ a.btn-intel:hover {
   font-size: 10px;
 }
 
-/* Bid lot tags — hang-tag / auction-coupon shape */
+/* Bid tags — clean diagonal price tags */
 .bid-tag-rail {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 0.85rem 0.75rem;
-  padding: 0.35rem 0.15rem 0.15rem;
+  gap: 0.65rem;
 }
 
 .bid-tag {
-  --tag-rot: -2.5deg;
-  --tag-band: #0f3d2e;
-  --tag-paper: #f6f1e6;
-  --tag-ink: #14201c;
-  --tag-price: #0f3d2e;
   position: relative;
-  display: flex;
-  flex-direction: column;
-  width: 7.6rem;
-  min-height: 7.4rem;
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 9.75rem;
+  max-width: 100%;
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--tag-ink);
+  color: #14201c;
   cursor: pointer;
-  transform: rotate(var(--tag-rot));
-  transform-origin: 50% 0;
+  filter: drop-shadow(0 6px 12px rgba(20, 32, 28, 0.1));
   transition:
-    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    filter 220ms ease;
-  filter: drop-shadow(0 10px 14px rgba(20, 32, 28, 0.16));
+    transform 180ms ease,
+    filter 180ms ease;
 }
 
-.bid-tag.tilt-1 {
-  --tag-rot: -3.2deg;
-  --tag-band: #0f3d2e;
-}
-.bid-tag.tilt-2 {
-  --tag-rot: 2.4deg;
-  --tag-band: #1f6b4f;
-}
-.bid-tag.tilt-3 {
-  --tag-rot: -1.2deg;
-  --tag-band: #145c3f;
-}
-.bid-tag.tilt-4 {
-  --tag-rot: 3deg;
-  --tag-band: #0f3d2e;
-}
-.bid-tag.tilt-5 {
-  --tag-rot: -2deg;
-  --tag-band: #246b4f;
-}
-
-.bid-tag-eye {
-  position: absolute;
-  top: 0.42rem;
-  left: 50%;
-  z-index: 3;
-  width: 0.72rem;
-  height: 0.72rem;
-  border-radius: 50%;
-  background: var(--bg-elevated);
-  border: 1.5px solid color-mix(in srgb, var(--tag-band) 70%, #000);
-  transform: translateX(-50%);
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--tag-paper) 80%, #fff);
-}
-
-.bid-tag-eye::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% - 1px);
-  width: 1.5px;
-  height: 0.55rem;
-  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--tag-band) 55%, #888));
-  transform: translateX(-50%);
-}
-
-.bid-tag-band {
+.bid-tag-inner {
   position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.35rem;
-  margin-top: 0.15rem;
-  padding: 1.05rem 0.55rem 0.4rem;
-  background:
-    linear-gradient(160deg, color-mix(in srgb, var(--tag-band) 88%, #2f8f68), var(--tag-band));
-  color: #f4fff8;
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 86%, 0 100%);
-  border-radius: 4px 4px 0 0;
-}
-
-.bid-tag-lot {
-  font-size: 0.58rem;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  opacity: 0.85;
-}
-
-.bid-tag-num {
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.95rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1;
-}
-
-.bid-tag-body {
-  position: relative;
-  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  justify-content: center;
   gap: 0.28rem;
-  flex: 1;
-  margin-top: -0.55rem;
-  padding: 0.85rem 0.6rem 0.55rem;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      transparent,
-      transparent 5px,
-      rgba(20, 32, 28, 0.03) 5px,
-      rgba(20, 32, 28, 0.03) 6px
-    ),
-    linear-gradient(180deg, #fffdf7, var(--tag-paper));
-  border: 1.5px solid color-mix(in srgb, var(--tag-band) 35%, #cfc6b6);
-  border-top: 0;
-  border-radius: 0 0 5px 5px;
+  min-height: 4.1rem;
+  padding: 0.7rem 1rem 0.7rem 1.55rem;
+  background: #fff;
+  border: 1px solid color-mix(in srgb, var(--brand) 22%, var(--line));
+  clip-path: polygon(14px 0, 100% 0, 100% 100%, 14px 100%, 0 50%);
   text-align: left;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease;
 }
 
-.bid-tag-body strong {
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  line-height: 1.2;
-  color: var(--tag-ink);
-  text-wrap: balance;
+.bid-tag-punch {
+  position: absolute;
+  top: 50%;
+  left: 7px;
+  z-index: 2;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--line));
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.bid-tag-inner strong {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+  color: var(--muted);
 }
 
 .bid-tag-price {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.92rem;
-  font-weight: 800;
-  letter-spacing: -0.035em;
+  font-size: 1.02rem;
+  font-weight: 750;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
-  color: var(--tag-price);
-  line-height: 1.05;
-}
-
-.bid-tag-bars {
-  display: block;
-  width: 100%;
-  height: 0.85rem;
-  margin-top: auto;
-  border-radius: 1px;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      var(--tag-ink) 0 1px,
-      transparent 1px 2px,
-      var(--tag-ink) 2px 4px,
-      transparent 4px 5px,
-      var(--tag-ink) 5px 5.5px,
-      transparent 5.5px 7px,
-      var(--tag-ink) 7px 10px,
-      transparent 10px 11px
-    );
-  opacity: 0.55;
+  color: var(--brand);
+  line-height: 1.1;
 }
 
 .bid-tag:hover {
-  transform: rotate(calc(var(--tag-rot) * 0.35)) translateY(-4px) scale(1.04);
-  filter: drop-shadow(0 16px 18px rgba(20, 32, 28, 0.22));
-  z-index: 2;
+  transform: translateY(-2px);
+  filter: drop-shadow(0 10px 16px rgba(20, 32, 28, 0.14));
+}
+
+.bid-tag:hover .bid-tag-inner {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
 }
 
 .bid-tag.is-live {
-  --tag-band: #0f3d2e;
-  --tag-price: #0f3d2e;
-  transform: rotate(0deg) translateY(-5px) scale(1.06);
-  filter: drop-shadow(0 18px 20px rgba(15, 61, 46, 0.28));
-  z-index: 3;
+  transform: translateY(-2px);
+  filter: drop-shadow(0 12px 18px rgba(15, 61, 46, 0.16));
 }
 
-.bid-tag.is-live .bid-tag-body {
-  border-color: #0f3d2e;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #0f3d2e 18%, transparent);
+.bid-tag.is-live .bid-tag-inner {
+  background: color-mix(in srgb, var(--brand) 8%, #fff);
+  border-color: var(--brand);
 }
 
-.bid-tag.is-live .bid-tag-band {
-  background: linear-gradient(160deg, #1f6b4f, #0f3d2e);
+.bid-tag.is-live .bid-tag-inner strong {
+  color: color-mix(in srgb, var(--brand) 40%, var(--ink));
 }
 
-.bid-tag.is-live .bid-tag-num {
-  color: #ffe29a;
+.bid-tag.is-live .bid-tag-price {
+  color: var(--brand);
 }
 
-.bid-tag.is-live::after {
-  content: "OPEN";
-  position: absolute;
-  right: -0.2rem;
-  bottom: 1.35rem;
-  z-index: 4;
-  padding: 0.12rem 0.35rem;
-  border: 1.5px solid #c45c26;
-  border-radius: 2px;
-  color: #c45c26;
-  background: color-mix(in srgb, #fff 82%, #f3e0d4);
-  font-size: 0.55rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  transform: rotate(-12deg);
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .bid-tag,
-  .bid-tag:hover,
-  .bid-tag.is-live {
-    transition: none;
-  }
+.bid-tag.is-live .bid-tag-punch {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 10%, var(--bg-elevated));
 }
 
 .bid-slip {
-  position: relative;
   display: grid;
-  gap: 0.25rem;
-  padding: 0.95rem 1rem 0.9rem 1.1rem;
-  border-radius: 4px;
-  border: 1.5px solid color-mix(in srgb, #0f3d2e 35%, var(--line));
-  background:
-    linear-gradient(90deg, #0f3d2e 0 0.35rem, transparent 0.35rem),
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 22px,
-      rgba(15, 61, 46, 0.05) 22px,
-      rgba(15, 61, 46, 0.05) 23px
-    ),
-    #f7f3ea;
-  color: #14201c;
+  gap: 0.2rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--brand) 20%, var(--line));
+  background: color-mix(in srgb, var(--brand) 5%, var(--bg-soft));
   font-size: 0.85rem;
-  overflow: hidden;
-}
-
-.bid-slip-stamp {
-  position: absolute;
-  top: 0.55rem;
-  right: 0.65rem;
-  padding: 0.18rem 0.4rem;
-  border: 1.5px solid #0f3d2e;
-  border-radius: 2px;
-  color: #0f3d2e;
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  transform: rotate(8deg);
-  opacity: 0.85;
 }
 
 .bid-slip strong {
-  color: #0f3d2e;
-  letter-spacing: 0.02em;
-  padding-right: 2.5rem;
+  color: var(--ink);
 }
 
 .bid-slip > span {
-  color: #14201c;
+  color: color-mix(in srgb, var(--brand) 45%, var(--ink));
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.82rem;
-  font-weight: 700;
+  font-size: 0.8rem;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
 
@@ -3292,7 +3103,6 @@ a.btn-intel:hover {
   color: var(--muted);
   font-size: 0.78rem;
   line-height: 1.4;
-  font-family: var(--font-sans);
 }
 
 /* Keep old readout styles for land-value / return charts */
