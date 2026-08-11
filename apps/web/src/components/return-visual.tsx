@@ -397,7 +397,6 @@ export function ReturnVisual({
   }, []);
 
   const [enabledFactors, setEnabledFactors] = useState<Record<string, boolean>>({});
-  const [manageScreensOpen, setManageScreensOpen] = useState(true);
   const screensRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -406,8 +405,18 @@ export function ReturnVisual({
 
   const resetScreens = useCallback(() => {
     setEnabledFactors(defaultsFromFactors(toggleFactors));
-    setManageScreensOpen(true);
   }, [defaultsFromFactors, toggleFactors]);
+
+  const jumpToScreens = useCallback(() => {
+    const el = screensRef.current;
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    el.classList.remove("is-flash");
+    // Force reflow so the flash animation can replay.
+    void el.offsetWidth;
+    el.classList.add("is-flash");
+    window.setTimeout(() => el.classList.remove("is-flash"), 1200);
+  }, []);
 
   useEffect(() => {
     setScrubYear((y) => Math.max(1, Math.min(holdYears, y)));
@@ -656,94 +665,24 @@ export function ReturnVisual({
       : scrubRaw;
   const scrubY = scrubPoint ? chart.yOf(scrubVal) : chart.yOf(chart.purchase);
 
-  const screensPanel =
-    factors.length > 0 ? (
-      <div className="return-screens-panel" ref={screensRef}>
-        <div className="return-screens-head">
-          <div className="return-screens-kicker">
-            Screens · {factorCount}
-            <span className="return-screens-hint">tap on / off</span>
-          </div>
-          <button type="button" className="return-screens-reset" onClick={resetScreens}>
-            Reset
-          </button>
-        </div>
-        <div className="return-factor-chips" role="group" aria-label="Hold return screens">
-          {factors.map((f) => {
-            const id = String(f.key);
-            const locked = f.toggleable === false;
-            const on = locked ? true : enabledFactors[id] !== false;
-            const affects = f.affects || f.kind || "pace";
-            const pts =
-              f.affects === "pace" && f.bps != null && Number(f.bps) !== 0
-                ? `${Number(f.bps) > 0 ? "+" : ""}${(Number(f.bps) / 100).toFixed(1)}`
-                : affects === "entry"
-                  ? "in"
-                  : affects === "carry"
-                    ? "carry"
-                    : affects === "exit"
-                      ? "exit"
-                      : affects === "fade"
-                        ? "fade"
-                        : "";
-            return (
-              <button
-                key={id}
-                type="button"
-                aria-pressed={on}
-                disabled={locked}
-                title={f.plain || f.label}
-                className={`return-factor-chip dir-${f.direction || "neutral"} ${
-                  on ? "is-on" : "is-off"
-                } ${locked ? "is-locked" : ""}`}
-                onClick={() => {
-                  if (locked) return;
-                  setEnabledFactors((prev) => ({ ...prev, [id]: !on }));
-                }}
-              >
-                <span className="return-factor-check" aria-hidden>
-                  {locked ? "●" : on ? "✓" : "○"}
-                </span>
-                <FactorIcon name={f.key || f.label} />
-                <span className="return-factor-chip-label">{f.label}</span>
-                {pts ? <span className="return-factor-chip-pts tabular-nums">{pts}</span> : null}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    ) : null;
-
   return (
     <div className="return-visual">
       <div className="return-title-row">
-        <div className="return-title-left">
-          <div className="return-title-kicker">Hold return</div>
-          {factors.length > 0 ? (
-            <button
-              type="button"
-              className={`return-manage-screens ${manageScreensOpen ? "is-open" : ""}`}
-              aria-expanded={manageScreensOpen}
-              aria-controls="hold-return-screens"
-              onClick={() => {
-                setManageScreensOpen((v) => {
-                  const next = !v;
-                  if (next) {
-                    window.requestAnimationFrame(() => {
-                      screensRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-                    });
-                  }
-                  return next;
-                });
-              }}
-            >
-              Manage screens
-            </button>
-          ) : null}
-        </div>
+        <div className="return-title-kicker">Hold return</div>
+        {factors.length > 0 ? (
+          <button
+            type="button"
+            className="return-manage-screens"
+            aria-controls="hold-return-screens"
+            onClick={jumpToScreens}
+          >
+            Manage screens
+          </button>
+        ) : null}
+        <span className="return-title-grow" aria-hidden />
         <button
           type="button"
-          className={`help-q ${helpOpen ? "on" : ""}`}
+          className={`help-q return-help-q ${helpOpen ? "on" : ""}`}
           aria-label="How this hold return works"
           aria-haspopup="dialog"
           aria-expanded={helpOpen}
@@ -753,9 +692,6 @@ export function ReturnVisual({
           ?
         </button>
       </div>
-      {manageScreensOpen && screensPanel ? (
-        <div id="hold-return-screens">{screensPanel}</div>
-      ) : null}
       {helpOpen ? (
         <div
           className="help-modal-backdrop"
@@ -1213,6 +1149,62 @@ export function ReturnVisual({
         </div>
       </div>
 
+      {factors.length > 0 ? (
+        <div className="return-screens-panel mt-3" id="hold-return-screens" ref={screensRef}>
+          <div className="return-screens-head">
+            <div className="return-screens-kicker">
+              Screens · {factorCount}
+              <span className="return-screens-hint">tap on / off</span>
+            </div>
+            <button type="button" className="return-screens-reset" onClick={resetScreens}>
+              Reset
+            </button>
+          </div>
+          <div className="return-factor-chips" role="group" aria-label="Hold return screens">
+            {factors.map((f) => {
+              const id = String(f.key);
+              const locked = f.toggleable === false;
+              const on = locked ? true : enabledFactors[id] !== false;
+              const affects = f.affects || f.kind || "pace";
+              const pts =
+                f.affects === "pace" && f.bps != null && Number(f.bps) !== 0
+                  ? `${Number(f.bps) > 0 ? "+" : ""}${(Number(f.bps) / 100).toFixed(1)}`
+                  : affects === "entry"
+                    ? "in"
+                    : affects === "carry"
+                      ? "carry"
+                      : affects === "exit"
+                        ? "exit"
+                        : affects === "fade"
+                          ? "fade"
+                          : "";
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={on}
+                  disabled={locked}
+                  title={f.plain || f.label}
+                  className={`return-factor-chip dir-${f.direction || "neutral"} ${
+                    on ? "is-on" : "is-off"
+                  } ${locked ? "is-locked" : ""}`}
+                  onClick={() => {
+                    if (locked) return;
+                    setEnabledFactors((prev) => ({ ...prev, [id]: !on }));
+                  }}
+                >
+                  <span className="return-factor-check" aria-hidden>
+                    {locked ? "●" : on ? "✓" : "○"}
+                  </span>
+                  <FactorIcon name={f.key || f.label} />
+                  <span className="return-factor-chip-label">{f.label}</span>
+                  {pts ? <span className="return-factor-chip-pts tabular-nums">{pts}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

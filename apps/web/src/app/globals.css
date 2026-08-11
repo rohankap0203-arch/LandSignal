@@ -3684,25 +3684,18 @@ a.btn-intel:hover {
   border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
 }
 
-/* Hold return title + Manage screens (parallel, same text size) */
+/* Hold return title: [Hold return] [Manage screens] …… [?] on one line */
 .return-title-row {
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.65rem;
-  min-width: 0;
-}
-
-.return-title-left {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.55rem 0.75rem;
+  gap: 0.5rem 0.65rem;
   min-width: 0;
 }
 
 .return-title-kicker,
 .return-manage-screens {
+  flex: 0 0 auto;
   font-size: 0.625rem;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -3716,7 +3709,7 @@ a.btn-intel:hover {
 
 .return-manage-screens {
   margin: 0;
-  padding: 0.28rem 0.55rem;
+  padding: 0.22rem 0.5rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--line));
   background: color-mix(in srgb, var(--brand) 8%, var(--bg-elevated));
@@ -3726,11 +3719,20 @@ a.btn-intel:hover {
   white-space: nowrap;
 }
 
-.return-manage-screens:hover,
-.return-manage-screens.is-open {
+.return-manage-screens:hover {
   border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
   background: color-mix(in srgb, var(--brand) 14%, var(--bg-elevated));
   color: var(--brand);
+}
+
+.return-title-grow {
+  flex: 1 1 auto;
+  min-width: 0.35rem;
+}
+
+.return-help-q {
+  flex: 0 0 auto;
+  margin-left: 0;
 }
 
 .return-screens-panel {
@@ -3742,6 +3744,23 @@ a.btn-intel:hover {
   border: 1px solid color-mix(in srgb, var(--brand) 18%, var(--line));
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--brand) 6%, var(--bg-elevated)), var(--bg-elevated));
+  scroll-margin-top: 5.5rem;
+}
+
+.return-screens-panel.is-flash {
+  animation: return-screens-flash 1.1s ease;
+}
+
+@keyframes return-screens-flash {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 35%, transparent);
+  }
+  35% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 28%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
 }
 
 .return-screens-head {
@@ -3791,10 +3810,10 @@ a.btn-intel:hover {
   background: color-mix(in srgb, var(--brand) 10%, var(--bg-elevated));
 }
 
-/* Easy-tap hold-screen chips — structured compact grid */
+/* Easy-tap chips — grow to fit full screen labels (no ellipsis cutoff) */
 .return-factor-chips {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.45rem;
   min-width: 0;
 }
@@ -3804,17 +3823,17 @@ a.btn-intel:hover {
   align-items: center;
   gap: 0.4rem;
   box-sizing: border-box;
-  width: 100%;
-  min-height: 2.35rem;
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-height: 2.25rem;
   border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--bg-elevated);
-  padding: 0.5rem 0.65rem;
+  padding: 0.48rem 0.7rem;
   font-size: 0.78rem;
-  line-height: 1.2;
+  line-height: 1.25;
   color: var(--ink);
   cursor: pointer;
-  white-space: nowrap;
   touch-action: manipulation;
   transition: border-color 0.12s ease, background 0.12s ease, opacity 0.12s ease;
 }
@@ -3826,19 +3845,19 @@ a.btn-intel:hover {
 }
 
 .return-factor-chip-label {
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 0 1 auto;
   font-weight: 650;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
   text-align: left;
+  overflow-wrap: anywhere;
 }
 
 .return-factor-chip-pts {
   flex: 0 0 auto;
   font-size: 0.68rem;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 .return-factor-chip.is-on {
@@ -3861,12 +3880,6 @@ a.btn-intel:hover {
 
 .return-factor-chip.dir-down.is-on {
   border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
-}
-
-@media (max-width: 420px) {
-  .return-factor-chips {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 .memo-panel {
