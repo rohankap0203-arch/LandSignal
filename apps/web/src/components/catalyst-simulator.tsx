@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -378,21 +379,40 @@ function DollarBurst({ burst }: { burst: { id: number; tone: "up" | "down" } | n
   );
 }
 
-function PathChart({ path }: { path: PathPoint[] }) {
+function PathChart({
+  path,
+  active,
+}: {
+  path: PathPoint[];
+  active: boolean;
+}) {
+  const [hoverX, setHoverX] = useState<number | null>(null);
   if (path.length < 2) return null;
+
+  const marks = [0, 5, 10, 20, 40, 60, 80];
   const w = 560;
-  const h = 140;
-  const pad = { t: 12, r: 12, b: 22, l: 8 };
+  const h = 128;
+  const pad = { t: 10, r: 10, b: 20, l: 6 };
   const xs = path.map((p) => Number(p.offset || 0));
   const ys = path.flatMap((p) => [Number(p.baseline_value || 0), Number(p.scenario_value || 0)]);
   const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys) * 0.97;
-  const maxY = Math.max(...ys) * 1.03 || 1;
+  const maxX = Math.max(Math.max(...xs), 80);
+  const minY = Math.min(...ys) * 0.98;
+  const maxY = Math.max(...ys) * 1.02 || 1;
   const sx = (x: number) =>
     pad.l + ((x - minX) / Math.max(0.001, maxX - minX)) * (w - pad.l - pad.r);
   const sy = (y: number) =>
     pad.t + (1 - (y - minY) / Math.max(1, maxY - minY)) * (h - pad.t - pad.b);
+
+  const atYear = (y: number) => {
+    const hit = path.find((p) => Number(p.offset) >= y) || path[path.length - 1];
+    return {
+      year: y,
+      base: Number(hit.baseline_value || 0),
+      scen: Number(hit.scenario_value || 0),
+    };
+  };
+
   const line = (key: "baseline_value" | "scenario_value") =>
     path
       .map(
@@ -401,17 +421,117 @@ function PathChart({ path }: { path: PathPoint[] }) {
       )
       .join(" ");
 
+  const band = (() => {
+    if (!active) return "";
+    const forward = path
+      .map((p) => `${sx(Number(p.offset || 0)).toFixed(1)},${sy(Number(p.scenario_value || 0)).toFixed(1)}`)
+      .join(" ");
+    const back = [...path]
+      .reverse()
+      .map((p) => `${sx(Number(p.offset || 0)).toFixed(1)},${sy(Number(p.baseline_value || 0)).toFixed(1)}`)
+      .join(" ");
+    return `M${forward} L${back} Z`;
+  })();
+
+  const hoverYear =
+    hoverX == null
+      ? null
+      : Math.round(minX + ((hoverX - pad.l) / Math.max(1, w - pad.l - pad.r)) * (maxX - minX));
+  const hover = hoverYear == null ? null : atYear(Math.max(0, Math.min(maxX, hoverYear)));
+  const last = atYear(Math.min(80, maxX));
+  const delta = last.scen - last.base;
+  const deltaPct = last.base ? ((last.scen / last.base - 1) * 100) : 0;
+
+  const onMove = (e: ReactPointerEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * w;
+    setHoverX(Math.max(pad.l, Math.min(w - pad.r, x)));
+  };
+
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="fse-chart" role="img" aria-label="Value path">
-      <path d={line("baseline_value")} className="fse-chart-base" />
-      <path d={line("scenario_value")} className="fse-chart-scen" />
-      <text x={pad.l} y={h - 4} className="fse-chart-label">
-        Today
-      </text>
-      <text x={w - pad.r} y={h - 4} textAnchor="end" className="fse-chart-label">
-        +{Math.round(maxX)}y
-      </text>
-    </svg>
+    <div className="fse-chart-wrap">
+      <div className="fse-chart-readout">
+        {hover ? (
+          <>
+            <span>{hover.year === 0 ? "Today" : `Year ${hover.year}`}</span>
+            <strong>{shortMoney(active ? hover.scen : hover.base)}</strong>
+            {active ? <em>vs {shortMoney(hover.base)}</em> : null}
+          </>
+        ) : active ? (
+          <>
+            <span>80 yr delta</span>
+            <strong className={delta >= 0 ? "up" : "down"}>
+              {delta >= 0 ? "+" : ""}
+              {shortMoney(delta)} ({deltaPct >= 0 ? "+" : ""}
+              {deltaPct.toFixed(0)}%)
+            </strong>
+          </>
+        ) : (
+          <>
+            <span>Drag chart to inspect</span>
+            <strong>{shortMoney(last.base)}</strong>
+            <em>@ 80 yr baseline</em>
+          </>
+        )}
+      </div>
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        className="fse-chart"
+        role="img"
+        aria-label="Value path"
+        onPointerMove={onMove}
+        onPointerLeave={() => setHoverX(null)}
+      >
+        {marks.map((y) => (
+          <line
+            key={y}
+            x1={sx(y)}
+            x2={sx(y)}
+            y1={pad.t}
+            y2={h - pad.b}
+            className="fse-chart-grid"
+          />
+        ))}
+        {band ? <path d={band} className={`fse-chart-band ${delta >= 0 ? "up" : "down"}`} /> : null}
+        <path d={line("baseline_value")} className="fse-chart-base" />
+        <path d={line("scenario_value")} className={`fse-chart-scen ${active ? "is-on" : ""}`} />
+        {marks.map((y) => {
+          const pt = atYear(y);
+          const val = active ? pt.scen : pt.base;
+          return (
+            <circle
+              key={`d-${y}`}
+              cx={sx(y)}
+              cy={sy(val)}
+              r={y === 0 ? 2.8 : 2.2}
+              className={`fse-chart-dot ${active ? "scen" : "base"}`}
+            />
+          );
+        })}
+        {hover ? (
+          <>
+            <line
+              x1={sx(hover.year)}
+              x2={sx(hover.year)}
+              y1={pad.t}
+              y2={h - pad.b}
+              className="fse-chart-hover"
+            />
+            <circle
+              cx={sx(hover.year)}
+              cy={sy(active ? hover.scen : hover.base)}
+              r={3.4}
+              className="fse-chart-dot hover"
+            />
+          </>
+        ) : null}
+        {marks.map((y) => (
+          <text key={`t-${y}`} x={sx(y)} y={h - 4} textAnchor="middle" className="fse-chart-label">
+            {y === 0 ? "0" : y}
+          </text>
+        ))}
+      </svg>
+    </div>
   );
 }
 
@@ -564,6 +684,13 @@ export function CatalystSimulator({
             <header className="fse-modal-head">
               <div className="fse-modal-title-row">
                 <h2 className="display fse-modal-title">Future Scenario Engine</h2>
+                {opp?.score != null ? (
+                  <span className="fse-title-score" title="Catalyst Opportunity">
+                    {opp.score}
+                    <small>/100</small>
+                    <em>{opp.label}</em>
+                  </span>
+                ) : null}
                 <Tip label="How this works">
                   <strong>What-if layer on the Value Path</strong>
                   <span>
@@ -583,21 +710,8 @@ export function CatalystSimulator({
               </button>
             </header>
 
-            {opp ? (
-              <div className="fse-opp-bar">
-                <div className="fse-opp-num">
-                  <strong>{opp.score}</strong>
-                  <span>/100 {opp.label}</span>
-                </div>
-                <p>{opp.primary_reason}</p>
-                <Tip label="Catalyst Opportunity">
-                  <strong>Catalyst Opportunity</strong>
-                  <span>
-                    How well this parcel is positioned for plausible upside — weighted by fit,
-                    timing, and downside pressure. Speculative rumours count less.
-                  </span>
-                </Tip>
-              </div>
+            {opp?.primary_reason ? (
+              <p className="fse-opp-reason-line">{opp.primary_reason}</p>
             ) : null}
 
             <div className="fse-stress" role="tablist" aria-label="Case">
@@ -753,7 +867,7 @@ export function CatalystSimulator({
                   <p className="fse-delta muted">Select catalysts to diverge from baseline.</p>
                 )}
 
-                <PathChart path={chartPath} />
+                <PathChart path={chartPath} active={hasSel} />
                 <div className="fse-legend">
                   <span className="base">Baseline</span>
                   <span className="scen">With selected</span>

@@ -1442,16 +1442,18 @@ def catalyst_opportunity_score(
     else:
         label = "Limited"
 
-    primary = "Limited near-term catalyst positioning from current screens."
+    primary = ""
     if growth >= 65 and any(s.get("event_key") in {"city_expansion", "sewer_extension", "highway_interchange"} for s in upside):
         primary = (
-            "Parcel sits in a growth-oriented context where utility, entitlement, or "
-            "expansion catalysts could materially reshape developability."
+            "Sits in a growth path where utilities, entitlements, or expansion could reshape use."
         )
     elif any(s.get("event_key") == "sewer_extension" for s in upside):
-        primary = "Developable acreage could benefit if municipal utilities extend to the property."
+        primary = "Developable acres could gain if municipal utilities extend here."
     elif downside and mag(max(downside, key=mag)) > (mag(max(upside, key=mag)) if upside else 0):
-        primary = "Downside environmental or demand risks currently weigh on catalyst opportunity."
+        primary = "Downside environmental or demand risks weigh on opportunity."
+    elif upside:
+        top = max(upside, key=mag)
+        primary = f"Top lever on this file: {top.get('label') or 'nearby catalyst'}."
 
     return {
         "score": score,

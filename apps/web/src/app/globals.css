@@ -7278,9 +7278,10 @@ a.acquire-block:hover {
 
 .fse-modal-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.6rem;
+  min-width: 0;
 }
 
 .fse-modal-title-row {
@@ -7288,18 +7289,65 @@ a.acquire-block:hover {
   align-items: center;
   gap: 0.45rem;
   min-width: 0;
+  flex: 1;
 }
 
 .fse-modal-title {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: clamp(0.95rem, 2.4vw, 1.15rem);
   font-weight: 650;
-  line-height: 1.2;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.fse-title-score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.15rem;
+  flex-shrink: 0;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--brand) 22%, var(--line));
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-soft));
+  color: var(--brand);
+  font-family: var(--font-display, "Fraunces", Georgia, serif);
+  font-size: 0.92rem;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.fse-title-score small {
+  font-size: 0.62rem;
+  color: var(--muted);
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.fse-title-score em {
+  margin-left: 0.25rem;
+  font-style: normal;
+  font-size: 0.62rem;
+  font-family: inherit;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fse-opp-reason-line {
+  margin: 0.45rem 0 0;
+  font-size: 0.76rem;
+  color: var(--muted);
+  line-height: 1.35;
 }
 
 .fse-close {
   width: 28px;
   height: 28px;
+  flex-shrink: 0;
 }
 
 .fse-opp-bar {
@@ -7538,7 +7586,8 @@ a.acquire-block:hover {
 }
 
 .fse-dollar.down {
-  top: 28%;
+  top: auto;
+  bottom: 12%;
   color: color-mix(in srgb, var(--danger, #b33) 45%, transparent);
   animation: fse-dollar-fall 1.2s ease-out forwards;
 }
@@ -7560,14 +7609,14 @@ a.acquire-block:hover {
 @keyframes fse-dollar-fall {
   0% {
     opacity: 0;
-    transform: translate(0, -12px) scale(0.8);
+    transform: translate(0, 0) scale(0.8);
   }
   18% {
     opacity: 0.4;
   }
   100% {
     opacity: 0;
-    transform: translate(var(--drift, 0px), 170px) scale(1.05);
+    transform: translate(var(--drift, 0px), 120px) scale(1.05);
   }
 }
 
@@ -7698,44 +7747,111 @@ a.acquire-block:hover {
   color: var(--muted);
 }
 
+.fse-chart-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.15rem;
+}
+
+.fse-chart-readout {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.45rem;
+  min-height: 1.15rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.fse-chart-readout strong {
+  font-family: var(--font-display, "Fraunces", Georgia, serif);
+  font-size: 0.92rem;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.fse-chart-readout strong.up {
+  color: var(--brand);
+}
+
+.fse-chart-readout strong.down {
+  color: var(--danger, #a33);
+}
+
+.fse-chart-readout em {
+  font-style: normal;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
 .fse-chart {
   width: 100%;
   height: auto;
   display: block;
   border-radius: 10px;
   background: color-mix(in srgb, var(--brand) 4%, var(--bg-soft));
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.fse-chart-grid {
+  stroke: color-mix(in srgb, var(--ink) 8%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+
+.fse-chart-band.up {
+  fill: color-mix(in srgb, var(--brand) 16%, transparent);
+}
+
+.fse-chart-band.down {
+  fill: color-mix(in srgb, var(--danger, #a33) 14%, transparent);
 }
 
 .fse-chart-base {
   fill: none;
   stroke: color-mix(in srgb, var(--ink) 40%, transparent);
-  stroke-width: 2;
+  stroke-width: 1.8;
   stroke-linecap: round;
   stroke-dasharray: 4 3;
 }
 
 .fse-chart-scen {
   fill: none;
-  stroke: var(--brand);
-  stroke-width: 2.6;
+  stroke: color-mix(in srgb, var(--ink) 22%, transparent);
+  stroke-width: 2;
   stroke-linecap: round;
+}
+
+.fse-chart-scen.is-on {
+  stroke: var(--brand);
+  stroke-width: 2.5;
   animation: fse-draw 0.55s ease both;
 }
 
-@keyframes fse-draw {
-  from {
-    stroke-dasharray: 700;
-    stroke-dashoffset: 700;
-  }
-  to {
-    stroke-dasharray: 700;
-    stroke-dashoffset: 0;
-  }
+.fse-chart-dot.base {
+  fill: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+
+.fse-chart-dot.scen {
+  fill: var(--brand);
+}
+
+.fse-chart-dot.hover {
+  fill: var(--brand);
+  stroke: var(--bg-elevated);
+  stroke-width: 1.5;
+}
+
+.fse-chart-hover {
+  stroke: color-mix(in srgb, var(--brand) 55%, transparent);
+  stroke-width: 1.2;
 }
 
 .fse-chart-label {
   fill: var(--muted);
-  font-size: 10px;
+  font-size: 9px;
 }
 
 .fse-legend {
