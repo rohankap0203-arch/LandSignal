@@ -51,7 +51,9 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
       },
       cache: "no-store",
     });
-  } catch {
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") throw e;
+    if (init?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
     throw new Error(
       "LandSignal API is not reachable. Start it with `npm run dev:api`, then try Show matches again.",
     );
@@ -271,6 +273,29 @@ export const landsignalApi = {
       state?: string | null;
       county?: string | null;
     }>(`/parcels/${id}/geometry`),
+  nearby: (lat: number, lon: number, kind: string, init?: RequestInit) =>
+    api<{
+      kind: string;
+      label: string;
+      hits: Array<{
+        kind: string;
+        label: string;
+        name: string;
+        lat: number;
+        lon: number;
+        meters: number;
+        detail?: string | null;
+        osm_key?: string | null;
+      }>;
+      status: string;
+      message?: string | null;
+      max_miles?: number | null;
+      searched_radius_m?: number | null;
+      cached?: boolean;
+    }>(
+      `/nearby?lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}&kind=${encodeURIComponent(kind)}`,
+      init,
+    ),
   memo: (id: string) =>
     api<{ markdown: string; verdict: string }>(`/parcels/${id}/memo`, { method: "POST" }),
   alerts: () => api<Record<string, unknown>[]>("/alerts"),

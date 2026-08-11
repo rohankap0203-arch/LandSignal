@@ -1863,6 +1863,19 @@ async def parcel_geometry(parcel_id: UUID) -> dict[str, Any]:
     }
 
 
+@router.get("/nearby")
+async def nearby_landmarks(lat: float, lon: float, kind: str) -> dict[str, Any]:
+    """Closest landmark chips for Land Viewer — server-side Overpass with a hard deadline."""
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+        raise HTTPException(400, "Invalid coordinates")
+    kind_norm = (kind or "").strip().lower()
+    from landsignal.services.nearby import KIND_META, find_nearby
+
+    if kind_norm not in KIND_META:
+        raise HTTPException(400, f"Unsupported kind: {kind}")
+    return await find_nearby(lat, lon, kind_norm)
+
+
 @router.post("/land-alerts/matches/{parcel_id}/viewed")
 async def mark_land_alert_viewed(parcel_id: UUID) -> dict[str, Any]:
     from landsignal.services.land_alerts import DEMO_USER_ID, mark_match_viewed
