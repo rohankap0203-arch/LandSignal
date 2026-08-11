@@ -661,6 +661,14 @@ export function CatalystSimulator({
         aria-expanded={open}
         onClick={() => setOpen(true)}
       >
+        <span className="fse-launch-sparkles" aria-hidden>
+          <i />
+          <i />
+          <i />
+          <i />
+          <i />
+          <i />
+        </span>
         <span className="fse-launch-label">{engine.button_label || "Future Scenario Engine"}</span>
         <span className="fse-launch-go" aria-hidden>
           Open
