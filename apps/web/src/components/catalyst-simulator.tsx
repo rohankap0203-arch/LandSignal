@@ -96,14 +96,18 @@ function pctRange(impact?: Impact): string {
   const lo = Number(impact.display_low_pct);
   const hi = Number(impact.display_high_pct);
   if (!Number.isFinite(lo) || !Number.isFinite(hi)) return "—";
-  const fmt = (n: number) => {
+  const fmtNum = (n: number) => {
     const rounded = Math.abs(n) >= 10 ? Math.round(n) : Math.round(n * 10) / 10;
-    const body = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
-    return `${rounded > 0 ? "+" : ""}${body}%`;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
   };
+  const fmt = (n: number) => `${n > 0 ? "+" : ""}${fmtNum(n)}%`;
   if (Math.abs(lo - hi) < 0.05) return fmt(lo);
-  if (lo < 0 && hi <= 0) return `${fmt(Math.min(lo, hi))} to ${fmt(Math.max(lo, hi))}`;
-  return `${fmt(Math.min(lo, hi))} to ${fmt(Math.max(lo, hi))}`;
+  const a = Math.min(lo, hi);
+  const b = Math.max(lo, hi);
+  // Compact range: "+2.8–8.5%" / "−12–−5%" — keeps rows from wrapping mid-select.
+  if (a >= 0) return `+${fmtNum(a)}–${fmtNum(b)}%`;
+  if (b <= 0) return `${fmtNum(a)}–${fmtNum(b)}%`;
+  return `${fmt(a)}–${fmt(b)}`;
 }
 
 function dollarRange(impact?: Impact, baseToday?: number | null): string | null {
@@ -117,7 +121,14 @@ function dollarRange(impact?: Impact, baseToday?: number | null): string | null 
   const high = Math.max(a, b);
   const fmt = (x: number) => `${x > 0 ? "+" : ""}${shortMoney(x)}`.replace("+-", "-");
   if (Math.abs(high - low) < 50) return fmt(low);
-  return `${fmt(low)} to ${fmt(high)}`;
+  // Compact: "+$12k–$45k" / "−$12k–$5k"
+  if (low >= 0 && high >= 0) {
+    return `+${shortMoney(low)}–${shortMoney(high)}`;
+  }
+  if (low <= 0 && high <= 0) {
+    return `${shortMoney(low)}–${shortMoney(high)}`;
+  }
+  return `${fmt(low)}–${fmt(high)}`;
 }
 
 function softCap(x: number, cap = 0.85): number {
