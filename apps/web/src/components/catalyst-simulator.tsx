@@ -661,20 +661,7 @@ export function CatalystSimulator({
         aria-expanded={open}
         onClick={() => setOpen(true)}
       >
-        <span className="fse-launch-copy">
-          <span className="fse-launch-label">{engine.button_label || "Future Scenario Engine"}</span>
-          <span className="fse-launch-meta">
-            {opp?.score != null ? (
-              <>
-                Opportunity <strong>{opp.score}</strong>
-                <span className="fse-launch-dot">·</span>
-                {opp.label}
-              </>
-            ) : (
-              "What if the area around this land changes?"
-            )}
-          </span>
-        </span>
+        <span className="fse-launch-label">{engine.button_label || "Future Scenario Engine"}</span>
         <span className="fse-launch-go" aria-hidden>
           Open
           <svg viewBox="0 0 16 16" width="14" height="14" fill="none">
