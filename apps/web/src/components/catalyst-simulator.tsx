@@ -668,7 +668,7 @@ export function CatalystSimulator({
             <path
               d="M3.5 8h9M8.5 4l4 4-4 4"
               stroke="currentColor"
-              strokeWidth="1.7"
+              strokeWidth="1.6"
               strokeLinecap="round"
               strokeLinejoin="round"
             />

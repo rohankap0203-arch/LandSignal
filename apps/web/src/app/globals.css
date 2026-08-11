@@ -7086,114 +7086,74 @@ a.acquire-block:hover {
 }
 
 .fse-launch {
-  position: relative;
-  isolation: isolate;
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.28rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   width: 100%;
-  text-align: center;
-  padding: 0.5rem 0.5rem 0.45rem;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line));
-  background: var(--brand);
-  color: #fff;
+  text-align: left;
+  padding: 0.7rem 0.85rem 0.7rem 1rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--line));
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-elevated));
+  color: var(--ink);
   cursor: pointer;
-  overflow: hidden;
   box-shadow: none;
-  transition: filter 0.16s ease, border-color 0.16s ease;
-}
-
-/* Constant subtle sheen — slow drift, low contrast, flat */
-.fse-launch::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(
-    100deg,
-    transparent 0%,
-    transparent 42%,
-    rgba(255, 255, 255, 0.09) 50%,
-    transparent 58%,
-    transparent 100%
-  );
-  opacity: 0.65;
-  animation: fse-launch-glisten 5.5s ease-in-out infinite alternate;
-  pointer-events: none;
-  z-index: 0;
-}
-
-@keyframes fse-launch-glisten {
-  from {
-    transform: translateX(-10%);
-  }
-  to {
-    transform: translateX(10%);
-  }
-}
-
-.fse-launch > * {
-  position: relative;
-  z-index: 1;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .fse-launch:hover {
-  filter: brightness(1.03);
+  background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
   border-color: color-mix(in srgb, var(--brand) 55%, var(--line));
 }
 
 .fse-launch:active {
-  filter: brightness(0.98);
+  background: color-mix(in srgb, var(--brand) 16%, var(--bg-elevated));
 }
 
 .fse-launch.is-open {
-  filter: brightness(1.02);
+  border-color: color-mix(in srgb, var(--brand) 50%, var(--line));
+  background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
 }
 
 .fse-launch-label {
-  font-family: var(--font-sans, system-ui, sans-serif);
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.015em;
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
   line-height: 1.2;
-  color: #fff;
+  color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 0 0.35rem;
+  min-width: 0;
 }
 
 .fse-launch-go {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.28rem;
-  width: 100%;
-  padding: 0.28rem 0.7rem;
-  border-radius: 999px;
-  background: transparent;
-  border: 1px solid color-mix(in srgb, #fff 30%, transparent);
-  color: color-mix(in srgb, #fff 94%, transparent);
-  font-family: var(--font-sans, system-ui, sans-serif);
-  font-size: 0.58rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  margin: -0.15rem -0.15rem -0.15rem 0;
+  padding: 0.38rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line));
+  background: var(--brand);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .fse-launch-go svg {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .fse-launch::before {
-    animation: none;
-    opacity: 0.4;
-    transform: none;
-  }
+.fse-launch:hover .fse-launch-go {
+  border-color: color-mix(in srgb, var(--brand) 60%, #000);
 }
 
 .fse-backdrop {
