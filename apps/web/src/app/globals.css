@@ -7143,8 +7143,8 @@ a.acquire-block:hover {
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-  color: color-mix(in srgb, var(--brand) 62%, var(--ink));
-  opacity: 0.4;
+  color: color-mix(in srgb, var(--brand) 48%, var(--ink) 52%);
+  opacity: 0.52;
 }
 
 .fse-scene-ground {
@@ -7462,8 +7462,9 @@ a.acquire-block:hover {
 .fse-dirt-layer {
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--bg-elevated) 94%, var(--ink) 6%);
-  animation: fse-dirt-clear 1.1s cubic-bezier(0.45, 0.05, 0.55, 1) forwards;
+  /* Near-white so it blends with the modal, with ink outlines carrying the clipart look */
+  background: var(--bg-elevated);
+  animation: fse-dirt-clear 1.15s cubic-bezier(0.45, 0.05, 0.55, 1) forwards;
 }
 
 .fse-dirt-clipart {
@@ -7472,6 +7473,10 @@ a.acquire-block:hover {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+.fse-dirt-clipart g:first-child {
+  stroke-width: 2.6;
 }
 
 .fse-dirt-shovel-wrap {
@@ -7516,25 +7521,27 @@ a.acquire-block:hover {
 }
 
 @keyframes fse-dirt-clear {
-  0% {
+  0%,
+  14% {
     clip-path: inset(0 0 0 0);
     opacity: 1;
   }
-  85% {
+  90% {
     opacity: 1;
   }
   100% {
     clip-path: inset(100% 0 0 0);
-    opacity: 0.85;
+    opacity: 0.9;
   }
 }
 
 @keyframes fse-shovel-sweep {
-  0% {
+  0%,
+  10% {
     top: -8%;
     opacity: 1;
   }
-  90% {
+  92% {
     opacity: 1;
   }
   100% {
