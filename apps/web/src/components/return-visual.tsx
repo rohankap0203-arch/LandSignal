@@ -377,16 +377,37 @@ export function ReturnVisual({
   const toggleFactors: ToggleFactor[] = useMemo(() => {
     const raw = (intel?.toggle_factors || intel?.all_factors || intel?.factors || []) as ToggleFactor[];
     return raw.filter((f) => f && f.key);
-  }, [intel]);
+  }, [intel?.toggle_factors, intel?.all_factors, intel?.factors]);
+
+  const factorSig = useMemo(
+    () =>
+      toggleFactors
+        .map((f) => `${f.key}:${f.default_on !== false ? 1 : 0}:${f.toggleable === false ? 0 : 1}`)
+        .join("|"),
+    [toggleFactors],
+  );
+
+  const defaultsFromFactors = useCallback((list: ToggleFactor[]) => {
+    const next: Record<string, boolean> = {};
+    for (const f of list) {
+      const id = String(f.key);
+      next[id] = f.toggleable === false ? true : f.default_on !== false;
+    }
+    return next;
+  }, []);
 
   const [enabledFactors, setEnabledFactors] = useState<Record<string, boolean>>({});
+  const [manageScreensOpen, setManageScreensOpen] = useState(true);
+  const screensRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
-    const next: Record<string, boolean> = {};
-    for (const f of toggleFactors) {
-      next[f.key] = f.default_on !== false;
-    }
-    setEnabledFactors(next);
-  }, [toggleFactors]);
+    setEnabledFactors(defaultsFromFactors(toggleFactors));
+  }, [factorSig, toggleFactors, defaultsFromFactors]);
+
+  const resetScreens = useCallback(() => {
+    setEnabledFactors(defaultsFromFactors(toggleFactors));
+    setManageScreensOpen(true);
+  }, [defaultsFromFactors, toggleFactors]);
 
   useEffect(() => {
     setScrubYear((y) => Math.max(1, Math.min(holdYears, y)));
@@ -635,11 +656,90 @@ export function ReturnVisual({
       : scrubRaw;
   const scrubY = scrubPoint ? chart.yOf(scrubVal) : chart.yOf(chart.purchase);
 
+  const screensPanel =
+    factors.length > 0 ? (
+      <div className="return-screens-panel" ref={screensRef}>
+        <div className="return-screens-head">
+          <div className="return-screens-kicker">
+            Screens · {factorCount}
+            <span className="return-screens-hint">tap on / off</span>
+          </div>
+          <button type="button" className="return-screens-reset" onClick={resetScreens}>
+            Reset
+          </button>
+        </div>
+        <div className="return-factor-chips" role="group" aria-label="Hold return screens">
+          {factors.map((f) => {
+            const id = String(f.key);
+            const locked = f.toggleable === false;
+            const on = locked ? true : enabledFactors[id] !== false;
+            const affects = f.affects || f.kind || "pace";
+            const pts =
+              f.affects === "pace" && f.bps != null && Number(f.bps) !== 0
+                ? `${Number(f.bps) > 0 ? "+" : ""}${(Number(f.bps) / 100).toFixed(1)}`
+                : affects === "entry"
+                  ? "in"
+                  : affects === "carry"
+                    ? "carry"
+                    : affects === "exit"
+                      ? "exit"
+                      : affects === "fade"
+                        ? "fade"
+                        : "";
+            return (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={on}
+                disabled={locked}
+                title={f.plain || f.label}
+                className={`return-factor-chip dir-${f.direction || "neutral"} ${
+                  on ? "is-on" : "is-off"
+                } ${locked ? "is-locked" : ""}`}
+                onClick={() => {
+                  if (locked) return;
+                  setEnabledFactors((prev) => ({ ...prev, [id]: !on }));
+                }}
+              >
+                <span className="return-factor-check" aria-hidden>
+                  {locked ? "●" : on ? "✓" : "○"}
+                </span>
+                <FactorIcon name={f.key || f.label} />
+                <span className="return-factor-chip-label">{f.label}</span>
+                {pts ? <span className="return-factor-chip-pts tabular-nums">{pts}</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    ) : null;
+
   return (
     <div className="return-visual">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-          Hold return
+      <div className="return-title-row">
+        <div className="return-title-left">
+          <div className="return-title-kicker">Hold return</div>
+          {factors.length > 0 ? (
+            <button
+              type="button"
+              className={`return-manage-screens ${manageScreensOpen ? "is-open" : ""}`}
+              aria-expanded={manageScreensOpen}
+              aria-controls="hold-return-screens"
+              onClick={() => {
+                setManageScreensOpen((v) => {
+                  const next = !v;
+                  if (next) {
+                    window.requestAnimationFrame(() => {
+                      screensRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                    });
+                  }
+                  return next;
+                });
+              }}
+            >
+              Manage screens
+            </button>
+          ) : null}
         </div>
         <button
           type="button"
@@ -653,6 +753,9 @@ export function ReturnVisual({
           ?
         </button>
       </div>
+      {manageScreensOpen && screensPanel ? (
+        <div id="hold-return-screens">{screensPanel}</div>
+      ) : null}
       {helpOpen ? (
         <div
           className="help-modal-backdrop"
@@ -1110,72 +1213,6 @@ export function ReturnVisual({
         </div>
       </div>
 
-      {factors.length > 0 && (
-        <div className="return-factors mt-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-              Screens · {factorCount}
-              <span className="ml-1.5 normal-case tracking-normal font-normal text-[11px]">
-                tap on/off
-              </span>
-            </div>
-            <button
-              type="button"
-              className="text-[11px] font-semibold text-[var(--brand)]"
-              onClick={() => {
-                const next: Record<string, boolean> = {};
-                for (const f of factors) next[f.key] = true;
-                setEnabledFactors(next);
-              }}
-            >
-              Reset
-            </button>
-          </div>
-          <div className="return-factor-chips mt-1.5">
-            {factors.map((f) => {
-              const id = String(f.key);
-              const locked = f.toggleable === false;
-              const on = locked ? true : enabledFactors[id] !== false;
-              const affects = f.affects || f.kind || "pace";
-              const pts =
-                f.affects === "pace" && f.bps != null && Number(f.bps) !== 0
-                  ? `${Number(f.bps) > 0 ? "+" : ""}${(Number(f.bps) / 100).toFixed(1)}`
-                  : affects === "entry"
-                    ? "in"
-                    : affects === "carry"
-                      ? "carry"
-                      : affects === "exit"
-                        ? "exit"
-                        : affects === "fade"
-                          ? "fade"
-                          : "";
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  aria-pressed={on}
-                  disabled={locked}
-                  title={f.plain || f.label}
-                  className={`return-factor-chip dir-${f.direction || "neutral"} ${
-                    on ? "is-on" : "is-off"
-                  } ${locked ? "is-locked" : ""}`}
-                  onClick={() => {
-                    if (locked) return;
-                    setEnabledFactors((prev) => ({ ...prev, [id]: !on }));
-                  }}
-                >
-                  <span className="return-factor-check" aria-hidden>
-                    {locked ? "●" : on ? "✓" : "○"}
-                  </span>
-                  <FactorIcon name={f.key || f.label} />
-                  <span className="return-factor-chip-label">{f.label}</span>
-                  {pts ? <span className="return-factor-chip-pts tabular-nums">{pts}</span> : null}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
