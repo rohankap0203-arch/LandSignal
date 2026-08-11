@@ -137,17 +137,6 @@ export function ScoreBar({
   );
 }
 
-function ScorePin() {
-  return (
-    <svg className="score-pin" viewBox="0 0 16 16" width="14" height="14" aria-hidden>
-      <path
-        fill="currentColor"
-        d="M8 1.5c-2.4 0-4.4 1.9-4.4 4.3 0 3.2 4.4 8.2 4.4 8.2s4.4-5 4.4-8.2C12.4 3.4 10.4 1.5 8 1.5zm0 6.1a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6z"
-      />
-    </svg>
-  );
-}
-
 /** Opportunity — plain compare to what’s live on the site. */
 function OpportunityLens({ score, standings }: { score: number; standings: ScoreStandings }) {
   const beats = Math.round(standings.beats_pct || 0);
