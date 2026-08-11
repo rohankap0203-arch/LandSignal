@@ -274,13 +274,13 @@ function CompletenessLens({ score, standings }: { score: number; standings: Scor
         >
           {band}
         </span>
-        <span className="score-lens-stat">
-          <strong>
-            {have}/{total}
-          </strong>{" "}
-          key screens on file
-        </span>
       </div>
+      <p className="score-lens-stat">
+        <strong>
+          {have}/{total}
+        </strong>{" "}
+        key screens on file
+      </p>
       <ul className="complete-checks">
         {factors.map((f) => {
           const ok = f.direction === "up";

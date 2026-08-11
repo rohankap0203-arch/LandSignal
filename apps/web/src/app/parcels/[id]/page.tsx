@@ -204,7 +204,7 @@ export default function ParcelIntelligencePage() {
         </Link>
       </div>
 
-      <section className="panel overflow-hidden">
+      <section className="panel">
         <div className="p-6 pb-4">
           <div className="intel-topbar">
             <div className="intel-topbar-left">
