@@ -1,6 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 import { landsignalApi } from "@/lib/api";
 
 type Impact = {
@@ -69,6 +78,15 @@ function money(v: unknown): string {
   return `$${Math.round(n).toLocaleString()}`;
 }
 
+function shortMoney(v: number): string {
+  const a = Math.abs(v);
+  const sign = v < 0 ? "-" : v > 0 ? "+" : "";
+  if (a >= 1_000_000) return `${sign}$${(a / 1_000_000).toFixed(1)}M`;
+  if (a >= 10_000) return `${sign}$${Math.round(a / 1000)}k`;
+  if (a >= 1000) return `${sign}$${(a / 1000).toFixed(1)}k`;
+  return `${sign}$${Math.round(a).toLocaleString()}`;
+}
+
 function pctRange(impact?: Impact): string {
   if (!impact) return "—";
   const lo = Number(impact.display_low_pct);
@@ -80,12 +98,24 @@ function pctRange(impact?: Impact): string {
     return `${rounded > 0 ? "+" : ""}${body}%`;
   };
   if (Math.abs(lo - hi) < 0.05) return fmt(lo);
-  // Upside: +low to +high · Downside: more-negative to less-negative
   if (lo < 0 && hi <= 0) return `${fmt(Math.min(lo, hi))} to ${fmt(Math.max(lo, hi))}`;
   return `${fmt(Math.min(lo, hi))} to ${fmt(Math.max(lo, hi))}`;
 }
 
-function softCap(x: number, cap = 0.75): number {
+function dollarRange(impact?: Impact, baseToday?: number | null): string | null {
+  if (!impact || !(baseToday && baseToday > 0)) return null;
+  const lo = Number(impact.display_low_pct);
+  const hi = Number(impact.display_high_pct);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null;
+  const a = (baseToday * lo) / 100;
+  const b = (baseToday * hi) / 100;
+  const low = Math.min(a, b);
+  const high = Math.max(a, b);
+  if (Math.abs(high - low) < 50) return shortMoney(low);
+  return `${shortMoney(low)} to ${shortMoney(high)}`;
+}
+
+function softCap(x: number, cap = 0.85): number {
   if (x === 0) return 0;
   const sign = x > 0 ? 1 : -1;
   const ax = Math.abs(x);
@@ -214,15 +244,41 @@ function pathSummary(path: PathPoint[]) {
 
 function Tip({ label, children }: { label: string; children: ReactNode }) {
   const [on, setOn] = useState(false);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!on || !btnRef.current) return;
+    const place = () => {
+      const r = btnRef.current!.getBoundingClientRect();
+      const width = Math.min(304, window.innerWidth - 24);
+      let left = r.right - width;
+      left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
+      const top = r.bottom + 8;
+      setPos({ top, left, width });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [on]);
+
   useEffect(() => {
     if (!on) return;
     const close = () => setOn(false);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close();
     };
+    // delay so the opening click doesn't immediately close
+    const t = window.setTimeout(() => {
+      window.addEventListener("click", close);
+    }, 0);
     window.addEventListener("keydown", onKey);
-    window.addEventListener("click", close);
     return () => {
+      window.clearTimeout(t);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("click", close);
     };
@@ -231,6 +287,7 @@ function Tip({ label, children }: { label: string; children: ReactNode }) {
   return (
     <span className={`help-tip tone-panel fse-tip ${on ? "is-open" : ""}`} onClick={(e) => e.stopPropagation()}>
       <button
+        ref={btnRef}
         type="button"
         className={`help-tip-btn ${on ? "on" : ""}`}
         aria-label={label}
@@ -243,12 +300,70 @@ function Tip({ label, children }: { label: string; children: ReactNode }) {
       >
         ?
       </button>
-      {on ? (
-        <span className="help-tip-pop fse-tip-pop" role="tooltip">
-          {children}
-        </span>
-      ) : null}
+      {on && pos && typeof document !== "undefined"
+        ? createPortal(
+            <span
+              className="fse-tip-portal"
+              role="tooltip"
+              style={{ top: pos.top, left: pos.left, width: pos.width }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {children}
+            </span>,
+            document.body,
+          )
+        : null}
     </span>
+  );
+}
+
+type DollarParticle = {
+  id: number;
+  x: number;
+  delay: number;
+  size: number;
+  drift: number;
+  tone: "up" | "down";
+  glyph: string;
+};
+
+function DollarBurst({ burst }: { burst: { id: number; tone: "up" | "down" } | null }) {
+  const [parts, setParts] = useState<DollarParticle[]>([]);
+
+  useEffect(() => {
+    if (!burst) return;
+    const next: DollarParticle[] = Array.from({ length: 18 }, (_, i) => ({
+      id: burst.id * 100 + i,
+      x: 8 + Math.random() * 84,
+      delay: Math.random() * 0.35,
+      size: 14 + Math.random() * 18,
+      drift: (Math.random() - 0.5) * 80,
+      tone: burst.tone,
+      glyph: burst.tone === "up" ? "$" : "−$",
+    }));
+    setParts(next);
+    const t = window.setTimeout(() => setParts([]), 1400);
+    return () => window.clearTimeout(t);
+  }, [burst]);
+
+  if (!parts.length) return null;
+  return (
+    <div className="fse-dollar-burst" aria-hidden>
+      {parts.map((p) => (
+        <span
+          key={p.id}
+          className={`fse-dollar ${p.tone}`}
+          style={{
+            left: `${p.x}%`,
+            animationDelay: `${p.delay}s`,
+            fontSize: `${p.size}px`,
+            ["--drift" as string]: `${p.drift}px`,
+          }}
+        >
+          {p.glyph}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -313,6 +428,8 @@ export function CatalystSimulator({
   const [customError, setCustomError] = useState<string | null>(null);
   const [customScenario, setCustomScenario] = useState<Scenario | null>(null);
   const [pending, startTransition] = useTransition();
+  const [burst, setBurst] = useState<{ id: number; tone: "up" | "down" } | null>(null);
+  const burstSeq = useRef(0);
 
   const scenarios = useMemo(() => {
     const base = [...(engine?.scenarios || [])];
@@ -345,6 +462,16 @@ export function CatalystSimulator({
   const chartPath = path.length
     ? path
     : applyPath(engine?.baseline_points || [], combineImpacts([]), []);
+  const baseToday = useMemo(() => {
+    const pts = engine?.baseline_points || [];
+    const today =
+      pts.find((p) => Number(p.offset) === 0) ||
+      pts.find((p) => (p.offset == null || Number(p.offset) >= 0) && (p.value_usd || p.baseline_value));
+    const fromPt = Number(today?.value_usd ?? today?.baseline_value ?? 0);
+    if (fromPt > 0) return fromPt;
+    const fromSummary = Number(summary?.today ?? 0);
+    return fromSummary > 0 ? fromSummary : null;
+  }, [engine?.baseline_points, summary?.today]);
 
   useEffect(() => {
     if (!open) return;
@@ -361,16 +488,6 @@ export function CatalystSimulator({
   }, [open]);
 
   if (!engine) return null;
-
-  const toggle = (id: string) => {
-    setStress("custom");
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   const applyStress = (key: string) => {
     setStress(key);
@@ -399,6 +516,12 @@ export function CatalystSimulator({
         setSelected((prev) => new Set([...prev, custom.scenario!.id]));
         setStress("custom");
         setCustomText("");
+        burstSeq.current += 1;
+        const central = Number(custom.scenario.impact?.central_pct ?? 0);
+        setBurst({
+          id: burstSeq.current,
+          tone: central < 0 || custom.scenario.bucket === "downside" ? "down" : "up",
+        });
       } catch (e) {
         setCustomError(e instanceof Error ? e.message : "Request failed");
       }
@@ -407,6 +530,23 @@ export function CatalystSimulator({
 
   const opp = engine.opportunity;
   const hasSel = selectedScenarios.length > 0;
+
+  const toggle = (id: string, scenario?: Scenario) => {
+    setStress("custom");
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const turningOn = !next.has(id);
+      if (turningOn) next.add(id);
+      else next.delete(id);
+      if (turningOn) {
+        const central = Number(scenario?.impact?.central_pct ?? 0);
+        const tone: "up" | "down" = central < 0 || scenario?.bucket === "downside" ? "down" : "up";
+        burstSeq.current += 1;
+        setBurst({ id: burstSeq.current, tone });
+      }
+      return next;
+    });
+  };
 
   return (
     <section id="sec-catalyst" className="fse-wrap scroll-mt-20">
@@ -444,6 +584,7 @@ export function CatalystSimulator({
             aria-label="Future Scenario Engine"
             onClick={(e) => e.stopPropagation()}
           >
+            <DollarBurst burst={burst} />
             <header className="fse-modal-head">
               <div className="fse-modal-title-row">
                 <h2 className="display fse-modal-title">Future Scenario Engine</h2>
@@ -521,17 +662,21 @@ export function CatalystSimulator({
                           const on = selected.has(s.id);
                           const because = (s.reasoning?.because || []).slice(0, 3);
                           const chain = (s.chain || []).slice(0, 3);
+                          const dollars = dollarRange(s.impact, baseToday);
                           return (
                             <li key={s.id} className={`fse-row ${on ? "is-on" : ""} ${key}`}>
                               <label className="fse-toggle">
                                 <input
                                   type="checkbox"
                                   checked={on}
-                                  onChange={() => toggle(s.id)}
+                                  onChange={() => toggle(s.id, s)}
                                 />
                                 <span className="fse-toggle-body">
                                   <span className="fse-row-title">{shortLabel(s.label)}</span>
-                                  <span className="fse-row-impact">{pctRange(s.impact)}</span>
+                                  <span className="fse-row-impact">
+                                    {pctRange(s.impact)}
+                                    {dollars ? <span className="fse-row-dollars">{dollars}</span> : null}
+                                  </span>
                                 </span>
                               </label>
                               <Tip label={`About ${s.label}`}>
@@ -543,6 +688,11 @@ export function CatalystSimulator({
                                   confidence
                                   {s.data_integrity ? ` · ${s.data_integrity}` : ""}
                                 </span>
+                                {dollars ? (
+                                  <span>
+                                    Modeled value move vs today (~{money(baseToday)}): {dollars}
+                                  </span>
+                                ) : null}
                                 {because.length ? (
                                   <span>{because.map((b) => `• ${b}`).join(" ")}</span>
                                 ) : null}

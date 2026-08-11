@@ -7177,6 +7177,7 @@ a.acquire-block:hover {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  position: relative;
 }
 
 .fse-body {
@@ -7359,7 +7360,19 @@ a.acquire-block:hover {
   font-size: 0.72rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.45rem;
+  align-items: baseline;
+}
+
+.fse-row-dollars {
+  color: var(--brand);
+  font-weight: 700;
+}
+
+.fse-row.downside .fse-row-dollars {
+  color: var(--danger, #a33);
 }
 
 .fse-row.is-on .fse-row-impact {
@@ -7387,18 +7400,78 @@ a.acquire-block:hover {
   font-size: 10px;
 }
 
-/* Force tip below the ? so modal overflow never clips it upward */
-.fse-tip .help-tip-pop,
-.fse-tip .fse-tip-pop {
-  top: calc(100% + 8px);
-  bottom: auto;
-  left: auto;
-  right: 0;
-  transform: none;
-  z-index: 96;
-  width: min(19rem, 82vw);
-  max-height: min(42vh, 280px);
+/* Portal tip — fixed to viewport, always below the ?, never clipped by modal */
+.fse-tip-portal {
+  position: fixed;
+  z-index: 120;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border-radius: 12px;
+  background: #10261e;
+  color: #f4faf6;
+  border: 1px solid rgba(247, 250, 248, 0.14);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 500;
+  text-align: left;
+  max-height: min(46vh, 320px);
   overflow: auto;
+}
+
+.fse-tip-portal strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.fse-tip-portal span {
+  display: block;
+  color: rgba(244, 250, 246, 0.9);
+}
+
+.fse-dollar-burst {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 40;
+  border-radius: inherit;
+}
+
+.fse-dollar {
+  position: absolute;
+  bottom: 18%;
+  font-weight: 800;
+  font-family: var(--font-display, "Fraunces", Georgia, serif);
+  animation: fse-dollar-rise 1.25s ease-out forwards;
+  opacity: 0;
+  text-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 25%, transparent);
+}
+
+.fse-dollar.up {
+  color: color-mix(in srgb, var(--brand) 75%, #1f8a4c);
+}
+
+.fse-dollar.down {
+  color: color-mix(in srgb, var(--danger, #b33) 80%, #7a2020);
+}
+
+@keyframes fse-dollar-rise {
+  0% {
+    opacity: 0;
+    transform: translate(0, 24px) scale(0.7);
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--drift, 0px), -220px) scale(1.15);
+  }
 }
 
 .fse-custom {
