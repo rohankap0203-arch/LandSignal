@@ -7352,6 +7352,14 @@ a.acquire-block:hover {
   color: var(--muted);
 }
 
+.fse-purpose {
+  margin: 0.15rem 0 0;
+  max-width: 36rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
 .fse-opp-reason-line {
   margin: 0.45rem 0 0;
   font-size: 0.76rem;
@@ -7610,7 +7618,7 @@ a.acquire-block:hover {
 
 .fse-dollar.down {
   top: auto;
-  bottom: 12%;
+  bottom: 22%;
   color: color-mix(in srgb, var(--danger, #b33) 45%, transparent);
   animation: fse-dollar-fall 1.2s ease-out forwards;
 }
@@ -7632,14 +7640,14 @@ a.acquire-block:hover {
 @keyframes fse-dollar-fall {
   0% {
     opacity: 0;
-    transform: translate(0, 0) scale(0.8);
+    transform: translate(0, 18px) scale(0.8);
   }
   18% {
     opacity: 0.4;
   }
   100% {
     opacity: 0;
-    transform: translate(var(--drift, 0px), 120px) scale(1.05);
+    transform: translate(var(--drift, 0px), 140px) scale(1.05);
   }
 }
 

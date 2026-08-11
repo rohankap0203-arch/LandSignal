@@ -714,6 +714,10 @@ export function CatalystSimulator({
                     </span>
                   </div>
                 ) : null}
+                <p className="fse-purpose">
+                  Turn on possible nearby changes below to see how this land’s future value could
+                  go up or down.
+                </p>
               </div>
               <button
                 type="button"
