@@ -7087,55 +7087,93 @@ a.acquire-block:hover {
 
 .fse-launch {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem 1.1rem;
   width: 100%;
   text-align: left;
-  padding: 0.85rem 1.05rem;
-  border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--line));
-  background:
-    linear-gradient(
-      125deg,
-      color-mix(in srgb, var(--brand) 9%, var(--bg-elevated)) 0%,
-      var(--bg-elevated) 60%,
-      color-mix(in srgb, #c4a574 7%, var(--bg-soft)) 100%
-    );
-  color: var(--ink);
+  padding: 0.78rem 0.85rem 0.78rem 1.05rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--brand) 55%, #111);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--brand) 92%, #fff) 0%,
+    var(--brand) 100%
+  );
+  color: #fff;
   cursor: pointer;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 22%, transparent) inset,
+    0 8px 18px color-mix(in srgb, var(--brand) 28%, transparent);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
 }
 
 .fse-launch:hover {
-  border-color: color-mix(in srgb, var(--brand) 55%, var(--line));
   transform: translateY(-1px);
+  filter: brightness(1.04);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 26%, transparent) inset,
+    0 10px 22px color-mix(in srgb, var(--brand) 34%, transparent);
+}
+
+.fse-launch:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 14%, transparent) inset,
+    0 4px 10px color-mix(in srgb, var(--brand) 22%, transparent);
 }
 
 .fse-launch.is-open {
-  border-color: color-mix(in srgb, var(--brand) 50%, var(--line));
+  filter: brightness(1.02);
+}
+
+.fse-launch-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
 }
 
 .fse-launch-label {
   font-family: var(--font-display, "Fraunces", Georgia, serif);
-  font-size: 1.05rem;
-  font-weight: 600;
+  font-size: 1.02rem;
+  font-weight: 650;
   letter-spacing: -0.01em;
+  line-height: 1.15;
+  color: #fff;
 }
 
 .fse-launch-meta {
-  font-size: 0.78rem;
-  color: var(--muted);
+  font-size: 0.74rem;
+  color: color-mix(in srgb, #fff 78%, transparent);
+  line-height: 1.25;
 }
 
 .fse-launch-meta strong {
-  color: var(--brand);
-  font-weight: 650;
+  color: #fff;
+  font-weight: 700;
 }
 
 .fse-launch-dot {
   margin: 0 0.2rem;
-  opacity: 0.55;
+  opacity: 0.7;
+}
+
+.fse-launch-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  padding: 0.42rem 0.72rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, #000 22%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 18%, transparent);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .fse-backdrop {
