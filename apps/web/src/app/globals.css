@@ -7094,7 +7094,7 @@ a.acquire-block:hover {
   text-align: left;
   padding: 0.7rem 0.85rem 0.7rem 1rem;
   border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--line));
+  border: 1.5px solid color-mix(in srgb, var(--ink) 72%, var(--brand));
   background: color-mix(in srgb, var(--brand) 8%, var(--bg-elevated));
   color: var(--ink);
   cursor: pointer;
@@ -7104,7 +7104,7 @@ a.acquire-block:hover {
 
 .fse-launch:hover {
   background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
-  border-color: color-mix(in srgb, var(--brand) 55%, var(--line));
+  border-color: color-mix(in srgb, var(--ink) 88%, var(--brand));
 }
 
 .fse-launch:active {
@@ -7112,7 +7112,7 @@ a.acquire-block:hover {
 }
 
 .fse-launch.is-open {
-  border-color: color-mix(in srgb, var(--brand) 50%, var(--line));
+  border-color: color-mix(in srgb, var(--ink) 80%, var(--brand));
   background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
 }
 
@@ -7150,10 +7150,33 @@ a.acquire-block:hover {
 .fse-launch-go svg {
   width: 12px;
   height: 12px;
+  animation: fse-launch-arrow 1.35s ease-in-out infinite;
+}
+
+@keyframes fse-launch-arrow {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translateX(3px);
+    opacity: 1;
+  }
 }
 
 .fse-launch:hover .fse-launch-go {
   border-color: color-mix(in srgb, var(--brand) 60%, #000);
+}
+
+.fse-launch:hover .fse-launch-go svg {
+  animation-duration: 0.85s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fse-launch-go svg {
+    animation: none;
+  }
 }
 
 .fse-backdrop {
