@@ -155,18 +155,25 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
             </text>
           </svg>
 
-          <div className="bid-tag-rail" role="list">
+          <div className="bid-ticket-rail" role="list">
             {points.map((p, i) => (
               <button
                 key={`${String(p.label)}-leg-${i}`}
                 type="button"
                 role="listitem"
-                className={`bid-tag ${active === i ? "is-live" : ""}`}
+                className={`bid-admit ${active === i ? "is-live" : ""}`}
                 onClick={() => setActive(i)}
                 aria-pressed={active === i}
               >
-                <strong>{String(p.label)}</strong>
-                <span className="bid-tag-price">{money(p.x)}</span>
+                <span className="bid-admit-stub">
+                  <span className="bid-admit-stub-k">No.</span>
+                  <span className="bid-admit-stub-n">{String(i + 1).padStart(2, "0")}</span>
+                </span>
+                <span className="bid-admit-perf" aria-hidden />
+                <span className="bid-admit-main">
+                  <strong>{String(p.label)}</strong>
+                  <span className="bid-admit-price">{money(p.x)}</span>
+                </span>
               </button>
             ))}
           </div>
