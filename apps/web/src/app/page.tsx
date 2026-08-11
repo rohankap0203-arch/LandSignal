@@ -225,7 +225,8 @@ export default function SearchPage() {
         unpriced_mode: "include",
         include_unpriced: true,
         sort: f.sort,
-        broaden: true,
+        // Never auto-loosen filters — results must match what the user selected.
+        broaden: false,
       };
     },
     [meta],
@@ -259,8 +260,8 @@ export default function SearchPage() {
         const total = metaNow?.inventory_count ?? data.length;
         setStatus(
           data.length
-            ? `Showing top ${data.length.toLocaleString()} matches · ${total.toLocaleString()} live parcels indexed`
-            : "No matches for these filters. Try Reset to Any, then Show matches again.",
+            ? `Showing ${data.length.toLocaleString()} matches for your filters · ${total.toLocaleString()} live parcels indexed`
+            : "No parcels match these exact filters. Widen price/acres/strategy, or Reset to Any, then Show matches again.",
         );
         // Re-align after results paint
         requestAnimationFrame(() => {
@@ -727,8 +728,8 @@ export default function SearchPage() {
               }
               return (
                 <>
-                  Try Reset to Any, widen price/acres, or pick another state — then click Show
-                  matches again.
+                  Nothing in live inventory matches these exact filters. Widen price, acres, or
+                  strategy — or Reset to Any — then click Show matches again.
                 </>
               );
             })()}

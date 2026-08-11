@@ -398,13 +398,14 @@ async def radar(
     market_channel: str | None = None,
     sort: str | None = "fit_desc",
     q: str | None = None,
-    broaden: bool = True,
+    broaden: bool = False,
     limit: int = 200,
 ) -> list[RadarRow]:
     """Search results with investor filters. Pass nothing / omit for Any.
 
-    broaden=True softens region/strategy when they would otherwise return zero rows,
-    but never crosses a selected state boundary.
+    Selected state / region / price / acres / strategy are hard filters.
+    broaden=True is opt-in only: if the exact set is empty it may loosen region
+    then price/acres — but never crosses a selected state boundary.
     """
     from landsignal.geo_meta import region_matches
     from landsignal.scoring.engine import personalized_score
@@ -465,35 +466,23 @@ async def radar(
         strategy_soft_miss: bool
         best_strategy: Any
 
-    def _soft_band_penalty(
+    def _in_band(
         value: float | None,
         lo: float | None,
         hi: float | None,
         *,
-        unknown_penalty: float = 6.0,
-        hard_ratio: float = 1.45,
-    ) -> float | None:
-        """Open-ended Up-to / N+ filters stay flexible: near-misses rank lower; far misses drop."""
+        allow_unknown: bool,
+    ) -> bool:
+        """Hard min/max band. Unknown values pass only when allow_unknown is True."""
         if lo is None and hi is None:
-            return 0.0
+            return True
         if value is None:
-            return unknown_penalty
-        penalty = 0.0
+            return allow_unknown
         if lo is not None and value < lo:
-            if lo <= 0:
-                return None
-            ratio = value / lo
-            if ratio < (1.0 / hard_ratio):
-                return None
-            penalty += min(26.0, (1.0 - ratio) * 55.0)
+            return False
         if hi is not None and value > hi:
-            if hi <= 0:
-                return None
-            ratio = value / hi
-            if ratio > hard_ratio:
-                return None
-            penalty += min(28.0, (ratio - 1.0) * 70.0)
-        return penalty
+            return False
+        return True
 
     def _sort_cands(cands: list[_Cand], sort_key: str | None) -> list[_Cand]:
         key = (sort_key or "fit_desc").lower()
@@ -564,14 +553,21 @@ async def radar(
                 ):
                     continue
 
-            # Soft price / acre bands: keep near-misses, demote them in Fit.
-            price_pen = _soft_band_penalty(ask, min_price, max_price, unknown_penalty=5.0)
-            if price_pen is None:
+            # Hard price / acre bands — selected criteria must fully match.
+            # Unpriced asks may pass a max-only ("Up to $X") filter, but never a min price.
+            if not _in_band(
+                ask,
+                min_price,
+                max_price,
+                allow_unknown=min_price is None,
+            ):
                 continue
-            acre_pen = _soft_band_penalty(
-                parcel.acreage, min_acres, max_acres, unknown_penalty=7.0, hard_ratio=1.55
-            )
-            if acre_pen is None:
+            if not _in_band(
+                parcel.acreage,
+                min_acres,
+                max_acres,
+                allow_unknown=False,
+            ):
                 continue
             strategy_soft_miss = False
             if strategy_prefs:
@@ -590,7 +586,8 @@ async def radar(
                         hit_any = True
                         break
                 if not hit_any:
-                    strategy_soft_miss = True
+                    # Strategy is a hard filter when the user picked one.
+                    continue
             if min_score is not None and score.opportunity < min_score:
                 continue
             if max_risk is not None and score.risk > max_risk:
@@ -611,9 +608,6 @@ async def radar(
                 score.best_strategy.value if score.best_strategy else None,
                 score.risk,
             )
-            if strategy_soft_miss:
-                fit = max(0, fit - 12)
-            fit = max(0.0, float(fit) - price_pen - acre_pen)
             out.append(
                 _Cand(
                     parcel_id=parcel.id,
