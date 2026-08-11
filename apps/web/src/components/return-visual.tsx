@@ -766,7 +766,7 @@ export function ReturnVisual({
       <div className="traj-head-row">
         <h3 className="display text-lg font-semibold leading-snug">
           {holdYears} yr hold · {livePaceDisplay}
-          {toggledOff ? ` · ${toggledOff} off` : ""}
+          {toggledOff ? ` · ${toggledOff} screens off` : ""}
         </h3>
         <div className="traj-windows traj-windows--cases" role="tablist" aria-label="Return case">
           {CASE_ORDER.map((k) => (
