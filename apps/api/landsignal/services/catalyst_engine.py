@@ -1293,11 +1293,6 @@ def combine_scenario_impacts(selected: list[dict[str, Any]]) -> dict[str, Any]:
         for i, item in enumerate(items_sorted[1:], start=1):
             w = 0.45 / i  # diminishing overlap
             add_channels(item, w)
-            notes.append(
-                f"Overlapping '{g.replace('_', ' ')}' catalysts: "
-                f"{item.get('label')} partially overlaps {items_sorted[0].get('label')} "
-                f"(interaction weight {w:.0%})"
-            )
 
     # Complementary boost: utilities + entitlement together unlock nonlinear HBU
     keys = {s.get("event_key") for s in selected}
@@ -1309,10 +1304,6 @@ def combine_scenario_impacts(selected: list[dict[str, Any]]) -> dict[str, Any]:
         p50 += boost
         p10 += boost * 0.6
         p90 += boost * 1.3
-        notes.append(
-            "Complementary interaction: utilities + entitlement together unlock additional "
-            "highest-and-best-use potential beyond either alone (not a simple sum)"
-        )
 
     # Soft cap to avoid absurd stacking
     def soft_cap(x: float, cap: float = 0.75) -> float:
@@ -1331,7 +1322,7 @@ def combine_scenario_impacts(selected: list[dict[str, Any]]) -> dict[str, Any]:
         "combined_p10": round(soft_cap(p10), 4),
         "combined_p50": round(soft_cap(p50), 4),
         "combined_p90": round(soft_cap(p90), 4),
-        "interaction_notes": notes,
+        "interaction_notes": [],
     }
 
 

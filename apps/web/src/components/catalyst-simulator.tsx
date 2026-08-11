@@ -130,7 +130,7 @@ function softCap(x: number, cap = 0.85): number {
 
 function combineImpacts(selected: Scenario[]) {
   if (!selected.length) {
-    return { immediate: 0, rate: 0, hbu: 0, notes: [] as string[] };
+    return { immediate: 0, rate: 0, hbu: 0 };
   }
   const groups = new Map<string, Scenario[]>();
   const independents: Scenario[] = [];
@@ -147,7 +147,6 @@ function combineImpacts(selected: Scenario[]) {
   let imm = 0;
   let rate = 0;
   let hbu = 0;
-  const notes: string[] = [];
 
   const add = (item: Scenario, weight = 1) => {
     const ch = item.channels || {};
@@ -168,7 +167,6 @@ function combineImpacts(selected: Scenario[]) {
     add(sorted[0], 1);
     sorted.slice(1).forEach((item, i) => {
       add(item, 0.45 / (i + 1));
-      notes.push(`Overlap: ${item.label} shares effects with ${sorted[0].label}`);
     });
   }
 
@@ -177,14 +175,12 @@ function combineImpacts(selected: Scenario[]) {
   const entitle = ["zoning_change", "density_entitlement", "annexation"].some((k) => keys.has(k));
   if (util && entitle) {
     hbu += 0.035;
-    notes.push("Utilities + entitlement unlock extra highest-and-best-use upside together");
   }
 
   return {
     immediate: softCap(imm),
     rate: softCap(rate, 0.04),
     hbu: softCap(hbu),
-    notes,
   };
 }
 
@@ -682,23 +678,42 @@ export function CatalystSimulator({
           >
             <DollarBurst burst={burst} />
             <header className="fse-modal-head">
-              <div className="fse-modal-title-row">
-                <h2 className="display fse-modal-title">Future Scenario Engine</h2>
+              <div className="fse-modal-head-main">
+                <div className="fse-modal-title-row">
+                  <h2 className="display fse-modal-title">Future Scenario Engine</h2>
+                  <Tip label="What this tool does">
+                    <strong>What this is</strong>
+                    <span>
+                      A what-if tester for this exact parcel. Turn on nearby changes and see how the
+                      land’s future price path could move.
+                    </span>
+                    <span>
+                      Numbers are built from this site’s access, growth, size, and risks — not a
+                      flat “restaurants always add 5%” rule.
+                    </span>
+                    <span>These are hypotheticals unless Land Signal cites a real project.</span>
+                  </Tip>
+                </div>
                 {opp?.score != null ? (
-                  <span className="fse-title-score" title="Catalyst Opportunity">
-                    {opp.score}
-                    <small>/100</small>
-                    <em>{opp.label}</em>
-                  </span>
+                  <div className="fse-title-score-row">
+                    <span className="fse-title-score" title="Catalyst Opportunity">
+                      {opp.score}
+                      <small>/100</small>
+                      <em>{opp.label}</em>
+                    </span>
+                    <Tip label="What the opportunity score means">
+                      <strong>Opportunity score</strong>
+                      <span>
+                        How well this parcel is set up to gain from realistic future changes nearby
+                        — and how much downside could hurt it.
+                      </span>
+                      <span>
+                        Higher = more useful upside catalysts fit this land. Lower = weaker fit or
+                        heavier downside pressure.
+                      </span>
+                    </Tip>
+                  </div>
                 ) : null}
-                <Tip label="How this works">
-                  <strong>What-if layer on the Value Path</strong>
-                  <span>
-                    Toggle nearby changes. Impacts are parcel-specific (distance, fit, timing,
-                    certainty) — not flat national %. Hypothetical unless cited. Paths diverge when
-                    the market would start pricing the event in.
-                  </span>
-                </Tip>
               </div>
               <button
                 type="button"
@@ -765,8 +780,6 @@ export function CatalystSimulator({
                       <ul>
                         {items.map((s) => {
                           const on = selected.has(s.id);
-                          const because = (s.reasoning?.because || []).slice(0, 3);
-                          const chain = (s.chain || []).slice(0, 3);
                           const dollars = dollarRange(s.impact, baseToday);
                           const isBear = Number(s.impact?.central_pct) < 0;
                           return (
@@ -788,27 +801,6 @@ export function CatalystSimulator({
                                   </span>
                                 </span>
                               </label>
-                              <Tip label={`About ${s.label}`}>
-                                <strong>{s.label}</strong>
-                                <span>
-                                  {s.stage} · {s.project_certainty_pct}% certainty · ~
-                                  {s.parcel_distance_mi?.toFixed(1)} mi · fit{" "}
-                                  {Math.round(s.compatibility_score || 0)}/100 · {s.confidence}{" "}
-                                  confidence
-                                  {s.data_integrity ? ` · ${s.data_integrity}` : ""}
-                                </span>
-                                {dollars ? (
-                                  <span>
-                                    Modeled value move vs today (~{money(baseToday)}): {dollars}
-                                  </span>
-                                ) : null}
-                                {because.length ? (
-                                  <span>{because.map((b) => `• ${b}`).join(" ")}</span>
-                                ) : null}
-                                {chain.length ? (
-                                  <span>Then: {chain.map((c) => c.label).join(" → ")}</span>
-                                ) : null}
-                              </Tip>
                             </li>
                           );
                         })}
@@ -821,11 +813,15 @@ export function CatalystSimulator({
               <div className="fse-path">
                 <div className="fse-path-head">
                   <h3>Value path</h3>
-                  <Tip label="Path timing">
-                    <strong>When value moves</strong>
+                  <Tip label="How the value path works">
+                    <strong>Reading the path</strong>
                     <span>
-                      Scenario line stays on baseline until markets would begin pricing the event,
-                      then ramps to full recognition — not a same-day jump.
+                      Gray dashed line = today’s baseline forecast. Green line = with your selected
+                      catalysts turned on.
+                    </span>
+                    <span>
+                      Drag across the chart to check a year. Value usually doesn’t jump on day one —
+                      it ramps in as the market prices the change.
                     </span>
                   </Tip>
                 </div>
@@ -872,7 +868,6 @@ export function CatalystSimulator({
                   <span className="base">Baseline</span>
                   <span className="scen">With selected</span>
                 </div>
-                {combo.notes[0] ? <p className="fse-note">{combo.notes[0]}</p> : null}
               </div>
             </div>
             </div>

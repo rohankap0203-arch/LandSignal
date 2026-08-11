@@ -7278,29 +7278,40 @@ a.acquire-block:hover {
 
 .fse-modal-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.6rem;
   min-width: 0;
 }
 
-.fse-modal-title-row {
+.fse-modal-head-main {
   display: flex;
-  align-items: center;
-  gap: 0.45rem;
+  flex-direction: column;
+  gap: 0.35rem;
   min-width: 0;
   flex: 1;
 }
 
+.fse-modal-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
 .fse-modal-title {
   margin: 0;
-  font-size: clamp(0.95rem, 2.4vw, 1.15rem);
+  font-size: clamp(1rem, 2.6vw, 1.2rem);
   font-weight: 650;
   line-height: 1.15;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.fse-title-score-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .fse-title-score {
@@ -7434,10 +7445,7 @@ a.acquire-block:hover {
 }
 
 .fse-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 0.35rem;
+  display: block;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--bg-soft);
