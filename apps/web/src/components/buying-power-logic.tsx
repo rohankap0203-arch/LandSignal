@@ -155,16 +155,25 @@ export function BuyingPowerLogic({
 
           <ul className="buy-power-points">
             <li>
-              <strong>Inflation does not lower the sale price.</strong> It changes what those
-              dollars can buy.
+              <span className="buy-power-pin" aria-hidden />
+              <span>
+                <strong>Inflation does not lower the sale price.</strong> It changes what those
+                dollars can buy.
+              </span>
             </li>
             <li>
-              <strong>Other factors still matter.</strong> The projected price already reflects
-              local demand, site limits, rates cases, taxes, and hold costs — not inflation alone.
+              <span className="buy-power-pin" aria-hidden />
+              <span>
+                <strong>Other factors still matter.</strong> The projected price already reflects
+                local demand, site limits, rates cases, taxes, and hold costs — not inflation alone.
+              </span>
             </li>
             <li>
-              <strong>Opportunity score is separate.</strong> It measures today’s buy versus our
-              value — not this long-hold inflation check.
+              <span className="buy-power-pin" aria-hidden />
+              <span>
+                <strong>Opportunity score is separate.</strong> It measures today’s buy versus our
+                value — not this long-hold inflation check.
+              </span>
             </li>
           </ul>
         </div>

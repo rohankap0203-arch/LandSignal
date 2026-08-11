@@ -85,7 +85,6 @@ export function ScoreBar({
     >
       <div className="flex items-baseline justify-between gap-3">
         <div className="font-semibold flex items-center gap-1.5">
-          <ScorePin />
           {label}
           {hasDetail ? (
             <span className="score-bar-chevron" aria-hidden>
