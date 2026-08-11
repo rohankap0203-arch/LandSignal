@@ -7086,6 +7086,8 @@ a.acquire-block:hover {
 }
 
 .fse-launch {
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -7094,26 +7096,87 @@ a.acquire-block:hover {
   text-align: left;
   padding: 0.7rem 0.85rem 0.7rem 1rem;
   border-radius: 10px;
-  border: 1.5px solid color-mix(in srgb, var(--ink) 72%, var(--brand));
-  background: color-mix(in srgb, var(--brand) 8%, var(--bg-elevated));
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--brand) 8%, var(--bg-elevated)),
+      color-mix(in srgb, var(--brand) 8%, var(--bg-elevated))
+    )
+    padding-box,
+    linear-gradient(
+      125deg,
+      #1a1a1a 0%,
+      #1a1a1a 38%,
+      #6a6a6a 48%,
+      #f2f2f2 52%,
+      #6a6a6a 56%,
+      #1a1a1a 66%,
+      #1a1a1a 100%
+    )
+    border-box;
+  background-size: 100% 100%, 220% 220%;
+  background-position: 0 0, 0% 50%;
   color: var(--ink);
   cursor: pointer;
   box-shadow: none;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  animation: fse-launch-outline-glisten 3.2s linear infinite;
+  transition: filter 0.15s ease;
+}
+
+@keyframes fse-launch-outline-glisten {
+  to {
+    background-position: 0 0, 100% 50%;
+  }
 }
 
 .fse-launch:hover {
-  background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
-  border-color: color-mix(in srgb, var(--ink) 88%, var(--brand));
+  filter: brightness(1.02);
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--brand) 12%, var(--bg-elevated)),
+      color-mix(in srgb, var(--brand) 12%, var(--bg-elevated))
+    )
+    padding-box,
+    linear-gradient(
+      125deg,
+      #111 0%,
+      #111 38%,
+      #777 48%,
+      #fff 52%,
+      #777 56%,
+      #111 66%,
+      #111 100%
+    )
+    border-box;
+  background-size: 100% 100%, 220% 220%;
+  background-position: 0 0, 0% 50%;
+  animation: fse-launch-outline-glisten 2.4s linear infinite;
 }
 
 .fse-launch:active {
-  background: color-mix(in srgb, var(--brand) 16%, var(--bg-elevated));
+  filter: brightness(0.98);
 }
 
 .fse-launch.is-open {
-  border-color: color-mix(in srgb, var(--ink) 80%, var(--brand));
-  background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--brand) 12%, var(--bg-elevated)),
+      color-mix(in srgb, var(--brand) 12%, var(--bg-elevated))
+    )
+    padding-box,
+    linear-gradient(
+      125deg,
+      #111 0%,
+      #111 38%,
+      #777 48%,
+      #fff 52%,
+      #777 56%,
+      #111 66%,
+      #111 100%
+    )
+    border-box;
+  background-size: 100% 100%, 220% 220%;
+  animation: fse-launch-outline-glisten 3.2s linear infinite;
 }
 
 .fse-launch-label {
@@ -7174,6 +7237,21 @@ a.acquire-block:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .fse-launch,
+  .fse-launch:hover,
+  .fse-launch.is-open {
+    animation: none;
+    background:
+      linear-gradient(
+        color-mix(in srgb, var(--brand) 8%, var(--bg-elevated)),
+        color-mix(in srgb, var(--brand) 8%, var(--bg-elevated))
+      )
+      padding-box,
+      linear-gradient(#1a1a1a, #1a1a1a) border-box;
+    background-size: auto;
+    background-position: 0 0;
+  }
+
   .fse-launch-go svg {
     animation: none;
   }
