@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 
 export type ScoreStandings = {
   kind?: "opportunity" | "risk" | "confidence" | string;
@@ -97,12 +97,14 @@ export function ScoreBar({
           </span>
           <span
             className="land-rating"
-            style={{
-              background: `linear-gradient(145deg, hsl(${Math.max(0, Math.min(120, hue))} 48% 36%), hsl(${Math.max(0, Math.min(120, hue))} 62% 28%))`,
-              boxShadow: `0 0 0 1px hsl(${Math.max(0, Math.min(120, hue))} 40% 24% / 0.35)`,
-            }}
+            style={
+              {
+                "--land-hue": String(Math.max(0, Math.min(120, hue))),
+              } as CSSProperties
+            }
             aria-label={`Land rating ${rating}`}
           >
+            <span className="land-rating-ring" aria-hidden />
             <span className="land-rating-num">{rating}</span>
           </span>
         </div>

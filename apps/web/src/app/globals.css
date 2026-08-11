@@ -1589,31 +1589,50 @@ button.score-bar-click:disabled {
   font-variant-numeric: tabular-nums;
 }
 
-/* Opportunity — single-line land rating stamp */
+/* Opportunity — crisp certified land-rating mark */
 .score-bar--rating {
   padding: 0.7rem 0.85rem;
 }
 
 .land-rating {
+  --land-hue: 96;
+  position: relative;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 2.55rem;
-  height: 2.55rem;
-  padding: 0 0.35rem;
-  border-radius: 12px;
-  color: #f7faf8;
+  min-width: 2.7rem;
+  height: 2.7rem;
+  padding: 0 0.4rem;
+  border-radius: 8px;
+  color: #f8faf9;
+  background: hsl(var(--land-hue) 42% 30%);
+  border: 1.5px solid hsl(var(--land-hue) 38% 18%);
+  box-shadow: none;
+  isolation: isolate;
+}
+
+.land-rating-ring {
+  position: absolute;
+  inset: 3px;
+  border-radius: 5px;
+  border: 1px solid hsl(var(--land-hue) 28% 78% / 0.55);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .land-rating-num {
+  position: relative;
+  z-index: 1;
   font-family: var(--font-display);
-  font-size: 1.45rem;
+  font-size: 1.4rem;
   font-weight: 700;
   line-height: 1;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
+  color: #fff;
+  text-shadow: none;
+  -webkit-font-smoothing: antialiased;
 }
 
 .score-rating-hint {
