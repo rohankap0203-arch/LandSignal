@@ -632,7 +632,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Bid-path price board — same words, auction-ticket layout when kind is a starting bid. */
+/** Starting bid coupon — same words, financial tear-ticket layout. */
 function PriceStat({ label, value, kind }: { label: string; value: string; kind?: string }) {
   const isBid = kind === "minimum_bid" || /starting bid/i.test(label);
   if (!isBid) return <Stat label={label} value={value} />;
@@ -640,20 +640,27 @@ function PriceStat({ label, value, kind }: { label: string; value: string; kind?
   const parts = value.split(/\s·\s/).map((p) => p.trim()).filter(Boolean);
 
   return (
-    <div className="bid-board" aria-label={`${label}: ${value}`}>
-      <div className="bid-board-kicker">{label}</div>
+    <div className="bid-ticket" aria-label={`${label}: ${value}`}>
+      <div className="bid-ticket-head">
+        <span className="bid-ticket-mark" aria-hidden>
+          BID
+        </span>
+        <span className="bid-ticket-kicker">{label}</span>
+      </div>
       {parts.length >= 2 ? (
-        <div className="bid-board-row">
-          <div className="bid-board-cell is-open">
-            <span className="bid-board-val">{parts[0]}</span>
+        <div className="bid-ticket-row">
+          <div className="bid-ticket-face is-open">
+            <span className="bid-ticket-val">{parts[0]}</span>
           </div>
-          <span className="bid-board-rule" aria-hidden />
-          <div className="bid-board-cell is-finish">
-            <span className="bid-board-val">{parts.slice(1).join(" · ")}</span>
+          <span className="bid-ticket-tear" aria-hidden />
+          <div className="bid-ticket-face is-finish">
+            <span className="bid-ticket-val">{parts.slice(1).join(" · ")}</span>
           </div>
         </div>
       ) : (
-        <div className="bid-board-val bid-board-val--solo">{value}</div>
+        <div className="bid-ticket-face is-solo">
+          <span className="bid-ticket-val">{value}</span>
+        </div>
       )}
     </div>
   );

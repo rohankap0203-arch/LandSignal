@@ -155,22 +155,30 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
             </text>
           </svg>
 
-          <div className="chart-legend">
+          <div className="bid-coupon-rail" role="list">
             {points.map((p, i) => (
               <button
                 key={`${String(p.label)}-leg-${i}`}
                 type="button"
-                className={`chart-legend-item ${active === i ? "active" : ""}`}
+                role="listitem"
+                className={`bid-coupon ${active === i ? "is-live" : ""}`}
                 onClick={() => setActive(i)}
+                aria-pressed={active === i}
               >
-                <strong>{String(p.label)}</strong>
-                <span>{money(p.x)}</span>
+                <span className="bid-coupon-stub" aria-hidden>
+                  <span className="bid-coupon-hash">#{String(i + 1).padStart(2, "0")}</span>
+                </span>
+                <span className="bid-coupon-perfs" aria-hidden />
+                <span className="bid-coupon-body">
+                  <strong>{String(p.label)}</strong>
+                  <span className="bid-coupon-price">{money(p.x)}</span>
+                </span>
               </button>
             ))}
           </div>
 
           {selected && (
-            <div className="chart-readout">
+            <div className="bid-slip">
               <strong>{String(selected.label)}</strong>
               <span>
                 {money(selected.x)} · about {Number(selected.y).toFixed(0)}% of buyers still bidding
