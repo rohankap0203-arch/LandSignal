@@ -7374,6 +7374,7 @@ a.acquire-block:hover {
 
 .fse-tip .help-tip-pop {
   z-index: 90;
+  width: min(18rem, 78vw);
 }
 
 .fse-custom {
