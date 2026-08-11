@@ -659,15 +659,10 @@ function PriceStat({ label, value, kind }: { label: string; value: string; kind?
   return (
     <div className="bid-ticket" aria-label={`${label}: ${value}`}>
       <div className="bid-ticket-stub" aria-hidden>
-        <span className="bid-ticket-stub-k">
-          <span>B</span>
-          <span>I</span>
-          <span>D</span>
-        </span>
+        <span className="bid-ticket-stub-k">BID</span>
       </div>
       <span className="bid-ticket-perf" aria-hidden />
       <div className="bid-ticket-main">
-        <span className="bid-ticket-kicker">{label}</span>
         {start && finish ? (
           <div className="bid-ticket-prices">
             <div className="bid-ticket-cell is-start">

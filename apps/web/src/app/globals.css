@@ -2788,17 +2788,15 @@ a.btn-intel:hover {
 }
 
 .bid-ticket-stub-k {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.12rem;
   font-size: 0.78rem;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--brand);
   line-height: 1;
+  /* Sideways vertical: D at top, B at bottom */
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
 }
 
 .bid-ticket-perf {
@@ -2815,19 +2813,8 @@ a.btn-intel:hover {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 0.35rem;
   min-width: 0;
   padding: 0.7rem 1.2rem 0.7rem 0.85rem;
-}
-
-.bid-ticket-kicker {
-  min-width: 0;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--brand) 45%, var(--muted));
-  overflow-wrap: anywhere;
 }
 
 .bid-ticket-prices {
