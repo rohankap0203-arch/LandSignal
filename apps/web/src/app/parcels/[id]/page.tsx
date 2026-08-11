@@ -396,12 +396,8 @@ export default function ParcelIntelligencePage() {
             />
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-3">
+          <div className="mt-5">
             <Stat label={String(price?.label || "Price")} value={String(price?.display || "No public price yet")} />
-            <Stat
-              label="Basics already on file"
-              value={`${Number(score?.deal_readiness || 0).toFixed(0)}/100`}
-            />
           </div>
 
           {price?.estimate_source ? (
