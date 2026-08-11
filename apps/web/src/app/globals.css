@@ -7101,7 +7101,6 @@ a.acquire-block:hover {
   color: var(--ink);
   cursor: pointer;
   box-shadow: none;
-  overflow: visible;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
@@ -7119,78 +7118,9 @@ a.acquire-block:hover {
   border-color: #0a0a0a;
 }
 
-.fse-launch-sparkles {
-  position: absolute;
-  inset: -1px;
-  pointer-events: none;
-  z-index: 2;
-}
-
-.fse-launch-sparkles i {
-  position: absolute;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow:
-    0 0 4px 1px rgba(255, 255, 255, 0.85),
-    0 0 0 1px rgba(255, 255, 255, 0.25);
-  opacity: 0;
-  animation: fse-launch-sparkle 1.9s ease-in-out infinite;
-}
-
-.fse-launch-sparkles i:nth-child(1) {
-  top: -1.5px;
-  left: 14%;
-  animation-delay: 0s;
-}
-
-.fse-launch-sparkles i:nth-child(2) {
-  top: -1.5px;
-  left: 62%;
-  animation-delay: 0.55s;
-}
-
-.fse-launch-sparkles i:nth-child(3) {
-  top: 28%;
-  right: -1.5px;
-  animation-delay: 0.25s;
-}
-
-.fse-launch-sparkles i:nth-child(4) {
-  bottom: -1.5px;
-  right: 22%;
-  animation-delay: 0.9s;
-}
-
-.fse-launch-sparkles i:nth-child(5) {
-  bottom: -1.5px;
-  left: 36%;
-  animation-delay: 1.2s;
-}
-
-.fse-launch-sparkles i:nth-child(6) {
-  top: 58%;
-  left: -1.5px;
-  animation-delay: 1.5s;
-}
-
-@keyframes fse-launch-sparkle {
-  0%,
-  100% {
-    opacity: 0;
-    transform: scale(0.35);
-  }
-  35%,
-  55% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 .fse-launch-label {
   font-family: var(--font-sans);
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 650;
   letter-spacing: 0.005em;
   line-height: 1.2;
@@ -7247,14 +7177,8 @@ a.acquire-block:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fse-launch-sparkles i,
   .fse-launch-go svg {
     animation: none;
-  }
-
-  .fse-launch-sparkles i {
-    opacity: 0.45;
-    transform: none;
   }
 }
 
