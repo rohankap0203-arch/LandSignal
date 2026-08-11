@@ -77,12 +77,17 @@ function money(v: unknown): string {
 }
 
 function shortMoney(v: number): string {
-  const a = Math.abs(v);
-  const sign = v < 0 ? "-" : v > 0 ? "+" : "";
-  if (a >= 1_000_000) return `${sign}$${(a / 1_000_000).toFixed(1)}M`;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "—";
+  const a = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+  if (a >= 1_000_000) {
+    const m = a / 1_000_000;
+    return `${sign}$${m >= 10 ? Math.round(m) : m.toFixed(1)}M`;
+  }
   if (a >= 10_000) return `${sign}$${Math.round(a / 1000)}k`;
   if (a >= 1000) return `${sign}$${(a / 1000).toFixed(1)}k`;
-  return `${sign}$${Math.round(a).toLocaleString()}`;
+  return `${sign}$${Math.round(a)}`;
 }
 
 function pctRange(impact?: Impact): string {
@@ -109,8 +114,9 @@ function dollarRange(impact?: Impact, baseToday?: number | null): string | null 
   const b = (baseToday * hi) / 100;
   const low = Math.min(a, b);
   const high = Math.max(a, b);
-  if (Math.abs(high - low) < 50) return shortMoney(low);
-  return `${shortMoney(low)} to ${shortMoney(high)}`;
+  const fmt = (x: number) => `${x > 0 ? "+" : ""}${shortMoney(x)}`.replace("+-", "-");
+  if (Math.abs(high - low) < 50) return fmt(low);
+  return `${fmt(low)} to ${fmt(high)}`;
 }
 
 function softCap(x: number, cap = 0.85): number {
@@ -613,7 +619,20 @@ export function CatalystSimulator({
               })}
             </div>
 
-            <div className="fse-body">
+            <div className="fse-work">
+              <nav className="fse-steps" aria-label="How to use">
+                <div className={`fse-step ${!hasSel ? "is-active" : "is-done"}`}>
+                  <span className="fse-step-num">1</span>
+                  <span className="fse-step-label">Choose catalysts</span>
+                </div>
+                <div className="fse-step-rail" aria-hidden />
+                <div className={`fse-step ${hasSel ? "is-active" : ""}`}>
+                  <span className="fse-step-num">2</span>
+                  <span className="fse-step-label">See value shift</span>
+                </div>
+              </nav>
+
+              <div className="fse-body">
               <div className="fse-scenarios">
                 {(
                   [
@@ -708,8 +727,10 @@ export function CatalystSimulator({
                         return (
                           <div key={y} className="fse-path-bubble">
                             <span>{y} yr</span>
-                            <strong>{money(shown)}</strong>
-                            {hasSel ? <em>vs {money(row.b)}</em> : null}
+                            <strong title={money(shown)}>{shortMoney(shown)}</strong>
+                            {hasSel ? (
+                              <em title={`Baseline ${money(row.b)}`}>vs {shortMoney(row.b)}</em>
+                            ) : null}
                           </div>
                         );
                       })}
@@ -737,6 +758,7 @@ export function CatalystSimulator({
                 </div>
                 {combo.notes[0] ? <p className="fse-note">{combo.notes[0]}</p> : null}
               </div>
+            </div>
             </div>
           </div>
         </div>
