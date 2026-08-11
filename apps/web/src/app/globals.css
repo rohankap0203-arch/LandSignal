@@ -7086,42 +7086,84 @@ a.acquire-block:hover {
 }
 
 .fse-launch {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.45rem;
+  gap: 0.32rem;
   width: 100%;
-  text-align: left;
-  padding: 0.85rem 1rem;
-  border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--brand) 55%, #111);
+  text-align: center;
+  padding: 0.58rem 0.85rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--brand) 45%, #0a0a0a);
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--brand) 92%, #fff) 0%,
-    var(--brand) 100%
+    color-mix(in srgb, var(--brand) 88%, #fff) 0%,
+    var(--brand) 55%,
+    color-mix(in srgb, var(--brand) 82%, #000) 100%
   );
   color: #fff;
   cursor: pointer;
+  overflow: hidden;
   box-shadow:
-    0 1px 0 color-mix(in srgb, #fff 22%, transparent) inset,
-    0 8px 18px color-mix(in srgb, var(--brand) 28%, transparent);
+    0 1px 0 color-mix(in srgb, #fff 28%, transparent) inset,
+    0 0 0 1px color-mix(in srgb, #000 12%, transparent) inset,
+    0 6px 14px color-mix(in srgb, var(--brand) 26%, transparent);
   transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+}
+
+/* Soft sheen sweeping across the button */
+.fse-launch::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    115deg,
+    transparent 32%,
+    rgba(255, 255, 255, 0.08) 42%,
+    rgba(255, 255, 255, 0.34) 50%,
+    rgba(255, 255, 255, 0.08) 58%,
+    transparent 68%
+  );
+  transform: translateX(-130%);
+  animation: fse-launch-glisten 3.8s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes fse-launch-glisten {
+  0%,
+  55% {
+    transform: translateX(-130%);
+  }
+  85%,
+  100% {
+    transform: translateX(130%);
+  }
+}
+
+.fse-launch > * {
+  position: relative;
+  z-index: 1;
 }
 
 .fse-launch:hover {
   transform: translateY(-1px);
-  filter: brightness(1.04);
+  filter: brightness(1.05);
   box-shadow:
-    0 1px 0 color-mix(in srgb, #fff 26%, transparent) inset,
-    0 10px 22px color-mix(in srgb, var(--brand) 34%, transparent);
+    0 1px 0 color-mix(in srgb, #fff 32%, transparent) inset,
+    0 0 0 1px color-mix(in srgb, #000 10%, transparent) inset,
+    0 8px 18px color-mix(in srgb, var(--brand) 32%, transparent);
 }
 
 .fse-launch:active {
   transform: translateY(0);
-  filter: brightness(0.98);
+  filter: brightness(0.97);
   box-shadow:
-    0 1px 0 color-mix(in srgb, #fff 14%, transparent) inset,
-    0 4px 10px color-mix(in srgb, var(--brand) 22%, transparent);
+    0 1px 0 color-mix(in srgb, #fff 16%, transparent) inset,
+    0 3px 8px color-mix(in srgb, var(--brand) 20%, transparent);
 }
 
 .fse-launch.is-open {
@@ -7130,10 +7172,10 @@ a.acquire-block:hover {
 
 .fse-launch-label {
   font-family: var(--font-display, "Fraunces", Georgia, serif);
-  font-size: 1.05rem;
+  font-size: 0.88rem;
   font-weight: 650;
   letter-spacing: -0.01em;
-  line-height: 1.2;
+  line-height: 1.15;
   color: #fff;
   white-space: nowrap;
   overflow: hidden;
@@ -7144,17 +7186,30 @@ a.acquire-block:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
+  gap: 0.3rem;
   width: 100%;
-  padding: 0.48rem 0.85rem;
+  padding: 0.28rem 0.7rem;
   border-radius: 999px;
-  background: color-mix(in srgb, #000 22%, transparent);
-  border: 1px solid color-mix(in srgb, #fff 18%, transparent);
-  color: #fff;
-  font-size: 0.74rem;
+  background: color-mix(in srgb, #000 20%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 16%, transparent);
+  color: color-mix(in srgb, #fff 92%, transparent);
+  font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.fse-launch-go svg {
+  width: 11px;
+  height: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fse-launch::before {
+    animation: none;
+    opacity: 0.2;
+    transform: none;
+  }
 }
 
 .fse-backdrop {
