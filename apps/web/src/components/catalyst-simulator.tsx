@@ -6,11 +6,9 @@ import {
   useMemo,
   useRef,
   useState,
-  useTransition,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { landsignalApi } from "@/lib/api";
 
 type Impact = {
   p10?: number;
@@ -228,17 +226,24 @@ function applyPath(
 
 function pathSummary(path: PathPoint[]) {
   if (!path.length) return null;
+  const at = (y: number) =>
+    path.find((p) => Number(p.offset) >= y) || path[path.length - 1];
   const today = path[0];
-  const at5 = path.find((p) => Number(p.offset) >= 5) || path[Math.min(1, path.length - 1)];
-  const at10 = path.find((p) => Number(p.offset) >= 10) || path[path.length - 1];
+  const horizons = [5, 10, 20, 40, 60, 80] as const;
+  const years: Record<number, { b: number; s: number }> = {};
+  for (const y of horizons) {
+    const p = at(y);
+    years[y] = {
+      b: Number(p.baseline_value || 0),
+      s: Number(p.scenario_value || 0),
+    };
+  }
+  const y10 = years[10];
   return {
     today: today.baseline_value,
-    y5b: at5.baseline_value,
-    y5s: at5.scenario_value,
-    y10b: at10.baseline_value,
-    y10s: at10.scenario_value,
-    add: at10.delta_value,
-    addPct: at10.delta_pct,
+    years,
+    add: y10.s - y10.b,
+    addPct: y10.b ? Math.round(((y10.s / y10.b - 1) * 1000)) / 10 : 0,
   };
 }
 
@@ -332,17 +337,17 @@ function DollarBurst({ burst }: { burst: { id: number; tone: "up" | "down" } | n
 
   useEffect(() => {
     if (!burst) return;
-    const next: DollarParticle[] = Array.from({ length: 18 }, (_, i) => ({
+    const next: DollarParticle[] = Array.from({ length: 7 }, (_, i) => ({
       id: burst.id * 100 + i,
-      x: 8 + Math.random() * 84,
-      delay: Math.random() * 0.35,
-      size: 14 + Math.random() * 18,
-      drift: (Math.random() - 0.5) * 80,
+      x: 18 + Math.random() * 64,
+      delay: Math.random() * 0.22,
+      size: 12 + Math.random() * 10,
+      drift: (Math.random() - 0.5) * 48,
       tone: burst.tone,
-      glyph: burst.tone === "up" ? "$" : "−$",
+      glyph: "$",
     }));
     setParts(next);
-    const t = window.setTimeout(() => setParts([]), 1400);
+    const t = window.setTimeout(() => setParts([]), 1300);
     return () => window.clearTimeout(t);
   }, [burst]);
 
@@ -415,27 +420,18 @@ function shortLabel(label: string): string {
 }
 
 export function CatalystSimulator({
-  parcelId,
   engine,
 }: {
-  parcelId: string;
+  parcelId?: string;
   engine: Engine | null | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [stress, setStress] = useState("custom");
-  const [customText, setCustomText] = useState("");
-  const [customError, setCustomError] = useState<string | null>(null);
-  const [customScenario, setCustomScenario] = useState<Scenario | null>(null);
-  const [pending, startTransition] = useTransition();
   const [burst, setBurst] = useState<{ id: number; tone: "up" | "down" } | null>(null);
   const burstSeq = useRef(0);
 
-  const scenarios = useMemo(() => {
-    const base = [...(engine?.scenarios || [])];
-    if (customScenario) base.push(customScenario);
-    return base;
-  }, [engine, customScenario]);
+  const scenarios = useMemo(() => [...(engine?.scenarios || [])], [engine]);
 
   const byBucket = useMemo(() => {
     const groups: Record<string, Scenario[]> = { likely: [], high_impact: [], downside: [] };
@@ -491,41 +487,12 @@ export function CatalystSimulator({
 
   const applyStress = (key: string) => {
     setStress(key);
-    setSelected(new Set(engine.stress_cases?.[key]?.scenario_ids || []));
-  };
-
-  const submitCustom = () => {
-    const text = customText.trim();
-    if (!text) {
-      setCustomError("Ask a what-if first.");
-      return;
+    const ids = engine.stress_cases?.[key]?.scenario_ids || [];
+    setSelected(new Set(ids));
+    if (key === "bull" || key === "bear") {
+      burstSeq.current += 1;
+      setBurst({ id: burstSeq.current, tone: key === "bear" ? "down" : "up" });
     }
-    setCustomError(null);
-    startTransition(async () => {
-      try {
-        const res = (await landsignalApi.catalystSimulate(parcelId, {
-          custom_text: text,
-          scenario_ids: [...selected],
-        })) as { custom?: { ok?: boolean; error?: string; scenario?: Scenario } };
-        const custom = res.custom;
-        if (!custom?.ok || !custom.scenario) {
-          setCustomError(custom?.error || "Couldn’t map that yet.");
-          return;
-        }
-        setCustomScenario(custom.scenario);
-        setSelected((prev) => new Set([...prev, custom.scenario!.id]));
-        setStress("custom");
-        setCustomText("");
-        burstSeq.current += 1;
-        const central = Number(custom.scenario.impact?.central_pct ?? 0);
-        setBurst({
-          id: burstSeq.current,
-          tone: central < 0 || custom.scenario.bucket === "downside" ? "down" : "up",
-        });
-      } catch (e) {
-        setCustomError(e instanceof Error ? e.message : "Request failed");
-      }
-    });
   };
 
   const opp = engine.opportunity;
@@ -540,9 +507,12 @@ export function CatalystSimulator({
       else next.delete(id);
       if (turningOn) {
         const central = Number(scenario?.impact?.central_pct ?? 0);
-        const tone: "up" | "down" = central < 0 || scenario?.bucket === "downside" ? "down" : "up";
+        const tone: "up" | "down" =
+          central < 0 || scenario?.bucket === "downside" ? "down" : "up";
+        // High-impact bear items are still bucket=high_impact but negative
+        const finalTone: "up" | "down" = central < 0 ? "down" : tone === "down" ? "down" : "up";
         burstSeq.current += 1;
-        setBurst({ id: burstSeq.current, tone });
+        setBurst({ id: burstSeq.current, tone: finalTone });
       }
       return next;
     });
@@ -648,8 +618,8 @@ export function CatalystSimulator({
                 {(
                   [
                     ["likely", "Likely"],
-                    ["high_impact", "High impact"],
                     ["downside", "Downside"],
+                    ["high_impact", "High impact"],
                   ] as const
                 ).map(([key, label]) => {
                   const items = byBucket[key];
@@ -663,8 +633,12 @@ export function CatalystSimulator({
                           const because = (s.reasoning?.because || []).slice(0, 3);
                           const chain = (s.chain || []).slice(0, 3);
                           const dollars = dollarRange(s.impact, baseToday);
+                          const isBear = Number(s.impact?.central_pct) < 0;
                           return (
-                            <li key={s.id} className={`fse-row ${on ? "is-on" : ""} ${key}`}>
+                            <li
+                              key={s.id}
+                              className={`fse-row ${on ? "is-on" : ""} ${key} ${isBear ? "is-bear" : ""}`}
+                            >
                               <label className="fse-toggle">
                                 <input
                                   type="checkbox"
@@ -707,30 +681,6 @@ export function CatalystSimulator({
                     </div>
                   );
                 })}
-
-                <div className="fse-custom">
-                  <div className="fse-custom-row">
-                    <input
-                      type="text"
-                      value={customText}
-                      onChange={(e) => setCustomText(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") submitCustom();
-                      }}
-                      placeholder="What if sewer reaches the property?"
-                      aria-label="Custom scenario"
-                    />
-                    <button
-                      type="button"
-                      className="btn fse-custom-run"
-                      disabled={pending}
-                      onClick={submitCustom}
-                    >
-                      {pending ? "…" : "Add"}
-                    </button>
-                  </div>
-                  {customError ? <p className="fse-error">{customError}</p> : null}
-                </div>
               </div>
 
               <div className="fse-path">
@@ -747,19 +697,22 @@ export function CatalystSimulator({
 
                 {summary ? (
                   <div className="fse-path-stats">
-                    <div>
+                    <div className="fse-path-today">
                       <span>Today</span>
                       <strong>{money(summary.today)}</strong>
                     </div>
-                    <div>
-                      <span>5 yr</span>
-                      <strong>{money(hasSel ? summary.y5s : summary.y5b)}</strong>
-                      {hasSel ? <em>vs {money(summary.y5b)}</em> : null}
-                    </div>
-                    <div>
-                      <span>10 yr</span>
-                      <strong>{money(hasSel ? summary.y10s : summary.y10b)}</strong>
-                      {hasSel ? <em>vs {money(summary.y10b)}</em> : null}
+                    <div className="fse-path-years">
+                      {([5, 10, 20, 40, 60, 80] as const).map((y) => {
+                        const row = summary.years[y];
+                        const shown = hasSel ? row.s : row.b;
+                        return (
+                          <div key={y} className="fse-path-bubble">
+                            <span>{y} yr</span>
+                            <strong>{money(shown)}</strong>
+                            {hasSel ? <em>vs {money(row.b)}</em> : null}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ) : null}

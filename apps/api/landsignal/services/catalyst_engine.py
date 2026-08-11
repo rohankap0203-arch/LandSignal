@@ -1083,7 +1083,14 @@ def select_auto_scenarios(
     if growth >= 50:
         add("residential_subdivision", "likely", 68)
 
-    # —— High impact ——
+    # —— Downside (moderate / ambient risks) ——
+    add("employment_decline", "downside", 70)
+    add("wildfire_risk_increase", "downside", 66)
+    add("environmental_restrictions", "downside", 64)
+    add("water_availability_worse", "downside", 62)
+    add("quarry_mining", "downside", 58)
+
+    # —— High impact: both bullish unlocks AND severe bear shocks ——
     if strategy in {"hold_develop", "subdivide", "flip"} or (acres or 0) >= 5:
         add("sewer_extension", "high_impact", 96)
         add("municipal_water", "high_impact", 90)
@@ -1097,18 +1104,12 @@ def select_auto_scenarios(
     if access >= 50:
         add("distribution_center", "high_impact", 60)
     add("annexation", "high_impact", 64)
-
-    # —— Downside (equal analytical weight) ——
-    add("flood_risk_increase", "downside", 92 if flood < 55 else 70)
-    add("landfill", "downside", 78)
-    add("neighbor_industrial", "downside", 76)
-    add("employer_closes", "downside", 68)
-    add("employment_decline", "downside", 64)
-    add("wildfire_risk_increase", "downside", 66)
-    add("environmental_restrictions", "downside", 62)
-    add("water_availability_worse", "downside", 60)
-    add("contamination", "downside", 58)
-    add("quarry_mining", "downside", 54)
+    # Severe downside also lives under High impact (bear side of the ledger)
+    add("flood_risk_increase", "high_impact", 94 if flood < 55 else 82)
+    add("landfill", "high_impact", 88)
+    add("neighbor_industrial", "high_impact", 84)
+    add("employer_closes", "high_impact", 80)
+    add("contamination", "high_impact", 76)
 
     # Dedupe keeping highest priority
     best: dict[str, tuple[float, str]] = {}
@@ -1119,12 +1120,34 @@ def select_auto_scenarios(
     ranked = sorted(best.items(), key=lambda kv: -kv[1][0])
     picked: list[tuple[str, str]] = []
     counts = {"likely": 0, "high_impact": 0, "downside": 0}
-    # Prefer a rich mix: ~4 likely, ~4 high-impact, ~4 downside
-    limits = {"likely": 4, "high_impact": 4, "downside": 4}
+    # Prefer: ~4 likely, ~3 ambient downside, ~5 high-impact (bull + bear)
+    limits = {"likely": 4, "downside": 3, "high_impact": 5}
+
+    hi_up = [
+        (k, b)
+        for k, (pri, b) in ranked
+        if b == "high_impact" and float(EVENT_TAXONOMY[k]["base_channels"].get("immediate", 0)) >= 0
+    ]
+    hi_dn = [
+        (k, b)
+        for k, (pri, b) in ranked
+        if b == "high_impact" and float(EVENT_TAXONOMY[k]["base_channels"].get("immediate", 0)) < 0
+    ]
+    # Seed high-impact with both bull and bear sides first
+    for key, bucket in hi_up[:3] + hi_dn[:2]:
+        if counts[bucket] >= limits[bucket]:
+            continue
+        if any(k == key for k, _ in picked):
+            continue
+        picked.append((key, bucket))
+        counts[bucket] += 1
+
     for key, (pri, bucket) in ranked:
         if len(picked) >= 12:
             break
         if counts[bucket] >= limits[bucket]:
+            continue
+        if any(k == key for k, _ in picked):
             continue
         picked.append((key, bucket))
         counts[bucket] += 1
@@ -1139,8 +1162,8 @@ def select_auto_scenarios(
             picked.append((key, bucket))
             counts[bucket] += 1
 
-    if counts["downside"] == 0:
-        picked = picked[:11] + [("flood_risk_increase", "downside")]
+    if counts["downside"] == 0 and counts["high_impact"] == 0:
+        picked = picked[:11] + [("flood_risk_increase", "high_impact")]
 
     scale_for = {
         "shopping_center": "major",
@@ -1446,19 +1469,17 @@ def build_stress_cases(
     scenarios: list[dict[str, Any]],
 ) -> dict[str, Any]:
     upside = sorted(
-        [s for s in scenarios if s.get("bucket") != "downside"],
+        [s for s in scenarios if float((s.get("impact") or {}).get("p50") or 0) >= 0],
         key=lambda s: float((s.get("impact") or {}).get("p50") or 0),
         reverse=True,
     )
     downside = sorted(
-        [s for s in scenarios if s.get("bucket") == "downside"],
+        [s for s in scenarios if float((s.get("impact") or {}).get("p50") or 0) < 0],
         key=lambda s: float((s.get("impact") or {}).get("p50") or 0),  # more negative first
     )
 
-    bull_ids = [s["id"] for s in upside[:3]]
-    bear_ids = [s["id"] for s in downside[:3]]
-    # Most likely: top likely-bucket by compatibility * certainty * |impact|
-    likely = [s for s in scenarios if s.get("bucket") == "likely"]
+    # Most Likely: only the top 2 compatible "likely" catalysts
+    likely = [s for s in scenarios if s.get("bucket") == "likely" and float((s.get("impact") or {}).get("p50") or 0) >= 0]
     if not likely:
         likely = upside[:2]
     most_likely_ids = [
@@ -1472,22 +1493,31 @@ def build_stress_cases(
         )[:2]
     ]
 
+    # Bull / Bear must select meaningfully MORE than Most Likely
+    bull_ids = [s["id"] for s in upside]  # all favorable autos
+    if len(bull_ids) <= len(most_likely_ids):
+        bull_ids = [s["id"] for s in upside[: max(4, len(most_likely_ids) + 2)]]
+
+    bear_ids = [s["id"] for s in downside]  # all adverse autos
+    if len(bear_ids) <= len(most_likely_ids):
+        bear_ids = [s["id"] for s in downside[: max(4, len(most_likely_ids) + 2)]]
+
     return {
         "baseline": {"scenario_ids": [], "label": "Baseline", "description": "Existing Value Path only."},
         "bull": {
             "scenario_ids": bull_ids,
             "label": "Bull Case",
-            "description": "Several favorable plausible catalysts occur (not extreme fantasy).",
+            "description": "All favorable plausible catalysts on this file (broader than Most Likely).",
         },
         "bear": {
             "scenario_ids": bear_ids,
             "label": "Bear Case",
-            "description": "Several downside catalysts occur.",
+            "description": "All material downside catalysts on this file (broader than Most Likely).",
         },
         "most_likely": {
             "scenario_ids": most_likely_ids,
             "label": "Most Likely",
-            "description": "Probability-weighted combination of the most compatible likely catalysts.",
+            "description": "Narrow set of the most compatible likely catalysts.",
         },
         "custom": {
             "scenario_ids": [],
