@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { AuthProvider } from "@/components/auth-provider";
+import { DisablePageZoom } from "@/components/disable-page-zoom";
 import { Shell } from "@/components/shell";
 import "./globals.css";
 
@@ -37,6 +38,9 @@ export const viewport: Viewport = {
   ],
   width: "device-width",
   initialScale: 1,
+  minimumScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
 };
 
@@ -52,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
+        <DisablePageZoom />
         <AuthProvider>
           <Shell>{children}</Shell>
         </AuthProvider>
