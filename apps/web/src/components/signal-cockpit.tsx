@@ -165,11 +165,8 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
                 onClick={() => setActive(i)}
                 aria-pressed={active === i}
               >
-                <span className="bid-tag-punch" aria-hidden />
-                <span className="bid-tag-inner">
-                  <strong>{String(p.label)}</strong>
-                  <span className="bid-tag-price">{money(p.x)}</span>
-                </span>
+                <strong>{String(p.label)}</strong>
+                <span className="bid-tag-price">{money(p.x)}</span>
               </button>
             ))}
           </div>
