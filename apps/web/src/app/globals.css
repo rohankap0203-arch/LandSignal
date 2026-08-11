@@ -6051,40 +6051,45 @@ a.acquire-block:hover {
   font: inherit;
 }
 
-/* Clean zoom ± — white buttons, black equal-weight bars (not font glyphs) */
+/* Map zoom ± — frosted instrument stack, geometric icons */
 .parcel-map-shell .leaflet-control-zoom,
 .land-viewer-map .leaflet-control-zoom {
-  border: 1px solid rgba(20, 32, 28, 0.12) !important;
   margin: 12px !important;
-  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
-  background: #fff !important;
+  background: rgba(12, 18, 16, 0.72) !important;
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .parcel-map-shell .leaflet-control-zoom a,
 .land-viewer-map .leaflet-control-zoom a {
   position: relative;
-  width: 2.15rem !important;
-  height: 2.15rem !important;
+  width: 2.35rem !important;
+  height: 2.35rem !important;
   line-height: 0 !important;
   font-size: 0 !important;
   font-weight: 400;
   color: transparent !important;
   text-indent: -9999px;
-  background: #fff !important;
-  border-bottom: 1px solid rgba(20, 32, 28, 0.1) !important;
-  transition:
-    background 140ms ease,
-    transform 140ms ease;
-}
-
-.parcel-map-shell .leaflet-control-zoom a:last-child,
-.land-viewer-map .leaflet-control-zoom a:last-child {
+  background: transparent !important;
   border-bottom: none !important;
+  transition:
+    background 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 180ms ease;
 }
 
-/* Shared bar geometry — same 2px stroke for + and − */
+.parcel-map-shell .leaflet-control-zoom a + a,
+.land-viewer-map .leaflet-control-zoom a + a {
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Shared bar geometry — equal optical weight */
 .parcel-map-shell .leaflet-control-zoom a::before,
 .parcel-map-shell .leaflet-control-zoom a::after,
 .land-viewer-map .leaflet-control-zoom a::before,
@@ -6093,16 +6098,21 @@ a.acquire-block:hover {
   position: absolute;
   left: 50%;
   top: 50%;
-  background: #14201c;
-  border-radius: 1px;
+  background: #f4f7f5;
+  border-radius: 999px;
   transform: translate(-50%, -50%);
   pointer-events: none;
+  transition:
+    background 180ms ease,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 180ms ease,
+    height 180ms ease;
 }
 
 /* Horizontal bar (plus + minus) */
 .parcel-map-shell .leaflet-control-zoom a::before,
 .land-viewer-map .leaflet-control-zoom a::before {
-  width: 11px;
+  width: 12px;
   height: 2px;
 }
 
@@ -6110,7 +6120,7 @@ a.acquire-block:hover {
 .parcel-map-shell .leaflet-control-zoom-in::after,
 .land-viewer-map .leaflet-control-zoom-in::after {
   width: 2px;
-  height: 11px;
+  height: 12px;
 }
 
 .parcel-map-shell .leaflet-control-zoom-out::after,
@@ -6120,26 +6130,67 @@ a.acquire-block:hover {
 
 .parcel-map-shell .leaflet-control-zoom a:hover,
 .land-viewer-map .leaflet-control-zoom a:hover {
-  background: #f4f6f5 !important;
+  background: color-mix(in srgb, var(--brand, #1f6b4f) 28%, rgba(255, 255, 255, 0.08)) !important;
+}
+
+.parcel-map-shell .leaflet-control-zoom a:hover::before,
+.parcel-map-shell .leaflet-control-zoom a:hover::after,
+.land-viewer-map .leaflet-control-zoom a:hover::before,
+.land-viewer-map .leaflet-control-zoom a:hover::after {
+  background: #ffffff;
+}
+
+.parcel-map-shell .leaflet-control-zoom-in:hover::before,
+.land-viewer-map .leaflet-control-zoom-in:hover::before {
+  width: 13px;
+}
+
+.parcel-map-shell .leaflet-control-zoom-in:hover::after,
+.land-viewer-map .leaflet-control-zoom-in:hover::after {
+  height: 13px;
+}
+
+.parcel-map-shell .leaflet-control-zoom-out:hover::before,
+.land-viewer-map .leaflet-control-zoom-out:hover::before {
+  width: 13px;
 }
 
 .parcel-map-shell .leaflet-control-zoom a:active,
 .land-viewer-map .leaflet-control-zoom a:active {
-  background: #e8ecea !important;
-  transform: scale(0.96);
+  background: color-mix(in srgb, var(--brand, #1f6b4f) 42%, rgba(0, 0, 0, 0.2)) !important;
+  transform: scale(0.94);
+}
+
+.parcel-map-shell .leaflet-control-zoom a:active::before,
+.parcel-map-shell .leaflet-control-zoom a:active::after,
+.land-viewer-map .leaflet-control-zoom a:active::before,
+.land-viewer-map .leaflet-control-zoom a:active::after {
+  transform: translate(-50%, -50%) scale(0.9);
+}
+
+.parcel-map-shell .leaflet-control-zoom a:focus-visible,
+.land-viewer-map .leaflet-control-zoom a:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand, #1f6b4f) 70%, #fff);
+  outline-offset: -2px;
 }
 
 .parcel-map-shell .leaflet-disabled,
 .land-viewer-map .leaflet-disabled {
-  opacity: 0.35 !important;
+  opacity: 0.32 !important;
   cursor: default !important;
+  pointer-events: none;
+}
+
+.parcel-map-shell .leaflet-disabled:hover,
+.land-viewer-map .leaflet-disabled:hover {
+  background: transparent !important;
 }
 
 .parcel-map-shell .leaflet-disabled::before,
 .parcel-map-shell .leaflet-disabled::after,
 .land-viewer-map .leaflet-disabled::before,
 .land-viewer-map .leaflet-disabled::after {
-  background: #14201c;
+  background: rgba(244, 247, 245, 0.55);
 }
 
 .land-viewer-empty {
@@ -6250,10 +6301,20 @@ a.acquire-block:hover {
 
   .parcel-map-shell .leaflet-control-zoom a,
   .land-viewer-map .leaflet-control-zoom a {
-    width: 2rem !important;
-    height: 2rem !important;
-    line-height: 2rem !important;
-    font-size: 1.05rem !important;
+    width: 2.15rem !important;
+    height: 2.15rem !important;
+    line-height: 0 !important;
+    font-size: 0 !important;
+  }
+
+  .parcel-map-shell .leaflet-control-zoom a::before,
+  .land-viewer-map .leaflet-control-zoom a::before {
+    width: 11px;
+  }
+
+  .parcel-map-shell .leaflet-control-zoom-in::after,
+  .land-viewer-map .leaflet-control-zoom-in::after {
+    height: 11px;
   }
 
   .parcel-map-expand {
