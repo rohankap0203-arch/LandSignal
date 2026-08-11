@@ -679,7 +679,6 @@ export function ReturnVisual({
             Manage screens
           </button>
         ) : null}
-        <span className="return-title-grow" aria-hidden />
         <button
           type="button"
           className={`help-q return-help-q ${helpOpen ? "on" : ""}`}

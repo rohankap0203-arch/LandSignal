@@ -3684,36 +3684,39 @@ a.btn-intel:hover {
   border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
 }
 
-/* Hold return title: [Hold return] [Manage screens] …… [?] on one line */
+/* Hold return title: [Hold return] [Manage screens] [?] grouped, no far-right gap */
 .return-title-row {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 0.5rem 0.65rem;
+  justify-content: flex-start;
+  gap: 0.4rem 0.5rem;
   min-width: 0;
 }
 
-.return-title-kicker,
-.return-manage-screens {
+.return-title-kicker {
   flex: 0 0 auto;
   font-size: 0.625rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   line-height: 1.2;
-}
-
-.return-title-kicker {
   color: var(--muted);
 }
 
 .return-manage-screens {
+  flex: 0 0 auto;
   margin: 0;
-  padding: 0.22rem 0.5rem;
+  padding: 0.12rem 0.35rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--line));
   background: color-mix(in srgb, var(--brand) 8%, var(--bg-elevated));
   color: color-mix(in srgb, var(--brand) 55%, var(--ink));
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.2;
   cursor: pointer;
   touch-action: manipulation;
   white-space: nowrap;
@@ -3726,13 +3729,15 @@ a.btn-intel:hover {
 }
 
 .return-title-grow {
-  flex: 1 1 auto;
-  min-width: 0.35rem;
+  display: none;
 }
 
 .return-help-q {
   flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
   margin-left: 0;
+  font-size: 0.8rem;
 }
 
 .return-screens-panel {
