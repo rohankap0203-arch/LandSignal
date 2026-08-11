@@ -12,18 +12,53 @@ function apiBase(): string {
   return base;
 }
 
+function friendlyApiError(status: number, body: string): string {
+  const trimmed = (body || "").trim();
+  try {
+    const parsed = JSON.parse(trimmed) as { detail?: unknown; message?: unknown };
+    const detail = parsed.detail ?? parsed.message;
+    if (typeof detail === "string" && detail.trim()) return detail.trim();
+    if (Array.isArray(detail) && detail.length) {
+      const first = detail[0] as { msg?: string } | string;
+      if (typeof first === "string") return first;
+      if (first && typeof first.msg === "string") return first.msg;
+    }
+  } catch {
+    /* not JSON */
+  }
+  if (
+    !trimmed ||
+    /^Internal Server Error$/i.test(trimmed) ||
+    trimmed.startsWith("<!DOCTYPE") ||
+    trimmed.startsWith("<html")
+  ) {
+    if (status === 502 || status === 503 || status === 504) {
+      return "LandSignal API is not reachable. Start it with `npm run dev:api`, then try Show matches again.";
+    }
+    return "Search could not reach the LandSignal API. Start `npm run dev:api`, then try Show matches again.";
+  }
+  return trimmed.length > 280 ? `API ${status}` : trimmed;
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${apiBase()}${path}`, {
-    ...init,
-    headers: {
-      ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
-      ...(init?.headers || {}),
-    },
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase()}${path}`, {
+      ...init,
+      headers: {
+        ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+        ...(init?.headers || {}),
+      },
+      cache: "no-store",
+    });
+  } catch {
+    throw new Error(
+      "LandSignal API is not reachable. Start it with `npm run dev:api`, then try Show matches again.",
+    );
+  }
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `API ${res.status}`);
+    throw new Error(friendlyApiError(res.status, text));
   }
   return res.json() as Promise<T>;
 }

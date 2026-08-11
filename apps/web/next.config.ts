@@ -2,15 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  async rewrites() {
-    const apiOrigin = process.env.LANDSIGNAL_API_ORIGIN || "http://127.0.0.1:8000";
-    return [
-      {
-        source: "/v1/:path*",
-        destination: `${apiOrigin}/v1/:path*`,
-      },
-    ];
-  },
+  // /v1 is proxied by apps/web/src/app/v1/[...path]/route.ts so a down API
+  // returns a clear 503 JSON instead of Next's raw "Internal Server Error".
 };
 
 export default nextConfig;

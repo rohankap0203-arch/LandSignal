@@ -270,8 +270,12 @@ export default function SearchPage() {
       } catch (e) {
         const raw = e instanceof Error ? e.message : "Search failed";
         const friendly =
-          /Failed to fetch|NetworkError|Load failed|timeout|abort/i.test(raw)
-            ? "Search couldn’t finish on this connection. Check your signal and tap Show matches again."
+          /Failed to fetch|NetworkError|Load failed|timeout|abort|Internal Server Error|not reachable|could not reach/i.test(
+            raw,
+          )
+            ? /not reachable|could not reach|Internal Server Error/i.test(raw)
+              ? "LandSignal API is not reachable. Start it with `npm run dev:api`, then try Show matches again."
+              : "Search couldn’t finish on this connection. Check your signal and tap Show matches again."
             : raw.length > 280
               ? "Search failed. Tap Show matches again — if it keeps failing, try Reset to Any first."
               : raw;
