@@ -7147,6 +7147,13 @@ a.acquire-block:hover {
   box-shadow: 0 6px 18px color-mix(in srgb, var(--ink) 10%, transparent);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .fse-launch::before {
+    animation: none;
+    background: #111;
+  }
+}
+
 .fse-launch-label {
   font-family: var(--font-display, "Fraunces", Georgia, serif);
   font-size: 1.05rem;
