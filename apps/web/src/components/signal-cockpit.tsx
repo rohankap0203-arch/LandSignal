@@ -155,31 +155,22 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
             </text>
           </svg>
 
-          <div className="bid-ticket-rail" role="list">
+          <div className="chart-legend">
             {points.map((p, i) => (
               <button
                 key={`${String(p.label)}-leg-${i}`}
                 type="button"
-                role="listitem"
-                className={`bid-admit ${active === i ? "is-live" : ""}`}
+                className={`chart-legend-item ${active === i ? "active" : ""}`}
                 onClick={() => setActive(i)}
-                aria-pressed={active === i}
               >
-                <span className="bid-admit-stub">
-                  <span className="bid-admit-stub-k">No.</span>
-                  <span className="bid-admit-stub-n">{String(i + 1).padStart(2, "0")}</span>
-                </span>
-                <span className="bid-admit-perf" aria-hidden />
-                <span className="bid-admit-main">
-                  <strong>{String(p.label)}</strong>
-                  <span className="bid-admit-price">{money(p.x)}</span>
-                </span>
+                <strong>{String(p.label)}</strong>
+                <span>{money(p.x)}</span>
               </button>
             ))}
           </div>
 
           {selected && (
-            <div className="bid-slip">
+            <div className="chart-readout">
               <strong>{String(selected.label)}</strong>
               <span>
                 {money(selected.x)} · about {Number(selected.y).toFixed(0)}% of buyers still bidding

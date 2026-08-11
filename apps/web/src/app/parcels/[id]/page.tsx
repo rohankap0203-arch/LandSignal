@@ -632,7 +632,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Starting bid coupon — same words, financial tear-ticket layout. */
+/** Starting bid → likely finish — admit-one ticket (above Buy case). */
 function PriceStat({ label, value, kind }: { label: string; value: string; kind?: string }) {
   const isBid = kind === "minimum_bid" || /starting bid/i.test(label);
   if (!isBid) return <Stat label={label} value={value} />;
@@ -641,27 +641,21 @@ function PriceStat({ label, value, kind }: { label: string; value: string; kind?
 
   return (
     <div className="bid-ticket" aria-label={`${label}: ${value}`}>
-      <div className="bid-ticket-head">
-        <span className="bid-ticket-mark" aria-hidden>
-          BID
-        </span>
-        <span className="bid-ticket-kicker">{label}</span>
+      <div className="bid-ticket-stub">
+        <span className="bid-ticket-stub-k">BID</span>
       </div>
-      {parts.length >= 2 ? (
-        <div className="bid-ticket-row">
-          <div className="bid-ticket-face is-open">
+      <span className="bid-ticket-perf" aria-hidden />
+      <div className="bid-ticket-main">
+        <span className="bid-ticket-kicker">{label}</span>
+        {parts.length >= 2 ? (
+          <div className="bid-ticket-prices">
             <span className="bid-ticket-val">{parts[0]}</span>
+            <span className="bid-ticket-val is-finish">{parts.slice(1).join(" · ")}</span>
           </div>
-          <span className="bid-ticket-tear" aria-hidden />
-          <div className="bid-ticket-face is-finish">
-            <span className="bid-ticket-val">{parts.slice(1).join(" · ")}</span>
-          </div>
-        </div>
-      ) : (
-        <div className="bid-ticket-face is-solo">
+        ) : (
           <span className="bid-ticket-val">{value}</span>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

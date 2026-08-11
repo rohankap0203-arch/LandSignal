@@ -2669,20 +2669,9 @@ a.btn-intel:hover {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   min-height: 220px;
   overflow: visible;
-  min-width: 0;
-  padding: 1rem 1.05rem 1.1rem;
-  border-radius: 16px;
-  background:
-    radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--brand-soft) 28%, transparent), transparent 55%),
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--brand) 10%, var(--bg-soft)),
-      color-mix(in srgb, var(--brand-soft) 14%, var(--bg-elevated)) 55%,
-      color-mix(in srgb, var(--brand) 8%, var(--bg-soft))
-    );
 }
 
 .cockpit-tabs {
@@ -2715,114 +2704,104 @@ a.btn-intel:hover {
   background: var(--bg-soft);
 }
 
-/* Starting bid — clean diagonal tag strip */
+/* Starting bid → likely finish — admit-one ticket (above Buy case) */
 .bid-ticket {
+  --ticket-fill: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--brand-soft) 42%, #fff) 0%,
+    color-mix(in srgb, var(--brand) 24%, #f2f9f5) 48%,
+    color-mix(in srgb, var(--brand-soft) 36%, #fff) 100%
+  );
   position: relative;
-  border: 1px solid color-mix(in srgb, var(--brand) 22%, var(--line));
-  background: #fff;
-  padding: 0.85rem 1rem 0.9rem 1.35rem;
-  clip-path: polygon(16px 0, 100% 0, 100% 100%, 16px 100%, 0 50%);
-  box-shadow: 0 8px 18px rgba(20, 32, 28, 0.08);
+  display: grid;
+  grid-template-columns: 3.75rem 1px minmax(0, 1fr);
+  align-items: stretch;
+  width: 100%;
+  min-height: 5.75rem;
+  padding: 0;
+  border: 0;
   color: var(--ink);
+  background: var(--ticket-fill);
+  /* Admit-one: side scallops + perforation notches at stub seam */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 120' preserveAspectRatio='none'%3E%3Cpath fill-rule='evenodd' fill='black' d='M0 0H360V120H0ZM0 20a6 6 0 1 0 .01 0ZM0 40a5 5 0 1 0 .01 0ZM0 60a11 11 0 1 0 .01 0ZM0 80a5 5 0 1 0 .01 0ZM0 100a6 6 0 1 0 .01 0ZM360 20a6 6 0 1 0 .01 0ZM360 40a5 5 0 1 0 .01 0ZM360 60a11 11 0 1 0 .01 0ZM360 80a5 5 0 1 0 .01 0ZM360 100a6 6 0 1 0 .01 0ZM100 0a7 7 0 1 0 .01 0ZM100 120a7 7 0 1 0 .01 0Z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 120' preserveAspectRatio='none'%3E%3Cpath fill-rule='evenodd' fill='black' d='M0 0H360V120H0ZM0 20a6 6 0 1 0 .01 0ZM0 40a5 5 0 1 0 .01 0ZM0 60a11 11 0 1 0 .01 0ZM0 80a5 5 0 1 0 .01 0ZM0 100a6 6 0 1 0 .01 0ZM360 20a6 6 0 1 0 .01 0ZM360 40a5 5 0 1 0 .01 0ZM360 60a11 11 0 1 0 .01 0ZM360 80a5 5 0 1 0 .01 0ZM360 100a6 6 0 1 0 .01 0ZM100 0a7 7 0 1 0 .01 0ZM100 120a7 7 0 1 0 .01 0Z'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  filter: drop-shadow(0 8px 16px rgba(20, 32, 28, 0.14));
 }
 
-.bid-ticket::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 8px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--bg-elevated);
-  border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--line));
-  transform: translate(-50%, -50%);
-}
-
-.bid-ticket-head {
+.bid-ticket-stub {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin: 0 0 0.65rem;
-  min-width: 0;
+  justify-content: center;
+  padding: 0.65rem 0.2rem;
+  text-align: center;
 }
 
-.bid-ticket-mark {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.16rem 0.4rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--brand) 12%, #fff);
+.bid-ticket-stub-k {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
   color: var(--brand);
-  font-size: 0.62rem;
-  font-weight: 750;
-  letter-spacing: 0.1em;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  line-height: 1;
+}
+
+.bid-ticket-perf {
+  width: 1px;
+  margin: 0.65rem 0;
+  background: repeating-linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--brand) 48%, var(--line)) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+.bid-ticket-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.85rem 1.35rem 0.85rem 0.95rem;
 }
 
 .bid-ticket-kicker {
   min-width: 0;
   font-size: 0.68rem;
-  font-weight: 650;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--brand) 40%, var(--muted));
+  overflow-wrap: anywhere;
 }
 
-.bid-ticket-row {
+.bid-ticket-prices {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 10px minmax(0, 1.25fr);
-  gap: 0.35rem;
-  align-items: stretch;
+  gap: 0.2rem;
   min-width: 0;
-}
-
-.bid-ticket-face {
-  min-width: 0;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--brand) 5%, var(--bg-soft));
-  padding: 0.65rem 0.75rem;
-}
-
-.bid-ticket-face.is-finish {
-  background: color-mix(in srgb, var(--brand) 10%, #fff);
-}
-
-.bid-ticket-face.is-solo {
-  background: color-mix(in srgb, var(--brand) 6%, var(--bg-soft));
-}
-
-.bid-ticket-tear {
-  align-self: center;
-  justify-self: center;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--brand) 45%, var(--line));
 }
 
 .bid-ticket-val {
   display: block;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: clamp(0.92rem, 2.5vw, 1.1rem);
-  font-weight: 750;
+  font-size: clamp(0.98rem, 2.6vw, 1.18rem);
+  font-weight: 800;
   line-height: 1.3;
   letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
   color: var(--brand);
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 420px) {
-  .bid-ticket-row {
-    grid-template-columns: 1fr;
-  }
-
-  .bid-ticket-tear {
-    width: 100%;
-    height: 2px;
-    border-radius: 999px;
-  }
+.bid-ticket-val.is-finish {
+  font-size: clamp(0.92rem, 2.4vw, 1.08rem);
+  font-weight: 750;
+  color: color-mix(in srgb, var(--brand) 72%, var(--ink));
 }
 
 .bid-track {
@@ -2938,172 +2917,86 @@ a.btn-intel:hover {
   font-size: 10px;
 }
 
-/* Admit tickets — exact stub + perforated body template */
-.bid-ticket-rail {
+.chart-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.85rem;
-  overflow: visible;
+  gap: 7px;
 }
 
-.bid-admit {
-  --ticket-fill: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--brand-soft) 40%, #fff) 0%,
-    color-mix(in srgb, var(--brand) 22%, #f2f9f5) 45%,
-    color-mix(in srgb, var(--brand-soft) 34%, #fff) 100%
-  );
+.chart-legend-item {
   position: relative;
-  display: grid;
-  grid-template-columns: 3.55rem 1px minmax(0, 1fr);
-  align-items: stretch;
-  width: min(18rem, 100%);
-  min-height: 4.75rem;
-  padding: 0;
-  border: 0;
-  color: var(--ink);
-  cursor: pointer;
-  background: var(--ticket-fill);
-  /*
-    Admit-one silhouette:
-    - scalloped left/right edges (small, large center, small)
-    - top/bottom notches at the stub perforation
-  */
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 120' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 0H92a8 8 0 0 0 16 0H360V18a9 9 0 0 1 0 18 12 12 0 0 1 0 24 12 12 0 0 1 0 24 9 9 0 0 1 0 18V120H108a8 8 0 0 0-16 0H0V102a9 9 0 0 1 0-18 12 12 0 0 1 0-24 12 12 0 0 1 0-24 9 9 0 0 1 0-18V0Z'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 120' preserveAspectRatio='none'%3E%3Cpath fill='black' d='M0 0H92a8 8 0 0 0 16 0H360V18a9 9 0 0 1 0 18 12 12 0 0 1 0 24 12 12 0 0 1 0 24 9 9 0 0 1 0 18V120H108a8 8 0 0 0-16 0H0V102a9 9 0 0 1 0-18 12 12 0 0 1 0-24 12 12 0 0 1 0-24 9 9 0 0 1 0-18V0Z'/%3E%3C/svg%3E");
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  filter: drop-shadow(0 8px 14px rgba(20, 32, 28, 0.14));
-  transition:
-    transform 160ms ease,
-    filter 160ms ease;
-}
-
-.bid-admit-stub {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.15rem;
-  padding: 0.55rem 0.25rem;
-  text-align: center;
-}
-
-.bid-admit-stub-k {
-  font-size: 0.58rem;
-  font-weight: 750;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--brand) 45%, var(--muted));
-}
-
-.bid-admit-stub-n {
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 1.05rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  color: var(--brand);
-  line-height: 1;
-}
-
-.bid-admit-perf {
-  width: 1px;
-  margin: 0.55rem 0;
-  background: repeating-linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--brand) 45%, var(--line)) 0 4px,
-    transparent 4px 8px
-  );
-}
-
-.bid-admit-main {
-  display: flex;
+  display: inline-flex;
   flex-direction: column;
   align-items: flex-start;
-  justify-content: center;
-  gap: 0.25rem;
-  min-width: 0;
-  padding: 0.7rem 1.15rem 0.7rem 0.85rem;
-  text-align: left;
-}
-
-.bid-admit-main strong {
-  font-size: 0.74rem;
-  font-weight: 700;
-  line-height: 1.25;
-  color: color-mix(in srgb, var(--brand) 40%, var(--ink));
-  overflow-wrap: anywhere;
-}
-
-.bid-admit-price {
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 1.08rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  font-variant-numeric: tabular-nums;
-  color: var(--brand);
-  line-height: 1.15;
-  overflow-wrap: anywhere;
-}
-
-.bid-admit:hover {
-  transform: translateY(-2px);
-  filter: drop-shadow(0 12px 18px rgba(20, 32, 28, 0.18));
-}
-
-.bid-admit.is-live {
-  --ticket-fill: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--brand-soft) 48%, #fff) 0%,
-    color-mix(in srgb, var(--brand) 28%, #eef8f2) 50%,
-    color-mix(in srgb, var(--brand-soft) 40%, #fff) 100%
-  );
-  transform: translateY(-2px);
-  filter: drop-shadow(0 12px 20px color-mix(in srgb, var(--brand) 22%, transparent));
-}
-
-.bid-admit.is-live .bid-admit-main strong {
-  color: var(--brand);
-}
-
-.bid-slip {
-  display: grid;
-  gap: 0.2rem;
-  padding: 0.85rem 1rem;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--brand) 18%, var(--line));
-  background: color-mix(in srgb, var(--brand) 8%, rgba(255, 255, 255, 0.72));
-  font-size: 0.85rem;
-}
-
-.bid-slip strong {
-  color: var(--ink);
-}
-
-.bid-slip > span {
-  color: color-mix(in srgb, var(--brand) 50%, var(--ink));
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.8rem;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-
-.bid-slip p {
-  margin: 4px 0 0;
+  gap: 2px;
+  min-width: 6.5rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--brand) 22%, var(--line));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--brand) 7%, var(--bg-elevated)), var(--bg-elevated));
+  padding: 0.55rem 0.75rem 0.5rem 0.85rem;
+  font-size: 0.72rem;
   color: var(--muted);
-  font-size: 0.78rem;
-  line-height: 1.4;
+  cursor: pointer;
+  overflow: hidden;
+  transition:
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
 }
 
-/* Keep old readout styles for land-value / return charts */
+.chart-legend-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: color-mix(in srgb, var(--brand) 55%, var(--line));
+}
+
+.chart-legend-item strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+}
+
+.chart-legend-item span {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  color: color-mix(in srgb, var(--brand) 55%, var(--ink));
+}
+
+.chart-legend-item:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+}
+
+.chart-legend-item.active {
+  border-color: var(--brand);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--brand) 18%, var(--bg-elevated)), color-mix(in srgb, var(--brand) 8%, var(--bg-elevated)));
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--brand) 16%, transparent);
+}
+
+.chart-legend-item.active::before {
+  background: var(--brand);
+  width: 4px;
+}
+
+.chart-legend-item.active strong {
+  color: color-mix(in srgb, var(--brand) 35%, var(--ink));
+}
+
 .chart-readout {
   display: grid;
   gap: 2px;
   padding: 10px 12px;
   border-radius: 12px;
-  background: var(--bg-soft);
+  border: 1px solid color-mix(in srgb, var(--brand) 22%, var(--line));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 10%, var(--bg-soft)), var(--bg-soft));
   font-size: 0.85rem;
 }
 
