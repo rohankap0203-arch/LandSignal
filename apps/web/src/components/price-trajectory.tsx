@@ -307,68 +307,9 @@ export function PriceTrajectory({
       : Number(selected?.value_usd || 0);
   return (
     <div className={`price-trajectory ${compact ? "compact" : ""}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-            Land value path
-          </div>
-          <h3 className="display text-lg font-semibold leading-snug">
-            {horizon} yr back · {horizon} yr ahead
-          </h3>
-        </div>
-        <div className="traj-stats">
-          <div>
-            <span>Past {horizon} yr</span>
-            <strong>{windowMath.cagrDisplay}</strong>
-          </div>
-          <div>
-            <span>Next {horizon} yr</span>
-            <strong>
-              {showToday ? windowMath.forwardCagrRealDisplay : windowMath.forwardCagrDisplay}
-            </strong>
-            {horizon >= 1 && windowMath.futureUsdToday != null ? (
-              <em className="return-alt-line">
-                {showToday
-                  ? `${shortMoney(windowMath.futureUsd)} future dollars`
-                  : `${shortMoney(windowMath.futureUsdToday)} today’s dollars`}
-              </em>
-            ) : null}
-          </div>
-          <div>
-            <span>Now</span>
-            <strong>{money(windowMath.todayUsd)}</strong>
-            <em className="return-alt-line">current mark</em>
-          </div>
-        </div>
+      <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+        Land value path
       </div>
-
-      <MoneyModeControl
-        className="mt-3"
-        mode={moneyMode}
-        onChange={setMoneyMode}
-        cpiDisplay={cpiDisplay}
-        compare={
-          horizon >= 1 && windowMath.futureUsdToday != null
-            ? {
-                label: `Land value ${horizon} yr ahead`,
-                today: windowMath.futureUsdToday,
-                before: windowMath.futureUsd,
-                format: shortMoney,
-              }
-            : null
-        }
-      />
-
-      <BuyingPowerLogic
-        className="mt-2"
-        variant="land"
-        years={horizon}
-        cpi={cpi}
-        cpiDisplay={cpiDisplay}
-        markUsd={windowMath.todayUsd}
-        futureNominal={windowMath.futureUsd}
-        futureToday={windowMath.futureUsdToday}
-      />
 
       <div className="traj-windows" role="tablist" aria-label="Chart time window">
         {(windows.length ? windows : TIMEFRAMES).map((y) => (
@@ -384,6 +325,54 @@ export function PriceTrajectory({
           </button>
         ))}
       </div>
+
+      <div className="traj-head-row">
+        <h3 className="display text-lg font-semibold leading-snug">
+          {horizon} yr back · {horizon} yr ahead
+        </h3>
+        <div className="traj-stats">
+          <div>
+            <span>Past {horizon} yr</span>
+            <strong className="tabular-nums">{windowMath.cagrDisplay}</strong>
+          </div>
+          <div>
+            <span>Next {horizon} yr</span>
+            <strong className="tabular-nums">
+              {showToday ? windowMath.forwardCagrRealDisplay : windowMath.forwardCagrDisplay}
+            </strong>
+          </div>
+          <div>
+            <span>Now</span>
+            <strong className="tabular-nums">{money(windowMath.todayUsd)}</strong>
+          </div>
+        </div>
+      </div>
+
+      <MoneyModeControl
+        mode={moneyMode}
+        onChange={setMoneyMode}
+        cpiDisplay={cpiDisplay}
+        compare={
+          horizon >= 1 && windowMath.futureUsdToday != null
+            ? {
+                label: `Land value · ${horizon} yr ahead`,
+                today: windowMath.futureUsdToday,
+                before: windowMath.futureUsd,
+                format: shortMoney,
+              }
+            : null
+        }
+      />
+
+      <BuyingPowerLogic
+        variant="land"
+        years={horizon}
+        cpi={cpi}
+        cpiDisplay={cpiDisplay}
+        markUsd={windowMath.todayUsd}
+        futureNominal={windowMath.futureUsd}
+        futureToday={windowMath.futureUsdToday}
+      />
 
       <div className="traj-chart-row">
       <div className="traj-chart-wrap">
@@ -574,8 +563,7 @@ export function PriceTrajectory({
         <p className="traj-hitch-note">{activeHitch.plain}</p>
       ) : !compact && hitches.length > 0 ? (
         <p className="traj-hitch-note">
-          What-if cases for years ahead — Higher rates · Stronger demand · Site problem. Tap ? for
-          plain English and the math.
+          What-if: Higher rates · Stronger demand · Site problem · tap ? for math
         </p>
       ) : null}
 
@@ -602,26 +590,16 @@ export function PriceTrajectory({
 
       <div className="traj-year-boxes">
         <div className="traj-year-box">
-          <span>
-            {horizon} year{horizon === 1 ? "" : "s"} back
-          </span>
-          <strong>{money(windowMath.startUsd)}</strong>
+          <span>{horizon} yr back</span>
+          <strong className="tabular-nums">{money(windowMath.startUsd)}</strong>
         </div>
         <div className="traj-year-box">
           <span>
-            {horizon} year{horizon === 1 ? "" : "s"} ahead
-            {` · ${moneyModeShort(moneyMode)}`}
+            {horizon} yr ahead · {moneyModeShort(moneyMode)}
           </span>
-          <strong>
+          <strong className="tabular-nums">
             {money(showToday ? windowMath.futureUsdToday ?? windowMath.futureUsd : windowMath.futureUsd)}
           </strong>
-          {horizon >= 1 && windowMath.futureUsdToday != null ? (
-            <em className="return-alt-line">
-              {showToday
-                ? `${shortMoney(windowMath.futureUsd)} future dollars`
-                : `${shortMoney(windowMath.futureUsdToday)} today’s dollars`}
-            </em>
-          ) : null}
         </div>
       </div>
     </div>

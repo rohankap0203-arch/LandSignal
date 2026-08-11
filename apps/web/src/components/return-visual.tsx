@@ -637,12 +637,9 @@ export function ReturnVisual({
 
   return (
     <div className="return-visual">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-            Hold return
-          </div>
-          <h3 className="display text-lg font-semibold">If you buy and hold</h3>
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+          Hold return
         </div>
         <button
           type="button"
@@ -708,28 +705,6 @@ export function ReturnVisual({
           </div>
         </div>
       ) : null}
-      <p className="mt-1 text-sm text-[var(--muted)] leading-snug">
-        Buy → rent → exit · live pace <strong className="text-[var(--ink)]">{livePaceDisplay}</strong>
-        {intel?.purchase_usd ? ` · you pay ~${money(intel.purchase_usd)}` : ""}
-        {intel?.mark_usd ? ` · mark starts ~${money(intel.mark_usd)}` : ""}. Toggle screens below —
-        chart and totals recompute. Same owned-land pace math as Land value path.
-        {toggledOff ? ` · ${toggledOff} screen${toggledOff === 1 ? "" : "s"} off` : ""}
-      </p>
-
-      <div className="traj-windows mt-3" role="tablist" aria-label="Return case">
-        {CASE_ORDER.map((k) => (
-          <button
-            key={k}
-            type="button"
-            role="tab"
-            aria-selected={activeCase === k}
-            className={`traj-window-btn ${activeCase === k ? "active" : ""}`}
-            onClick={() => setActiveCase(k)}
-          >
-            {caseLabel(k)}
-          </button>
-        ))}
-      </div>
 
       <div className="traj-windows" role="tablist" aria-label="Hold length">
         {windows.map((y) => (
@@ -784,12 +759,32 @@ export function ReturnVisual({
               }}
             />
           </label>
-          <span className="hold-custom-hint">1–100 · chart &amp; totals update live</span>
+          <span className="hold-custom-hint">1–100 years</span>
         </div>
       ) : null}
 
+      <div className="traj-head-row">
+        <h3 className="display text-lg font-semibold leading-snug">
+          {holdYears} yr hold · {livePaceDisplay}
+          {toggledOff ? ` · ${toggledOff} off` : ""}
+        </h3>
+        <div className="traj-windows traj-windows--cases" role="tablist" aria-label="Return case">
+          {CASE_ORDER.map((k) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={activeCase === k}
+              className={`traj-window-btn ${activeCase === k ? "active" : ""}`}
+              onClick={() => setActiveCase(k)}
+            >
+              {caseLabel(k)}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <MoneyModeControl
-        className="mt-3"
         mode={moneyMode}
         onChange={setMoneyMode}
         cpiDisplay={cpiDisplay}
@@ -798,7 +793,7 @@ export function ReturnVisual({
           endpoint?.total_back_usd != null &&
           endpoint?.total_back_usd_today != null
             ? {
-                label: `Total back after ${holdYears} yr · ${caseLabel(activeCase).toLowerCase()}`,
+                label: `Total back · ${holdYears} yr · ${caseLabel(activeCase)}`,
                 today: endpoint.total_back_usd_today,
                 before: endpoint.total_back_usd,
                 format: shortMoney,
@@ -808,7 +803,6 @@ export function ReturnVisual({
       />
 
       <BuyingPowerLogic
-        className="mt-2"
         variant="hold"
         years={holdYears}
         cpi={cpi}
@@ -821,7 +815,7 @@ export function ReturnVisual({
         totalBackNominal={endpoint?.total_back_usd}
       />
 
-      <div className="return-chart-wrap mt-3">
+      <div className="return-chart-wrap">
         <svg
           ref={svgRef}
           viewBox={`0 0 ${chart.W} ${chart.H}`}
@@ -917,10 +911,10 @@ export function ReturnVisual({
       </div>
 
       {endpoint && (
-        <div className="return-future mt-3">
+        <div className="return-future">
           <div className="return-future-head">
             <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-              After exactly {holdYears} years · {caseLabel(activeCase).toLowerCase()}
+              After {holdYears} yr · {caseLabel(activeCase)}
             </div>
             <div className="return-future-basis">{moneyModeShort(moneyMode)}</div>
           </div>

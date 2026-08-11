@@ -63,8 +63,8 @@ export function MoneyModeControl({
         <p className="money-mode-note">
           {note ||
             (mode === "nominal"
-              ? "Projected sale price in the dollars of that future year"
-              : `Same sale, measured in what money buys today (~${cpiDisplay} inflation)`)}
+              ? "Projected sale price"
+              : `Purchasing power today · ~${cpiDisplay} inflation`)}
         </p>
       </div>
 
@@ -79,7 +79,7 @@ export function MoneyModeControl({
             >
               <span className="money-compare-tag">{MONEY_MODE_LABELS.nominal}</span>
               <strong className="tabular-nums">{compare.format(beforeN as number)}</strong>
-              <em>projected sale price</em>
+              <em>sale price</em>
             </button>
             <div className="money-compare-vs" aria-hidden>
               →
@@ -91,12 +91,12 @@ export function MoneyModeControl({
             >
               <span className="money-compare-tag">{MONEY_MODE_LABELS.today}</span>
               <strong className="tabular-nums">{compare.format(todayN as number)}</strong>
-              <em>purchasing power today</em>
+              <em>buying power</em>
             </button>
           </div>
           <p className="money-compare-gap">
-            Inflation does <strong>not</strong> cut the sale price. It tells you whether that future
-            sale still creates wealth after money loses buying power (~{cpiDisplay}).
+            Inflation does not cut the sale price — it checks whether wealth is created after money
+            loses buying power.
           </p>
         </div>
       ) : null}
