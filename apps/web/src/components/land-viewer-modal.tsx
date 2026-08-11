@@ -48,11 +48,13 @@ type NearbyChip = {
   kind: NearbyKind;
   label: string;
   color: string;
-  /** Overpass union body fragments (without around filter). */
+  /** Overpass union body fragments (without bbox filter). */
   overpassParts: string[];
+  /** Only used when primary parts return no validated hits (e.g. flood-adjacency). */
+  overpassPartsFallback?: string[];
   radiiM: number[];
   maxMiles: number;
-  /** center = fast area/POI lookup; geom = needed for accurate linear features */
+  /** center = fast POI lookup; geom = distance to line/area edge */
   outMode: "center" | "geom";
 };
 
@@ -61,14 +63,15 @@ const NEARBY_CHIPS: NearbyChip[] = [
     kind: "flood",
     label: "Flood zone",
     color: "#3b82f6",
-    // Prefer explicit flood tags; waterways are a legitimate flood-adjacency proxy when flood polygons are unmapped.
+    // Strict flood tags only; waterway adjacency is fallback when flood polygons are unmapped.
     overpassParts: [
       'nwr["flood_prone"="yes"]',
       'nwr["hazard"="flood"]',
       'nwr["flood:zone"]',
-      'way["waterway"~"^(river|stream|canal)$"]',
+      'nwr["floodplain"="yes"]',
     ],
-    radiiM: [1200, 5000, 14000],
+    overpassPartsFallback: ['way["waterway"~"^(river|stream|canal)$"]'],
+    radiiM: [1500, 6000, 14000],
     maxMiles: 12.4,
     outMode: "geom",
   },
@@ -76,32 +79,33 @@ const NEARBY_CHIPS: NearbyChip[] = [
     kind: "wetland",
     label: "Wetland",
     color: "#14b8a6",
-    // Tight wetland tag only — broad ["wetland"] + full geom was stalling Overpass.
-    overpassParts: ['nwr["natural"="wetland"]'],
-    radiiM: [1500, 6000, 15000],
+    overpassParts: ['nwr["natural"="wetland"]', 'nwr["wetland"]'],
+    radiiM: [1500, 6000, 14000],
     maxMiles: 10,
-    outMode: "center",
+    outMode: "geom",
   },
   {
     kind: "water",
     label: "Water body",
     color: "#0ea5e9",
+    // Standing water only — not rivers/streams (those are flood-adjacency / waterways).
     overpassParts: [
-      'nwr["natural"="water"]',
-      'nwr["water"~"^(lake|pond|reservoir|basin)$"]',
+      'nwr["natural"="water"]["water"!~"^(river|stream|canal|drain|ditch|swimming_pool|reflecting_pool|fountain|moat)$"]',
+      'nwr["water"~"^(lake|pond|reservoir|basin|lagoon)$"]',
       'nwr["landuse"="reservoir"]',
     ],
-    radiiM: [1500, 6000, 15000],
+    radiiM: [1500, 6000, 14000],
     maxMiles: 11,
-    outMode: "center",
+    outMode: "geom",
   },
   {
     kind: "road",
     label: "Paved road",
     color: "#a16207",
+    // Classified roads are treated as paved; local roads require an explicit paved surface.
     overpassParts: [
-      'way["highway"~"^(motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link)$"]',
-      'way["highway"~"^(residential|unclassified)$"]["surface"~"^(paved|asphalt|concrete|chipseal|paving_stones)$"]',
+      'way["highway"~"^(motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link)$"]["surface"!~"^(unpaved|gravel|dirt|earth|grass|sand|mud|ground|fine_gravel|pebblestone|wood|metal)$"]',
+      'way["highway"~"^(residential|unclassified)$"]["surface"~"^(paved|asphalt|concrete|chipseal|paving_stones|sett|cobblestone)$"]',
     ],
     radiiM: [800, 3000, 10000],
     maxMiles: 7.5,
@@ -111,11 +115,9 @@ const NEARBY_CHIPS: NearbyChip[] = [
     kind: "power",
     label: "Power line",
     color: "#ca8a04",
-    overpassParts: [
-      'way["power"~"^(line|minor_line|cable)$"]',
-      'nwr["power"~"^(substation|transformer|tower|pole)$"]',
-    ],
-    radiiM: [1200, 5000, 14000],
+    // Actual transmission/distribution lines only — not poles, substations, or transformers.
+    overpassParts: ['way["power"~"^(line|minor_line)$"]'],
+    radiiM: [1500, 6000, 14000],
     maxMiles: 11,
     outMode: "geom",
   },
@@ -123,7 +125,6 @@ const NEARBY_CHIPS: NearbyChip[] = [
     kind: "town",
     label: "Town / services",
     color: "#b45309",
-    // Settlements are sparse — skip tiny radii that almost always miss and burn 8s+.
     overpassParts: ['node["place"~"^(city|town|village)$"]'],
     radiiM: [12000, 28000],
     maxMiles: 25,
@@ -133,7 +134,7 @@ const NEARBY_CHIPS: NearbyChip[] = [
     kind: "school",
     label: "School",
     color: "#7c3aed",
-    overpassParts: ['nwr["amenity"="school"]', 'nwr["amenity"="kindergarten"]'],
+    overpassParts: ['nwr["amenity"="school"]'],
     radiiM: [4000, 12000, 18000],
     maxMiles: 12.4,
     outMode: "center",
@@ -145,8 +146,9 @@ const NEARBY_CHIPS: NearbyChip[] = [
     overpassParts: [
       'nwr["amenity"="hospital"]',
       'nwr["healthcare"="hospital"]',
-      'nwr["amenity"="clinic"]["emergency"="yes"]',
     ],
+    // Emergency-capable clinics only if no hospital is mapped nearby.
+    overpassPartsFallback: ['nwr["amenity"="clinic"]["emergency"="yes"]'],
     radiiM: [10000, 28000],
     maxMiles: 22,
     outMode: "center",
@@ -210,6 +212,7 @@ function formatDistance(meters: number) {
 }
 
 function isValidLatLon(lat: unknown, lon: unknown): lat is number {
+  // Narrow both args via runtime checks; callers treat a true result as valid lat/lon numbers.
   return (
     typeof lat === "number" &&
     typeof lon === "number" &&
@@ -218,6 +221,10 @@ function isValidLatLon(lat: unknown, lon: unknown): lat is number {
     Math.abs(lat) <= 90 &&
     Math.abs(lon) <= 180
   );
+}
+
+function asLatLon(lat: unknown, lon: unknown): [number, number] | null {
+  return isValidLatLon(lat, lon) ? [lat, lon as number] : null;
 }
 
 /** High-precision display for live map coordinates (no padded fake zeros beyond source). */
@@ -260,29 +267,138 @@ function elementKey(el: OverpassElement): string {
   return `pt:${lat.toFixed(5)}:${lon.toFixed(5)}`;
 }
 
-function elementName(el: OverpassElement, fallback: string) {
-  const t = el.tags || {};
-  return (
-    t.name ||
-    t["name:en"] ||
-    t.brand ||
-    t.operator ||
-    t.waterway ||
-    t.water ||
-    t.highway ||
-    t.place ||
-    t.amenity ||
-    t.power ||
-    t.natural ||
-    t.wetland ||
-    t["flood:zone"] ||
-    fallback
-  );
+function titleCaseTag(v: string) {
+  return v.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function isFloodTagged(el: OverpassElement) {
   const t = el.tags || {};
-  return Boolean(t.flood_prone === "yes" || t.hazard === "flood" || t["flood:zone"]);
+  return Boolean(
+    t.flood_prone === "yes" ||
+      t.hazard === "flood" ||
+      t["flood:zone"] ||
+      t.floodplain === "yes",
+  );
+}
+
+/** Keep only OSM elements that legitimately satisfy the selected Closest option. */
+function matchesNearbyKind(kind: NearbyKind, el: OverpassElement): boolean {
+  const t = el.tags || {};
+  switch (kind) {
+    case "flood":
+      return (
+        isFloodTagged(el) || /^(river|stream|canal)$/.test(String(t.waterway || ""))
+      );
+    case "wetland":
+      return t.natural === "wetland" || Boolean(t.wetland && t.wetland !== "no");
+    case "water": {
+      if (
+        /^(river|stream|canal|drain|ditch|swimming_pool|reflecting_pool|fountain|moat)$/.test(
+          String(t.water || ""),
+        ) ||
+        t.leisure === "swimming_pool" ||
+        (t.landuse === "basin" && t.basin === "detention")
+      ) {
+        return false;
+      }
+      return (
+        t.natural === "water" ||
+        /^(lake|pond|reservoir|basin|lagoon)$/.test(String(t.water || "")) ||
+        t.landuse === "reservoir"
+      );
+    }
+    case "road": {
+      const hw = String(t.highway || "");
+      const surface = String(t.surface || "");
+      if (
+        /^(unpaved|gravel|dirt|earth|grass|sand|mud|ground|fine_gravel|pebblestone|wood|metal)$/.test(
+          surface,
+        )
+      ) {
+        return false;
+      }
+      if (
+        /^(motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link)$/.test(
+          hw,
+        )
+      ) {
+        return true;
+      }
+      return (
+        /^(residential|unclassified)$/.test(hw) &&
+        /^(paved|asphalt|concrete|chipseal|paving_stones|sett|cobblestone)$/.test(surface)
+      );
+    }
+    case "power":
+      return el.type === "way" && /^(line|minor_line)$/.test(String(t.power || ""));
+    case "town":
+      return /^(city|town|village)$/.test(String(t.place || ""));
+    case "school":
+      return t.amenity === "school";
+    case "hospital":
+      return (
+        t.amenity === "hospital" ||
+        t.healthcare === "hospital" ||
+        (t.amenity === "clinic" && t.emergency === "yes")
+      );
+    default:
+      return false;
+  }
+}
+
+function elementName(el: OverpassElement, kind: NearbyKind, fallback: string) {
+  const t = el.tags || {};
+  const named = t.name || t["name:en"] || t.brand;
+  if (named) return named;
+
+  switch (kind) {
+    case "flood":
+      if (isFloodTagged(el)) {
+        return t["flood:zone"] ? `Flood zone ${t["flood:zone"]}` : "Mapped flood hazard";
+      }
+      return t.waterway ? `${titleCaseTag(t.waterway)} (flood-adjacency)` : fallback;
+    case "wetland":
+      return t.wetland && t.wetland !== "yes" ? `${titleCaseTag(t.wetland)} wetland` : "Wetland";
+    case "water":
+      return t.water ? titleCaseTag(t.water) : t.landuse === "reservoir" ? "Reservoir" : "Water body";
+    case "road":
+      if (t.ref) return t.ref;
+      if (t.highway) return `${titleCaseTag(t.highway)} road`;
+      return "Paved road";
+    case "power":
+      return t.operator ? `${t.operator} power line` : "Power line";
+    case "town":
+      return t.place ? titleCaseTag(t.place) : "Town";
+    case "school":
+      return "School";
+    case "hospital":
+      if (t.amenity === "clinic") return "Emergency clinic";
+      return "Hospital";
+    default:
+      return fallback;
+  }
+}
+
+function elementDetail(kind: NearbyKind, el: OverpassElement): string | undefined {
+  const t = el.tags || {};
+  if (kind === "flood") {
+    return isFloodTagged(el)
+      ? "Mapped flood hazard tag"
+      : "Nearest mapped waterway (flood-adjacency proxy)";
+  }
+  if (kind === "hospital" && t.amenity === "clinic") {
+    return "Emergency clinic (no hospital mapped closer)";
+  }
+  if (kind === "town" && t.place) {
+    return `OSM place=${t.place}`;
+  }
+  if (kind === "road" && t.surface) {
+    return `Surface ${t.surface}`;
+  }
+  if (kind === "power" && t.voltage) {
+    return `${t.voltage} V`;
+  }
+  return undefined;
 }
 
 function closestOnElement(
@@ -293,22 +409,25 @@ function closestOnElement(
   if (geom && geom.length >= 2) {
     let best: { lat: number; lon: number; meters: number } | null = null;
     for (let i = 0; i < geom.length - 1; i++) {
-      const a: [number, number] = [geom[i].lat, geom[i].lon];
-      const b: [number, number] = [geom[i + 1].lat, geom[i + 1].lon];
-      const hit = closestPointOnSegment(origin, a, b);
+      const aLat = geom[i]?.lat;
+      const aLon = geom[i]?.lon;
+      const bLat = geom[i + 1]?.lat;
+      const bLon = geom[i + 1]?.lon;
+      if (!isValidLatLon(aLat, aLon) || !isValidLatLon(bLat, bLon)) continue;
+      const hit = closestPointOnSegment(origin, [aLat, aLon], [bLat, bLon]);
       if (!best || hit.meters < best.meters) best = hit;
     }
     if (best) return best;
   }
-  if (geom && geom.length === 1) {
+  if (geom && geom.length === 1 && isValidLatLon(geom[0]?.lat, geom[0]?.lon)) {
     const lat = geom[0].lat;
     const lon = geom[0].lon;
     return { lat, lon, meters: haversineMeters(origin, [lat, lon]) };
   }
   const lat = el.lat ?? el.center?.lat;
   const lon = el.lon ?? el.center?.lon;
-  if (lat == null || lon == null) return null;
-  return { lat, lon, meters: haversineMeters(origin, [lat, lon]) };
+  if (!isValidLatLon(lat, lon)) return null;
+  return { lat: Number(lat), lon: Number(lon), meters: haversineMeters(origin, [Number(lat), Number(lon)]) };
 }
 
 /** Degrees bbox (south, west, north, east) covering a radius — faster than Overpass `around`. */
@@ -362,7 +481,7 @@ async function overpassQuery(
   }
 }
 
-/** Nominatim settlement search — usually much faster than Overpass for Town / services. */
+/** Nominatim settlement search — city/town/village only (rejects hamlets/suburbs). */
 async function nominatimSettlements(
   lat: number,
   lon: number,
@@ -370,55 +489,65 @@ async function nominatimSettlements(
   signal: AbortSignal,
 ): Promise<OverpassElement[]> {
   const [s, w, n, e] = radiusToBbox(lat, lon, radiusM);
-  const params = new URLSearchParams({
-    format: "jsonv2",
-    limit: "8",
-    dedupe: "1",
-    bounded: "1",
-    // Nominatim requires a free-text q; "town" + viewbox finds nearby settlements quickly.
-    q: "town",
-    featuretype: "settlement",
-    // left, top, right, bottom
-    viewbox: `${w},${n},${e},${s}`,
-  });
-  const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-    signal,
-    headers: {
-      Accept: "application/json",
-    },
-  });
-  if (!res.ok) throw new Error(`Nominatim ${res.status}`);
-  const rows = (await res.json()) as Array<{
-    lat?: string;
-    lon?: string;
-    name?: string;
-    display_name?: string;
-    type?: string;
-    class?: string;
-    osm_type?: string;
-    osm_id?: number;
-  }>;
-  return (rows || [])
-    .map((row, i) => {
-      const rLat = Number(row.lat);
-      const rLon = Number(row.lon);
-      if (!Number.isFinite(rLat) || !Number.isFinite(rLon)) return null;
-      const place =
-        row.type && /^(city|town|village|hamlet|suburb|neighbourhood)$/i.test(row.type)
-          ? row.type
-          : "town";
-      return {
-        type: row.osm_type === "way" || row.osm_type === "relation" ? row.osm_type : "node",
-        id: row.osm_id ?? i,
-        lat: rLat,
-        lon: rLon,
-        tags: {
-          name: row.name || row.display_name?.split(",")[0] || "Town",
-          place,
-        },
-      } satisfies OverpassElement;
-    })
-    .filter((el): el is OverpassElement => Boolean(el));
+  const viewbox = `${w},${n},${e},${s}`;
+  const queries = ["city", "town", "village"];
+  const rows = (
+    await Promise.all(
+      queries.map(async (q) => {
+        const params = new URLSearchParams({
+          format: "jsonv2",
+          limit: "6",
+          dedupe: "1",
+          bounded: "1",
+          q,
+          featuretype: "settlement",
+          viewbox,
+        });
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+          signal,
+          headers: { Accept: "application/json" },
+        });
+        if (!res.ok) return [];
+        return (await res.json()) as Array<{
+          lat?: string;
+          lon?: string;
+          name?: string;
+          display_name?: string;
+          type?: string;
+          class?: string;
+          osm_type?: string;
+          osm_id?: number;
+        }>;
+      }),
+    )
+  ).flat();
+
+  const out: OverpassElement[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const place = String(row.type || "").toLowerCase();
+    if (!/^(city|town|village)$/.test(place)) continue;
+    if (row.class && row.class !== "place") continue;
+    const rLat = Number(row.lat);
+    const rLon = Number(row.lon);
+    if (!Number.isFinite(rLat) || !Number.isFinite(rLon)) continue;
+    // Keep inside the requested radius (Nominatim viewbox can still spill).
+    if (haversineMeters([lat, lon], [rLat, rLon]) > radiusM * 1.05) continue;
+    const key = `${row.osm_type || "node"}/${row.osm_id ?? `${rLat}:${rLon}`}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      type: row.osm_type === "way" || row.osm_type === "relation" ? row.osm_type : "node",
+      id: row.osm_id,
+      lat: rLat,
+      lon: rLon,
+      tags: {
+        name: row.name || row.display_name?.split(",")[0] || titleCaseTag(place),
+        place,
+      },
+    });
+  }
+  return out;
 }
 
 function pickTopHits(
@@ -428,22 +557,25 @@ function pickTopHits(
   elements: OverpassElement[],
   limit = NEARBY_RESULT_LIMIT,
 ): NearbyHit[] {
-  const byKey = new Map<string, NearbyHit & { floodTagged: boolean }>();
+  const byKey = new Map<string, NearbyHit & { floodTagged: boolean; rankBoost: number }>();
 
   for (const el of elements) {
+    if (!matchesNearbyKind(kind, el)) continue;
     const pt = closestOnElement(origin, el);
-    if (!pt) continue;
+    if (!pt || !isValidLatLon(pt.lat, pt.lon)) continue;
     const meters = haversineMeters(origin, [pt.lat, pt.lon]);
     if (!Number.isFinite(meters) || meters < 0) continue;
 
-    const name = elementName(el, label);
     const floodTagged = kind === "flood" && isFloodTagged(el);
-    const detail =
-      kind === "flood"
-        ? floodTagged
-          ? "Flood tag"
-          : "Nearest mapped waterway (flood-adjacency)"
-        : undefined;
+    const name = elementName(el, kind, label);
+    const detail = elementDetail(kind, el);
+    // Prefer true hospitals over emergency clinics; true flood tags over waterway proxies.
+    const rankBoost =
+      kind === "hospital" && el.tags?.amenity === "clinic"
+        ? 1
+        : kind === "flood" && !floodTagged
+          ? 1
+          : 0;
 
     const key = elementKey(el);
     const hit = {
@@ -457,20 +589,20 @@ function pickTopHits(
       detail,
       osmKey: key,
       floodTagged,
+      rankBoost,
     };
     const prev = byKey.get(key);
     if (!prev || meters < prev.meters) byKey.set(key, hit);
   }
 
-  const all = [...byKey.values()];
-  const floodFirst = all.filter((h) => h.floodTagged).sort((a, b) => a.meters - b.meters);
-  const rest = all.filter((h) => !h.floodTagged).sort((a, b) => a.meters - b.meters);
-  // Prefer explicit flood tags when present (accuracy > nearest arbitrary waterway).
-  const ranked = floodFirst.length ? [...floodFirst, ...rest] : rest;
+  const ranked = [...byKey.values()].sort((a, b) => {
+    if (a.rankBoost !== b.rankBoost) return a.rankBoost - b.rankBoost;
+    return a.meters - b.meters;
+  });
 
   const out: NearbyHit[] = [];
   for (const raw of ranked) {
-    const { floodTagged: _flood, ...hit } = raw;
+    const { floodTagged: _flood, rankBoost: _boost, ...hit } = raw;
     const nearDup = out.some(
       (o) =>
         haversineMeters([o.lat, o.lon], [hit.lat, hit.lon]) < 55 &&
@@ -512,7 +644,8 @@ async function fetchNearby(
   const meta = NEARBY_CHIPS.find((c) => c.kind === kind);
   if (!meta) return [];
 
-  const cacheKey = `${kind}:${lat.toFixed(4)}:${lon.toFixed(4)}`;
+  // v3: kind-validated hits only (bust older caches that mixed poles/pools/proxies).
+  const cacheKey = `v3:${kind}:${lat.toFixed(4)}:${lon.toFixed(4)}`;
   // Only reuse successful caches — never lock in an empty miss (Overpass blips used to
   // make Hospital "permanently" fail after Water until reload).
   if (nearbyCache.has(cacheKey)) {
@@ -538,26 +671,38 @@ async function fetchNearby(
     onPartial(verified);
   };
 
-  const outClause = meta.outMode === "center" ? "out center qt;" : "out geom qt;";
+  const outClause = meta.outMode === "center" ? "out center tags qt;" : "out geom qt;";
+
+  const runParts = async (parts: string[], radius: number, timeoutMs: number) => {
+    const [s, w, n, e] = radiusToBbox(lat, lon, radius);
+    const bbox = `(${s.toFixed(5)},${w.toFixed(5)},${n.toFixed(5)},${e.toFixed(5)})`;
+    const union = parts.map((part) => `  ${part}${bbox};`).join("\n");
+    const query = `
+[out:json][timeout:${Math.max(5, Math.round(timeoutMs / 1000))}];
+(
+${union}
+);
+${outClause}
+`.trim();
+    return overpassQuery(query, timeoutMs, overpassCtl.signal);
+  };
 
   // Progressive radii: surface the first hit ASAP, then keep going for up to 3.
   // Use bbox (not `around`) — same client-side distance filter, much less Overpass CPU.
   for (let i = 0; i < meta.radiiM.length; i++) {
     const radius = meta.radiiM[i];
     if (isCancelled?.() || overpassCtl.signal.aborted) break;
-    const [s, w, n, e] = radiusToBbox(lat, lon, radius);
-    const bbox = `(${s.toFixed(5)},${w.toFixed(5)},${n.toFixed(5)},${e.toFixed(5)})`;
-    const union = meta.overpassParts.map((part) => `  ${part}${bbox};`).join("\n");
-    const query = `
-[out:json][timeout:6];
-(
-${union}
-);
-${outClause}
-`.trim();
     try {
-      // Town/services: race Nominatim (usually ~1s) against Overpass on the first pass.
-      const timeoutMs = i === 0 ? (kind === "town" ? 5000 : 6000) : 8000;
+      const timeoutMs =
+        i === 0
+          ? kind === "town"
+            ? 5000
+            : meta.outMode === "geom"
+              ? 7000
+              : 6000
+          : meta.outMode === "geom"
+            ? 9000
+            : 8000;
       const nonEmpty = async (p: Promise<OverpassElement[]>) => {
         const els = await p;
         if (!els.length) throw new Error("empty");
@@ -567,23 +712,41 @@ ${outClause}
       if (kind === "town" && i === 0) {
         elements = await Promise.any([
           nonEmpty(nominatimSettlements(lat, lon, radius, overpassCtl.signal)),
-          nonEmpty(overpassQuery(query, timeoutMs, overpassCtl.signal)),
+          nonEmpty(runParts(meta.overpassParts, radius, timeoutMs)),
         ]).catch(async () => {
-          // Both empty/failed — one more short Overpass attempt before next radius.
           if (isCancelled?.() || overpassCtl.signal.aborted) return [];
           try {
-            return await overpassQuery(query, 4000, overpassCtl.signal);
+            return await runParts(meta.overpassParts, radius, 4000);
           } catch {
             return [];
           }
         });
       } else {
-        elements = await overpassQuery(query, timeoutMs, overpassCtl.signal);
+        elements = await runParts(meta.overpassParts, radius, timeoutMs);
       }
-      if (isCancelled?.() || overpassCtl.signal.aborted) break;
-      const hits = pickTopHits(kind, meta.label, origin, elements, NEARBY_RESULT_LIMIT).filter(
+
+      let hits = pickTopHits(kind, meta.label, origin, elements, NEARBY_RESULT_LIMIT).filter(
         (h) => h.meters / 1609.344 <= meta.maxMiles && h.meters <= radius * 1.15,
       );
+
+      // Fallback parts only when the strict query produced no validated hits.
+      if (
+        !hits.length &&
+        meta.overpassPartsFallback?.length &&
+        !isCancelled?.() &&
+        !overpassCtl.signal.aborted
+      ) {
+        try {
+          const fallbackEls = await runParts(meta.overpassPartsFallback, radius, timeoutMs);
+          hits = pickTopHits(kind, meta.label, origin, fallbackEls, NEARBY_RESULT_LIMIT).filter(
+            (h) => h.meters / 1609.344 <= meta.maxMiles && h.meters <= radius * 1.15,
+          );
+        } catch {
+          // keep empty — try next radius
+        }
+      }
+
+      if (isCancelled?.() || overpassCtl.signal.aborted) break;
       if (hits.length) {
         // Merge with prior radii so expanding search can add #2/#3 without dropping #1.
         const byKey = new Map<string, NearbyHit>();
@@ -731,7 +894,10 @@ export function LandViewerModal({
     nearbySearchGen.current += 1;
     setElevationFt(null);
     setZoom(null);
-    setCoords(isValidLatLon(latitude, longitude) ? formatCoordPair(latitude, longitude, 5) : "—");
+    {
+      const pair = asLatLon(latitude, longitude);
+      setCoords(pair ? formatCoordPair(pair[0], pair[1], 5) : "—");
+    }
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
@@ -994,7 +1160,7 @@ export function LandViewerModal({
         // One short retry only when nothing painted — avoids doubling a slow empty miss
         // (Town/Hospital used to wait through every radius twice).
         if (!hits.length && !paintedKey && gen === nearbySearchGen.current) {
-          nearbyCache.delete(`${kind}:${latitude!.toFixed(4)}:${longitude!.toFixed(4)}`);
+          nearbyCache.delete(`v3:${kind}:${latitude!.toFixed(4)}:${longitude!.toFixed(4)}`);
           hits = await fetchNearby(
             kind,
             latitude!,
@@ -1196,8 +1362,9 @@ export function LandViewerModal({
   }, [radiusMiles, drawRadius]);
 
   async function copyCoords() {
-    if (!isValidLatLon(latitude, longitude)) return;
-    const text = formatCoordPair(latitude, longitude, 6);
+    const pair = asLatLon(latitude, longitude);
+    if (!pair) return;
+    const text = formatCoordPair(pair[0], pair[1], 6);
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
