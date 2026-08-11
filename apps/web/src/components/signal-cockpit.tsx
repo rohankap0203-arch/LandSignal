@@ -155,23 +155,25 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
             </text>
           </svg>
 
-          <div className="bid-coupon-rail" role="list">
+          <div className="bid-tag-rail" role="list">
             {points.map((p, i) => (
               <button
                 key={`${String(p.label)}-leg-${i}`}
                 type="button"
                 role="listitem"
-                className={`bid-coupon ${active === i ? "is-live" : ""}`}
+                className={`bid-tag tilt-${(i % 5) + 1} ${active === i ? "is-live" : ""}`}
                 onClick={() => setActive(i)}
                 aria-pressed={active === i}
               >
-                <span className="bid-coupon-stub" aria-hidden>
-                  <span className="bid-coupon-hash">#{String(i + 1).padStart(2, "0")}</span>
+                <span className="bid-tag-eye" aria-hidden />
+                <span className="bid-tag-band">
+                  <span className="bid-tag-lot">LOT</span>
+                  <span className="bid-tag-num">{String(i + 1).padStart(2, "0")}</span>
                 </span>
-                <span className="bid-coupon-perfs" aria-hidden />
-                <span className="bid-coupon-body">
+                <span className="bid-tag-body">
                   <strong>{String(p.label)}</strong>
-                  <span className="bid-coupon-price">{money(p.x)}</span>
+                  <span className="bid-tag-price">{money(p.x)}</span>
+                  <span className="bid-tag-bars" aria-hidden />
                 </span>
               </button>
             ))}
@@ -179,6 +181,9 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
 
           {selected && (
             <div className="bid-slip">
+              <div className="bid-slip-stamp" aria-hidden>
+                BID
+              </div>
               <strong>{String(selected.label)}</strong>
               <span>
                 {money(selected.x)} · about {Number(selected.y).toFixed(0)}% of buyers still bidding
