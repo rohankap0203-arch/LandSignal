@@ -1264,7 +1264,7 @@ def combine_scenario_impacts(selected: list[dict[str, Any]]) -> dict[str, Any]:
         else:
             groups.setdefault(g, []).append(s)
 
-    notes: list[str] = []
+    notes: list[str] = []  # kept empty — correlation math remains, no user-facing overlap copy
     imm = rate = hbu = 0.0
     p10 = p50 = p90 = 0.0
 
