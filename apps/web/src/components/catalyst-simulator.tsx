@@ -661,6 +661,48 @@ export function CatalystSimulator({
         aria-expanded={open}
         onClick={() => setOpen(true)}
       >
+        <span className="fse-launch-scene" aria-hidden>
+          <span className="fse-scene-actor fse-scene-shovel">
+            <svg viewBox="0 0 32 32" width="22" height="22" fill="none">
+              <path
+                d="M18.5 4.5l3 3-9.2 9.2c-.7.7-1.9.6-2.5-.2l-.8-1.1c-.6-.8-.5-2 .2-2.6L18.5 4.5z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M8.2 18.8c-1.6 1.2-2.4 3.4-1.6 5.1.5 1.1 1.7 1.7 2.9 1.4 1.8-.4 3.5-2.1 4.2-3.8"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+              <path
+                className="fse-scene-dirt"
+                d="M6.5 26.5c1.2-.8 2.4-.6 3.5 0 1.1-.7 2.4-.9 3.6 0"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+              />
+            </svg>
+          </span>
+          <span className="fse-scene-actor fse-scene-build">
+            <svg viewBox="0 0 32 32" width="22" height="22" fill="none">
+              <rect className="fse-brick fse-brick-a" x="6" y="20" width="8" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+              <rect className="fse-brick fse-brick-b" x="15" y="20" width="9" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+              <rect className="fse-brick fse-brick-c" x="10" y="13" width="9" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+              <rect className="fse-brick fse-brick-d" x="13" y="6" width="8" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+            </svg>
+          </span>
+          <span className="fse-scene-actor fse-scene-crane">
+            <svg viewBox="0 0 32 32" width="24" height="24" fill="none">
+              <path d="M8 27V9h3l10 1.2V7h2.5" stroke="currentColor" strokeWidth="1.45" strokeLinejoin="round" />
+              <path className="fse-crane-cable" d="M23.5 7v9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              <rect className="fse-crane-hook" x="21.2" y="16" width="4.6" height="3.2" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M6.5 27h8" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" />
+            </svg>
+          </span>
+          <span className="fse-scene-ground" />
+        </span>
         <span className="fse-launch-label">{engine.button_label || "Future Scenario Engine"}</span>
         <span className="fse-launch-go" aria-hidden>
           Open

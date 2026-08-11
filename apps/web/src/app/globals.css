@@ -7097,28 +7097,140 @@ a.acquire-block:hover {
   padding: 0.68rem 0.8rem 0.68rem 0.95rem;
   border-radius: 10px;
   border: 1.5px solid #161616;
-  background: color-mix(in srgb, var(--brand) 8%, var(--bg-elevated));
+  background:
+    linear-gradient(
+      105deg,
+      color-mix(in srgb, var(--brand) 14%, var(--bg-elevated)) 0%,
+      color-mix(in srgb, var(--brand) 7%, var(--bg-elevated)) 42%,
+      color-mix(in srgb, var(--brand-soft) 10%, var(--bg-elevated)) 100%
+    );
   color: var(--ink);
   cursor: pointer;
   box-shadow: none;
+  overflow: hidden;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .fse-launch:hover {
-  background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
+  background:
+    linear-gradient(
+      105deg,
+      color-mix(in srgb, var(--brand) 18%, var(--bg-elevated)) 0%,
+      color-mix(in srgb, var(--brand) 10%, var(--bg-elevated)) 42%,
+      color-mix(in srgb, var(--brand-soft) 14%, var(--bg-elevated)) 100%
+    );
   border-color: #0a0a0a;
 }
 
 .fse-launch:active {
-  background: color-mix(in srgb, var(--brand) 16%, var(--bg-elevated));
+  background:
+    linear-gradient(
+      105deg,
+      color-mix(in srgb, var(--brand) 22%, var(--bg-elevated)) 0%,
+      color-mix(in srgb, var(--brand) 12%, var(--bg-elevated)) 50%,
+      color-mix(in srgb, var(--brand-soft) 16%, var(--bg-elevated)) 100%
+    );
 }
 
 .fse-launch.is-open {
-  background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
   border-color: #0a0a0a;
 }
 
+/* Tiny construction scene behind the FSE label — cute, on-theme, non-noisy. */
+.fse-launch-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--brand) 55%, var(--ink));
+  opacity: 0.34;
+}
+
+.fse-scene-ground {
+  position: absolute;
+  left: 0.7rem;
+  right: 5.8rem;
+  bottom: 0.42rem;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--brand) 45%, transparent) 18%,
+    color-mix(in srgb, var(--brand) 45%, transparent) 78%,
+    transparent
+  );
+  opacity: 0.55;
+}
+
+.fse-scene-actor {
+  position: absolute;
+  display: grid;
+  place-items: center;
+}
+
+.fse-scene-shovel {
+  left: 8%;
+  bottom: 0.2rem;
+  transform-origin: 70% 80%;
+  animation: fse-shovel-dig 2.4s ease-in-out infinite;
+}
+
+.fse-scene-dirt {
+  opacity: 0.55;
+  animation: fse-dirt-puff 2.4s ease-in-out infinite;
+}
+
+.fse-scene-build {
+  left: 42%;
+  bottom: 0.15rem;
+}
+
+.fse-brick {
+  fill: color-mix(in srgb, var(--brand) 8%, transparent);
+}
+
+.fse-brick-a {
+  animation: fse-brick-pop 3.2s ease-in-out infinite;
+  animation-delay: 0s;
+}
+
+.fse-brick-b {
+  animation: fse-brick-pop 3.2s ease-in-out infinite;
+  animation-delay: 0.35s;
+}
+
+.fse-brick-c {
+  animation: fse-brick-pop 3.2s ease-in-out infinite;
+  animation-delay: 0.7s;
+}
+
+.fse-brick-d {
+  animation: fse-brick-pop 3.2s ease-in-out infinite;
+  animation-delay: 1.05s;
+}
+
+.fse-scene-crane {
+  right: 22%;
+  bottom: 0.1rem;
+  animation: fse-crane-sway 3.6s ease-in-out infinite;
+  transform-origin: 30% 90%;
+}
+
+.fse-crane-cable,
+.fse-crane-hook {
+  transform-box: fill-box;
+  transform-origin: top center;
+  animation: fse-crane-lift 3.6s ease-in-out infinite;
+}
+
+.fse-launch:hover .fse-launch-scene {
+  opacity: 0.42;
+}
+
 .fse-launch-label {
+  position: relative;
+  z-index: 1;
   font-family: var(--font-sans);
   font-size: 0.78rem;
   font-weight: 650;
@@ -7130,9 +7242,12 @@ a.acquire-block:hover {
   text-overflow: ellipsis;
   min-width: 0;
   flex: 1;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--bg-elevated) 85%, transparent);
 }
 
 .fse-launch-go {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -7168,6 +7283,70 @@ a.acquire-block:hover {
   }
 }
 
+@keyframes fse-shovel-dig {
+  0%,
+  100% {
+    transform: rotate(-8deg) translateY(0);
+  }
+  40% {
+    transform: rotate(16deg) translateY(1px);
+  }
+  55% {
+    transform: rotate(10deg) translateY(-1px);
+  }
+}
+
+@keyframes fse-dirt-puff {
+  0%,
+  35%,
+  100% {
+    opacity: 0.2;
+    transform: translateY(0);
+  }
+  48% {
+    opacity: 0.85;
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes fse-brick-pop {
+  0%,
+  12% {
+    opacity: 0.15;
+    transform: translateY(3px);
+  }
+  28%,
+  70% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  88%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(1px);
+  }
+}
+
+@keyframes fse-crane-sway {
+  0%,
+  100% {
+    transform: rotate(-3deg);
+  }
+  50% {
+    transform: rotate(4deg);
+  }
+}
+
+@keyframes fse-crane-lift {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(2px);
+  }
+}
+
 .fse-launch:hover .fse-launch-go {
   border-color: color-mix(in srgb, var(--brand) 60%, #000);
 }
@@ -7177,8 +7356,18 @@ a.acquire-block:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fse-launch-go svg {
+  .fse-launch-go svg,
+  .fse-scene-shovel,
+  .fse-scene-dirt,
+  .fse-brick,
+  .fse-scene-crane,
+  .fse-crane-cable,
+  .fse-crane-hook {
     animation: none;
+  }
+
+  .fse-brick {
+    opacity: 0.7;
   }
 }
 
