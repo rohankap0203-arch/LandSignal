@@ -1515,9 +1515,9 @@ select {
 
 .score-bar-track {
   margin-top: 8px;
-  height: 12px;
+  height: 10px;
   border-radius: 999px;
-  background: var(--bg-soft);
+  background: color-mix(in srgb, var(--line) 55%, var(--bg));
   overflow: hidden;
 }
 
@@ -1554,10 +1554,96 @@ button.score-bar-click:disabled {
   color: var(--muted);
 }
 
+.score-rating-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.score-rating-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.score-plain-num {
+  flex: 0 0 auto;
+  font-size: 1.15rem;
+  font-weight: 750;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Opportunity — single-line land rating stamp */
+.score-bar--rating {
+  padding: 0.7rem 0.85rem;
+}
+
+.land-rating {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.55rem;
+  height: 2.55rem;
+  padding: 0 0.35rem;
+  border-radius: 12px;
+  color: #f7faf8;
+  transform: rotate(-2deg);
+}
+
+.land-rating-num {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
+}
+
+.score-rating-hint {
+  margin: 0.45rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--muted);
+  text-align: left;
+}
+
+.score-rating-hint-inline {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  color: var(--muted);
+  text-align: right;
+}
+
+.score-bar--rating .land-rating {
+  margin-left: 0.15rem;
+}
+
+.score-rating-why {
+  margin-left: 0.35rem;
+  color: var(--brand);
+  font-weight: 650;
+  white-space: nowrap;
+}
 
 .score-bar-detail {
   border-top: 1px solid var(--line);
-  padding-top: 8px;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
 }
 
 /* Risk / completeness lenses — lean, not opportunity clones */

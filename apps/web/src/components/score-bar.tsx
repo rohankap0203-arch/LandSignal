@@ -71,42 +71,69 @@ export function ScoreBar({
   const hue = invert ? 120 - v * 1.2 : v * 1.2;
   const fill = `hsl(${Math.max(0, Math.min(120, hue))} 65% 42%)`;
   const kind = standings?.kind || (invert ? "risk" : undefined);
+  const isOpportunity = kind === "opportunity" || (!invert && !kind);
   const hasStandings = Boolean(standings?.histogram?.length || standings?.rank_plain);
   const hasDetail = Boolean(hasStandings || (bullets && bullets.length) || verdict || hint);
   const closedHint = standings?.rank_plain || hint;
+  const rating = Math.round(v);
 
   return (
     <button
       type="button"
-      className={`score-bar score-bar-click ${open ? "open" : ""}`}
+      className={`score-bar score-bar-click ${isOpportunity ? "score-bar--rating" : ""} ${open ? "open" : ""}`}
       onClick={() => hasDetail && setOpen((o) => !o)}
       aria-expanded={open}
       disabled={!hasDetail}
     >
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="font-semibold flex items-center gap-1.5">
-          {label}
-          {hasDetail ? (
-            <span className="score-bar-chevron" aria-hidden>
-              {open ? "▾" : "▸"}
+      {isOpportunity ? (
+        <div className="score-rating-line">
+          <span className="score-rating-label">
+            {label}
+            {hasDetail ? (
+              <span className="score-bar-chevron" aria-hidden>
+                {open ? "▾" : "▸"}
+              </span>
+            ) : null}
+          </span>
+          <span
+            className="land-rating"
+            style={{
+              background: `linear-gradient(145deg, hsl(${Math.max(0, Math.min(120, hue))} 48% 36%), hsl(${Math.max(0, Math.min(120, hue))} 62% 28%))`,
+              boxShadow: `0 0 0 1px hsl(${Math.max(0, Math.min(120, hue))} 40% 24% / 0.35)`,
+            }}
+            aria-label={`Land rating ${rating}`}
+          >
+            <span className="land-rating-num">{rating}</span>
+          </span>
+        </div>
+      ) : (
+        <>
+          <div className="score-rating-line">
+            <span className="score-rating-label">
+              {label}
+              {hasDetail ? (
+                <span className="score-bar-chevron" aria-hidden>
+                  {open ? "▾" : "▸"}
+                </span>
+              ) : null}
             </span>
+            <span className="score-plain-num tabular-nums" style={{ color: fill }}>
+              {rating}
+            </span>
+          </div>
+          <div className="score-bar-track" aria-hidden>
+            <div className="score-bar-fill" style={{ width: `${v}%`, background: fill }} />
+          </div>
+          {!open && closedHint ? (
+            <p className="score-rating-hint">
+              {closedHint}
+              <span className="score-rating-why">Why ▸</span>
+            </p>
           ) : null}
-        </div>
-        <div className="text-sm font-semibold tabular-nums whitespace-nowrap">
-          {Math.round(v)} <span className="text-[var(--muted)] font-medium">/ 100</span>
-        </div>
-      </div>
-      <div className="score-bar-track" aria-hidden>
-        <div className="score-bar-fill" style={{ width: `${v}%`, background: fill }} />
-      </div>
-      {!open && closedHint ? (
-        <p className="mt-1.5 text-sm leading-snug text-[var(--muted)] line-clamp-2 text-left">
-          {closedHint}
-          <span className="ml-1 text-[var(--brand)]">Why ▸</span>
-        </p>
-      ) : null}
+        </>
+      )}
       {open ? (
-        <div className="score-bar-detail mt-2 text-left" onClick={(e) => e.stopPropagation()}>
+        <div className="score-bar-detail" onClick={(e) => e.stopPropagation()}>
           {kind === "risk" && standings ? (
             <RiskLens score={v} standings={standings} />
           ) : kind === "confidence" && standings ? (
