@@ -15,6 +15,8 @@ export type LandViewerProps = {
   longitude?: number | null;
   polygon?: number[][][] | null;
   reportHref?: string | null;
+  /** When set, Closest uses the parcel's stored coordinates (preferred for every listing). */
+  parcelId?: string | null;
 };
 
 type Basemap = "satellite" | "streets" | "hybrid";
@@ -55,7 +57,7 @@ type NearbyChip = {
 
 const NEARBY_CHIPS: NearbyChip[] = [
   { kind: "flood", label: "Flood zone", color: "#3b82f6", maxMiles: 12.4 },
-  { kind: "wetland", label: "Wetland", color: "#14b8a6", maxMiles: 12 },
+  { kind: "wetland", label: "Wetland", color: "#14b8a6", maxMiles: 14 },
   { kind: "water", label: "Water body", color: "#0ea5e9", maxMiles: 14 },
   { kind: "road", label: "Paved road", color: "#a16207", maxMiles: 10 },
   { kind: "power", label: "Power line", color: "#ca8a04", maxMiles: 14 },
@@ -126,8 +128,8 @@ function ordinalClosest(index: number) {
 }
 
 /**
- * Closest landmarks via LandSignal API (server-side Overpass).
- * Browser-direct Overpass was flaky and caused endless "Working" with no results.
+ * Closest landmarks via LandSignal API for any listing pin nationwide.
+ * Prefers parcelId so every listing uses authoritative stored coordinates.
  */
 async function fetchNearby(
   kind: NearbyKind,
@@ -135,11 +137,14 @@ async function fetchNearby(
   lon: number,
   onPartial?: (hits: NearbyHit[]) => void,
   isCancelled?: () => boolean,
+  parcelId?: string | null,
 ): Promise<{ hits: NearbyHit[]; message: string | null }> {
   const meta = NEARBY_CHIPS.find((c) => c.kind === kind);
   if (!meta) return { hits: [], message: "Unknown landmark type" };
 
-  const cacheKey = `api:v1:${kind}:${lat.toFixed(3)}:${lon.toFixed(3)}`;
+  const cacheKey = parcelId
+    ? `api:v2:parcel:${parcelId}:${kind}`
+    : `api:v2:${kind}:${lat.toFixed(3)}:${lon.toFixed(3)}`;
   if (nearbyCache.has(cacheKey)) {
     const cached = nearbyCache.get(cacheKey)!;
     if (cached.hits.length) {
@@ -162,8 +167,10 @@ async function fetchNearby(
         reject(new DOMException("Aborted", "AbortError"));
       };
       ctl.signal.addEventListener("abort", onAbort, { once: true });
-      landsignalApi
-        .nearby(lat, lon, kind, { signal: ctl.signal })
+      const req = parcelId
+        ? landsignalApi.nearbyForParcel(parcelId, kind, { signal: ctl.signal })
+        : landsignalApi.nearby(lat, lon, kind, { signal: ctl.signal });
+      req
         .then((value) => {
           if (timeoutId) window.clearTimeout(timeoutId);
           ctl.signal.removeEventListener("abort", onAbort);
@@ -267,6 +274,7 @@ export function LandViewerModal({
   longitude,
   polygon,
   reportHref,
+  parcelId,
 }: LandViewerProps) {
   const titleId = useId();
   const mapEl = useRef<HTMLDivElement>(null);
@@ -314,6 +322,47 @@ export function LandViewerModal({
   );
 
   useEffect(() => setMounted(true), []);
+
+  // Warm Closest cache for every chip as soon as Land Viewer opens — any listing.
+  useEffect(() => {
+    if (!open || !hasGeo) return;
+    let cancelled = false;
+    void (async () => {
+      const { landsignalApi } = await import("@/lib/api");
+      await Promise.allSettled(
+        NEARBY_CHIPS.map(async (chip) => {
+          if (cancelled) return;
+          try {
+            const data = parcelId
+              ? await landsignalApi.nearbyForParcel(parcelId, chip.kind)
+              : await landsignalApi.nearby(latitude!, longitude!, chip.kind);
+            if (cancelled || !data.hits?.length) return;
+            const key = parcelId
+              ? `api:v2:parcel:${parcelId}:${chip.kind}`
+              : `api:v2:${chip.kind}:${latitude!.toFixed(3)}:${longitude!.toFixed(3)}`;
+            nearbyCache.set(key, {
+              hits: data.hits.slice(0, NEARBY_RESULT_LIMIT).map((h) => ({
+                kind: chip.kind,
+                label: h.label || chip.label,
+                name: h.name || chip.label,
+                lat: Number(h.lat),
+                lon: Number(h.lon),
+                meters: Number(h.meters),
+                source: "live" as const,
+                detail: h.detail || undefined,
+                osmKey: h.osm_key || undefined,
+              })),
+            });
+          } catch {
+            /* prefetch is best-effort */
+          }
+        }),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, hasGeo, latitude, longitude, parcelId]);
 
   useEffect(() => {
     if (!open) return;
@@ -607,6 +656,7 @@ export function LandViewerModal({
           longitude!,
           applyPartial,
           () => gen !== nearbySearchGen.current,
+          parcelId,
         );
         hits = result.hits;
         emptyMessage = result.message;
@@ -641,7 +691,7 @@ export function LandViewerModal({
         await paintNearbyHit(hits[0], 0);
       }
     },
-    [hasGeo, latitude, longitude, nearbyActive, paintNearbyHit],
+    [hasGeo, latitude, longitude, nearbyActive, paintNearbyHit, parcelId],
   );
 
   const showPrevNearby = useCallback(() => {

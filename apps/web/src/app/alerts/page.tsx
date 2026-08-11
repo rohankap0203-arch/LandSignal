@@ -545,6 +545,7 @@ function MatchCard({
         longitude={row.longitude}
         polygon={viewerPolygon}
         reportHref={href}
+        parcelId={row.parcel_id}
       />
     </div>
   );

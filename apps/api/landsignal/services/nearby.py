@@ -35,7 +35,7 @@ OVERPASS_ENDPOINTS = [
 ]
 
 # Whole chip budget — API must answer inside this window.
-SEARCH_DEADLINE_S = 10.0
+SEARCH_DEADLINE_S = 8.0
 MIRROR_TIMEOUT_S = 5.0
 CACHE_TTL_S = 6 * 3600
 RESULT_LIMIT = 3
@@ -46,8 +46,7 @@ KIND_META: dict[str, dict[str, Any]] = {
     "flood": {
         "label": "Flood zone",
         "max_miles": 12.4,
-        # US OSM rarely has flood_prone tags — waterway adjacency is the practical signal.
-        "radii_m": [10000],
+        "radii_m": [12000],
         "out": "center",
         "parts": ['way["waterway"~"^(river|stream|canal)$"]'],
         "fallback_parts": [
@@ -55,13 +54,22 @@ KIND_META: dict[str, dict[str, Any]] = {
             'nwr["hazard"="flood"]',
             'nwr["floodplain"="yes"]',
         ],
+        "photon": [
+            {"q": "stream", "osm_tag": "waterway:stream"},
+            {"q": "river", "osm_tag": "waterway:river"},
+            {"q": "canal", "osm_tag": "waterway:canal"},
+        ],
     },
     "wetland": {
         "label": "Wetland",
-        "max_miles": 12.0,
+        "max_miles": 14.0,
         "radii_m": [16000],
         "out": "center",
         "parts": ['nwr["natural"="wetland"]', 'nwr["wetland"]'],
+        "photon": [
+            {"q": "wetland", "osm_tag": "natural:wetland"},
+            {"q": "marsh", "osm_tag": "wetland:marsh"},
+        ],
     },
     "water": {
         "label": "Water body",
@@ -73,23 +81,32 @@ KIND_META: dict[str, dict[str, Any]] = {
             'nwr["water"~"^(lake|pond|reservoir|basin|lagoon)$"]',
             'nwr["landuse"="reservoir"]',
         ],
+        "photon": [
+            {"q": "lake", "osm_tag": "natural:water"},
+            {"q": "reservoir", "osm_tag": "water:reservoir"},
+            {"q": "pond", "osm_tag": "water:pond"},
+        ],
     },
     "road": {
         "label": "Paved road",
         "max_miles": 10.0,
         "radii_m": [12000],
         "out": "center",
-        # Overpass highway extracts often 504 — OSRM nearest is primary in find_nearby.
-        "parts": [
-            'way["highway"~"^(primary|secondary|tertiary)$"]',
-        ],
+        "parts": ['way["highway"~"^(primary|secondary|tertiary)$"]'],
+        "photon": [],
     },
     "power": {
         "label": "Power line",
         "max_miles": 14.0,
-        "radii_m": [16000],
+        "radii_m": [8000, 16000],
         "out": "center",
-        "parts": ['way["power"~"^(line|minor_line)$"]'],
+        # Towers/poles are denser + faster than full line geometry extracts.
+        "parts": [
+            'node["power"="tower"]',
+            'node["power"="pole"]',
+            'way["power"="line"]',
+        ],
+        "photon": [],
     },
     "town": {
         "label": "Town / services",
@@ -97,6 +114,11 @@ KIND_META: dict[str, dict[str, Any]] = {
         "radii_m": [28000],
         "out": "center",
         "parts": ['node["place"~"^(city|town|village)$"]'],
+        "photon": [
+            {"q": "town", "osm_tag": "place:town"},
+            {"q": "city", "osm_tag": "place:city"},
+            {"q": "village", "osm_tag": "place:village"},
+        ],
     },
     "school": {
         "label": "School",
@@ -104,9 +126,12 @@ KIND_META: dict[str, dict[str, Any]] = {
         "radii_m": [30000],
         "out": "center",
         "parts": [
-            'nwr["amenity"="school"]',
-            'nwr["amenity"="kindergarten"]',
-            'nwr["building"="school"]',
+            'node["amenity"="school"]',
+            'way["amenity"="school"]',
+        ],
+        "photon": [
+            {"q": "school", "osm_tag": "amenity:school"},
+            {"q": "school", "osm_tag": "building:school"},
         ],
     },
     "hospital": {
@@ -115,12 +140,22 @@ KIND_META: dict[str, dict[str, Any]] = {
         "radii_m": [50000],
         "out": "center",
         "parts": [
-            'nwr["amenity"="hospital"]',
-            'nwr["healthcare"="hospital"]',
+            'node["amenity"="hospital"]',
+            'way["amenity"="hospital"]',
+            'node["healthcare"="hospital"]',
         ],
-        "fallback_parts": ['nwr["amenity"="clinic"]["emergency"="yes"]', 'nwr["amenity"="clinic"]'],
+        "fallback_parts": [
+            'node["amenity"="clinic"]',
+            'way["amenity"="clinic"]',
+        ],
+        "photon": [
+            {"q": "hospital", "osm_tag": "amenity:hospital"},
+            {"q": "clinic", "osm_tag": "amenity:clinic"},
+        ],
     },
 }
+
+
 
 
 def _haversine_m(a_lat: float, a_lon: float, b_lat: float, b_lon: float) -> float:
@@ -224,7 +259,7 @@ def _matches(kind: str, el: dict[str, Any]) -> bool:
             "unclassified",
         }
     if kind == "power":
-        return el.get("type") == "way" and tags.get("power") in {"line", "minor_line"}
+        return tags.get("power") in {"line", "minor_line", "tower", "pole"}
     if kind == "town":
         return tags.get("place") in {"city", "town", "village"}
     if kind == "school":
@@ -303,6 +338,8 @@ def _name(kind: str, el: dict[str, Any], fallback: str) -> str:
             return f"{_title(tags['highway'])} road"
         return "Paved road"
     if kind == "power":
+        if tags.get("power") in {"tower", "pole"}:
+            return "Transmission / distribution support (power corridor)"
         op = tags.get("operator")
         return f"{op} power line" if op else "Power line"
     if kind == "town":
@@ -334,6 +371,10 @@ def _detail(kind: str, el: dict[str, Any]) -> str | None:
         return f"OSM water={tags['water']}"
     if kind == "road" and tags.get("source") == "osrm_nearest":
         return "Nearest drivable road (OSRM)"
+    if kind == "power":
+        p = tags.get("power")
+        if p in {"tower", "pole"}:
+            return "Nearest mapped power tower/pole (line corridor proxy)"
     return None
 
 
@@ -428,14 +469,14 @@ async def _overpass_once(client: httpx.AsyncClient, query: str, endpoint: str) -
     return list(payload.get("elements") or [])
 
 
-async def _overpass_race(query: str, budget_s: float) -> list[dict[str, Any]]:
-    """Query mirrors in parallel; prefer first non-empty success within budget."""
+async def _overpass_race(query: str, budget_s: float) -> tuple[list[dict[str, Any]], bool]:
+    """Query mirrors in parallel. Returns (elements, upstream_succeeded)."""
     if budget_s <= 0.4:
-        return []
+        return [], False
     timeout = httpx.Timeout(max(0.5, min(budget_s, MIRROR_TIMEOUT_S)))
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         tasks = [asyncio.create_task(_overpass_once(client, query, ep)) for ep in OVERPASS_ENDPOINTS]
-        done_empty: list[list[dict[str, Any]]] = []
+        empty_ok = False
         try:
             while tasks:
                 remaining = budget_s
@@ -450,21 +491,21 @@ async def _overpass_race(query: str, budget_s: float) -> list[dict[str, Any]]:
                         els = fut.result()
                     except Exception:
                         continue
+                    empty_ok = True
                     if els:
                         for p in tasks:
                             p.cancel()
-                        return els
-                    done_empty.append(els)
+                        return els, True
                 if not finished:
                     break
         finally:
             for t in tasks:
                 t.cancel()
-        return done_empty[0] if done_empty else []
+        return [], empty_ok
 
 
 async def _osrm_nearest_roads(lat: float, lon: float, budget_s: float) -> list[dict[str, Any]]:
-    """Nearest drivable roads via OSRM — far more reliable than heavy Overpass highway dumps."""
+    """Nearest drivable roads via OSRM — works for every geocoded listing nationwide."""
     if budget_s <= 0.4:
         return []
     timeout = httpx.Timeout(max(0.5, min(budget_s, 4.0)))
@@ -504,6 +545,91 @@ async def _osrm_nearest_roads(lat: float, lon: float, budget_s: float) -> list[d
                 },
             }
         )
+    return out
+
+
+async def _photon_pois(
+    lat: float,
+    lon: float,
+    queries: list[dict[str, str]],
+    budget_s: float,
+) -> list[dict[str, Any]]:
+    """Photon (Komoot) locality search — fast nationwide POI lookup for any lat/lon."""
+    if budget_s <= 0.3 or not queries:
+        return []
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    timeout = httpx.Timeout(max(0.5, min(budget_s, 3.5)))
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        for spec in queries:
+            if budget_s <= 0.25:
+                break
+            t0 = time.monotonic()
+            params = {
+                "q": spec["q"],
+                "lat": f"{lat:.6f}",
+                "lon": f"{lon:.6f}",
+                "limit": "8",
+                "osm_tag": spec["osm_tag"],
+            }
+            try:
+                res = await client.get(
+                    "https://photon.komoot.io/api/",
+                    params=params,
+                    headers={"User-Agent": "LandSignal/0.1 (closest-landmarks; server)"},
+                )
+                if res.status_code != 200:
+                    continue
+                feats = (res.json() or {}).get("features") or []
+            except Exception:
+                continue
+            finally:
+                budget_s -= time.monotonic() - t0
+            for feat in feats:
+                props = feat.get("properties") or {}
+                geom = feat.get("geometry") or {}
+                coords = geom.get("coordinates") or []
+                if len(coords) < 2:
+                    continue
+                try:
+                    r_lon, r_lat = float(coords[0]), float(coords[1])
+                except (TypeError, ValueError):
+                    continue
+                osm_key = str(props.get("osm_key") or "")
+                osm_value = str(props.get("osm_value") or "")
+                osm_type = str(props.get("osm_type") or "n")
+                osm_id = props.get("osm_id")
+                key = f"{osm_type}/{osm_id}" if osm_id is not None else f"pt:{r_lat:.5f}:{r_lon:.5f}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                tags: dict[str, str] = {"name": str(props.get("name") or props.get("street") or "").strip()}
+                if osm_key and osm_value:
+                    tags[osm_key] = osm_value
+                # Normalize common Photon keys into our matcher tags.
+                if osm_key == "amenity":
+                    tags["amenity"] = osm_value
+                if osm_key == "healthcare":
+                    tags["healthcare"] = osm_value
+                if osm_key == "place":
+                    tags["place"] = osm_value
+                if osm_key == "natural":
+                    tags["natural"] = osm_value
+                if osm_key == "water":
+                    tags["water"] = osm_value
+                if osm_key == "waterway":
+                    tags["waterway"] = osm_value
+                if osm_key == "wetland":
+                    tags["wetland"] = osm_value
+                if osm_key == "power":
+                    tags["power"] = osm_value
+                if osm_key == "building" and osm_value == "school":
+                    tags["building"] = "school"
+                    tags["amenity"] = tags.get("amenity") or "school"
+                if not tags.get("name"):
+                    tags["name"] = _title(osm_value or spec["q"])
+                typ = {"N": "node", "W": "way", "R": "relation"}.get(osm_type.upper()[:1], "node")
+                out.append({"type": typ, "id": osm_id, "lat": r_lat, "lon": r_lon, "tags": tags})
     return out
 
 
@@ -577,10 +703,11 @@ async def _nominatim_towns(lat: float, lon: float, radius_m: int, budget_s: floa
 
 
 def _cache_key(kind: str, lat: float, lon: float) -> str:
-    return f"v1:{kind}:{lat:.3f}:{lon:.3f}"
+    return f"v2:{kind}:{lat:.3f}:{lon:.3f}"
 
 
 async def find_nearby(lat: float, lon: float, kind: str) -> dict[str, Any]:
+    """Resolve Closest chips for any listing pin worldwide."""
     meta = KIND_META.get(kind)
     if not meta:
         return {
@@ -604,114 +731,84 @@ async def find_nearby(lat: float, lon: float, kind: str) -> dict[str, Any]:
     started = time.monotonic()
     best: list[dict[str, Any]] = []
     upstream_ok = False
-    searched_radius = 0
+    searched_radius = int(meta["radii_m"][-1])
 
     def remaining() -> float:
         return SEARCH_DEADLINE_S - (time.monotonic() - started)
 
-    for radius in meta["radii_m"]:
-        if remaining() < 0.8:
-            break
-        searched_radius = int(radius)
-        timeout_s = max(5, min(12, int(remaining())))
-        query = _build_query(meta["parts"], lat, lon, int(radius), meta["out"], timeout_s)
-        elements: list[dict[str, Any]] = []
-        try:
-            if kind == "road":
-                osrm_els = await _osrm_nearest_roads(lat, lon, min(4.0, remaining()))
-                if osrm_els:
+    # --- Primary: kind-specific fast nationwide sources ---
+    elements: list[dict[str, Any]] = []
+    try:
+        if kind == "road":
+            osrm_els = await _osrm_nearest_roads(lat, lon, min(4.0, remaining()))
+            if osrm_els:
+                upstream_ok = True
+                elements.extend(osrm_els)
+        else:
+            photon_specs = list(meta.get("photon") or [])
+            if photon_specs and remaining() > 0.5:
+                photon_els = await _photon_pois(lat, lon, photon_specs, min(4.5, remaining()))
+                if photon_els:
                     upstream_ok = True
-                    elements.extend(osrm_els)
-                # Light Overpass backup only if OSRM returned nothing.
-                if not elements and remaining() > 2.0:
-                    elements = await _overpass_race(query, remaining() - 0.2)
-                    if elements:
-                        upstream_ok = True
-            elif kind == "town":
-                nom_task = asyncio.create_task(_nominatim_towns(lat, lon, int(radius), min(3.5, remaining())))
-                ov_task = asyncio.create_task(_overpass_race(query, remaining() - 0.2))
-                done, pending = await asyncio.wait(
-                    {nom_task, ov_task},
-                    timeout=max(0.5, remaining() - 0.1),
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-                for fut in list(done) + list(pending):
-                    if fut.done():
-                        try:
-                            chunk = fut.result()
-                            if chunk:
-                                upstream_ok = True
-                                elements.extend(chunk)
-                        except Exception:
-                            pass
-                    else:
-                        fut.cancel()
-            else:
-                elements = await _overpass_race(query, remaining() - 0.2)
-                if elements is not None:
+                    elements.extend(photon_els)
+            if kind == "town" and remaining() > 0.8:
+                nom = await _nominatim_towns(lat, lon, searched_radius, min(3.0, remaining()))
+                if nom:
                     upstream_ok = True
-        except Exception as exc:  # noqa: BLE001
-            log.warning("nearby_overpass_failed", kind=kind, radius=radius, error=str(exc))
-            elements = []
+                    elements.extend(nom)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("nearby_primary_failed", kind=kind, error=str(exc))
 
-        hits = _pick_hits(
-            kind, label, origin, elements, max_miles=max_miles, radius_m=float(radius)
-        )
+    best = _pick_hits(
+        kind, label, origin, elements, max_miles=max_miles, radius_m=float(searched_radius)
+    )
 
-        # Fallback query when primary produced nothing validated.
-        if (
-            not hits
-            and meta.get("fallback_parts")
-            and remaining() > 1.0
-        ):
-            fb_query = _build_query(
-                meta["fallback_parts"], lat, lon, int(radius), meta["out"], max(5, int(remaining()))
-            )
+    # --- Secondary: Overpass only if still short on hits ---
+    if len(best) < RESULT_LIMIT and remaining() > 1.2:
+        for radius in meta["radii_m"]:
+            if remaining() < 1.0:
+                break
+            searched_radius = int(radius)
+            timeout_s = max(5, min(10, int(remaining())))
+            query = _build_query(meta["parts"], lat, lon, int(radius), meta["out"], timeout_s)
             try:
-                fb_els = await _overpass_race(fb_query, remaining() - 0.2)
-                if fb_els:
+                ov_els, ov_ok = await _overpass_race(query, remaining() - 0.2)
+                if ov_ok:
                     upstream_ok = True
                 hits = _pick_hits(
-                    kind, label, origin, fb_els, max_miles=max_miles, radius_m=float(radius)
+                    kind, label, origin, ov_els, max_miles=max_miles, radius_m=float(radius)
                 )
+                if (
+                    not hits
+                    and meta.get("fallback_parts")
+                    and remaining() > 1.0
+                ):
+                    fb_query = _build_query(
+                        meta["fallback_parts"],
+                        lat,
+                        lon,
+                        int(radius),
+                        meta["out"],
+                        max(5, int(remaining())),
+                    )
+                    fb_els, fb_ok = await _overpass_race(fb_query, remaining() - 0.2)
+                    if fb_ok:
+                        upstream_ok = True
+                    hits = _pick_hits(
+                        kind, label, origin, fb_els, max_miles=max_miles, radius_m=float(radius)
+                    )
+                if hits:
+                    merged: dict[str, dict[str, Any]] = {}
+                    for h in best + hits:
+                        k = h.get("osm_key") or f"{h['lat']:.5f},{h['lon']:.5f}"
+                        prev = merged.get(k)
+                        if prev is None or h["meters"] < prev["meters"]:
+                            merged[k] = h
+                    best = sorted(merged.values(), key=lambda x: x["meters"])[:RESULT_LIMIT]
+                    if len(best) >= RESULT_LIMIT:
+                        break
             except Exception as exc:  # noqa: BLE001
-                log.warning("nearby_fallback_failed", kind=kind, error=str(exc))
-
-        if hits:
-            merged: dict[str, dict[str, Any]] = {}
-            for h in best + hits:
-                k = h.get("osm_key") or f"{h['lat']:.5f},{h['lon']:.5f}"
-                prev = merged.get(k)
-                if prev is None or h["meters"] < prev["meters"]:
-                    merged[k] = h
-            best = sorted(merged.values(), key=lambda x: x["meters"])[:RESULT_LIMIT]
-            if len(best) >= RESULT_LIMIT and best[-1]["meters"] <= radius * 1.05:
-                break
-
-    # One quick retry when mirrors flaked — common Overpass 429/504 blip.
-    if not best and remaining() > 2.5:
-        radius = int(meta["radii_m"][-1])
-        searched_radius = radius
-        query = _build_query(meta["parts"], lat, lon, radius, meta["out"], max(5, int(remaining())))
-        try:
-            elements = await _overpass_race(query, remaining() - 0.2)
-            if elements:
-                upstream_ok = True
-            best = _pick_hits(
-                kind, label, origin, elements, max_miles=max_miles, radius_m=float(radius)
-            )
-            if not best and meta.get("fallback_parts") and remaining() > 1.5:
-                fb_query = _build_query(
-                    meta["fallback_parts"], lat, lon, radius, meta["out"], max(5, int(remaining()))
-                )
-                fb_els = await _overpass_race(fb_query, remaining() - 0.2)
-                if fb_els:
-                    upstream_ok = True
-                best = _pick_hits(
-                    kind, label, origin, fb_els, max_miles=max_miles, radius_m=float(radius)
-                )
-        except Exception as exc:  # noqa: BLE001
-            log.warning("nearby_retry_failed", kind=kind, error=str(exc))
+                log.warning("nearby_overpass_failed", kind=kind, radius=radius, error=str(exc))
 
     if best:
         payload = {

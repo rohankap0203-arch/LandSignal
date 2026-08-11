@@ -1865,7 +1865,7 @@ async def parcel_geometry(parcel_id: UUID) -> dict[str, Any]:
 
 @router.get("/nearby")
 async def nearby_landmarks(lat: float, lon: float, kind: str) -> dict[str, Any]:
-    """Closest landmark chips for Land Viewer — server-side Overpass with a hard deadline."""
+    """Closest landmark chips for Land Viewer — works for any lat/lon nationwide."""
     if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
         raise HTTPException(400, "Invalid coordinates")
     kind_norm = (kind or "").strip().lower()
@@ -1874,6 +1874,25 @@ async def nearby_landmarks(lat: float, lon: float, kind: str) -> dict[str, Any]:
     if kind_norm not in KIND_META:
         raise HTTPException(400, f"Unsupported kind: {kind}")
     return await find_nearby(lat, lon, kind_norm)
+
+
+@router.get("/parcels/{parcel_id}/nearby")
+async def parcel_nearby_landmarks(parcel_id: UUID, kind: str) -> dict[str, Any]:
+    """Closest chips for a specific listing — uses the parcel's stored coordinates."""
+    store = get_store(get_settings().demo_seed)
+    parcel = store.parcels.get(parcel_id)
+    if not parcel:
+        raise HTTPException(404, "Parcel not found")
+    if parcel.latitude is None or parcel.longitude is None:
+        raise HTTPException(422, "Parcel has no coordinates for Closest lookup")
+    kind_norm = (kind or "").strip().lower()
+    from landsignal.services.nearby import KIND_META, find_nearby
+
+    if kind_norm not in KIND_META:
+        raise HTTPException(400, f"Unsupported kind: {kind}")
+    result = await find_nearby(float(parcel.latitude), float(parcel.longitude), kind_norm)
+    result["parcel_id"] = str(parcel.id)
+    return result
 
 
 @router.post("/land-alerts/matches/{parcel_id}/viewed")

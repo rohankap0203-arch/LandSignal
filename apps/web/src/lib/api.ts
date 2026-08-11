@@ -292,10 +292,32 @@ export const landsignalApi = {
       max_miles?: number | null;
       searched_radius_m?: number | null;
       cached?: boolean;
+      parcel_id?: string;
     }>(
       `/nearby?lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}&kind=${encodeURIComponent(kind)}`,
       init,
     ),
+  nearbyForParcel: (parcelId: string, kind: string, init?: RequestInit) =>
+    api<{
+      kind: string;
+      label: string;
+      hits: Array<{
+        kind: string;
+        label: string;
+        name: string;
+        lat: number;
+        lon: number;
+        meters: number;
+        detail?: string | null;
+        osm_key?: string | null;
+      }>;
+      status: string;
+      message?: string | null;
+      max_miles?: number | null;
+      searched_radius_m?: number | null;
+      cached?: boolean;
+      parcel_id?: string;
+    }>(`/parcels/${encodeURIComponent(parcelId)}/nearby?kind=${encodeURIComponent(kind)}`, init),
   memo: (id: string) =>
     api<{ markdown: string; verdict: string }>(`/parcels/${id}/memo`, { method: "POST" }),
   alerts: () => api<Record<string, unknown>[]>("/alerts"),

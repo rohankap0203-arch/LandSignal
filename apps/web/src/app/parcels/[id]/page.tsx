@@ -352,6 +352,7 @@ export default function ParcelIntelligencePage() {
             latitude={parcel.latitude as number}
             longitude={parcel.longitude as number}
             polygon={parcel.polygon as number[][][]}
+            parcelId={String(parcel.id || params.id)}
           />
         </div>
 
