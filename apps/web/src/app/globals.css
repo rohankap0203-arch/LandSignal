@@ -3059,8 +3059,6 @@ a.btn-intel:hover {
 }
 
 .source-card {
-
-.source-card {
   border-radius: 14px;
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-soft) 80%, var(--bg-elevated));
