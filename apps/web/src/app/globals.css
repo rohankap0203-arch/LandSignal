@@ -7087,13 +7087,13 @@ a.acquire-block:hover {
 
 .fse-launch {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.85rem 1.1rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
   width: 100%;
   text-align: left;
-  padding: 0.78rem 0.85rem 0.78rem 1.05rem;
-  border-radius: 999px;
+  padding: 0.85rem 1rem;
+  border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--brand) 55%, #111);
   background: linear-gradient(
     180deg,
@@ -7130,13 +7130,12 @@ a.acquire-block:hover {
 
 .fse-launch-label {
   font-family: var(--font-display, "Fraunces", Georgia, serif);
-  font-size: 1.02rem;
+  font-size: 1.05rem;
   font-weight: 650;
   letter-spacing: -0.01em;
-  line-height: 1.15;
+  line-height: 1.2;
   color: #fff;
   white-space: nowrap;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -7144,16 +7143,17 @@ a.acquire-block:hover {
 .fse-launch-go {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  flex-shrink: 0;
-  padding: 0.42rem 0.72rem;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.48rem 0.85rem;
   border-radius: 999px;
   background: color-mix(in srgb, #000 22%, transparent);
   border: 1px solid color-mix(in srgb, #fff 18%, transparent);
   color: #fff;
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
