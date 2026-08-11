@@ -7465,45 +7465,51 @@ a.acquire-block:hover {
 }
 
 .fse-toggle {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 0.45rem;
   align-items: center;
   min-width: 0;
   cursor: pointer;
+  width: 100%;
 }
 
 .fse-toggle input {
   accent-color: var(--brand);
   flex-shrink: 0;
-}
-
-.fse-toggle-body {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.15rem 0.55rem;
-  min-width: 0;
+  margin: 0;
 }
 
 .fse-row-title {
   font-size: 0.84rem;
   font-weight: 600;
   line-height: 1.25;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fse-row-impact {
-  font-size: 0.72rem;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  justify-content: flex-end;
+  font-size: 0.7rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.45rem;
-  align-items: baseline;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.fse-row-pct {
+  white-space: nowrap;
 }
 
 .fse-row-dollars {
   color: var(--brand);
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .fse-row.downside .fse-row-dollars,

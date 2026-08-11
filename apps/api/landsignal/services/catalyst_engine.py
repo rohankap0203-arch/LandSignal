@@ -1441,9 +1441,6 @@ def catalyst_opportunity_score(
         primary = "Developable acres could gain if municipal utilities extend here."
     elif downside and mag(max(downside, key=mag)) > (mag(max(upside, key=mag)) if upside else 0):
         primary = "Downside environmental or demand risks weigh on opportunity."
-    elif upside:
-        top = max(upside, key=mag)
-        primary = f"Top lever on this file: {top.get('label') or 'nearby catalyst'}."
 
     return {
         "score": score,

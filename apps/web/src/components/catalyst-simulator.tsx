@@ -701,17 +701,6 @@ export function CatalystSimulator({
                       <small>/100</small>
                       <em>{opp.label}</em>
                     </span>
-                    <Tip label="What the opportunity score means">
-                      <strong>Opportunity score</strong>
-                      <span>
-                        How well this parcel is set up to gain from realistic future changes nearby
-                        — and how much downside could hurt it.
-                      </span>
-                      <span>
-                        Higher = more useful upside catalysts fit this land. Lower = weaker fit or
-                        heavier downside pressure.
-                      </span>
-                    </Tip>
                   </div>
                 ) : null}
               </div>
@@ -724,10 +713,6 @@ export function CatalystSimulator({
                 ×
               </button>
             </header>
-
-            {opp?.primary_reason ? (
-              <p className="fse-opp-reason-line">{opp.primary_reason}</p>
-            ) : null}
 
             <div className="fse-stress" role="tablist" aria-label="Case">
               {(["baseline", "most_likely", "bull", "bear", "custom"] as const).map((key) => {
@@ -793,12 +778,10 @@ export function CatalystSimulator({
                                   checked={on}
                                   onChange={() => toggle(s.id, s)}
                                 />
-                                <span className="fse-toggle-body">
-                                  <span className="fse-row-title">{shortLabel(s.label)}</span>
-                                  <span className="fse-row-impact">
-                                    {pctRange(s.impact)}
-                                    {dollars ? <span className="fse-row-dollars">{dollars}</span> : null}
-                                  </span>
+                                <span className="fse-row-title">{shortLabel(s.label)}</span>
+                                <span className="fse-row-impact">
+                                  <span className="fse-row-pct">{pctRange(s.impact)}</span>
+                                  {dollars ? <span className="fse-row-dollars">{dollars}</span> : null}
                                 </span>
                               </label>
                             </li>
