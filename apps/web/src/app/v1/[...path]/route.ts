@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const API_ORIGIN = process.env.LANDSIGNAL_API_ORIGIN || "http://127.0.0.1:8000";
 
+/** Headers that must not be forwarded (request or response). */
 const HOP_BY_HOP = new Set([
   "connection",
   "keep-alive",
@@ -13,6 +14,10 @@ const HOP_BY_HOP = new Set([
   "upgrade",
   "host",
   "content-length",
+  // Node fetch auto-decompresses; forwarding these with a decoded body breaks browsers
+  // ("Failed to fetch") — which Show matches used to surface as a connection error.
+  "content-encoding",
+  "accept-encoding",
 ]);
 
 async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
@@ -24,6 +29,8 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
   req.headers.forEach((value, key) => {
     if (!HOP_BY_HOP.has(key.toLowerCase())) headers.set(key, value);
   });
+  // Ask upstream for identity encoding so we never re-label a decoded body as gzip.
+  headers.set("accept-encoding", "identity");
 
   const init: RequestInit & { duplex?: "half" } = {
     method: req.method,
@@ -39,11 +46,12 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
 
   try {
     const upstream = await fetch(target, init);
+    const body = await upstream.arrayBuffer();
     const outHeaders = new Headers();
     upstream.headers.forEach((value, key) => {
       if (!HOP_BY_HOP.has(key.toLowerCase())) outHeaders.set(key, value);
     });
-    return new NextResponse(upstream.body, {
+    return new NextResponse(body, {
       status: upstream.status,
       statusText: upstream.statusText,
       headers: outHeaders,
