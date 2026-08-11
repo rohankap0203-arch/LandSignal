@@ -7698,7 +7698,4 @@ a.acquire-block:hover {
   .fse-opp-bar > p {
     grid-column: 1 / -1;
   }
-  .fse-path-stats {
-    grid-template-columns: 1fr;
-  }
 }
