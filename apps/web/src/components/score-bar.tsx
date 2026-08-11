@@ -85,6 +85,7 @@ export function ScoreBar({
     >
       <div className="flex items-baseline justify-between gap-3">
         <div className="font-semibold flex items-center gap-1.5">
+          <ScorePin />
           {label}
           {hasDetail ? (
             <span className="score-bar-chevron" aria-hidden>
@@ -137,18 +138,26 @@ export function ScoreBar({
   );
 }
 
-/** Opportunity — plain-language dial for everyday land buyers. */
+function ScorePin() {
+  return (
+    <svg className="score-pin" viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+      <path
+        fill="currentColor"
+        d="M8 1.5c-2.4 0-4.4 1.9-4.4 4.3 0 3.2 4.4 8.2 4.4 8.2s4.4-5 4.4-8.2C12.4 3.4 10.4 1.5 8 1.5zm0 6.1a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6z"
+      />
+    </svg>
+  );
+}
+
+/** Opportunity — plain compare to what’s live on the site. */
 function OpportunityLens({ score, standings }: { score: number; standings: ScoreStandings }) {
   const beats = Math.round(standings.beats_pct || 0);
-  const lifts = (standings.lifts || standings.factors?.filter((f) => f.direction === "up") || []).slice(
-    0,
-    1,
-  );
-  const drags = (
-    standings.drags ||
-    [...(standings.factors || [])].sort((a, b) => (b.gap || 0) - (a.gap || 0))
-  ).slice(0, 1);
-  const why = (standings.why_not_higher || [])[0];
+  const top = standings.max != null && Number.isFinite(Number(standings.max)) ? Math.round(Number(standings.max)) : null;
+  const median =
+    standings.median != null && Number.isFinite(Number(standings.median))
+      ? Math.round(Number(standings.median))
+      : null;
+  const compare = (standings.why_not_higher || [])[0] || standings.ceiling_plain;
   const band =
     score >= 78
       ? "Strong buy"
@@ -164,7 +173,19 @@ function OpportunityLens({ score, standings }: { score: number; standings: Score
       <div className="score-lens-top">
         <span className={`score-lens-pill tone-${tone}`}>{band}</span>
         <span className="score-lens-stat">
-          Better than <strong>~{beats}%</strong> of listings we show
+          Better than <strong>~{beats}%</strong> of listings on the site
+          {top != null ? (
+            <>
+              {" "}
+              · top is <strong>{top}</strong>
+              {median != null ? (
+                <>
+                  {" "}
+                  · middle ~<strong>{median}</strong>
+                </>
+              ) : null}
+            </>
+          ) : null}
         </span>
       </div>
       <div className="opp-edge" aria-hidden>
@@ -177,21 +198,7 @@ function OpportunityLens({ score, standings }: { score: number; standings: Score
           <span>Strong</span>
         </div>
       </div>
-      <div className="score-lens-chips">
-        {lifts[0] ? (
-          <span className="score-chip score-chip--ok">Helps · {lifts[0].label}</span>
-        ) : (
-          <span className="score-chip">No clear price advantage</span>
-        )}
-        {drags[0] ? (
-          <span className="score-chip score-chip--warn">Holds back · {drags[0].label}</span>
-        ) : null}
-      </div>
-      {why ? <p className="score-lens-why">{why}</p> : null}
-      <p className="score-lens-why">
-        This score asks: is today’s buy price a good deal versus our value? It does not promise the
-        land will beat inflation years from now.
-      </p>
+      {compare ? <p className="score-lens-why">{compare}</p> : null}
     </div>
   );
 }

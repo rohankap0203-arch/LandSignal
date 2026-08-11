@@ -1547,6 +1547,12 @@ button.score-bar-click:disabled {
   color: var(--muted);
 }
 
+.score-pin {
+  flex-shrink: 0;
+  color: var(--brand);
+  opacity: 0.9;
+}
+
 .score-bar-detail {
   border-top: 1px solid var(--line);
   padding-top: 8px;

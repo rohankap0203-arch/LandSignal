@@ -305,11 +305,6 @@ export function PriceTrajectory({
     selected && Number.isFinite(Number(selected.display_usd))
       ? Number(selected.display_usd)
       : Number(selected?.value_usd || 0);
-  const knowledge = String(trajectory.knowledge_label || "Estimated from similar land nearby").replace(
-    /_/g,
-    " ",
-  );
-
   return (
     <div className={`price-trajectory ${compact ? "compact" : ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -320,16 +315,6 @@ export function PriceTrajectory({
           <h3 className="display text-lg font-semibold leading-snug">
             {horizon} yr back · {horizon} yr ahead
           </h3>
-          <p className="mt-1 text-xs text-[var(--muted)] break-words">
-            Market mark for this pin — not hold cashflow. {windowMath.startYear} → now →{" "}
-            {windowMath.endYear} · {knowledge}
-          </p>
-          <p className="mt-1 text-[11px] text-[var(--muted)] leading-snug">
-            Screened area land pace
-            {trajectory?.annual_rate_display ? ` (~${trajectory.annual_rate_display})` : ""}
-            , with parcel factors once. Future dollars = projected price. Today’s dollars = that
-            same price in purchasing power. Far years ease slightly for uncertainty.
-          </p>
         </div>
         <div className="traj-stats">
           <div>

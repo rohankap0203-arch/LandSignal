@@ -286,7 +286,6 @@ def build_opportunity_standings(
     lifts = [f for f in factors if f["direction"] == "up"][:2]
     drags = sorted(factors, key=lambda r: r["gap"], reverse=True)[:2]
     shown = round(opp)
-    risk = _f(getattr(score, "risk", None))
 
     if top is not None and shown >= round(top) and beats_pct >= 90:
         rank_plain = (
@@ -313,44 +312,29 @@ def build_opportunity_standings(
             f"open stronger files first."
         )
 
+    # Keep only site-high + how this score compares (dynamic).
     why_not: list[str] = []
-    if top is not None and shown < 90:
-        if round(top) < 90:
-            why_bits = [f"Nothing live clears 90 — top on site is {top:.0f}"]
-        else:
-            why_bits = [f"90 is rare; you’re at {shown}"]
-        if drags and drags[0]["gap"] >= 2:
-            why_bits.append(
-                f"{drags[0]['label'].lower()} is the main drag "
-                f"({drags[0]['score']:.0f}/100)"
-            )
-        elif risk is not None and risk >= 40:
-            why_bits.append(f"risk screen is still {risk:.0f}")
-        why_not.append(" · ".join(why_bits) + ".")
-    elif drags and drags[0]["gap"] >= 2:
+    if top is not None and median is not None:
         why_not.append(
-            f"Room left mostly in {drags[0]['label'].lower()} "
-            f"({drags[0]['score']:.0f}/100)."
+            f"Top on the site right now is {top:.0f}. Yours is {shown} — "
+            f"ahead of ~{beats_pct:.0f}% of live files (middle is ~{median:.0f})."
         )
-    if not why_not:
+    elif top is not None:
         why_not.append(
-            "It’s a weighted buy-edge screen — price, land, growth, access, risk — "
-            "not a dirt beauty grade."
+            f"Top on the site right now is {top:.0f}. Yours is {shown} — "
+            f"ahead of ~{beats_pct:.0f}% of live files."
+        )
+    else:
+        why_not.append(
+            f"Yours is {shown} — ahead of ~{beats_pct:.0f}% of live files on the site."
         )
 
     if beats_pct >= 90:
-        meaning = (
-            f"In {place}, {shown} means this file is already near the ceiling of "
-            f"what LandSignal is indexing."
-        )
+        meaning = f"Compared with live listings, {shown} is near the top of the site."
     elif beats_pct >= 60:
-        meaning = (
-            f"In {place}, {shown} means a real scoutable edge vs typical live inventory."
-        )
+        meaning = f"Compared with live listings, {shown} is above most files on the site."
     else:
-        meaning = (
-            f"In {place}, {shown} means a middling edge — useful context, not a rush."
-        )
+        meaning = f"Compared with live listings, {shown} sits near or below the middle."
 
     return {
         "kind": "opportunity",

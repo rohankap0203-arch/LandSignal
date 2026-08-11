@@ -156,31 +156,16 @@ export function BuyingPowerLogic({
           <ul className="buy-power-points">
             <li>
               <strong>Inflation does not lower the sale price.</strong> It changes what those
-              dollars can buy. The {money(endFuture)} figure is the projected future price
-              {variant === "hold" ? " (sale + rent along the way)" : ""}. ~{money(endToday$)} is
-              that same money measured in today’s purchasing power.
+              dollars can buy.
             </li>
             <li>
               <strong>Other factors still matter.</strong> The projected price already reflects
-              local demand, site limits, rates stress cases, taxes, and hold costs — not inflation
-              alone. Inflation here is only the purchasing-power check:{" "}
-              <code>
-                {money(endFuture)} ÷ {(1 + cpi).toFixed(3)}^{years}
-              </code>
-              .
+              local demand, site limits, rates cases, taxes, and hold costs — not inflation alone.
             </li>
-            {buy != null && mark != null && mark > buy ? (
-              <li>
-                <strong>Opportunity score is separate.</strong> It measures whether today’s buy
-                looks cheap versus our value (~{money(mark)}), not whether this hold beats
-                inflation for {years} years.
-              </li>
-            ) : (
-              <li>
-                <strong>Opportunity score is separate.</strong> It measures today’s buy versus our
-                value — not whether this long hold beats inflation.
-              </li>
-            )}
+            <li>
+              <strong>Opportunity score is separate.</strong> It measures today’s buy versus our
+              value — not this long-hold inflation check.
+            </li>
           </ul>
         </div>
       )}

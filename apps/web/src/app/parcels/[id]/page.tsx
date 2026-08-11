@@ -122,7 +122,9 @@ export default function ParcelIntelligencePage() {
   const score = data.score as AnyRec | null;
   const links = (data.links as ActionLink[]) || [];
   const price = data.price as AnyRec;
-  const ratings = (data.rating_breakdown as AnyRec[]) || [];
+  const ratings = ((data.rating_breakdown as AnyRec[]) || []).filter(
+    (r) => String(r.key || "") !== "hbu_optionality",
+  );
   const land = (data.land_readouts as Record<string, AnyRec>) || {};
   const brief = (data.brief as AnyRec) || {};
   const cockpit = (data.cockpit as AnyRec) || {};
