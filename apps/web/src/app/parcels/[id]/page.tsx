@@ -397,7 +397,11 @@ export default function ParcelIntelligencePage() {
           </div>
 
           <div className="mt-5">
-            <Stat label={String(price?.label || "Price")} value={String(price?.display || "No public price yet")} />
+            <PriceStat
+              label={String(price?.label || "Price")}
+              value={String(price?.display || "No public price yet")}
+              kind={String((price as AnyRec)?.kind || "")}
+            />
           </div>
 
           {price?.estimate_source ? (
@@ -624,6 +628,33 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="rounded-2xl bg-[var(--bg-soft)] p-3">
       <div className="text-[10px] uppercase tracking-wide text-[var(--muted)]">{label}</div>
       <div className="mt-1 font-semibold break-words">{value}</div>
+    </div>
+  );
+}
+
+/** Bid-path price board — same words, auction-ticket layout when kind is a starting bid. */
+function PriceStat({ label, value, kind }: { label: string; value: string; kind?: string }) {
+  const isBid = kind === "minimum_bid" || /starting bid/i.test(label);
+  if (!isBid) return <Stat label={label} value={value} />;
+
+  const parts = value.split(/\s·\s/).map((p) => p.trim()).filter(Boolean);
+
+  return (
+    <div className="bid-board" aria-label={`${label}: ${value}`}>
+      <div className="bid-board-kicker">{label}</div>
+      {parts.length >= 2 ? (
+        <div className="bid-board-row">
+          <div className="bid-board-cell is-open">
+            <span className="bid-board-val">{parts[0]}</span>
+          </div>
+          <span className="bid-board-rule" aria-hidden />
+          <div className="bid-board-cell is-finish">
+            <span className="bid-board-val">{parts.slice(1).join(" · ")}</span>
+          </div>
+        </div>
+      ) : (
+        <div className="bid-board-val bid-board-val--solo">{value}</div>
+      )}
     </div>
   );
 }

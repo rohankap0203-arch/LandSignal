@@ -1264,36 +1264,37 @@ export function LandViewerModal({
 
         <div className="land-viewer-nearby" aria-label="Closest landmarks">
           <span className="land-viewer-nearby-label">Closest</span>
-          {NEARBY_CHIPS.map((chip) => (
-            <button
-              key={chip.kind}
-              type="button"
-              className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
-              style={{ ["--chip" as string]: chip.color }}
-              disabled={!hasGeo}
-              onClick={() => void showNearby(chip.kind)}
-              title={
-                nearbyLoading && nearbyActive === chip.kind
-                  ? "Cancel search"
-                  : nearbyLoading
-                    ? `Switch to ${chip.label}`
-                    : chip.label
-              }
-            >
-              {chip.label}
-            </button>
-          ))}
-          {nearbyLoading ? (
-            <span className="land-viewer-nearby-loading" role="status" aria-live="polite">
-              <LiveMagnifier size={14} label="Finding closest landmark" />
-              <span>Working</span>
-            </span>
-          ) : nearbyHits.length > 1 ? (
-            <div
-              className="land-viewer-nearby-nav"
-              role="group"
-              aria-label={`Closest result ${nearbyHitIndex + 1} of ${nearbyHits.length}`}
-            >
+          <div className="land-viewer-nearby-chips">
+            {NEARBY_CHIPS.map((chip) => (
+              <button
+                key={chip.kind}
+                type="button"
+                className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
+                style={{ ["--chip" as string]: chip.color }}
+                disabled={!hasGeo}
+                onClick={() => void showNearby(chip.kind)}
+                title={
+                  nearbyLoading && nearbyActive === chip.kind
+                    ? "Cancel search"
+                    : nearbyLoading
+                      ? `Switch to ${chip.label}`
+                      : chip.label
+                }
+              >
+                {chip.label}
+              </button>
+            ))}
+            {nearbyLoading ? (
+              <span className="land-viewer-nearby-loading" role="status" aria-live="polite">
+                <LiveMagnifier size={14} label="Finding closest landmark" />
+                <span>Working</span>
+              </span>
+            ) : nearbyHits.length > 1 ? (
+              <div
+                className="land-viewer-nearby-nav"
+                role="group"
+                aria-label={`Closest result ${nearbyHitIndex + 1} of ${nearbyHits.length}`}
+              >
               <button
                 type="button"
                 className="land-viewer-nearby-nav-arrow is-back"
@@ -1321,8 +1322,9 @@ export function LandViewerModal({
                   →
                 </span>
               </button>
-            </div>
-          ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
 
         <div className="land-viewer-stage">

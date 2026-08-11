@@ -104,7 +104,6 @@ export function ScoreBar({
             }
             aria-label={`Land rating ${rating}`}
           >
-            <span className="land-rating-ring" aria-hidden />
             <span className="land-rating-num">{rating}</span>
           </span>
         </div>
