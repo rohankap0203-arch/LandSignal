@@ -7465,44 +7465,39 @@ a.acquire-block:hover {
 }
 
 .fse-toggle {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  display: flex;
   gap: 0.45rem;
   align-items: center;
   min-width: 0;
   cursor: pointer;
-  width: 100%;
 }
 
 .fse-toggle input {
   accent-color: var(--brand);
   flex-shrink: 0;
-  margin: 0;
+}
+
+.fse-toggle-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.55rem;
+  min-width: 0;
 }
 
 .fse-row-title {
   font-size: 0.84rem;
   font-weight: 600;
   line-height: 1.25;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .fse-row-impact {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.35rem;
-  justify-content: flex-end;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.fse-row-pct {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem 0.45rem;
   white-space: nowrap;
 }
 

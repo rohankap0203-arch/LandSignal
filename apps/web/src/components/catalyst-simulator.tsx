@@ -778,10 +778,12 @@ export function CatalystSimulator({
                                   checked={on}
                                   onChange={() => toggle(s.id, s)}
                                 />
-                                <span className="fse-row-title">{shortLabel(s.label)}</span>
-                                <span className="fse-row-impact">
-                                  <span className="fse-row-pct">{pctRange(s.impact)}</span>
-                                  {dollars ? <span className="fse-row-dollars">{dollars}</span> : null}
+                                <span className="fse-toggle-body">
+                                  <span className="fse-row-title">{shortLabel(s.label)}</span>
+                                  <span className="fse-row-impact">
+                                    {pctRange(s.impact)}
+                                    {dollars ? <span className="fse-row-dollars">{dollars}</span> : null}
+                                  </span>
                                 </span>
                               </label>
                             </li>
