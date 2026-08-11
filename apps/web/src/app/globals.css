@@ -7107,31 +7107,36 @@ a.acquire-block:hover {
     );
   color: var(--ink);
   cursor: pointer;
-  transition: transform 0.2s ease, border-color 0.2s ease;
+  transition: transform 0.2s ease;
   overflow: visible;
 }
 
-/* Soft black pulse that travels the outline counter-clockwise */
+/* Pulse rides the black outline, counter-clockwise — no hard racing dash */
 .fse-launch::after {
   content: "";
   position: absolute;
-  inset: -3px;
-  border-radius: 16px;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 2px;
   background: conic-gradient(
     from 0deg,
-    transparent 0deg,
-    transparent 220deg,
-    rgba(0, 0, 0, 0.08) 260deg,
-    rgba(0, 0, 0, 0.55) 300deg,
-    rgba(0, 0, 0, 0.12) 335deg,
-    transparent 360deg
+    rgba(0, 0, 0, 0.15) 0deg,
+    rgba(0, 0, 0, 0.15) 200deg,
+    rgba(0, 0, 0, 0.35) 250deg,
+    rgba(0, 0, 0, 0.95) 295deg,
+    rgba(0, 0, 0, 0.4) 330deg,
+    rgba(0, 0, 0, 0.15) 360deg
   );
-  filter: blur(3.5px);
-  z-index: -1;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
   pointer-events: none;
+  z-index: 1;
   animation:
-    fse-launch-pulse-spin 3.4s linear infinite,
-    fse-launch-pulse-breathe 1.7s ease-in-out infinite;
+    fse-launch-pulse-spin 3.6s linear infinite,
+    fse-launch-pulse-breathe 1.8s ease-in-out infinite;
 }
 
 @keyframes fse-launch-pulse-spin {
@@ -7143,7 +7148,7 @@ a.acquire-block:hover {
 @keyframes fse-launch-pulse-breathe {
   0%,
   100% {
-    opacity: 0.45;
+    opacity: 0.55;
   }
   50% {
     opacity: 1;
@@ -7154,16 +7159,11 @@ a.acquire-block:hover {
   transform: translateY(-1px);
 }
 
-.fse-launch.is-open {
-  border-color: #111;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .fse-launch::after {
     animation: none;
-    opacity: 0.35;
-    background: rgba(0, 0, 0, 0.2);
-    filter: blur(2px);
+    opacity: 0.5;
+    background: #111;
   }
 }
 
