@@ -7086,9 +7086,6 @@ a.acquire-block:hover {
 }
 
 .fse-launch {
-  position: relative;
-  z-index: 0;
-  isolation: isolate;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -7097,7 +7094,7 @@ a.acquire-block:hover {
   text-align: left;
   padding: 0.85rem 1.05rem;
   border-radius: 14px;
-  border: 1.5px solid #111;
+  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--line));
   background:
     linear-gradient(
       125deg,
@@ -7107,64 +7104,16 @@ a.acquire-block:hover {
     );
   color: var(--ink);
   cursor: pointer;
-  transition: transform 0.2s ease;
-  overflow: visible;
-}
-
-/* Pulse rides the black outline, counter-clockwise — no hard racing dash */
-.fse-launch::after {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  padding: 2px;
-  background: conic-gradient(
-    from 0deg,
-    rgba(0, 0, 0, 0.15) 0deg,
-    rgba(0, 0, 0, 0.15) 200deg,
-    rgba(0, 0, 0, 0.35) 250deg,
-    rgba(0, 0, 0, 0.95) 295deg,
-    rgba(0, 0, 0, 0.4) 330deg,
-    rgba(0, 0, 0, 0.15) 360deg
-  );
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-  z-index: 1;
-  animation:
-    fse-launch-pulse-spin 3.6s linear infinite,
-    fse-launch-pulse-breathe 1.8s ease-in-out infinite;
-}
-
-@keyframes fse-launch-pulse-spin {
-  to {
-    transform: rotate(-360deg);
-  }
-}
-
-@keyframes fse-launch-pulse-breathe {
-  0%,
-  100% {
-    opacity: 0.55;
-  }
-  50% {
-    opacity: 1;
-  }
+  transition: border-color 0.2s ease, transform 0.2s ease;
 }
 
 .fse-launch:hover {
+  border-color: color-mix(in srgb, var(--brand) 55%, var(--line));
   transform: translateY(-1px);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .fse-launch::after {
-    animation: none;
-    opacity: 0.5;
-    background: #111;
-  }
+.fse-launch.is-open {
+  border-color: color-mix(in srgb, var(--brand) 50%, var(--line));
 }
 
 .fse-launch-label {
