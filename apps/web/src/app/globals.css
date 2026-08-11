@@ -7097,7 +7097,7 @@ a.acquire-block:hover {
   text-align: left;
   padding: 0.85rem 1.05rem;
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--line));
+  border: 1.5px solid #111;
   background:
     linear-gradient(
       125deg,
@@ -7107,55 +7107,63 @@ a.acquire-block:hover {
     );
   color: var(--ink);
   cursor: pointer;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease;
   overflow: visible;
 }
 
-/* Short black segment racing along the existing outline (CCW) */
+/* Soft black pulse that travels the outline counter-clockwise */
 .fse-launch::after {
   content: "";
   position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  padding: 1.5px;
+  inset: -3px;
+  border-radius: 16px;
   background: conic-gradient(
     from 0deg,
     transparent 0deg,
-    transparent 300deg,
-    #0c0c0c 318deg,
-    #0c0c0c 342deg,
-    transparent 358deg,
+    transparent 220deg,
+    rgba(0, 0, 0, 0.08) 260deg,
+    rgba(0, 0, 0, 0.55) 300deg,
+    rgba(0, 0, 0, 0.12) 335deg,
     transparent 360deg
   );
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
+  filter: blur(3.5px);
+  z-index: -1;
   pointer-events: none;
-  z-index: 1;
-  animation: fse-launch-trace 2.6s linear infinite;
+  animation:
+    fse-launch-pulse-spin 3.4s linear infinite,
+    fse-launch-pulse-breathe 1.7s ease-in-out infinite;
 }
 
-@keyframes fse-launch-trace {
+@keyframes fse-launch-pulse-spin {
   to {
     transform: rotate(-360deg);
   }
 }
 
+@keyframes fse-launch-pulse-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 .fse-launch:hover {
-  border-color: color-mix(in srgb, var(--brand) 55%, var(--line));
   transform: translateY(-1px);
 }
 
 .fse-launch.is-open {
-  border-color: color-mix(in srgb, var(--brand) 50%, var(--line));
+  border-color: #111;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .fse-launch::after {
     animation: none;
-    opacity: 0;
+    opacity: 0.35;
+    background: rgba(0, 0, 0, 0.2);
+    filter: blur(2px);
   }
 }
 
