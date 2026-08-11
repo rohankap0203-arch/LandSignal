@@ -3708,7 +3708,8 @@ a.btn-intel:hover {
 
 .return-manage-screens {
   flex: 0 0 auto;
-  margin: 0;
+  align-self: center;
+  margin: 0.28rem 0 0;
   padding: 0.12rem 0.35rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--line));
@@ -3747,7 +3748,7 @@ a.btn-intel:hover {
   border: 1px solid color-mix(in srgb, var(--brand) 18%, var(--line));
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--brand) 6%, var(--bg-elevated)), var(--bg-elevated));
-  scroll-margin-top: 5.5rem;
+  scroll-margin-top: 6.25rem;
 }
 
 .return-screens-panel.is-flash {

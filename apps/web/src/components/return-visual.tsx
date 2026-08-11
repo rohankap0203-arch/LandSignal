@@ -410,7 +410,7 @@ export function ReturnVisual({
   const jumpToScreens = useCallback(() => {
     const el = screensRef.current;
     if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
     el.classList.remove("is-flash");
     // Force reflow so the flash animation can replay.
     void el.offsetWidth;

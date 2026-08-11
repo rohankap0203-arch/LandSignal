@@ -514,6 +514,8 @@ async def radar(
         return cands
 
     def collect_cands(*, apply_region: bool, apply_strict_channel: bool) -> list[_Cand]:
+        from landsignal.services.auction import expected_auction_clearing
+
         out: list[_Cand] = []
         # Snapshot keys so a concurrent discover can't reshuffle mid-search.
         for pid in sorted(store.parcels.keys(), key=str):
@@ -553,15 +555,55 @@ async def radar(
                 ):
                     continue
 
-            # Hard price / acre bands — selected criteria must fully match.
-            # Unpriced asks may pass a max-only ("Up to $X") filter, but never a min price.
-            if not _in_band(
-                ask,
-                min_price,
-                max_price,
-                allow_unknown=min_price is None,
-            ):
-                continue
+            # Budget recognition: compare against dollars-to-own, not teaser openers.
+            # - Auctions → likely settle (expected clearing)
+            # - Priced listings → published ask
+            # - Unpriced process parcels → our estimate (so a $250k budget
+            #   does not surface $2M “no public price” cards)
+            budget_usd: float | None = None
+            if min_price is not None or max_price is not None:
+                enrichment = store.enrichments.get(parcel.id)
+                auction_path = None
+                if enrichment and enrichment.comps and listing.provider_id != "public_vacant_gis":
+                    comps_n = enrichment.comps.normalized or enrichment.comps.value or {}
+                    if isinstance(comps_n, dict):
+                        raw_ap = comps_n.get("auction_path")
+                        if isinstance(raw_ap, dict):
+                            auction_path = raw_ap
+                if auction_path is None and ask and listing.provider_id in (
+                    "public_tax_sale",
+                    "public_surplus",
+                ):
+                    auction_path = expected_auction_clearing(
+                        opening_bid=ask,
+                        model_value=score.estimated_value_usd,
+                        acres=parcel.acreage,
+                        provider_id=listing.provider_id,
+                        state=parcel.state,
+                    )
+                if isinstance(auction_path, dict):
+                    settle = auction_path.get("expected_settle_usd") or auction_path.get(
+                        "settle_high_usd"
+                    )
+                    if settle is not None:
+                        try:
+                            budget_usd = float(settle)
+                        except (TypeError, ValueError):
+                            budget_usd = None
+                if budget_usd is None and ask is not None and ask > 0:
+                    budget_usd = float(ask)
+                if budget_usd is None and score.estimated_value_usd is not None:
+                    try:
+                        budget_usd = float(score.estimated_value_usd)
+                    except (TypeError, ValueError):
+                        budget_usd = None
+                if not _in_band(
+                    budget_usd,
+                    min_price,
+                    max_price,
+                    allow_unknown=False,
+                ):
+                    continue
             if not _in_band(
                 parcel.acreage,
                 min_acres,

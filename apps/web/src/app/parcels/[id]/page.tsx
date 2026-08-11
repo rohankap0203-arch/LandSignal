@@ -506,7 +506,7 @@ export default function ParcelIntelligencePage() {
         />
       </section>
 
-      <section id="sec-why" className="grid gap-4 md:grid-cols-2 scroll-mt-20">
+      <section id="sec-why" className="grid gap-4 md:grid-cols-2 items-start scroll-mt-20">
         <InsightList
           eyebrow="Scout edge"
           title="What makes this one worth opening"
@@ -644,9 +644,13 @@ function peelBidFace(raw: string): { amount: string; role: "start" | "finish" | 
   return { amount: t, role: null };
 }
 
-/** Starting bid → likely finish — admit-one ticket (above Buy case). */
+/** Starting bid → likely finish — admit-one ticket (above Buy case).
+ *  Auction / tax-sale floors only — retail asks and unpriced estimates stay plain. */
 function PriceStat({ label, value, kind }: { label: string; value: string; kind?: string }) {
-  const isBid = kind === "minimum_bid" || /starting bid/i.test(label);
+  const isBid =
+    kind === "minimum_bid" ||
+    /starting bid/i.test(label) ||
+    (/\bstart\b/i.test(value) && /likely finish/i.test(value));
   if (!isBid) return <Stat label={label} value={value} />;
 
   const parts = value.split(/\s·\s/).map((p) => p.trim()).filter(Boolean);
@@ -694,7 +698,7 @@ function InsightList({
 }) {
   const [open, setOpen] = useState(0);
   return (
-    <div className="panel p-4 insight-interactive">
+    <div className="panel p-4 insight-interactive h-fit">
       {eyebrow ? (
         <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">{eyebrow}</div>
       ) : null}
