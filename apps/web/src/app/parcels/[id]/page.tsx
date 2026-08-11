@@ -243,11 +243,13 @@ export default function ParcelIntelligencePage() {
                   <button
                     type="button"
                     className="next-process-action"
-                    onClick={() =>
-                      document
-                        .getElementById("sec-scroll-to")
-                        ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                    }
+                    onClick={() => {
+                      const el = document.getElementById("sec-read-start");
+                      if (!el) return;
+                      // Land below the sticky header + scroll-to chips (slightly lower than before).
+                      const top = el.getBoundingClientRect().top + window.scrollY - 56;
+                      window.scrollTo({ top, behavior: "smooth" });
+                    }}
                   >
                     Start reading ↓
                   </button>
@@ -320,6 +322,7 @@ export default function ParcelIntelligencePage() {
               ))}
             </div>
           </nav>
+          <div id="sec-read-start" className="scroll-mt-16">
           <ParcelMap
             latitude={parcel.latitude as number}
             longitude={parcel.longitude as number}
@@ -328,6 +331,7 @@ export default function ParcelIntelligencePage() {
             height={280}
             onExpand={() => setLandViewerOpen(true)}
           />
+          </div>
           <LandViewerModal
             open={landViewerOpen}
             onClose={() => setLandViewerOpen(false)}
@@ -506,7 +510,7 @@ export default function ParcelIntelligencePage() {
         />
       </section>
 
-      <section id="sec-why" className="grid gap-4 md:grid-cols-2 items-start scroll-mt-20">
+      <section id="sec-why" className="insight-pair scroll-mt-20">
         <InsightList
           eyebrow="Scout edge"
           title="What makes this one worth opening"
@@ -696,36 +700,45 @@ function InsightList({
   items: AnyRec[];
   eyebrow?: string;
 }) {
-  const [open, setOpen] = useState(0);
+  const [open, setOpen] = useState<number>(-1);
+  const rows = (items || []).filter((item) => {
+    const headline = String(item?.headline || item || "").trim();
+    return Boolean(headline);
+  });
   return (
-    <div className="panel p-4 insight-interactive h-fit">
-      {eyebrow ? (
-        <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">{eyebrow}</div>
-      ) : null}
-      <h2 className="display text-lg font-semibold leading-snug">{title}</h2>
-      <div className="mt-2 space-y-1.5">
-        {items.map((item, i) => {
-          const active = open === i;
-          return (
-            <button
-              key={`${String(item.headline || item)}-${i}`}
-              type="button"
-              className={`w-full rounded-xl bg-[var(--bg-soft)] p-2.5 text-left ${active ? "active" : ""}`}
-              onClick={() => setOpen(active ? -1 : i)}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="font-semibold text-sm leading-snug">{String(item.headline || item)}</div>
-                <span className="text-[10px] text-[var(--muted)] shrink-0">{active ? "−" : "+"}</span>
-              </div>
-              {active && item.detail ? (
-                <p className="mt-1.5 text-xs leading-relaxed text-[var(--muted)]">{String(item.detail)}</p>
-              ) : !active && item.detail ? (
-                <p className="mt-1 text-xs text-[var(--muted)] line-clamp-1">{String(item.detail)}</p>
-              ) : null}
-            </button>
-          );
-        })}
-        {!items.length && <p className="text-sm text-[var(--muted)]">No parcel-specific narrative yet.</p>}
+    <div className="panel insight-interactive">
+      <div className="insight-interactive-inner">
+        {eyebrow ? (
+          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">{eyebrow}</div>
+        ) : null}
+        <h2 className="display text-lg font-semibold leading-snug">{title}</h2>
+        <div className="insight-list">
+          {rows.map((item, i) => {
+            const active = open === i;
+            const detail = String(item.detail || "").trim();
+            return (
+              <button
+                key={`${String(item.headline || item)}-${i}`}
+                type="button"
+                className={`insight-item${active ? " is-open" : ""}`}
+                onClick={() => setOpen(active ? -1 : i)}
+              >
+                <div className="insight-item-head">
+                  <div className="font-semibold text-sm leading-snug">{String(item.headline || item)}</div>
+                  <span className="insight-item-toggle" aria-hidden>
+                    {active ? "−" : "+"}
+                  </span>
+                </div>
+                {active && detail ? (
+                  <p className="insight-item-detail">{detail}</p>
+                ) : null}
+              </button>
+            );
+          })}
+          {!rows.length ? (
+            <p className="text-sm text-[var(--muted)]">No parcel-specific narrative yet.</p>
+          ) : null}
+        </div>
       </div>
     </div>
   );

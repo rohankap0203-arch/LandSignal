@@ -4762,6 +4762,83 @@ a.acquire-block:hover {
   background: color-mix(in srgb, var(--brand) 8%, var(--bg-soft));
 }
 
+/* Scout edge / Still on the board — hug content, no stretched empty white */
+.insight-pair {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (min-width: 768px) {
+  .insight-pair {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.insight-interactive {
+  display: block;
+  height: auto;
+  min-height: 0;
+  align-self: start;
+}
+
+.insight-interactive-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  min-height: 0;
+}
+
+.insight-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-height: 0;
+}
+
+.insight-item {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.65rem 0.7rem;
+  border: 0;
+  border-radius: 12px;
+  background: var(--bg-soft);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  height: auto;
+  min-height: 0;
+}
+
+.insight-item.is-open {
+  border: 1px solid color-mix(in srgb, var(--brand) 40%, transparent);
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-soft));
+}
+
+.insight-item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.insight-item-toggle {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.insight-item-detail {
+  margin: 0.4rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
 .dd-compact button {
   padding: 8px 10px !important;
   border-radius: 12px !important;
