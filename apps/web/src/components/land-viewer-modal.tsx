@@ -83,6 +83,19 @@ const NEARBY_CHIPS: NearbyChip[] = [
     outMode: "center",
   },
   {
+    kind: "water",
+    label: "Water body",
+    color: "#0ea5e9",
+    overpassParts: [
+      'nwr["natural"="water"]',
+      'nwr["water"~"^(lake|pond|reservoir|basin)$"]',
+      'nwr["landuse"="reservoir"]',
+    ],
+    radiiM: [1500, 6000, 15000],
+    maxMiles: 11,
+    outMode: "center",
+  },
+  {
     kind: "road",
     label: "Paved road",
     color: "#a16207",
@@ -135,19 +148,6 @@ const NEARBY_CHIPS: NearbyChip[] = [
     ],
     radiiM: [3000, 12000, 32000],
     maxMiles: 22,
-    outMode: "center",
-  },
-  {
-    kind: "water",
-    label: "Water body",
-    color: "#0ea5e9",
-    overpassParts: [
-      'nwr["natural"="water"]',
-      'nwr["water"~"^(lake|pond|reservoir|basin)$"]',
-      'nwr["landuse"="reservoir"]',
-    ],
-    radiiM: [1500, 6000, 15000],
-    maxMiles: 11,
     outMode: "center",
   },
 ];

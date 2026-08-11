@@ -6019,12 +6019,14 @@ a.acquire-block:hover {
 }
 
 .land-viewer-nearby {
-  --nearby-chip-gap: 0.18rem;
+  /* Tight enough that Flood / Wetland / Water body / Paved road / Power line
+     barely share one row on phone-width Land Viewer; remaining 3 + Working wrap. */
+  --nearby-chip-gap: 0.12rem;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.18rem;
-  padding: 0.24rem 0.4rem 0.28rem;
+  gap: 0.14rem;
+  padding: 0.22rem 0.32rem 0.26rem;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-elevated) 90%, var(--bg-soft));
 }
@@ -6043,19 +6045,19 @@ a.acquire-block:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.18rem var(--nearby-chip-gap);
+  gap: 0.14rem var(--nearby-chip-gap);
   min-width: 0;
 }
 
 .land-viewer-chip {
   flex: 0 0 auto;
-  min-height: 1.28rem;
-  padding: 0.06rem 0.26rem;
+  min-height: 1.22rem;
+  padding: 0.05rem 0.2rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--chip, var(--brand)) 45%, var(--line));
   background: color-mix(in srgb, var(--chip, var(--brand)) 10%, var(--bg-elevated));
   color: var(--ink);
-  font-size: 0.58rem;
+  font-size: 0.55rem;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -6079,17 +6081,17 @@ a.acquire-block:hover {
 .land-viewer-nearby-loading {
   display: inline-flex;
   align-items: center;
-  gap: 0.12rem;
+  gap: 0.1rem;
   box-sizing: border-box;
   flex: 0 0 auto;
-  min-height: 1.28rem;
+  min-height: 1.22rem;
   margin: 0;
-  padding: 0.06rem 0.2rem 0.06rem 0.16rem;
+  padding: 0.05rem 0.18rem 0.05rem 0.14rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line));
   background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
   color: color-mix(in srgb, var(--brand) 55%, var(--ink));
-  font-size: 0.58rem;
+  font-size: 0.55rem;
   font-weight: 650;
   letter-spacing: 0.01em;
   line-height: 1;
