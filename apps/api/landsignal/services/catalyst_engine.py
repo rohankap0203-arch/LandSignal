@@ -882,11 +882,15 @@ def compute_scenario_impact(
 
     # Adjacency / frontage premium — catalysts next door hit harder than half-life decay alone.
     if effective_dist <= 0.15:
-        factor *= 1.55
+        factor *= 1.4
     elif effective_dist <= 0.35:
-        factor *= 1.28
+        factor *= 1.18
     elif effective_dist <= 0.75:
-        factor *= 1.12
+        factor *= 1.08
+
+    # Mild temper on bullish catalysts — still opportunistic, less aggressive.
+    if float(channels.get("immediate", 0.0)) >= 0:
+        factor *= 0.88
 
     # Externality haircut for catalysts that can help markets but hurt amenity parcels.
     ext = float(meta.get("externality_risk") or 0.0)
@@ -903,8 +907,8 @@ def compute_scenario_impact(
 
     # Combined multiperiod impact proxy used for UI ranges (10-year horizon lens).
     combined = immediate + hbu + rate * 8.0
-    # Soft absolute cap — opportunistic but not fantasy.
-    combined = _clip(combined, -0.65, 0.85)
+    # Soft absolute cap — moderately opportunistic, not fantasy.
+    combined = _clip(combined, -0.65, 0.78)
 
     # Confidence / dispersion from evidence quality proxies (no fabricated comps).
     evidence_n = 0  # real comps not yet wired — do not invent
@@ -931,9 +935,9 @@ def compute_scenario_impact(
     p90 = combined * (1.0 + dispersion) if combined >= 0 else combined * (1.0 - dispersion)
     # Keep ordering for negatives; bound display bands to institutional ranges.
     lo, mid, hi = sorted([p10, p50, p90])
-    lo = _clip(lo, -0.6, 0.85)
-    mid = _clip(mid, -0.6, 0.85)
-    hi = _clip(hi, -0.6, 0.85)
+    lo = _clip(lo, -0.6, 0.72)
+    mid = _clip(mid, -0.6, 0.72)
+    hi = _clip(hi, -0.6, 0.72)
 
     return {
         "event_key": event_key,
@@ -1183,7 +1187,7 @@ def select_auto_scenarios(
         dist = _default_distance(key, screens)
         # Retail / mall auto-scenarios assume nearby-node proximity when access supports it
         if key in {"major_restaurant", "major_retailer", "shopping_center"} and access >= 50:
-            dist = min(dist, 0.35 if key == "major_restaurant" else 0.85)
+            dist = min(dist, 0.5 if key == "major_restaurant" else 1.0)
         timing = _timing_years(key, stage, screens)
         # Retail nodes get recognized faster once open / approved
         if key in {"major_restaurant", "major_retailer", "shopping_center"}:
