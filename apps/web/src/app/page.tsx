@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FilterField } from "@/components/filter-field";
+import { HeroSelect } from "@/components/hero-select";
 import { LandLoader } from "@/components/land-loader";
 import { PropertyCard } from "@/components/property-card";
 import {
@@ -84,14 +85,24 @@ export default function SearchPage() {
   const regionOptions = useMemo(() => {
     const code = stateCode(form.state);
     const byState = meta?.regions_by_state?.[code] || meta?.regions_by_state?.Any || ["Any"];
-    const live = (meta?.regions || []).filter((r) => r !== "Any");
-    const merged = ["Any", ...byState.filter((r) => r !== "Any")];
-    for (const r of live) {
-      if (code === "Any" || r.endsWith(`, ${code}`) || r.includes(` ${code}`)) {
+    // Canonical investor regions for the selected state (or national macros when Any).
+    const merged = ["Any", ...byState.filter((r) => r && r !== "Any")];
+    // When a state is picked, append live inventory counties as concrete region cues.
+    if (code !== "Any") {
+      const live = (meta?.regions || []).filter((r) => {
+        if (!r || r === "Any") return false;
+        // Prefer "County, ST" / region labels tied to the active state.
+        return (
+          r.endsWith(`, ${code}`) ||
+          r.endsWith(` ${code}`) ||
+          r.toUpperCase().includes(`, ${code}`)
+        );
+      });
+      for (const r of live) {
         if (!merged.includes(r)) merged.push(r);
       }
     }
-    if (!merged.includes("Type a city / county…")) merged.push("Type a city / county…");
+    if (!merged.includes("Type a region…")) merged.push("Type a region…");
     return merged;
   }, [form.state, meta]);
 
@@ -133,6 +144,7 @@ export default function SearchPage() {
         unpriced_mode: "include",
         include_unpriced: true,
         sort: f.sort,
+        // Broaden may loosen region/channel only — never price, acres, or state.
         broaden: true,
       };
     },
@@ -242,67 +254,53 @@ export default function SearchPage() {
 
         <div className="filter-grid filter-grid-12">
           <FilterField label="State">
-            <select
+            <HeroSelect
+              ariaLabel="State"
               value={form.state}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, state: e.target.value, region: "Any", regionCustom: "" }))
-              }
-            >
-              {(meta?.states || ["Any"]).map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+              options={(meta?.states || ["Any"]).map((s) => ({ value: s, label: s }))}
+              onChange={(v) => setForm((f) => ({ ...f, state: v, region: "Any", regionCustom: "" }))}
+            />
           </FilterField>
 
-          <FilterField label="City / region">
-            <select
+          <FilterField label="Region">
+            <HeroSelect
+              ariaLabel="Region"
               value={form.region}
-              onChange={(e) =>
+              options={regionOptions.map((s) => ({ value: s, label: s }))}
+              onChange={(v) =>
                 setForm((f) => ({
                   ...f,
-                  region: e.target.value,
-                  regionCustom: e.target.value.startsWith("Type a") ? f.regionCustom : "",
+                  region: v,
+                  regionCustom: v.startsWith("Type a") ? f.regionCustom : "",
                 }))
               }
-            >
-              {regionOptions.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+            />
             {form.region.startsWith("Type a") ? (
               <input
                 className="mt-1.5"
                 value={form.regionCustom}
-                placeholder="Type city, county, or corridor…"
+                placeholder="e.g. Piedmont, Hill Country, Ozarks…"
                 onChange={(e) => setForm((f) => ({ ...f, regionCustom: e.target.value }))}
               />
             ) : null}
           </FilterField>
 
           <FilterField label="Price range">
-            <select
+            <HeroSelect
+              ariaLabel="Price range"
               value={form.pricePreset}
-              onChange={(e) => {
-                const v = e.target.value;
+              options={(meta?.price_presets || [{ label: "Any" }]).map((p) => ({
+                value: p.label,
+                label: p.label,
+              }))}
+              onChange={(v) =>
                 setForm((f) => ({
                   ...f,
                   pricePreset: v,
-                  ...(v.toLowerCase().includes("custom")
-                    ? {}
-                    : { priceMin: "", priceMax: "" }),
-                }));
-              }}
-            >
-              {(meta?.price_presets || [{ label: "Any" }]).map((p) => (
-                <option key={p.label} value={p.label}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
+                  ...(v.toLowerCase().includes("custom") ? {} : { priceMin: "", priceMax: "" }),
+                }))
+              }
+            />
             {form.pricePreset.toLowerCase().includes("custom") ? (
               <div className="filter-custom-pair mt-1.5">
                 <input
@@ -322,23 +320,21 @@ export default function SearchPage() {
           </FilterField>
 
           <FilterField label="Acreage">
-            <select
+            <HeroSelect
+              ariaLabel="Acreage"
               value={form.acrePreset}
-              onChange={(e) => {
-                const v = e.target.value;
+              options={(meta?.acre_presets || [{ label: "Any" }]).map((p) => ({
+                value: p.label,
+                label: p.label,
+              }))}
+              onChange={(v) =>
                 setForm((f) => ({
                   ...f,
                   acrePreset: v,
                   ...(v.toLowerCase().includes("custom") ? {} : { acreMin: "", acreMax: "" }),
-                }));
-              }}
-            >
-              {(meta?.acre_presets || [{ label: "Any" }]).map((p) => (
-                <option key={p.label} value={p.label}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
+                }))
+              }
+            />
             {form.acrePreset.toLowerCase().includes("custom") ? (
               <div className="filter-custom-pair mt-1.5">
                 <input
@@ -364,23 +360,21 @@ export default function SearchPage() {
               body: "Prefers parcels that fit that use (farm, develop, timber…). Others stay in results — they just rank lower.",
             }}
           >
-            <select
+            <HeroSelect
+              ariaLabel="Strategy"
               value={form.strategy}
-              onChange={(e) => {
-                const v = e.target.value;
+              options={(meta?.strategies || ["Any"]).map((s) => ({
+                value: s,
+                label: s === "Any" ? "Any" : s === "CUSTOM" ? "Type my own…" : s.replaceAll("_", " "),
+              }))}
+              onChange={(v) =>
                 setForm((f) => ({
                   ...f,
                   strategy: v,
                   strategyCustom: v === "CUSTOM" ? f.strategyCustom : "",
-                }));
-              }}
-            >
-              {(meta?.strategies || ["Any"]).map((s) => (
-                <option key={s} value={s}>
-                  {s === "Any" ? "Any" : s === "CUSTOM" ? "Type my own…" : s.replaceAll("_", " ")}
-                </option>
-              ))}
-            </select>
+                }))
+              }
+            />
             {form.strategy === "CUSTOM" ? (
               <input
                 className="mt-1.5"
@@ -398,24 +392,24 @@ export default function SearchPage() {
               body: "Doesn’t remove results — only reorders them.",
             }}
           >
-            <select
+            <HeroSelect
+              ariaLabel="Hold period"
               value={form.holdYears}
-              onChange={(e) => {
-                const v = e.target.value;
+              options={[
+                ...(meta?.hold_years?.length ? meta.hold_years : HOLD_YEAR_OPTIONS).map((s) => ({
+                  value: String(s),
+                  label: s === "Any" ? "Any" : `${s} years`,
+                })),
+                { value: "__custom__", label: "Type my own…" },
+              ]}
+              onChange={(v) =>
                 setForm((f) => ({
                   ...f,
                   holdYears: v,
                   holdCustom: v === "__custom__" ? f.holdCustom : "",
-                }));
-              }}
-            >
-              {(meta?.hold_years?.length ? meta.hold_years : HOLD_YEAR_OPTIONS).map((s) => (
-                <option key={String(s)} value={String(s)}>
-                  {s === "Any" ? "Any" : `${s} years`}
-                </option>
-              ))}
-              <option value="__custom__">Type my own…</option>
-            </select>
+                }))
+              }
+            />
             {form.holdYears === "__custom__" ? (
               <input
                 className="mt-1.5"
@@ -466,7 +460,7 @@ export default function SearchPage() {
                 onClick={scanFresh}
                 disabled={scanning}
               >
-                {scanning ? "Starting refresh…" : "Refresh live inventory"}
+                {scanning ? "Refreshing" : "Refresh live inventory"}
               </button>
               <button
                 type="button"
@@ -534,11 +528,7 @@ export default function SearchPage() {
         <div className="panel empty-state">
           <div className="display text-2xl text-[var(--ink)]">Find buys others can’t see</div>
           <p className="mx-auto mt-2 max-w-lg">
-            Hit <strong>Top opportunities</strong> for the strongest engine-ranked files nationwide, or
-            set filters and <strong>Show matches</strong> for this page’s search.{" "}
-            <strong>Land Alerts</strong> is separate — a saved watch profile that notifies you over time.
-            Use <strong>Refresh live inventory</strong> to pull new tax-sale / surplus / BLM postings into
-            the queue.
+            Hit <strong>Top opportunities</strong> for the strongest engine-ranked files nationwide.
           </p>
         </div>
       )}

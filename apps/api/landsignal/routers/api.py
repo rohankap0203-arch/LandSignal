@@ -358,8 +358,8 @@ async def radar(
 ) -> list[RadarRow]:
     """Search results with investor filters. Pass nothing / omit for Any.
 
-    broaden=True softens region/strategy when they would otherwise return zero rows,
-    but never crosses a selected state boundary.
+    broaden=True may loosen region / market-channel when they would otherwise return
+    zero rows, but never drops state, price, or acre constraints the user set.
     """
     from landsignal.geo_meta import region_matches
     from landsignal.scoring.engine import personalized_score
@@ -411,6 +411,28 @@ async def radar(
         discount_pct: float | None
         strategy_soft_miss: bool
         best_strategy: Any
+
+    def _in_hard_band(
+        value: float | None,
+        lo: float | None,
+        hi: float | None,
+        *,
+        allow_unknown: bool = False,
+    ) -> bool:
+        """Strict inclusive band. Unknown values fail unless explicitly allowed.
+
+        Price: unpriced GIS rows may pass an open max-only ceiling (no ask ≠ over budget),
+        but never a min-price floor. Acreage: unknown always fails when a band is set.
+        """
+        if lo is None and hi is None:
+            return True
+        if value is None:
+            return bool(allow_unknown and lo is None)
+        if lo is not None and value < lo:
+            return False
+        if hi is not None and value > hi:
+            return False
+        return True
 
     def _sort_cands(cands: list[_Cand], sort_key: str | None) -> list[_Cand]:
         key = (sort_key or "fit_desc").lower()
@@ -472,13 +494,10 @@ async def radar(
                 ):
                     continue
 
-            if min_price is not None and (ask is None or ask < min_price):
+            # Price + acre filters are hard constraints (stacked with state/region/etc.).
+            if not _in_hard_band(ask, min_price, max_price, allow_unknown=True):
                 continue
-            if max_price is not None and ask is not None and ask > max_price:
-                continue
-            if min_acres is not None and (parcel.acreage is None or parcel.acreage < min_acres):
-                continue
-            if max_acres is not None and parcel.acreage is not None and parcel.acreage > max_acres:
+            if not _in_hard_band(parcel.acreage, min_acres, max_acres, allow_unknown=False):
                 continue
             strategy_soft_miss = False
             if strategy and strategy.upper() not in ("ANY", "CUSTOM", ""):
@@ -928,14 +947,17 @@ async def radar(
     broaden_reason: str | None = None
     if broaden and not cands:
         cands = collect_cands(apply_region=False, apply_strict_channel=True)
-        broaden_reason = "Loosened city/region a bit so you still get real matches for your other filters."
-    if broaden and not cands and (min_price is not None or max_price is not None):
-        saved_min, saved_max = min_price, max_price
-        min_price = None
-        max_price = None
+        if cands:
+            broaden_reason = (
+                "Loosened region a bit so you still get real matches for your other filters."
+            )
+    if broaden and not cands:
+        # Channel only — never drop state / price / acre hard filters.
         cands = collect_cands(apply_region=False, apply_strict_channel=False)
-        min_price, max_price = saved_min, saved_max
-        broaden_reason = "Your exact price band had no hits — showing the closest live opportunities instead."
+        if cands:
+            broaden_reason = (
+                "Loosened market channel a bit so you still get matches inside your price/acre filters."
+            )
 
     ranked = _sort_cands(cands, sort)
     capped = ranked[: max(1, min(limit, 500))] if ranked else []
@@ -982,9 +1004,39 @@ async def search_meta() -> dict[str, Any]:
     inventory_states = sorted(
         {(p.state or "").upper() for p in store.parcels.values() if p.state and not p.is_demo}
     )
+    # Per-state acreage coverage so UI/search can tell when a filter band
+    # cannot be satisfied by current inventory (e.g. old FL-only sub-acre lots).
+    by_state_acres: dict[str, list[float]] = {}
+    for p in store.parcels.values():
+        if p.is_demo or not p.state:
+            continue
+        ac = getattr(p, "acreage", None)
+        if ac is None:
+            continue
+        try:
+            ac_f = float(ac)
+        except (TypeError, ValueError):
+            continue
+        if ac_f <= 0:
+            continue
+        by_state_acres.setdefault(str(p.state).upper(), []).append(ac_f)
+    inventory_acre_coverage = {}
+    for st, acres in sorted(by_state_acres.items()):
+        acres_sorted = sorted(acres)
+        n = len(acres_sorted)
+        inventory_acre_coverage[st] = {
+            "count": n,
+            "min_acres": round(acres_sorted[0], 2),
+            "max_acres": round(acres_sorted[-1], 2),
+            "median_acres": round(acres_sorted[n // 2], 2),
+            "count_1_plus": sum(1 for a in acres_sorted if a >= 1),
+            "count_5_plus": sum(1 for a in acres_sorted if a >= 5),
+            "count_40_plus": sum(1 for a in acres_sorted if a >= 40),
+        }
     payload = search_meta_payload(inventory_regions)
     payload["inventory_states"] = inventory_states
     payload["inventory_count"] = sum(1 for p in store.parcels.values() if not p.is_demo)
+    payload["inventory_acre_coverage"] = inventory_acre_coverage
     return payload
 
 
@@ -1484,16 +1536,22 @@ async def get_land_alert_profile() -> dict[str, Any]:
 
 @router.put("/land-alerts/profile")
 async def upsert_land_alert_profile(body: LandAlertProfileUpsert) -> dict[str, Any]:
-    from landsignal.services.land_alerts import DEMO_USER_ID, match_card, upsert_profile
+    from landsignal.services.land_alerts import (
+        DEMO_USER_ID,
+        filter_mappable_matches,
+        match_card,
+        upsert_profile,
+    )
 
     store = get_store(get_settings().demo_seed)
     profile, matches = upsert_profile(store, body, DEMO_USER_ID)
-    cards = [match_card(store, m) for m in matches]
+    viewable = filter_mappable_matches(store, matches)
+    cards = [match_card(store, m) for m in viewable]
     cards.sort(key=lambda c: (-(c.get("preference_match_pct") or 0), -(c.get("landsignal_score") or 0)))
     return {
         "profile": profile.model_dump(mode="json"),
-        "match_count": len(matches),
-        "new_count": sum(1 for m in matches if m.status == "new"),
+        "match_count": len(viewable),
+        "new_count": sum(1 for m in viewable if m.status == "new"),
         "matches": cards[:100],
         "note": "Matches recalculated against existing inventory. Preference changes do not create 'new listing' notifications.",
     }
@@ -1526,10 +1584,15 @@ async def resume_land_alert(profile_id: UUID) -> dict[str, Any]:
 
 @router.get("/land-alerts/matches")
 async def list_land_alert_matches(profile_id: UUID | None = None, status: str | None = None) -> dict[str, Any]:
-    from landsignal.services.land_alerts import DEMO_USER_ID, match_card, matches_for_user
+    from landsignal.services.land_alerts import (
+        DEMO_USER_ID,
+        filter_mappable_matches,
+        match_card,
+        matches_for_user,
+    )
 
     store = get_store(get_settings().demo_seed)
-    all_rows = matches_for_user(store, DEMO_USER_ID, profile_id)
+    all_rows = filter_mappable_matches(store, matches_for_user(store, DEMO_USER_ID, profile_id))
     rows = [m for m in all_rows if m.status == status] if status else all_rows
     cards = [match_card(store, m) for m in rows]
     return {
@@ -1623,15 +1686,21 @@ async def update_land_alert_notify(body: LandAlertNotify) -> dict[str, Any]:
 
 @router.post("/land-alerts/rescan")
 async def rescan_land_alerts() -> dict[str, Any]:
-    from landsignal.services.land_alerts import DEMO_USER_ID, match_card, rescan_profile
+    from landsignal.services.land_alerts import (
+        DEMO_USER_ID,
+        filter_mappable_matches,
+        match_card,
+        rescan_profile,
+    )
 
     store = get_store(get_settings().demo_seed)
     profiles = [p for p in store.land_alert_profiles.values() if p.user_id == DEMO_USER_ID and not p.paused]
     all_matches = []
     for p in profiles:
         all_matches.extend(rescan_profile(store, p, origin="existing_inventory"))
-    cards = [match_card(store, m) for m in all_matches]
-    return {"match_count": len(all_matches), "matches": cards[:100]}
+    viewable = filter_mappable_matches(store, all_matches)
+    cards = [match_card(store, m) for m in viewable]
+    return {"match_count": len(viewable), "matches": cards[:100]}
 
 
 @router.get("/investor-profile")

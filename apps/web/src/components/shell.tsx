@@ -38,12 +38,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMenuOpen(false);
     };
+    // Do not lock body overflow — hiding the scrollbar reflows the header and shifts this control.
     document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
   if (isAuthPage) {
@@ -133,15 +130,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
               >
                 {theme === "light" ? "Dark mode" : "Light mode"}
               </button>
-              <div className="shell-menu-close-panel">
-                <button
-                  type="button"
-                  className="shell-menu-close-btn"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Close menu
-                </button>
-              </div>
             </nav>
           </>
         ) : null}
