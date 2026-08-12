@@ -358,8 +358,8 @@ async def radar(
 ) -> list[RadarRow]:
     """Search results with investor filters. Pass nothing / omit for Any.
 
-    broaden=True softens region/strategy when they would otherwise return zero rows,
-    but never crosses a selected state boundary.
+    broaden=True may loosen region / market-channel when they would otherwise return
+    zero rows, but never drops state, price, or acre constraints the user set.
     """
     from landsignal.geo_meta import region_matches
     from landsignal.scoring.engine import personalized_score
@@ -412,35 +412,27 @@ async def radar(
         strategy_soft_miss: bool
         best_strategy: Any
 
-    def _soft_band_penalty(
+    def _in_hard_band(
         value: float | None,
         lo: float | None,
         hi: float | None,
         *,
-        unknown_penalty: float = 6.0,
-        hard_ratio: float = 1.45,
-    ) -> float | None:
-        """Open-ended Up-to / N+ filters stay flexible: near-misses rank lower; far misses drop."""
+        allow_unknown: bool = False,
+    ) -> bool:
+        """Strict inclusive band. Unknown values fail unless explicitly allowed.
+
+        Price: unpriced GIS rows may pass an open max-only ceiling (no ask ≠ over budget),
+        but never a min-price floor. Acreage: unknown always fails when a band is set.
+        """
         if lo is None and hi is None:
-            return 0.0
+            return True
         if value is None:
-            return unknown_penalty
-        penalty = 0.0
+            return bool(allow_unknown and lo is None)
         if lo is not None and value < lo:
-            if lo <= 0:
-                return None
-            ratio = value / lo
-            if ratio < (1.0 / hard_ratio):
-                return None
-            penalty += min(26.0, (1.0 - ratio) * 55.0)
+            return False
         if hi is not None and value > hi:
-            if hi <= 0:
-                return None
-            ratio = value / hi
-            if ratio > hard_ratio:
-                return None
-            penalty += min(28.0, (ratio - 1.0) * 70.0)
-        return penalty
+            return False
+        return True
 
     def _sort_cands(cands: list[_Cand], sort_key: str | None) -> list[_Cand]:
         key = (sort_key or "fit_desc").lower()
@@ -502,14 +494,10 @@ async def radar(
                 ):
                     continue
 
-            # Soft price / acre bands: keep near-misses, demote them in Fit.
-            price_pen = _soft_band_penalty(ask, min_price, max_price, unknown_penalty=5.0)
-            if price_pen is None:
+            # Price + acre filters are hard constraints (stacked with state/region/etc.).
+            if not _in_hard_band(ask, min_price, max_price, allow_unknown=True):
                 continue
-            acre_pen = _soft_band_penalty(
-                parcel.acreage, min_acres, max_acres, unknown_penalty=7.0, hard_ratio=1.55
-            )
-            if acre_pen is None:
+            if not _in_hard_band(parcel.acreage, min_acres, max_acres, allow_unknown=False):
                 continue
             strategy_soft_miss = False
             if strategy and strategy.upper() not in ("ANY", "CUSTOM", ""):
@@ -547,7 +535,6 @@ async def radar(
             )
             if strategy_soft_miss:
                 fit = max(0, fit - 12)
-            fit = max(0.0, float(fit) - price_pen - acre_pen)
             out.append(
                 _Cand(
                     parcel_id=parcel.id,
@@ -960,22 +947,17 @@ async def radar(
     broaden_reason: str | None = None
     if broaden and not cands:
         cands = collect_cands(apply_region=False, apply_strict_channel=True)
-        broaden_reason = "Loosened region a bit so you still get real matches for your other filters."
-    if broaden and not cands and (
-        min_price is not None or max_price is not None or min_acres is not None or max_acres is not None
-    ):
-        saved_min, saved_max = min_price, max_price
-        saved_amin, saved_amax = min_acres, max_acres
-        min_price = None
-        max_price = None
-        min_acres = None
-        max_acres = None
+        if cands:
+            broaden_reason = (
+                "Loosened region a bit so you still get real matches for your other filters."
+            )
+    if broaden and not cands:
+        # Channel only — never drop state / price / acre hard filters.
         cands = collect_cands(apply_region=False, apply_strict_channel=False)
-        min_price, max_price = saved_min, saved_max
-        min_acres, max_acres = saved_amin, saved_amax
-        broaden_reason = (
-            "Your exact price/acre band had no hits — showing the closest live opportunities instead."
-        )
+        if cands:
+            broaden_reason = (
+                "Loosened market channel a bit so you still get matches inside your price/acre filters."
+            )
 
     ranked = _sort_cands(cands, sort)
     capped = ranked[: max(1, min(limit, 500))] if ranked else []

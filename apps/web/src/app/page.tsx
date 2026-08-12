@@ -144,6 +144,7 @@ export default function SearchPage() {
         unpriced_mode: "include",
         include_unpriced: true,
         sort: f.sort,
+        // Broaden may loosen region/channel only — never price, acres, or state.
         broaden: true,
       };
     },
