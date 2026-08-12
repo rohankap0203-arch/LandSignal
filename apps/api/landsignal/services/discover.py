@@ -158,18 +158,30 @@ async def discover_opportunities(
         )
     )
 
-    by_provider: dict[str, list[dict]] = {}
+    # Fair nationwide mix: round-robin by state, then by provider inside each state.
+    by_state_provider: dict[str, dict[str, list[dict]]] = {}
     for row in listings:
-        by_provider.setdefault(row.get("provider_id") or "unknown", []).append(row)
+        st = (row.get("state") or "??").upper()
+        prov = row.get("provider_id") or "unknown"
+        by_state_provider.setdefault(st, {}).setdefault(prov, []).append(row)
     diversified: list[dict] = []
-    while len(diversified) < limit and any(by_provider.values()):
-        for prov in list(by_provider.keys()):
-            if by_provider.get(prov):
-                diversified.append(by_provider[prov].pop(0))
+    while len(diversified) < limit and by_state_provider:
+        for st in list(by_state_provider.keys()):
+            provs = by_state_provider.get(st) or {}
+            if not provs:
+                by_state_provider.pop(st, None)
+                continue
+            for prov in list(provs.keys()):
+                if provs.get(prov):
+                    diversified.append(provs[prov].pop(0))
+                if not provs.get(prov):
+                    provs.pop(prov, None)
+                if len(diversified) >= limit:
+                    break
+            if not provs:
+                by_state_provider.pop(st, None)
             if len(diversified) >= limit:
                 break
-            if prov in by_provider and not by_provider[prov]:
-                by_provider.pop(prov, None)
 
     parcel_ids: list[UUID] = []
     to_score: list[UUID] = []

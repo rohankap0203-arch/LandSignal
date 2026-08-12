@@ -78,6 +78,8 @@ class ArcgisMarketSource:
         out_fields: str = "*",
         shard_by_objectid: bool = False,
         objectid_max: int | None = None,
+        shard_field: str | None = None,
+        shard_values: list[str] | None = None,
     ):
         self.source_id = source_id
         self.name = name
@@ -92,6 +94,9 @@ class ArcgisMarketSource:
         # CO_NO is present on FL_Parcels but not reliably filterable; OBJECTID ranges work.
         self.shard_by_objectid = shard_by_objectid
         self.objectid_max = objectid_max
+        # Alternate sharding when OBJECTID windows are unsupported (e.g. NC OneMap).
+        self.shard_field = shard_field
+        self.shard_values = shard_values
 
 
 def _norm_shasta(raw: dict) -> dict | None:
@@ -749,7 +754,7 @@ def _norm_nj_mod4_vacant(raw: dict) -> dict | None:
     if str(props.get("PROP_CLASS") or "").strip() != "1":
         return None
     geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
-    acreage = _nj_acres(props, geom_acres, min_ac=5.0)
+    acreage = _nj_acres(props, geom_acres, min_ac=1.0)
     if acreage is None:
         return None
     impr = _fnum(props.get("IMPRVT_VAL")) or 0
@@ -844,7 +849,7 @@ def _norm_ny_orpts_vacant(raw: dict) -> dict | None:
     acreage = _bounded_acres(
         _fnum(props.get("CALC_ACRES")) or _fnum(props.get("ACRES")),
         geom_acres,
-        min_ac=5.0,
+        min_ac=1.0,
     )
     if acreage is None:
         return None
@@ -999,7 +1004,7 @@ def _norm_ma_massgis_vacant(raw: dict) -> dict | None:
     if _non_market_owner(owner):
         return None
     geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
-    acreage = _bounded_acres(preferred, geom_acres, min_ac=5.0)
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=1.0)
     if acreage is None:
         return None
     pid = props.get("PROP_ID") or props.get("MAP_PAR_ID") or props.get("LOC_ID") or props.get("OBJECTID")
@@ -2141,13 +2146,15 @@ SOURCES: list[ArcgisMarketSource] = [
     ),
     ArcgisMarketSource(
         "nj_mod4_vacant",
-        "New Jersey MOD-IV Vacant Land (5ac+)",
+        "New Jersey MOD-IV Vacant Land (1ac+)",
         "https://maps.nj.gov/arcgis/rest/services/Framework/Cadastral/MapServer/0/query",
         "NJ",
         "Statewide",
         _norm_nj_mod4_vacant,
-        where="PROP_CLASS='1' AND CALC_ACRE>=5 AND IMPRVT_VAL=0",
-        order_by="CALC_ACRE DESC",
+        where="PROP_CLASS='1' AND CALC_ACRE>=1 AND IMPRVT_VAL=0",
+        page_size=1000,
+        shard_by_objectid=True,
+        objectid_max=4_000_000,
     ),
     ArcgisMarketSource(
         "nj_mod4_farmland",
@@ -2157,23 +2164,27 @@ SOURCES: list[ArcgisMarketSource] = [
         "Statewide",
         _norm_nj_mod4_farm,
         where="PROP_CLASS='3B' AND CALC_ACRE>=10",
-        order_by="CALC_ACRE DESC",
+        page_size=1000,
+        shard_by_objectid=True,
+        objectid_max=4_000_000,
     ),
-    # Statewide cadastral screens — only states with verified official vacant/ag attributes.
-    # Skipped for now (no equally clean public vacant filter): DE, HI, IA, KY, LA, ME, MS,
-    # ND, NH, OK, RI, SC, SD, VT, WV, DC (county-only / centroids-only / stale / no class codes).
+    # Statewide cadastral screens — FL/NJ/NY/MA/AR here; NC/NE/WA/WI/UT/IN/VT/CT appended
+    # from statewide_inventory.py. Remaining gaps stay on county tax-sale/surplus feeds until
+    # a clean public vacant class filter exists (DE/HI/IA/KY/LA/ME/MS/ND/NH/OK/RI/SC/SD/WV/…).
     ArcgisMarketSource(
         "ny_orpts_vacant",
-        "New York ORPTS Vacant Land (5ac+)",
+        "New York ORPTS Vacant Land (1ac+)",
         "https://gisservices.its.ny.gov/arcgis/rest/services/NYS_Tax_Parcels_Public/MapServer/1/query",
         "NY",
         "Statewide",
         _norm_ny_orpts_vacant,
         where=(
             "PROP_CLASS >= 300 AND PROP_CLASS < 400 AND PROP_CLASS <> 315 "
-            "AND CALC_ACRES >= 5 AND CALC_ACRES <= 2500 AND OWNER_TYPE='8'"
+            "AND CALC_ACRES >= 1 AND CALC_ACRES <= 2500 AND OWNER_TYPE='8'"
         ),
-        order_by="CALC_ACRES DESC",
+        page_size=1000,
+        shard_by_objectid=True,
+        objectid_max=5_000_000,
     ),
     ArcgisMarketSource(
         "ny_orpts_agriculture",
@@ -2186,7 +2197,9 @@ SOURCES: list[ArcgisMarketSource] = [
             "PROP_CLASS >= 100 AND PROP_CLASS < 200 "
             "AND CALC_ACRES >= 10 AND CALC_ACRES <= 2500 AND OWNER_TYPE='8'"
         ),
-        order_by="CALC_ACRES DESC",
+        page_size=1000,
+        shard_by_objectid=True,
+        objectid_max=5_000_000,
     ),
     ArcgisMarketSource(
         "ar_geostor_vacant",
@@ -2196,20 +2209,24 @@ SOURCES: list[ArcgisMarketSource] = [
         "Statewide",
         _norm_ar_geostor_vacant,
         where="impvalue=0 AND taxarea>=5 AND taxarea<=2500 AND landvalue>0 AND parceltype='AV'",
-        order_by="taxarea DESC",
+        page_size=1000,
+        shard_by_objectid=True,
+        objectid_max=3_000_000,
     ),
     ArcgisMarketSource(
         "ma_massgis_vacant",
-        "Massachusetts MassGIS Vacant Land (5ac+)",
+        "Massachusetts MassGIS Vacant Land (1ac+)",
         "https://services1.arcgis.com/hGdibHYSPO59RG1h/arcgis/rest/services/Massachusetts_Property_Tax_Parcels/FeatureServer/0/query",
         "MA",
         "Statewide",
         _norm_ma_massgis_vacant,
         where=(
-            "BLDG_VAL=0 AND LOT_UNITS='Acres' AND LOT_SIZE>=5 AND LOT_SIZE<=2500 "
+            "BLDG_VAL=0 AND LOT_UNITS='Acres' AND LOT_SIZE>=1 AND LOT_SIZE<=2500 "
             "AND USE_CODE IN ('130','131','132','201','202','390','391','392','393')"
         ),
-        order_by="LOT_SIZE DESC",
+        page_size=1000,
+        shard_by_objectid=True,
+        objectid_max=3_000_000,
     ),
     ArcgisMarketSource(
         "ma_massgis_chapter61",
@@ -2222,9 +2239,16 @@ SOURCES: list[ArcgisMarketSource] = [
             "BLDG_VAL=0 AND LOT_UNITS='Acres' AND LOT_SIZE>=10 AND LOT_SIZE<=2500 "
             "AND USE_CODE IN ('601','602','713','714','717','718')"
         ),
-        order_by="LOT_SIZE DESC",
+        page_size=1000,
+        shard_by_objectid=True,
+        objectid_max=3_000_000,
     ),
 ]
+
+# Merge additional verified statewide vacant/ag screens (NC/NE/WA/WI/UT/IN/VT/CT…).
+from landsignal.providers.statewide_inventory import SOURCES as _STATEWIDE_EXTRA_SOURCES
+
+SOURCES.extend(_STATEWIDE_EXTRA_SOURCES)
 
 
 async def _fetch_arcgis_pages(
@@ -2282,6 +2306,70 @@ async def _fetch_arcgis_pages(
             break
         offset += len(feats)
     return out
+
+
+async def _fetch_arcgis_value_shards(
+    client: httpx.AsyncClient,
+    src: ArcgisMarketSource,
+    *,
+    target: int,
+    start_offset: int = 0,
+) -> list[dict]:
+    """Shard a layer by discrete field values (county name / FIPS) for geographic breadth."""
+    import asyncio
+
+    values = [str(v) for v in (getattr(src, "shard_values", None) or []) if v]
+    field = getattr(src, "shard_field", None)
+    if not values or not field or target <= 0:
+        return await _fetch_arcgis_pages(
+            client, src, target=target, start_offset=start_offset
+        )
+    per_value = max(15, (target // len(values)) + 10)
+    sem = asyncio.Semaphore(6)
+
+    async def one(val: str) -> list[dict]:
+        # Quote strings; leave bare tokens that look numeric.
+        literal = val if val.replace(".", "", 1).isdigit() else f"'{val.replace(chr(39), chr(39)+chr(39))}'"
+        where = f"({src.where}) AND {field}={literal}"
+        async with sem:
+            for attempt in range(2):
+                try:
+                    return await _fetch_arcgis_pages(
+                        client,
+                        src,
+                        target=per_value,
+                        start_offset=start_offset,
+                        where=where,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    if attempt == 0:
+                        await asyncio.sleep(0.4)
+                        continue
+                    log.warning(
+                        "public_tax_value_shard_failed",
+                        source=src.source_id,
+                        field=field,
+                        value=val,
+                        error=str(exc)[:200],
+                    )
+                    return []
+        return []
+
+    batches = await asyncio.gather(*[one(v) for v in values])
+    queues = [list(batch) for batch in batches if batch]
+    out: list[dict] = []
+    while queues and len(out) < target:
+        nxt: list[list[dict]] = []
+        for q in queues:
+            if not q:
+                continue
+            out.append(q.pop(0))
+            if q:
+                nxt.append(q)
+            if len(out) >= target:
+                break
+        queues = nxt
+    return out[:target]
 
 
 async def _fetch_arcgis_objectid_shards(
@@ -2375,54 +2463,93 @@ class PublicTaxSaleProvider(ListingProvider):
             preferred = [s for s in tax_sources if s.state.upper() in prefer]
             if preferred:
                 tax_sources = preferred
-        # Split the budget across counties so one mega-layer doesn't dominate,
-        # but keep a large statewide allotment when present (FL/NJ/NY/MA/AR…).
-        statewide_sources = [s for s in tax_sources if (s.county or "").lower() == "statewide"]
-        county_sources = [s for s in tax_sources if (s.county or "").lower() != "statewide"]
-        statewide_n = len(statewide_sources)
-        statewide_pool = 0
-        statewide_target = None
-        if statewide_n:
-            # Zillow-scale: most budget to statewide vacant/ag; leave a slice for county feeds.
-            statewide_pool = min(limit, max(5000, (limit * 9) // 10))
-            statewide_target = max(300, statewide_pool // statewide_n)
-            per_source = max(100, (limit - statewide_pool) // max(1, len(county_sources))) if county_sources else 0
-        else:
-            per_source = max(300, limit // max(1, len(tax_sources)))
+        # Fair per-state budgets so FL-style statewide screens don't starve other states.
+        from collections import defaultdict
+        import asyncio
+
+        by_state_sources: dict[str, list[ArcgisMarketSource]] = defaultdict(list)
+        for src in tax_sources:
+            by_state_sources[src.state.upper()].append(src)
+        state_keys = sorted(by_state_sources.keys())
+        per_state = max(150, limit // max(1, len(state_keys)))
+        if prefer and len(state_keys) <= 3:
+            # Single-/few-state discovers can spend nearly the full Zillow-scale budget.
+            per_state = max(per_state, min(limit, max(4000, (limit * 9) // 10 // max(1, len(state_keys)))))
         start_offset = int(query.get("offset") or 0)
+
         async with httpx.AsyncClient(timeout=120.0, headers=_ARCGIS_HEADERS) as client:
-            results = await asyncio_gather_sources(
-                client,
-                tax_sources,
-                per_source,
-                errors,
-                start_offset=start_offset,
-                statewide_target=statewide_target,
-                statewide_pool=statewide_pool,
-            )
+
+            async def fetch_state(st: str) -> list[dict]:
+                srcs = by_state_sources[st]
+                statewide = [s for s in srcs if (s.county or "").lower() == "statewide"]
+                county = [s for s in srcs if s not in statewide]
+                st_limit = per_state
+                if statewide:
+                    pool = min(st_limit, max(200, (st_limit * 9) // 10))
+                    county_budget = max(0, st_limit - pool)
+                    per_county = (
+                        max(40, county_budget // max(1, len(county))) if county else 0
+                    )
+                    batches = await asyncio_gather_sources(
+                        client,
+                        srcs,
+                        per_county,
+                        errors,
+                        start_offset=start_offset,
+                        statewide_target=max(100, pool // max(1, len(statewide))),
+                        statewide_pool=pool,
+                    )
+                else:
+                    per_src = max(40, st_limit // max(1, len(srcs)))
+                    batches = await asyncio_gather_sources(
+                        client,
+                        srcs,
+                        per_src,
+                        errors,
+                        start_offset=start_offset,
+                    )
+                rows: list[dict] = []
+                for batch in batches:
+                    rows.extend(batch)
+                return rows
+
+            results = await asyncio.gather(*[fetch_state(st) for st in state_keys])
             for batch in results:
                 out.extend(batch)
-        # Round-robin by feed (not acreage) so large ag parcels don't bury vacant lots.
-        by_feed: dict[str, list[dict]] = {}
+
+        # Round-robin by STATE first (nationwide fairness), then by feed inside each state.
+        by_state_feed: dict[str, dict[str, list[dict]]] = defaultdict(lambda: defaultdict(list))
         for row in out:
-            feed = (row.get("external_id") or "").split(":")[0] or (row.get("state") or "??")
-            by_feed.setdefault(feed, []).append(row)
-        for feed in by_feed:
-            by_feed[feed].sort(
-                key=lambda r: (
-                    0 if r.get("asking_price_usd") is not None else 1,
-                    -(r.get("acreage") or 0),
+            st = (row.get("state") or "??").upper()
+            feed = (row.get("external_id") or "").split(":")[0] or st
+            by_state_feed[st][feed].append(row)
+        for st in by_state_feed:
+            for feed in by_state_feed[st]:
+                by_state_feed[st][feed].sort(
+                    key=lambda r: (
+                        0 if r.get("asking_price_usd") is not None else 1,
+                        -(r.get("acreage") or 0),
+                    )
                 )
-            )
         diversified: list[dict] = []
-        while len(diversified) < limit and any(by_feed.values()):
-            for feed in list(by_feed.keys()):
-                if by_feed.get(feed):
-                    diversified.append(by_feed[feed].pop(0))
+        while len(diversified) < limit and by_state_feed:
+            for st in list(by_state_feed.keys()):
+                feeds = by_state_feed.get(st) or {}
+                if not feeds:
+                    by_state_feed.pop(st, None)
+                    continue
+                # One row from each feed in this state, then next state.
+                for feed in list(feeds.keys()):
+                    if feeds.get(feed):
+                        diversified.append(feeds[feed].pop(0))
+                    if not feeds.get(feed):
+                        feeds.pop(feed, None)
+                    if len(diversified) >= limit:
+                        break
+                if not feeds:
+                    by_state_feed.pop(st, None)
                 if len(diversified) >= limit:
                     break
-                if feed in by_feed and not by_feed[feed]:
-                    by_feed.pop(feed, None)
         return ProviderResult(
             True,
             ProviderStatus.CONFIGURED,
@@ -2464,8 +2591,9 @@ async def asyncio_gather_sources(
         # Statewide cadastral screens can support Zillow-scale land coverage —
         # bias the pool toward vacant lots (listing-site shape) over ag acreage.
         if statewide_pool and (src.county or "").lower() == "statewide":
+            # Split the pool across sources (do NOT give every vacant 75% of the pool).
             if src in vacant_statewide:
-                share = 0.75 if other_statewide else 1.0
+                share = (0.75 if other_statewide else 1.0) / max(1, len(vacant_statewide))
                 target = max(statewide_target or per_source, int(statewide_pool * share))
             elif src in other_statewide:
                 share = 0.25 / max(1, len(other_statewide))
@@ -2475,6 +2603,10 @@ async def asyncio_gather_sources(
         elif statewide_target and (src.county or "").lower() == "statewide":
             target = max(per_source, statewide_target)
         try:
+            if getattr(src, "shard_field", None) and getattr(src, "shard_values", None):
+                return await _fetch_arcgis_value_shards(
+                    client, src, target=target, start_offset=start_offset
+                )
             if getattr(src, "shard_by_objectid", False):
                 return await _fetch_arcgis_objectid_shards(
                     client, src, target=target, start_offset=start_offset
