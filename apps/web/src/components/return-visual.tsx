@@ -8,6 +8,21 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import {
+  cpiFromMeta,
+  withInflation,
+  type InflationMeta,
+  type MoneyMode,
+} from "@/lib/inflation";
+import { MoneyModeControl, moneyModeShort } from "@/components/money-mode-control";
+import { BuyingPowerLogic } from "@/components/buying-power-logic";
+import {
+  buildHoldCasePath,
+  enrichHoldEndpoint,
+  rateFromFactors,
+  type HoldCaseKey,
+  type ToggleFactor,
+} from "@/lib/hold-path";
 
 type PathPoint = {
   year_offset: number;
@@ -18,16 +33,24 @@ type PathPoint = {
   cumulative_carry_usd?: number;
   total_back_usd?: number;
   gain_usd?: number;
+  starting_mark_usd?: number;
+  purchase_usd?: number;
 };
 
 type CaseEndpoint = {
   irr?: number | null;
   irr_display?: string;
+  irr_real?: number | null;
+  irr_real_display?: string;
   exit_usd?: number | null;
+  exit_usd_today?: number | null;
   land_mark_usd?: number | null;
   cumulative_rent_usd?: number | null;
+  cumulative_rent_usd_today?: number | null;
   total_back_usd?: number | null;
+  total_back_usd_today?: number | null;
   gain_usd?: number | null;
+  gain_usd_today?: number | null;
   path?: PathPoint[];
   starting_noi?: number | null;
   effective_annual_used?: number | null;
@@ -53,17 +76,24 @@ type ReturnIntel = {
   mark_usd?: number | null;
   hold_years?: number;
   windows?: number[];
+  inflation?: InflationMeta | null;
   model?: {
     effective_annual?: number;
     effective_annual_display?: string;
     uncertainty?: number;
     usable_frac?: number;
+    flood_carry_frac?: number;
     factor_count?: number;
     place?: string;
     strategy?: string;
+    acres?: number;
+    state?: string;
+    provider?: string;
+    prime_pct?: number;
   };
   factors?: Factor[];
   all_factors?: Factor[];
+  toggle_factors?: ToggleFactor[];
   endpoints?: Record<string, Record<string, CaseEndpoint>>;
   paths_100?: Record<
     string,
@@ -310,6 +340,8 @@ export function ReturnVisual({
   entryUsd,
   markUsd,
   annualRate,
+  moneyMode: moneyModeProp,
+  onMoneyModeChange,
 }: {
   intel?: ReturnIntel | null;
   cases?: LegacyCase[];
@@ -319,6 +351,8 @@ export function ReturnVisual({
   entryUsd?: number | null;
   markUsd?: number | null;
   annualRate?: number | null;
+  moneyMode?: MoneyMode;
+  onMoneyModeChange?: (m: MoneyMode) => void;
 }) {
   const windows = (intel?.windows?.length ? intel.windows : [...HOLD_YEARS]).filter((w) =>
     HOLD_YEARS.includes(w as (typeof HOLD_YEARS)[number]),
@@ -332,9 +366,57 @@ export function ReturnVisual({
   const [activeCase, setActiveCase] = useState<(typeof CASE_ORDER)[number]>("BASE");
   const [scrubYear, setScrubYear] = useState(holdYears);
   const [dragging, setDragging] = useState(false);
-  const [openFactor, setOpenFactor] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [casesHelpOpen, setCasesHelpOpen] = useState(false);
+  const [moneyModeLocal, setMoneyModeLocal] = useState<MoneyMode>("today");
+  const moneyMode = moneyModeProp ?? moneyModeLocal;
+  const setMoneyMode = onMoneyModeChange ?? setMoneyModeLocal;
+  const cpi = cpiFromMeta(intel?.inflation);
+  const cpiDisplay = intel?.inflation?.cpi_display || `${(cpi * 100).toFixed(1)}%/yr`;
+
+  const toggleFactors: ToggleFactor[] = useMemo(() => {
+    const raw = (intel?.toggle_factors || intel?.all_factors || intel?.factors || []) as ToggleFactor[];
+    return raw.filter((f) => f && f.key);
+  }, [intel?.toggle_factors, intel?.all_factors, intel?.factors]);
+
+  const factorSig = useMemo(
+    () =>
+      toggleFactors
+        .map((f) => `${f.key}:${f.default_on !== false ? 1 : 0}:${f.toggleable === false ? 0 : 1}`)
+        .join("|"),
+    [toggleFactors],
+  );
+
+  const defaultsFromFactors = useCallback((list: ToggleFactor[]) => {
+    const next: Record<string, boolean> = {};
+    for (const f of list) {
+      const id = String(f.key);
+      next[id] = f.toggleable === false ? true : f.default_on !== false;
+    }
+    return next;
+  }, []);
+
+  const [enabledFactors, setEnabledFactors] = useState<Record<string, boolean>>({});
+  const screensRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setEnabledFactors(defaultsFromFactors(toggleFactors));
+  }, [factorSig, toggleFactors, defaultsFromFactors]);
+
+  const resetScreens = useCallback(() => {
+    setEnabledFactors(defaultsFromFactors(toggleFactors));
+  }, [defaultsFromFactors, toggleFactors]);
+
+  const jumpToScreens = useCallback(() => {
+    const el = screensRef.current;
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.classList.remove("is-flash");
+    // Force reflow so the flash animation can replay.
+    void el.offsetWidth;
+    el.classList.add("is-flash");
+    window.setTimeout(() => el.classList.remove("is-flash"), 1200);
+  }, []);
 
   useEffect(() => {
     setScrubYear((y) => Math.max(1, Math.min(holdYears, y)));
@@ -350,54 +432,134 @@ export function ReturnVisual({
   }, [casesHelpOpen]);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
-  const available = intel?.available !== false && Boolean(intel?.endpoints || intel?.paths_100);
+  const available = intel?.available !== false && Boolean(intel?.endpoints || intel?.paths_100 || toggleFactors.length);
+
+  const purchase = Number(intel?.purchase_usd || entryUsd || markUsd || 0);
+  const mark = Number(intel?.mark_usd || markUsd || purchase || 0);
+
+  const liveModel = useMemo(() => {
+    const pace = rateFromFactors(toggleFactors, enabledFactors);
+    const floodOn = enabledFactors.flood_carry !== false;
+    const wetOn = enabledFactors.wetland_usable !== false;
+    const taxOn = enabledFactors.property_tax !== false;
+    const exitOn = enabledFactors.exit_friction !== false;
+    const fadeOn = enabledFactors.long_hold_fade !== false;
+    const floodF = toggleFactors.find((f) => f.key === "flood_carry");
+    const wetF = toggleFactors.find((f) => f.key === "wetland_usable");
+    const taxF = toggleFactors.find((f) => f.key === "property_tax");
+    const exitF = toggleFactors.find((f) => f.key === "exit_friction");
+    return {
+      annual: pace || Number(intel?.model?.effective_annual || annualRate || 0.028),
+      floodCarryFrac: floodOn
+        ? Number(floodF?.flood_carry_frac ?? intel?.model?.flood_carry_frac ?? 0)
+        : 0,
+      usableFrac: wetOn ? Number(wetF?.usable_frac ?? intel?.model?.usable_frac ?? 1) : 1,
+      taxFrac: taxOn ? Number(taxF?.tax_frac ?? 0.009) : 0,
+      exitHaircutAdd: exitOn ? Number(exitF?.exit_haircut_add ?? 0) : 0,
+      applyFade: fadeOn,
+    };
+  }, [toggleFactors, enabledFactors, intel, annualRate]);
 
   const endpointsAtHold = useMemo(() => {
     const out: Record<string, CaseEndpoint> = {};
+    const canLive = purchase > 0 && mark > 0 && toggleFactors.length > 0;
     for (const c of CASE_ORDER) {
-      const fromApi = intel?.endpoints?.[String(holdYears)]?.[c];
-      if (fromApi) {
-        out[c] = fromApi;
+      if (canLive) {
+        const built = buildHoldCasePath({
+          purchase,
+          mark,
+          annual: liveModel.annual,
+          holdYears,
+          caseKey: c as HoldCaseKey,
+          uncertainty: Number(intel?.model?.uncertainty ?? 0.35),
+          acres: Number(intel?.model?.acres ?? 1),
+          strategy: intel?.model?.strategy,
+          provider: intel?.model?.provider,
+          floodCarryFrac: liveModel.floodCarryFrac,
+          usableFrac: liveModel.usableFrac,
+          exitHaircutAdd: liveModel.exitHaircutAdd,
+          taxFrac: liveModel.taxFrac,
+          applyFade: liveModel.applyFade,
+          primePct: intel?.model?.prime_pct,
+          state: intel?.model?.state,
+        });
+        const enriched = enrichHoldEndpoint(built, cpi);
+        if (enriched) out[c] = enriched as CaseEndpoint;
         continue;
       }
-      const sliced = endpointFromPath(
-        intel?.paths_100?.[c],
-        holdYears,
-        intel?.purchase_usd,
-      );
-      if (sliced) out[c] = sliced;
+      const fromApi = intel?.endpoints?.[String(holdYears)]?.[c];
+      const base =
+        fromApi ||
+        endpointFromPath(intel?.paths_100?.[c], holdYears, intel?.purchase_usd) ||
+        null;
+      const enriched = withInflation(base, cpi);
+      if (enriched) out[c] = enriched;
     }
     return out;
-  }, [intel, holdYears]);
+  }, [
+    purchase,
+    mark,
+    toggleFactors.length,
+    liveModel,
+    holdYears,
+    intel,
+    cpi,
+  ]);
 
   const endpoint = endpointsAtHold[activeCase];
-  const fullPath = intel?.paths_100?.[activeCase]?.path || endpoint?.path || [];
   const path = useMemo(() => {
-    const pts = fullPath.filter((p) => Number(p.year_offset) >= 1 && Number(p.year_offset) <= holdYears);
-    return pts.length ? pts : (endpoint?.path || []).slice(0, holdYears);
-  }, [fullPath, holdYears, endpoint?.path]);
+    const pts = (endpoint?.path || []).filter(
+      (p) => Number(p.year_offset) >= 1 && Number(p.year_offset) <= holdYears,
+    );
+    return pts;
+  }, [endpoint?.path, holdYears]);
+
+  const bandPaths = useMemo(() => {
+    const out: Record<string, PathPoint[]> = {};
+    for (const c of CASE_ORDER) {
+      out[c] = (endpointsAtHold[c]?.path || []).filter(
+        (p) => Number(p.year_offset) >= 1 && Number(p.year_offset) <= holdYears,
+      ) as PathPoint[];
+    }
+    return out;
+  }, [endpointsAtHold, holdYears]);
+
+  const showToday = moneyMode === "today";
+  const exitShow = showToday ? endpoint?.exit_usd_today ?? endpoint?.exit_usd : endpoint?.exit_usd;
+  const rentShow = showToday
+    ? endpoint?.cumulative_rent_usd_today ?? endpoint?.cumulative_rent_usd
+    : endpoint?.cumulative_rent_usd;
+  const totalShow = showToday
+    ? endpoint?.total_back_usd_today ?? endpoint?.total_back_usd
+    : endpoint?.total_back_usd;
+  const gainShow = showToday ? endpoint?.gain_usd_today ?? endpoint?.gain_usd : endpoint?.gain_usd;
+  const irrShow = showToday ? endpoint?.irr_real ?? endpoint?.irr : endpoint?.irr;
+  const irrPct = irrShow != null ? Number(irrShow) * 100 : null;
 
   // Keep scrub inside the selected hold window
   const scrubClamped = Math.max(1, Math.min(holdYears, scrubYear));
   const scrubPoint = path.find((p) => Number(p.year_offset) === scrubClamped) || path[path.length - 1];
 
-  const bandPaths = useMemo(() => {
-    const out: Record<string, PathPoint[]> = {};
-    for (const c of CASE_ORDER) {
-      const src = intel?.paths_100?.[c]?.path || intel?.endpoints?.[String(holdYears)]?.[c]?.path || [];
-      out[c] = src.filter((p) => Number(p.year_offset) >= 1 && Number(p.year_offset) <= holdYears);
-    }
-    return out;
-  }, [intel, holdYears]);
-
   const chart = useMemo(() => {
     const series = bandPaths.BASE.length ? bandPaths : { BASE: path, BEAR: path, BULL: path };
+    const purchase = Number(intel?.purchase_usd || endpoint?.purchase_usd || entryUsd || markUsd || 0);
+    const startMark = Number(
+      intel?.mark_usd ||
+        (path[0] as PathPoint | undefined)?.starting_mark_usd ||
+        purchase,
+    );
+    const valOf = (p: PathPoint) => {
+      const y = Number(p.year_offset || 0);
+      const raw = Number(p.total_back_usd ?? p.exit_usd ?? p.land_usd ?? 0);
+      if (!showToday || !(y > 0) || !(raw > 0)) return raw;
+      return raw / Math.pow(1 + cpi, y);
+    };
     const allVals = Object.values(series)
       .flat()
-      .map((p) => Number(p.total_back_usd ?? p.exit_usd ?? p.land_usd ?? 0))
+      .map(valOf)
       .filter((v) => v > 0);
-    const purchase = Number(intel?.purchase_usd || endpoint?.purchase_usd || entryUsd || markUsd || 0);
     if (purchase > 0) allVals.push(purchase);
+    if (startMark > 0) allVals.push(startMark);
     const minV = allVals.length ? Math.min(...allVals) * 0.92 : 0;
     const maxV = allVals.length ? Math.max(...allVals) * 1.06 : 1;
     const W = 640;
@@ -413,16 +575,13 @@ export function ReturnVisual({
     };
     const lineFor = (pts: PathPoint[]) => {
       if (!pts.length) return "";
+      // Chart starts at buy cash outlay; first land mark is usually higher (the edge).
       const start = `M ${xOf(0)} ${yOf(purchase)}`;
       const rest = pts
-        .map((p) => {
-          const v = Number(p.total_back_usd ?? p.exit_usd ?? p.land_usd ?? 0);
-          return `L ${xOf(Number(p.year_offset))} ${yOf(v)}`;
-        })
+        .map((p) => `L ${xOf(Number(p.year_offset))} ${yOf(valOf(p))}`)
         .join(" ");
       return `${start} ${rest}`;
     };
-    // Sample for smooth-looking polyline (every year for short holds; step for long)
     const step = holdYears > 40 ? 2 : 1;
     const sample = (pts: PathPoint[]) => pts.filter((_, i) => i % step === 0 || i === pts.length - 1);
     return {
@@ -435,13 +594,25 @@ export function ReturnVisual({
       xOf,
       yOf,
       purchase,
+      startMark,
       minV,
       maxV,
       bearD: lineFor(sample(series.BEAR || [])),
       baseD: lineFor(sample(series.BASE || [])),
       bullD: lineFor(sample(series.BULL || [])),
     };
-  }, [bandPaths, path, holdYears, intel?.purchase_usd, endpoint?.purchase_usd, entryUsd, markUsd]);
+  }, [
+    bandPaths,
+    path,
+    holdYears,
+    intel?.purchase_usd,
+    intel?.mark_usd,
+    endpoint?.purchase_usd,
+    entryUsd,
+    markUsd,
+    showToday,
+    cpi,
+  ]);
 
   const yearFromClientX = useCallback(
     (clientX: number) => {
@@ -467,9 +638,10 @@ export function ReturnVisual({
   };
   const onPointerUp = () => setDragging(false);
 
-  const factors = intel?.factors || [];
-  const factorCount = intel?.model?.factor_count ?? factors.length;
-  const irrPct = endpoint?.irr != null ? Number(endpoint.irr) * 100 : null;
+  const factors = toggleFactors;
+  const factorCount = factors.length;
+  const livePaceDisplay = `${(liveModel.annual * 100).toFixed(1)}%/yr`;
+  const toggledOff = factors.filter((f) => f.toggleable !== false && enabledFactors[f.key] === false).length;
 
   // Fallback: legacy flat compound if intel missing
   if (!available) {
@@ -486,74 +658,91 @@ export function ReturnVisual({
   }
 
   const scrubX = chart.xOf(scrubClamped);
-  const scrubY = scrubPoint
-    ? chart.yOf(Number(scrubPoint.total_back_usd ?? scrubPoint.exit_usd ?? 0))
-    : chart.yOf(chart.purchase);
+  const scrubRaw = Number(scrubPoint?.total_back_usd ?? scrubPoint?.exit_usd ?? 0);
+  const scrubVal =
+    showToday && scrubRaw > 0
+      ? scrubRaw / Math.pow(1 + cpi, scrubClamped)
+      : scrubRaw;
+  const scrubY = scrubPoint ? chart.yOf(scrubVal) : chart.yOf(chart.purchase);
 
   return (
     <div className="return-visual">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-            Multi-factor return path
-          </div>
-          <h3 className="display text-lg font-semibold">If you hold this property</h3>
-        </div>
+      <div className="return-title-row">
+        <div className="return-title-kicker">Hold return</div>
+        {factors.length > 0 ? (
+          <button
+            type="button"
+            className="return-manage-screens"
+            aria-controls="hold-return-screens"
+            onClick={jumpToScreens}
+          >
+            Manage screens
+          </button>
+        ) : null}
         <button
           type="button"
-          className={`help-q ${helpOpen ? "on" : ""}`}
-          aria-label="How this return path works"
+          className={`help-q return-help-q ${helpOpen ? "on" : ""}`}
+          aria-label="How this hold return works"
+          aria-haspopup="dialog"
           aria-expanded={helpOpen}
           title="How this works"
-          onClick={() => setHelpOpen((v) => !v)}
+          onClick={() => setHelpOpen(true)}
         >
           ?
         </button>
       </div>
       {helpOpen ? (
-        <div className="help-panel mt-2">
-          <p>
-            This is not a straight “price goes up X% every year” line. LandSignal bends the path
-            with this property’s own screens — soil, flood, wetlands, growth, how it’s sold, carry
-            costs, and exit friction — then shows three cases:
-          </p>
-          <ul>
-            <li>
-              <strong>Cautious</strong> — slower rents, softer exit, higher carry
-            </li>
-            <li>
-              <strong>Typical</strong> — base path for this file
-            </li>
-            <li>
-              <strong>Optimistic</strong> — stronger rents and exit, still bounded
-            </li>
-          </ul>
-          <p>
-            Pick a hold length (presets or Custom, 1–100 yr). Drag the chart to read any year. Tap a
-            factor card to see why it lifts or slows the path. First look only — not an appraisal.
-          </p>
+        <div
+          className="help-modal-backdrop"
+          role="presentation"
+          onClick={() => setHelpOpen(false)}
+        >
+          <div
+            className="help-modal help-modal--compact"
+            role="dialog"
+            aria-modal="true"
+            aria-label="How hold return works"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h4 className="display text-base font-semibold">Hold return · quick read</h4>
+              <button
+                type="button"
+                className="help-q on"
+                aria-label="Close"
+                onClick={() => setHelpOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <p className="mt-2 text-sm leading-snug text-[var(--ink-soft)]">
+              Not a flat %/yr line. Soil, flood, wetlands, growth, channel, carry, and exit bend the
+              path
+              {intel?.purchase_usd ? ` from a ~${money(intel.purchase_usd)} buy` : ""}.
+            </p>
+            <ul className="help-modal-list">
+              <li>
+                <strong>Cautious</strong>
+                <span>Slower rents, softer exit, higher carry.</span>
+              </li>
+              <li>
+                <strong>Typical</strong>
+                <span>Base path for this file.</span>
+              </li>
+              <li>
+                <strong>Optimistic</strong>
+                <span>Stronger rents &amp; exit — still bounded.</span>
+              </li>
+            </ul>
+            <p className="mt-3 text-xs leading-snug text-[var(--muted)]">
+              Drag the chart · tap a factor · 1–100 yr hold.{" "}
+              <strong>Future dollars</strong> = projected money back.{" "}
+              <strong>Today’s dollars</strong> = that same money in purchasing power (~{cpiDisplay}{" "}
+              inflation). Screen only — not an appraisal.
+            </p>
+          </div>
         </div>
       ) : null}
-      <p className="mt-1 text-sm text-[var(--muted)] leading-snug">
-        {factorCount} local screens shape the curve
-        {intel?.purchase_usd ? ` · buy near ${money(intel.purchase_usd)}` : ""}.
-        Pick a case and hold length.
-      </p>
-
-      <div className="traj-windows mt-3" role="tablist" aria-label="Return case">
-        {CASE_ORDER.map((k) => (
-          <button
-            key={k}
-            type="button"
-            role="tab"
-            aria-selected={activeCase === k}
-            className={`traj-window-btn ${activeCase === k ? "active" : ""}`}
-            onClick={() => setActiveCase(k)}
-          >
-            {caseLabel(k)}
-          </button>
-        ))}
-      </div>
 
       <div className="traj-windows" role="tablist" aria-label="Hold length">
         {windows.map((y) => (
@@ -608,11 +797,63 @@ export function ReturnVisual({
               }}
             />
           </label>
-          <span className="hold-custom-hint">1–100 · chart &amp; totals update live</span>
+          <span className="hold-custom-hint">1–100 years</span>
         </div>
       ) : null}
 
-      <div className="return-chart-wrap mt-3">
+      <div className="traj-head-row traj-head-row--hold">
+        <h3 className="display text-lg font-semibold leading-snug">
+          {holdYears} yr hold · {livePaceDisplay}
+          {toggledOff ? ` · ${toggledOff} screens off` : ""}
+        </h3>
+        <div className="traj-windows traj-windows--cases" role="tablist" aria-label="Return case">
+          {CASE_ORDER.map((k) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={activeCase === k}
+              className={`traj-window-btn traj-window-btn--case ${activeCase === k ? "active" : ""}`}
+              onClick={() => setActiveCase(k)}
+            >
+              {caseLabel(k)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <MoneyModeControl
+        mode={moneyMode}
+        onChange={setMoneyMode}
+        cpiDisplay={cpiDisplay}
+        compare={
+          holdYears >= 1 &&
+          endpoint?.total_back_usd != null &&
+          endpoint?.total_back_usd_today != null
+            ? {
+                label: `Total back · ${holdYears} yr · ${caseLabel(activeCase)}`,
+                today: endpoint.total_back_usd_today,
+                before: endpoint.total_back_usd,
+                format: shortMoney,
+              }
+            : null
+        }
+      />
+
+      <BuyingPowerLogic
+        variant="hold"
+        years={holdYears}
+        cpi={cpi}
+        cpiDisplay={cpiDisplay}
+        purchaseUsd={intel?.purchase_usd}
+        markUsd={intel?.mark_usd}
+        futureNominal={endpoint?.exit_usd}
+        futureToday={endpoint?.exit_usd_today}
+        totalBackToday={endpoint?.total_back_usd_today}
+        totalBackNominal={endpoint?.total_back_usd}
+      />
+
+      <div className="return-chart-wrap">
         <svg
           ref={svgRef}
           viewBox={`0 0 ${chart.W} ${chart.H}`}
@@ -630,9 +871,9 @@ export function ReturnVisual({
               <stop offset="100%" stopColor="var(--brand)" stopOpacity="0.02" />
             </linearGradient>
           </defs>
-          {/* Grid years */}
-          {[0, Math.round(holdYears / 2), holdYears].map((y) => (
-            <g key={y}>
+          {/* Grid years — dedupe so 1 yr holds don’t emit [0,1,1] React keys */}
+          {Array.from(new Set([0, Math.round(holdYears / 2), holdYears])).map((y) => (
+            <g key={`yr-${y}`}>
               <line
                 x1={chart.xOf(y)}
                 x2={chart.xOf(y)}
@@ -696,39 +937,89 @@ export function ReturnVisual({
         </svg>
         <div className="return-scrub-hint">
           Drag the chart · year {scrubClamped} of {holdYears} · total back{" "}
-          <strong>{money(scrubPoint?.total_back_usd)}</strong>
+          <strong>
+            {money(
+              showToday && scrubPoint?.total_back_usd != null
+                ? Number(scrubPoint.total_back_usd) / Math.pow(1 + cpi, scrubClamped)
+                : scrubPoint?.total_back_usd,
+            )}
+          </strong>
+          {showToday ? " in today’s dollars" : " in future dollars"}
         </div>
       </div>
 
       {endpoint && (
-        <div className="return-future mt-3">
-          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-            After exactly {holdYears} years · {caseLabel(activeCase).toLowerCase()}
+        <div className="return-future">
+          <div className="return-future-head">
+            <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+              After {holdYears} yr · {caseLabel(activeCase)}
+            </div>
+            <div className="return-future-basis">{moneyModeShort(moneyMode)}</div>
           </div>
           <div className="return-future-grid">
             <div>
               <span>Land at exit</span>
-              <strong>{money(endpoint.exit_usd)}</strong>
+              <strong>{money(exitShow)}</strong>
+              {holdYears >= 1 && endpoint.exit_usd != null && endpoint.exit_usd_today != null ? (
+                <em className="return-alt-line">
+                  {showToday
+                    ? `${shortMoney(Number(endpoint.exit_usd))} future dollars`
+                    : `${shortMoney(Number(endpoint.exit_usd_today))} today’s dollars`}
+                </em>
+              ) : null}
             </div>
             <div>
               <span>Rent along the way</span>
-              <strong>{money(endpoint.cumulative_rent_usd)}</strong>
+              <strong>{money(rentShow)}</strong>
+              {holdYears >= 1 &&
+              endpoint.cumulative_rent_usd != null &&
+              endpoint.cumulative_rent_usd_today != null ? (
+                <em className="return-alt-line">
+                  {showToday
+                    ? `${shortMoney(Number(endpoint.cumulative_rent_usd))} future dollars`
+                    : `${shortMoney(Number(endpoint.cumulative_rent_usd_today))} today’s dollars`}
+                </em>
+              ) : null}
             </div>
             <div>
               <span>Total back</span>
-              <strong>{money(endpoint.total_back_usd)}</strong>
+              <strong>{money(totalShow)}</strong>
+              {holdYears >= 1 &&
+              endpoint.total_back_usd != null &&
+              endpoint.total_back_usd_today != null ? (
+                <em className="return-alt-line">
+                  {showToday
+                    ? `${shortMoney(Number(endpoint.total_back_usd))} future dollars`
+                    : `${shortMoney(Number(endpoint.total_back_usd_today))} today’s dollars`}
+                </em>
+              ) : null}
             </div>
             <div className="return-vs-cell">
               <span>Vs buy · annualized</span>
               <strong
-                className={`return-vs-buy ${
-                  (endpoint.gain_usd ?? 0) >= 0 ? "text-[var(--positive)]" : "text-[var(--danger)]"
-                }`}
+                className={`return-vs-buy ${(Number(gainShow) || 0) >= 0 ? "is-pos" : "is-neg"}`}
               >
-                {(endpoint.gain_usd ?? 0) >= 0 ? "+" : ""}
-                {shortMoney(Number(endpoint.gain_usd || 0))}
-                {irrPct != null ? ` · ${irrPct.toFixed(1)}%/yr` : ""}
+                <span className="return-vs-gain">
+                  {(Number(gainShow) || 0) >= 0 ? "+" : ""}
+                  {shortMoney(Number(gainShow || 0))}
+                </span>
+                {irrPct != null ? (
+                  <span className="return-vs-irr">
+                    {irrPct.toFixed(1)}%/yr{showToday ? " real" : ""}
+                  </span>
+                ) : null}
               </strong>
+              {holdYears >= 1 &&
+              endpoint.irr != null &&
+              endpoint.irr_real != null &&
+              Number.isFinite(endpoint.irr) &&
+              Number.isFinite(endpoint.irr_real) ? (
+                <em className="return-alt-line">
+                  {showToday
+                    ? `${(Number(endpoint.irr) * 100).toFixed(1)}%/yr in future dollars`
+                    : `${(Number(endpoint.irr_real) * 100).toFixed(1)}%/yr in today’s dollars`}
+                </em>
+              ) : null}
             </div>
           </div>
         </div>
@@ -742,10 +1033,10 @@ export function ReturnVisual({
         </p>
       ) : null}
 
-      <div className="mt-4 space-y-2">
+      <div className="mt-3">
         <div className="flex items-center justify-between gap-2">
           <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-            All cases at {holdYears} years
+            3 outcomes · {holdYears} yr
           </div>
           <button
             type="button"
@@ -766,14 +1057,14 @@ export function ReturnVisual({
             onClick={() => setCasesHelpOpen(false)}
           >
             <div
-              className="help-modal"
+              className="help-modal help-modal--compact"
               role="dialog"
               aria-modal="true"
               aria-label="What these cases mean"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-3">
-                <h4 className="display text-base font-semibold">3 cases · {holdYears} yr hold</h4>
+                <h4 className="display text-base font-semibold">3 cases · {holdYears} yr</h4>
                 <button
                   type="button"
                   className="help-q on"
@@ -783,114 +1074,136 @@ export function ReturnVisual({
                   ×
                 </button>
               </div>
-              <p className="mt-2 text-sm leading-snug">
+              <p className="mt-1.5 text-xs leading-snug text-[var(--muted)]">
                 Same buy
-                {intel?.purchase_usd ? ` (${money(intel.purchase_usd)})` : ""}. Same hold. Only the
-                story changes.
+                {intel?.purchase_usd ? ` (${money(intel.purchase_usd)})` : ""} · same hold · rent /
+                pace / exit friction shift.
               </p>
               <ul className="help-modal-list">
-                {CASE_ORDER.map((k) => {
-                  const ep = endpointsAtHold[k];
-                  const pct = ep?.irr != null ? Number(ep.irr) * 100 : null;
-                  const blurb =
-                    k === "BEAR"
-                      ? "Soft day — weaker rents, harder exit, more carry."
-                      : k === "BULL"
-                        ? "Strong day — better rents & exit, still faded on long holds."
-                        : "Base path from this property’s own screens.";
-                  return (
-                    <li key={k}>
-                      <strong>
-                        {caseLabel(k)}
-                        {pct != null ? ` · ${pct.toFixed(1)}%/yr` : ""}
-                      </strong>
-                      <span>
-                        {blurb}
-                        {ep?.total_back_usd != null
-                          ? ` Total back ~${money(ep.total_back_usd)}.`
-                          : ""}
-                      </span>
-                    </li>
-                  );
-                })}
+                <li>
+                  <strong>Cautious</strong>
+                  <span>Softer rents, harder exit, more carry.</span>
+                </li>
+                <li>
+                  <strong>Typical</strong>
+                  <span>Base path from this property’s screens.</span>
+                </li>
+                <li>
+                  <strong>Optimistic</strong>
+                  <span>Stronger rents & exit — still not a forever rocket.</span>
+                </li>
               </ul>
-              <p className="mt-3 text-xs text-[var(--muted)] leading-snug">
-                {holdYears >= 50
-                  ? "Long holds fade on purpose — century dollars are nominal screens, not dynasty math."
-                  : "Annualized if you buy, collect rent, and sell at that case’s exit. A screen — not a promise."}
+              <p className="mt-2 text-[11px] text-[var(--muted)] leading-snug">
+                Total back = exit + rent along the way. Screen, not promise.
               </p>
             </div>
           </div>
         ) : null}
-        {CASE_ORDER.map((k) => {
-          const ep = endpointsAtHold[k];
-          if (!ep) return null;
-          const pct = ep.irr != null ? Number(ep.irr) * 100 : null;
-          const maxAbs = Math.max(
-            12,
-            ...CASE_ORDER.map((x) => Math.abs(Number(endpointsAtHold[x]?.irr || 0) * 100)),
-          );
-          const w = pct != null ? Math.max(6, (Math.abs(pct) / maxAbs) * 100) : 6;
-          return (
-            <button
-              key={k}
-              type="button"
-              className={`return-mini ${activeCase === k ? "active" : ""} tone-${caseTone(k)}`}
-              onClick={() => setActiveCase(k)}
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="font-semibold">{caseLabel(k)}</span>
-                <span className="tabular-nums">
-                  {pct != null ? `${pct.toFixed(1)}%/yr` : "n/a"} · land {money(ep.exit_usd)}
-                </span>
-              </div>
-              <div className="return-track">
-                <div
-                  className={`return-fill ${pct != null && pct >= 0 ? "pos" : "neg"}`}
-                  style={{ width: `${w}%` }}
-                />
-              </div>
-            </button>
-          );
-        })}
+        <div className="case-outcome-grid mt-1.5" role="list">
+          {CASE_ORDER.map((k) => {
+            const ep = endpointsAtHold[k];
+            if (!ep) return null;
+            const rate = showToday ? ep.irr_real ?? ep.irr : ep.irr;
+            const pct = rate != null && Number.isFinite(Number(rate)) ? Number(rate) * 100 : null;
+            const total = showToday
+              ? ep.total_back_usd_today ?? ep.total_back_usd
+              : ep.total_back_usd;
+            const gain = showToday ? ep.gain_usd_today ?? ep.gain_usd : ep.gain_usd;
+            const gainN = Number(gain);
+            const pos = Number.isFinite(gainN) ? gainN >= 0 : null;
+            return (
+              <button
+                key={k}
+                type="button"
+                role="listitem"
+                className={`case-outcome ${activeCase === k ? "is-active" : ""} tone-${caseTone(k)}`}
+                onClick={() => setActiveCase(k)}
+                aria-pressed={activeCase === k}
+              >
+                <div className="case-outcome-row">
+                  <span className="case-outcome-name">{caseLabel(k)}</span>
+                  <span className="case-outcome-total tabular-nums">
+                    {total != null ? shortMoney(Number(total)) : "—"}
+                  </span>
+                </div>
+                <div className="case-outcome-meta">
+                  <span
+                    className={`case-outcome-delta tabular-nums ${
+                      pos === true ? "is-pos" : pos === false ? "is-neg" : ""
+                    }`}
+                  >
+                    {Number.isFinite(gainN)
+                      ? `${gainN >= 0 ? "+" : ""}${shortMoney(gainN)}`
+                      : "—"}
+                  </span>
+                  <span className="case-outcome-irr tabular-nums">
+                    {pct != null
+                      ? `${pct.toFixed(1)}%/yr${showToday ? " real" : ""}`
+                      : "n/a"}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {factors.length > 0 && (
-        <div className="return-factors mt-4">
-          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-            What bends this path · {factorCount} screens
+      {factors.length > 0 ? (
+        <div className="return-screens-panel mt-3" id="hold-return-screens" ref={screensRef}>
+          <div className="return-screens-head">
+            <div className="return-screens-kicker">
+              Screens · {factorCount}
+              <span className="return-screens-hint">tap on / off</span>
+            </div>
+            <button type="button" className="return-screens-reset" onClick={resetScreens}>
+              Reset
+            </button>
           </div>
-          <div className="return-factor-grid mt-2">
+          <div className="return-factor-chips" role="group" aria-label="Hold return screens">
             {factors.map((f) => {
-              const id = String(f.key || f.label);
-              const open = openFactor === id;
+              const id = String(f.key);
+              const locked = f.toggleable === false;
+              const on = locked ? true : enabledFactors[id] !== false;
+              const affects = f.affects || f.kind || "pace";
+              const pts =
+                f.affects === "pace" && f.bps != null && Number(f.bps) !== 0
+                  ? `${Number(f.bps) > 0 ? "+" : ""}${(Number(f.bps) / 100).toFixed(1)}`
+                  : affects === "entry"
+                    ? "in"
+                    : affects === "carry"
+                      ? "carry"
+                      : affects === "exit"
+                        ? "exit"
+                        : affects === "fade"
+                          ? "fade"
+                          : "";
               return (
                 <button
                   key={id}
                   type="button"
-                  className={`return-factor dir-${f.direction || "neutral"} text-left ${open ? "ring-1 ring-[var(--brand-soft)]" : ""}`}
-                  onClick={() => setOpenFactor(open ? null : id)}
+                  aria-pressed={on}
+                  disabled={locked}
+                  title={f.plain || f.label}
+                  className={`return-factor-chip dir-${f.direction || "neutral"} ${
+                    on ? "is-on" : "is-off"
+                  } ${locked ? "is-locked" : ""}`}
+                  onClick={() => {
+                    if (locked) return;
+                    setEnabledFactors((prev) => ({ ...prev, [id]: !on }));
+                  }}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="return-factor-head">
-                      <FactorIcon name={f.key || f.label} />
-                      <span className="font-semibold">{f.label}</span>
-                    </span>
-                    <span className="tabular-nums text-[11px]">
-                      {f.bps != null && f.bps !== 0
-                        ? `${f.bps > 0 ? "+" : ""}${(Number(f.bps) / 100).toFixed(2)} pts`
-                        : f.kind === "entry"
-                          ? "entry"
-                          : "—"}
-                    </span>
-                  </div>
-                  <p className={open ? "" : "line-clamp-3"}>{f.plain}</p>
+                  <span className="return-factor-check" aria-hidden>
+                    {locked ? "●" : on ? "✓" : "○"}
+                  </span>
+                  <FactorIcon name={f.key || f.label} />
+                  <span className="return-factor-chip-label">{f.label}</span>
+                  {pts ? <span className="return-factor-chip-pts tabular-nums">{pts}</span> : null}
                 </button>
               );
             })}
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

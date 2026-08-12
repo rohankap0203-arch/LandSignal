@@ -6,7 +6,7 @@ from typing import Any
 
 from landsignal.scoring.financial import asking_discount_pct, clamp, margin_of_safety
 
-ALGORITHM_VERSION = "landsignal_score_v3_3_3"
+ALGORITHM_VERSION = "landsignal_score_v3_4_0"
 WEIGHT_VERSION = "weights_default_v3"
 
 DEFAULT_WEIGHTS = {
@@ -209,12 +209,12 @@ def deal_readiness(inp: dict) -> float:
 
 
 def _signal(opportunity: float, risk: float, confidence: float) -> str:
-    """Surface real asymmetric process buys — keep Strong rare enough to mean something."""
-    if opportunity < 40 or (risk > 78 and opportunity < 65):
+    """Surface real asymmetric process buys — slightly more lenient so strong files can surface."""
+    if opportunity < 38 or (risk > 82 and opportunity < 62):
         return "REJECT"
-    if opportunity >= 84 and risk <= 48 and confidence >= 42:
+    if opportunity >= 78 and risk <= 52 and confidence >= 38:
         return "EXCEPTIONAL"
-    if opportunity >= 72 and risk <= 55:
+    if opportunity >= 66 and risk <= 60:
         return "STRONG"
     return "WATCH"
 
@@ -249,21 +249,21 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
     elif ask is None and base is not None:
         # Unpriced process parcels: score entry optionality from scale + scarcity, not fake mispricing
         scar = _v(inp, "scarcity_score") or 50.0
-        valuation_value = _round1(clamp(48 + min(float(acres), 640.0) / 640.0 * 22 + (scar - 50) * 0.25, 40, 82))
+        valuation_value = _round1(clamp(52 + min(float(acres), 640.0) / 640.0 * 28 + (scar - 50) * 0.3, 42, 92))
         valuation_evidence = [
             f"{tag}: no retail ask — process pricing. Screening mark ~${base:,.0f}; "
             f"scale ({float(acres):,.2f} ac) + scarcity {scar:.0f} → valuation {valuation_value:.0f}/100"
         ]
         valuation_ks = "ESTIMATED"
     elif base is None and ask is not None:
-        valuation_value = 48.0
+        valuation_value = 52.0
         valuation_evidence = [
             f"{tag}: ask ${ask:,.0f} present but model mark incomplete — valuation {valuation_value:.0f}/100 pending comps"
         ]
         valuation_ks = "UNKNOWN"
     else:
-        # Stronger response to deep discounts so real bargains can clear the 50s/60s
-        valuation_value = _round1(clamp(58 - discount * 1.35, 0, 100))
+        # Slightly more lenient so real process edges can clear the mid/high 70s
+        valuation_value = _round1(clamp(62 - discount * 1.2, 0, 100))
         if is_auction and opening_bid is not None:
             valuation_evidence = [
                 f"{tag}: auction opener ${opening_bid:,.0f} ≠ settle. "
@@ -295,13 +295,13 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
     else:
         q_evidence.append(f"Composite land quality → {quality_value:.0f}/100")
 
-    zoning = _v(inp, "zoning_development_friendly") or 40
-    growth = _v(inp, "path_of_growth_score") or 40
-    solar = _v(inp, "solar_irradiance_score") or 40
-    timber = _v(inp, "timber_suitability") or 40
+    zoning = _v(inp, "zoning_development_friendly") or 52
+    growth = _v(inp, "path_of_growth_score") or 52
+    solar = _v(inp, "solar_irradiance_score") or 50
+    timber = _v(inp, "timber_suitability") or 50
     wetland = _v(inp, "wetland_pct") or 20
-    access = _v(inp, "legal_access_confidence") or 50
-    prime_f = prime or 40
+    access = _v(inp, "legal_access_confidence") or 55
+    prime_f = prime or 48
 
     strategy_scores = {
         "FARMLAND": 0.0
@@ -408,19 +408,19 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
             ],
         ),
         "catalysts": (
-            _v(inp, "catalyst_score") if _v(inp, "catalyst_score") is not None else 40.0,
+            _v(inp, "catalyst_score") if _v(inp, "catalyst_score") is not None else 52.0,
             "UNKNOWN" if _v(inp, "catalyst_score") is None else "KNOWN",
             [
-                f"{tag}: no structured catalyst on file — catalysts {(_v(inp, 'catalyst_score') or 40):.0f}/100"
+                f"{tag}: no structured catalyst on file — catalysts {(_v(inp, 'catalyst_score') or 52):.0f}/100"
                 if _v(inp, "catalyst_score") is None
                 else f"{tag}: catalyst score {_v(inp, 'catalyst_score'):.0f}/100"
             ],
         ),
         "seller_dynamics": (
-            _v(inp, "seller_pressure_score") if _v(inp, "seller_pressure_score") is not None else 40.0,
+            _v(inp, "seller_pressure_score") if _v(inp, "seller_pressure_score") is not None else 52.0,
             "UNKNOWN" if _v(inp, "seller_pressure_score") is None else "KNOWN",
             [
-                f"{tag}: seller-pressure proxy missing ({inp.get('provider_id') or 'listing'}) — held at 40/100"
+                f"{tag}: seller-pressure proxy missing ({inp.get('provider_id') or 'listing'}) — held at 52/100"
                 if _v(inp, "seller_pressure_score") is None
                 else f"{tag}: seller pressure {_v(inp, 'seller_pressure_score'):.0f} via {inp.get('provider_id') or 'listing'} → {_v(inp, 'seller_pressure_score'):.0f}/100"
             ],
@@ -484,45 +484,45 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
         if provider == "public_vacant_gis":
             # Cap lifts — vacant GIS must not crowd out true tax-sale / surplus edges
             if eff_discount <= -15:
-                lift += 3
-                lift_notes.append(f"Soft map-screen edge (+3) for {eff_discount:.0f}% vs model")
+                lift += 5
+                lift_notes.append(f"Soft map-screen edge (+5) for {eff_discount:.0f}% vs model")
         elif eff_discount <= -50:
-            lift += 16
-            lift_notes.append(f"Deep discount lift (+16) for {eff_discount:.0f}% vs model")
+            lift += 18
+            lift_notes.append(f"Deep discount lift (+18) for {eff_discount:.0f}% vs model")
         elif eff_discount <= -30:
-            lift += 11
-            lift_notes.append(f"Strong discount lift (+11) for {eff_discount:.0f}% vs model")
+            lift += 13
+            lift_notes.append(f"Strong discount lift (+13) for {eff_discount:.0f}% vs model")
         elif eff_discount <= -15:
-            lift += 6
-            lift_notes.append(f"Discount lift (+6) for {eff_discount:.0f}% vs model")
+            lift += 8
+            lift_notes.append(f"Discount lift (+8) for {eff_discount:.0f}% vs model")
     # Channel edge only when the file also shows a real price/use gap (not bare vacant GIS)
     if provider in ("public_tax_sale", "public_surplus", "blm_lpad") and (
         (eff_discount is not None and eff_discount <= -15) or float(acres or 0) >= 40
     ):
-        lift += 3
-        lift_notes.append("Off-MLS / process channel scout edge (+3)")
+        lift += 5
+        lift_notes.append("Off-MLS / process channel scout edge (+5)")
     sp = _v(inp, "seller_pressure_score")
     if sp is not None and sp >= 72 and provider != "public_vacant_gis":
-        lift += 5
-        lift_notes.append("Distressed / high seller-pressure channel (+5)")
-    if ask is None and acres >= 40 and provider in ("public_tax_sale", "public_surplus", "blm_lpad"):
         lift += 6
-        lift_notes.append("Unpriced large-tract process edge (+6)")
+        lift_notes.append("Distressed / high seller-pressure channel (+6)")
+    if ask is None and acres >= 40 and provider in ("public_tax_sale", "public_surplus", "blm_lpad"):
+        lift += 7
+        lift_notes.append("Unpriced large-tract process edge (+7)")
         if (_v(inp, "scarcity_score") or 0) >= 65:
-            lift += 4
-            lift_notes.append("Scarcity on large unpriced tract (+4)")
+            lift += 5
+            lift_notes.append("Scarcity on large unpriced tract (+5)")
     elif ask is None and acres >= 40 and provider == "public_vacant_gis":
-        lift += 2
-        lift_notes.append("Large vacant map screen — still need an owner path (+2)")
+        lift += 3
+        lift_notes.append("Large vacant map screen — still need an owner path (+3)")
     # Usable-acre quality when soil is strong and flood/wetlands are contained
     if (prime or 0) >= 50 and (wetland or 0) < 15 and (_v(inp, "flood_zone_pct") or 0) < 20:
-        lift += 4
-        lift_notes.append("Cleaner soil + contained flood/wetland screens (+4)")
+        lift += 5
+        lift_notes.append("Cleaner soil + contained flood/wetland screens (+5)")
     if risk > 70:
-        lift *= 0.4
+        lift *= 0.55
         lift_notes.append("Lift cut — elevated risk")
     elif risk > 58:
-        lift *= 0.75
+        lift *= 0.85
         lift_notes.append("Lift tempered — moderate-high risk")
     if lift:
         opportunity = _round1(clamp(opportunity + lift, 0, 100))

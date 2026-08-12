@@ -902,8 +902,8 @@ export default function LandAlertsPage() {
     if (!selectedStates.length) bits.push("All states");
     else if (selectedStates.length <= 4) bits.push(selectedStates.join(", "));
     else bits.push(`${selectedStates.length} states`);
-    if (form.budget_max) bits.push(`≤ $${Number(form.budget_max).toLocaleString()}`);
-    else if (form.budget_min) bits.push(`≥ $${Number(form.budget_min).toLocaleString()}`);
+    if (form.budget_max) bits.push(`Up to $${Number(form.budget_max).toLocaleString()}`);
+    else if (form.budget_min) bits.push(`$${Number(form.budget_min).toLocaleString()}+`);
     if (form.acres_min) bits.push(`${form.acres_min}+ ac`);
     if (!form.strategies.length) bits.push("Any strategy");
     else if (form.strategies.length === 1)

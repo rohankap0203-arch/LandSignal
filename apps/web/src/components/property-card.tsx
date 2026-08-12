@@ -12,7 +12,11 @@ function shortLine(text: string, max = 120): string {
   const s = (text || "").trim();
   if (!s) return "";
   const first = s.split(/(?<=[.!?])\s+/)[0] || s;
-  return first.length > max ? first.slice(0, max - 1).trimEnd() + "…" : first;
+  if (first.length <= max) return first;
+  const cut = first.slice(0, max);
+  const at = Math.max(cut.lastIndexOf(" "), cut.lastIndexOf("·"), cut.lastIndexOf("—"));
+  const base = (at > max * 0.55 ? cut.slice(0, at) : cut).trimEnd().replace(/[.,;:]+$/, "");
+  return `${base}…`;
 }
 
 function convictionLabel(c: string): string {
@@ -25,7 +29,10 @@ function shortPrice(display: string): string {
   const s = (display || "").trim();
   if (!s) return "No public price";
   if (s.length <= 28) return s;
-  return s.slice(0, 27).trimEnd() + "…";
+  const cut = s.slice(0, 28);
+  const at = cut.lastIndexOf(" ");
+  const base = (at > 12 ? cut.slice(0, at) : cut).trimEnd();
+  return `${base}…`;
 }
 
 /** Modal title mirrors the headline (or discount line) left of the ? */
@@ -45,16 +52,39 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
   const router = useRouter();
   const [intelPending, setIntelPending] = useState(false);
   const [gapHelpOpen, setGapHelpOpen] = useState(false);
+  const links = Array.isArray(row.links) ? row.links : [];
   const posting =
-    row.links.find((l) => l.kind === "primary" && l.available !== false) ||
+    links.find((l) => l.kind === "primary" && l.available !== false) ||
     (row.contact_website
       ? { label: "Open posting", url: row.contact_website, kind: "primary", available: true }
       : null);
-  const findParcel = row.links.find((l) => l.kind === "lookup" && l.available !== false) || null;
+  const findParcel =
+    links.find((l) => l.kind === "lookup" && l.available !== false) ||
+    (row.county || row.state
+      ? {
+          label: "Find this parcel",
+          url: `https://www.google.com/search?q=${encodeURIComponent(
+            `${row.county || ""} ${row.state || ""} parcel assessor`.trim(),
+          )}`,
+          kind: "lookup",
+          available: true,
+        }
+      : null);
   const phone =
     row.contact_phone ||
-    row.links.find((l) => l.kind === "contact" && String(l.url).startsWith("tel:"))?.label ||
+    links.find((l) => l.kind === "contact" && String(l.url).startsWith("tel:"))?.label ||
     null;
+  // Always prefer a real http(s) office/posting URL for the rail — never leave buyers without a path.
+  const officeUrl =
+    posting?.url ||
+    row.contact_website ||
+    links.find((l) => l.kind === "contact_web" && String(l.url || "").startsWith("http"))?.url ||
+    links.find((l) => l.kind === "source" && String(l.url || "").startsWith("http"))?.url ||
+    (row.contact_office || row.county
+      ? `https://www.google.com/search?q=${encodeURIComponent(
+          `${row.contact_office || `${row.county || ""} ${row.state || ""} treasurer`} tax sale`.trim(),
+        )}`
+      : null);
   const conviction = row.conviction || "WATCH";
   const blurb = shortLine(row.return_thesis || row.summary || "", 140);
   const href = `/parcels/${row.parcel_id}`;
@@ -215,7 +245,6 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
               Scout pick
             </span>
           )}
-          <span className="chip">{row.discount_display}</span>
           <span className="chip">{row.best_strategy_label}</span>
           <span className="chip" title="Detail page builds a year-by-year path from soil, flood, growth, channel, and more">
             Multi-factor path
@@ -239,11 +268,12 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
         <div onClick={(e) => e.stopPropagation()}>
           <AcquireRail
             className="mt-3"
-            postingUrl={posting?.url}
-            phone={phone}
+            postingUrl={officeUrl}
+            phone={typeof phone === "string" ? phone.replace(/^Call\s+/i, "") : phone}
             office={row.contact_office}
             findUrl={findParcel?.url}
             findLabel={findParcel?.label?.replace(/^Find parcel /, "ID ")}
+            outreach={null}
           />
         </div>
 

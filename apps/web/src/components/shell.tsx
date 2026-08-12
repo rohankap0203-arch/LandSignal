@@ -134,7 +134,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </>
         ) : null}
       </header>
-      <main className="mx-auto max-w-[1240px] px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-[1240px] min-w-0 overflow-x-clip px-4 py-6">{children}</main>
       <footer className="mx-auto max-w-[1240px] px-4 pb-10 text-center text-sm text-[var(--muted)]">
         LandSignal ranks public land deals with access to intelligent insight on location information
       </footer>

@@ -388,8 +388,8 @@ CATEGORY_HELP = {
         "simple": "How usable this exact pin looks from soil and slope. Higher = more usable ground.",
     },
     "hbu_optionality": {
-        "title": "Ways you could use it",
-        "simple": "Which money-making uses (farm, homes, energy, etc.) fit this listing. Higher = more solid options.",
+        "title": "Best-fit use",
+        "simple": "How well farm, homes, energy, or hold uses fit this listing. Higher = a clearer fit.",
     },
     "growth_appreciation": {
         "title": "Area growth",
