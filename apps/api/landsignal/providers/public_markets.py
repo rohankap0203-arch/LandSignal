@@ -2305,7 +2305,8 @@ async def _fetch_arcgis_objectid_shards(
     shard_span = max(100_000, (max_oid // shard_count) + 1)
     ranges = [(lo, min(lo + shard_span, max_oid + 1)) for lo in range(1, max_oid + 1, shard_span)]
     per_shard = max(40, (target // max(1, len(ranges))) + 30)
-    sem = asyncio.Semaphore(8)
+    # Keep concurrency modest — this ArcGIS host 504s when hammered.
+    sem = asyncio.Semaphore(6)
 
     async def one(lo: int, hi: int) -> list[dict]:
         where = f"({src.where}) AND OBJECTID>={int(lo)} AND OBJECTID<{int(hi)}"
