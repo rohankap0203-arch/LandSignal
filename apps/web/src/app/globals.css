@@ -116,42 +116,38 @@ select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   width: 2.35rem;
   height: 2.35rem;
+  min-width: 2.35rem;
+  max-width: 2.35rem;
+  padding: 0;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--bg-elevated);
   color: var(--ink);
-  flex: 0 0 auto;
+  flex: 0 0 2.35rem;
   cursor: pointer;
   box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent);
 }
 
-.shell-menu-toggle:hover {
+.shell-menu-toggle:hover,
+.shell-menu-toggle[data-open="true"] {
   border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
   color: var(--ink);
 }
 
 .shell-menu-toggle[data-open="true"] {
   border-color: var(--ink);
-  background: var(--bg-elevated);
-  color: var(--ink);
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--ink) 16%, transparent);
-}
-
-.shell-menu-toggle-bars,
-.shell-menu-toggle-bars::before,
-.shell-menu-toggle-bars::after {
-  display: block;
-  width: 1rem;
-  height: 1.5px;
-  border-radius: 999px;
-  background: currentColor;
-  transition: transform 160ms ease, opacity 160ms ease;
 }
 
 .shell-menu-toggle-bars {
   position: relative;
+  display: block;
+  width: 1rem;
+  height: 1.5px;
+  /* Two-line menu: no middle bar — only ::before / ::after */
+  background: transparent;
 }
 
 .shell-menu-toggle-bars::before,
@@ -159,18 +155,20 @@ select {
   content: "";
   position: absolute;
   left: 0;
+  display: block;
+  width: 1rem;
+  height: 1.5px;
+  border-radius: 999px;
+  background: currentColor;
+  transition: transform 160ms ease, top 160ms ease;
 }
 
 .shell-menu-toggle-bars::before {
-  top: -5px;
+  top: -3.5px;
 }
 
 .shell-menu-toggle-bars::after {
-  top: 5px;
-}
-
-.shell-menu-toggle-bars[data-open="true"] {
-  background: transparent;
+  top: 3.5px;
 }
 
 .shell-menu-toggle-bars[data-open="true"]::before {
@@ -234,33 +232,6 @@ select {
   border-radius: 0;
 }
 
-.shell-menu-close-panel {
-  margin-top: 0.25rem;
-  padding-top: 0.45rem;
-  border-top: 1px solid var(--line);
-}
-
-.shell-menu-close-btn {
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.6rem;
-  padding: 0.7rem 0.95rem;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--bg-soft);
-  color: var(--ink);
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.shell-menu-close-btn:hover {
-  border-color: color-mix(in srgb, var(--brand) 40%, var(--line));
-  background: color-mix(in srgb, var(--brand) 10%, var(--bg-soft));
-}
-
 @media (min-width: 900px) {
   .shell-nav {
     display: flex;
@@ -297,6 +268,8 @@ select {
   padding: 28px;
   box-shadow: var(--shadow);
   overflow: visible;
+  position: relative;
+  z-index: 2;
 }
 
 .hero-brand-row {
@@ -423,9 +396,8 @@ select {
 }
 
 .help-tip.tone-panel {
-  /* Keep static so the pop positions against the section, not the ? */
-  position: static;
-  z-index: 2;
+  position: relative;
+  z-index: 5;
 }
 
 .help-tip-btn {
@@ -451,10 +423,14 @@ select {
 .help-tip.tone-panel .help-tip-pop {
   left: 50%;
   right: auto;
-  bottom: auto;
-  top: 2.75rem;
-  width: min(22rem, calc(100% - 2rem));
+  bottom: calc(100% + 6px);
+  top: auto;
+  width: min(16.5rem, 72vw);
   transform: translateX(-50%);
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.35;
+  gap: 3px;
 }
 
 /* Same width as the field’s dropdown; sits above the control, not clipped */
@@ -534,6 +510,193 @@ select {
 
 .filter-field select option {
   color: #14201c;
+}
+
+/* Custom hero dropdown — always opens below, matches LandSignal glass card */
+.hero-select {
+  position: relative;
+  width: 100%;
+  z-index: 1;
+}
+
+.hero-select.is-open {
+  z-index: 60;
+}
+
+.filter-field:has(.hero-select.is-open) {
+  z-index: 60;
+}
+
+.hero-select-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  min-height: 2.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08));
+  color: #f7faf8;
+  border-radius: 12px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.84rem;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.hero-select-trigger:hover {
+  border-color: rgba(255, 255, 255, 0.42);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.1));
+}
+
+.hero-select.is-open .hero-select-trigger {
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 0 3px rgba(143, 208, 176, 0.18);
+}
+
+.hero-select-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.hero-select-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.hero-select-chevron {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  line-height: 1;
+  opacity: 0.8;
+  transition: transform 160ms ease;
+}
+
+.hero-select.is-open .hero-select-chevron {
+  transform: rotate(180deg);
+}
+
+.hero-select-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -0.4rem;
+  right: -0.4rem;
+  z-index: 70;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  max-height: min(16.5rem, 48vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(247, 250, 248, 0.16);
+  background:
+    linear-gradient(180deg, rgba(18, 42, 32, 0.98), rgba(12, 28, 22, 0.98));
+  box-shadow:
+    0 18px 36px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  animation: hero-select-in 140ms ease-out;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(247, 250, 248, 0.18) transparent;
+}
+
+.hero-select-menu::-webkit-scrollbar {
+  width: 5px;
+}
+
+.hero-select-menu::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 6px 0;
+}
+
+.hero-select-menu::-webkit-scrollbar-thumb {
+  background: rgba(247, 250, 248, 0.14);
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  transition: background 160ms ease;
+}
+
+.hero-select-menu:hover::-webkit-scrollbar-thumb {
+  background: rgba(247, 250, 248, 0.28);
+  background-clip: padding-box;
+}
+
+.hero-select-menu::-webkit-scrollbar-thumb:hover {
+  background: rgba(143, 208, 176, 0.45);
+  background-clip: padding-box;
+}
+
+.hero-select-menu::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@keyframes hero-select-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-select-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: 0;
+  background: transparent;
+  color: rgba(247, 250, 248, 0.92);
+  border-radius: 10px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.84rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hero-select-option > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero-select-option.is-active,
+.hero-select-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.hero-select-option.is-selected {
+  background: color-mix(in srgb, #8fd0b0 22%, transparent);
+  color: #e8fff3;
+  font-weight: 650;
+}
+
+.hero-select-check {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  color: #8fd0b0;
 }
 
 .filter-actions {
@@ -3203,6 +3366,15 @@ a.acquire-block:hover {
   gap: 0.45rem;
 }
 
+.acq-chips-tight {
+  gap: 0.28rem;
+}
+
+.acq-chips-tight .land-alert-chip {
+  padding: 0.28rem 0.55rem;
+  font-size: 0.74rem;
+}
+
 .land-alert-chip {
   border: 1px solid var(--line);
   background: transparent;
@@ -3213,10 +3385,343 @@ a.acquire-block:hover {
   cursor: pointer;
 }
 
+.land-alert-field input,
+.land-alert-field select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.88rem;
+}
+
 .land-alert-chip.on {
   border-color: color-mix(in srgb, var(--brand) 55%, var(--line));
   background: color-mix(in srgb, var(--brand) 12%, transparent);
   color: var(--brand);
+}
+
+.land-alert-chip.is-partial {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--brand) 40%, var(--line));
+  color: var(--brand);
+}
+
+/* Acquisition profile editor */
+.acq-profile {
+  display: grid;
+  gap: 1.35rem;
+  padding: 1.35rem 1.25rem 1.25rem;
+  overflow: visible;
+}
+
+.acq-profile-head {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.acq-profile-summary {
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-soft));
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 550;
+  line-height: 1.35;
+}
+
+.acq-section {
+  display: grid;
+  gap: 0.65rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.acq-section-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+}
+
+.acq-section-label {
+  font-size: 0.92rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.acq-sublabel {
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+}
+
+.acq-section-hint {
+  margin: 0.15rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.acq-optional-input {
+  max-width: 22rem;
+}
+
+.acq-chips-gap {
+  margin-top: 0.15rem;
+}
+
+.acq-mode {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-soft);
+  gap: 2px;
+}
+
+.acq-mode-btn {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.acq-mode-btn.on {
+  background: var(--bg-elevated);
+  color: var(--brand);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.acq-state-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr));
+  gap: 0.35rem;
+  max-height: 11.5rem;
+  overflow: auto;
+  padding: 0.15rem;
+}
+
+.acq-state {
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border-radius: 8px;
+  min-height: 2.15rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.acq-state.on {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 14%, var(--bg-elevated));
+  color: var(--brand);
+}
+
+.acq-range-row {
+  display: inline-grid;
+  grid-template-columns: minmax(0, 6.5rem) auto minmax(0, 6.5rem);
+  align-items: center;
+  gap: 0.3rem;
+  width: auto;
+  max-width: 100%;
+}
+
+.acq-range-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 0.28rem 0.45rem;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.acq-range-sep {
+  padding: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.acq-section-tip {
+  overflow: visible;
+  position: relative;
+  z-index: 4;
+}
+
+.acq-label-with-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  position: relative;
+}
+
+.acq-label-with-tip .help-tip {
+  position: relative;
+  z-index: 5;
+}
+
+.acq-label-with-tip .help-tip-pop {
+  left: auto;
+  right: 0;
+  bottom: calc(100% + 6px);
+  top: auto;
+  width: min(15.5rem, 70vw);
+  transform: none;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.acq-label-with-tip .help-tip-pop strong {
+  white-space: normal;
+  font-size: 11px;
+}
+
+.acq-notify-contact {
+  width: 100%;
+  max-width: none;
+}
+
+.acq-notify-contact input {
+  width: 100%;
+}
+
+.acq-segment {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.acq-segment-btn {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  border-radius: 10px;
+  min-height: 2.4rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.acq-segment-btn.on {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  color: var(--brand);
+}
+
+.acq-switch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.acq-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  border-radius: 12px;
+  padding: 0.7rem 0.75rem;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.acq-switch.on {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-elevated));
+}
+
+.acq-switch-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2.35rem;
+  height: 1.3rem;
+  margin-top: 0.1rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 18%, var(--bg-soft));
+  transition: background 140ms ease;
+}
+
+.acq-switch.on .acq-switch-track {
+  background: var(--brand);
+}
+
+.acq-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(1.3rem - 4px);
+  height: calc(1.3rem - 4px);
+  border-radius: 999px;
+  background: #fff;
+  transition: transform 140ms ease;
+}
+
+.acq-switch.on .acq-switch-thumb {
+  transform: translateX(1.05rem);
+}
+
+.acq-switch-copy {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.acq-switch-label {
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.acq-switch-hint {
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.acq-notify {
+  gap: 0.75rem;
+}
+
+.acq-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+@media (max-width: 720px) {
+  .acq-switch-grid,
+  .acq-segment {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .acq-range-row {
+    max-width: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .acq-switch-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .land-alert-checks {
