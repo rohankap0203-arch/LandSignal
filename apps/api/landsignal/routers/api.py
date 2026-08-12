@@ -982,9 +982,39 @@ async def search_meta() -> dict[str, Any]:
     inventory_states = sorted(
         {(p.state or "").upper() for p in store.parcels.values() if p.state and not p.is_demo}
     )
+    # Per-state acreage coverage so UI/search can tell when a filter band
+    # cannot be satisfied by current inventory (e.g. old FL-only sub-acre lots).
+    by_state_acres: dict[str, list[float]] = {}
+    for p in store.parcels.values():
+        if p.is_demo or not p.state:
+            continue
+        ac = getattr(p, "acreage", None)
+        if ac is None:
+            continue
+        try:
+            ac_f = float(ac)
+        except (TypeError, ValueError):
+            continue
+        if ac_f <= 0:
+            continue
+        by_state_acres.setdefault(str(p.state).upper(), []).append(ac_f)
+    inventory_acre_coverage = {}
+    for st, acres in sorted(by_state_acres.items()):
+        acres_sorted = sorted(acres)
+        n = len(acres_sorted)
+        inventory_acre_coverage[st] = {
+            "count": n,
+            "min_acres": round(acres_sorted[0], 2),
+            "max_acres": round(acres_sorted[-1], 2),
+            "median_acres": round(acres_sorted[n // 2], 2),
+            "count_1_plus": sum(1 for a in acres_sorted if a >= 1),
+            "count_5_plus": sum(1 for a in acres_sorted if a >= 5),
+            "count_40_plus": sum(1 for a in acres_sorted if a >= 40),
+        }
     payload = search_meta_payload(inventory_regions)
     payload["inventory_states"] = inventory_states
     payload["inventory_count"] = sum(1 for p in store.parcels.values() if not p.is_demo)
+    payload["inventory_acre_coverage"] = inventory_acre_coverage
     return payload
 
 
