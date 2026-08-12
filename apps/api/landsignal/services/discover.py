@@ -93,7 +93,8 @@ async def discover_opportunities(
         ),
         tax.search_listings(
             {
-                "limit": min(8000, max(500, limit)),
+                # Statewide vacant GIS (esp. FL_Parcels) can fill Zillow-scale land inventory.
+                "limit": min(50000, max(500, limit)),
                 "min_acres": min_acres,
                 "offset": 0,
                 "states": states,

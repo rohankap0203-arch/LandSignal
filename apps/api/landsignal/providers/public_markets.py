@@ -73,6 +73,11 @@ class ArcgisMarketSource:
         normalize: Callable[[dict], dict | None],
         where: str = "1=1",
         order_by: str | None = None,
+        *,
+        page_size: int | None = None,
+        out_fields: str = "*",
+        shard_by_objectid: bool = False,
+        objectid_max: int | None = None,
     ):
         self.source_id = source_id
         self.name = name
@@ -82,6 +87,11 @@ class ArcgisMarketSource:
         self.normalize = normalize
         self.where = where
         self.order_by = order_by
+        self.page_size = page_size
+        self.out_fields = out_fields
+        # CO_NO is present on FL_Parcels but not reliably filterable; OBJECTID ranges work.
+        self.shard_by_objectid = shard_by_objectid
+        self.objectid_max = objectid_max
 
 
 def _norm_shasta(raw: dict) -> dict | None:
@@ -1649,6 +1659,187 @@ def _norm_collier_fl_large(raw: dict) -> dict | None:
     }
 
 
+_FL_COUNTY_NAMES = {
+    1: "Alachua",
+    2: "Baker",
+    3: "Bay",
+    4: "Bradford",
+    5: "Brevard",
+    6: "Broward",
+    7: "Calhoun",
+    8: "Charlotte",
+    9: "Citrus",
+    10: "Clay",
+    11: "Collier",
+    12: "Columbia",
+    13: "Miami-Dade",
+    14: "DeSoto",
+    15: "Dixie",
+    16: "Duval",
+    17: "Escambia",
+    18: "Flagler",
+    19: "Franklin",
+    20: "Gadsden",
+    21: "Gilchrist",
+    22: "Glades",
+    23: "Gulf",
+    24: "Hamilton",
+    25: "Hardee",
+    26: "Hendry",
+    27: "Hernando",
+    28: "Highlands",
+    29: "Hillsborough",
+    30: "Holmes",
+    31: "Indian River",
+    32: "Jackson",
+    33: "Jefferson",
+    34: "Lafayette",
+    35: "Lake",
+    36: "Lee",
+    37: "Leon",
+    38: "Levy",
+    39: "Liberty",
+    40: "Madison",
+    41: "Manatee",
+    42: "Marion",
+    43: "Martin",
+    44: "Monroe",
+    45: "Nassau",
+    46: "Okaloosa",
+    47: "Okeechobee",
+    48: "Orange",
+    49: "Osceola",
+    50: "Palm Beach",
+    51: "Pasco",
+    52: "Pinellas",
+    53: "Polk",
+    54: "Putnam",
+    55: "St. Johns",
+    56: "St. Lucie",
+    57: "Santa Rosa",
+    58: "Sarasota",
+    59: "Seminole",
+    60: "Sumter",
+    61: "Suwannee",
+    62: "Taylor",
+    63: "Union",
+    64: "Volusia",
+    65: "Wakulla",
+    66: "Walton",
+    67: "Washington",
+}
+
+
+def _fl_county_name(co_no: Any) -> str:
+    try:
+        return _FL_COUNTY_NAMES.get(int(float(co_no)), "Florida")
+    except Exception:
+        return "Florida"
+
+
+def _norm_fl_parcels_vacant(raw: dict) -> dict | None:
+    """Statewide Florida vacant land (DOR 00*) from FL_Parcels — Zillow-scale coverage."""
+    props = raw.get("properties") or {}
+    dor = str(props.get("DOR_UC") or "").strip()
+    if not dor.startswith("00"):
+        return None
+    if _non_market_owner(props.get("OWN_NAME")):
+        return None
+    public = str(props.get("PUBLIC_LND") or "").strip().upper()
+    if public in {"Y", "YES", "1", "T", "TRUE"}:
+        return None
+    # DOR 00* is the vacant land use code. Assessor TOT_LVG_AR is often stale/noisy on
+    # this layer (~80% of 00* rows), so only drop clear residential structures.
+    living = _fnum(props.get("TOT_LVG_AR")) or 0
+    if living >= 800:
+        return None
+    preferred = _fnum(props.get("Acres"))
+    if preferred is None:
+        sqft = _fnum(props.get("LND_SQFOOT"))
+        preferred = (sqft / 43560.0) if sqft else None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=1.0)
+    if acreage is None or not polygon:
+        return None
+    pid = props.get("PARCEL_ID") or props.get("OBJECTID")
+    county = _fl_county_name(props.get("CO_NO"))
+    city = (props.get("PHY_CITY") or "").strip() or county
+    addr1 = (props.get("PHY_ADDR1") or "").strip()
+    land_val = _fnum(props.get("LND_VAL"))
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"fl_parcels:{pid}",
+        "title": f"Florida vacant · {acreage:.1f} ac · {county}",
+        "description": (
+            f"Florida statewide vacant parcel (DOR {dor}). "
+            f"County={county}. Owner={props.get('OWN_NAME')}. Land value=${land_val}. "
+            "Public GIS — not MLS/Zillow."
+        ),
+        "asking_price_usd": None,
+        "acreage": acreage,
+        "state": "FL",
+        "county": county,
+        "apn": str(pid) if pid else None,
+        "address": f"{addr1}, {city}, FL".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": None,
+        "status": "ACTIVE",
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
+        "is_demo": False,
+    }
+
+
+def _norm_fl_parcels_ag(raw: dict) -> dict | None:
+    """Statewide Florida agricultural parcels (DOR 050–069)."""
+    props = raw.get("properties") or {}
+    dor = str(props.get("DOR_UC") or "").strip()
+    if not (dor >= "050" and dor < "070"):
+        return None
+    if _non_market_owner(props.get("OWN_NAME")):
+        return None
+    public = str(props.get("PUBLIC_LND") or "").strip().upper()
+    if public in {"Y", "YES", "1", "T", "TRUE"}:
+        return None
+    preferred = _fnum(props.get("Acres"))
+    if preferred is None:
+        sqft = _fnum(props.get("LND_SQFOOT"))
+        preferred = (sqft / 43560.0) if sqft else None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=5.0)
+    if acreage is None or not polygon:
+        return None
+    pid = props.get("PARCEL_ID") or props.get("OBJECTID")
+    county = _fl_county_name(props.get("CO_NO"))
+    city = (props.get("PHY_CITY") or "").strip() or county
+    addr1 = (props.get("PHY_ADDR1") or "").strip()
+    land_val = _fnum(props.get("LND_VAL"))
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"fl_ag:{pid}",
+        "title": f"Florida ag · {acreage:.1f} ac · {county}",
+        "description": (
+            f"Florida statewide agricultural parcel (DOR {dor}). "
+            f"County={county}. Owner={props.get('OWN_NAME')}. Land value=${land_val}. "
+            "Public GIS — not MLS/Zillow."
+        ),
+        "asking_price_usd": None,
+        "acreage": acreage,
+        "state": "FL",
+        "county": county,
+        "apn": str(pid) if pid else None,
+        "address": f"{addr1}, {city}, FL".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": None,
+        "status": "ACTIVE",
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
+        "is_demo": False,
+    }
+
+
 SOURCES: list[ArcgisMarketSource] = [
     ArcgisMarketSource(
         "shasta_ca_tax",
@@ -1724,6 +1915,42 @@ SOURCES: list[ArcgisMarketSource] = [
         "Collier",
         _norm_collier_fl_large,
         where="CAST(TOTALACRES AS FLOAT) >= 5 AND CAST(TOTALACRES AS FLOAT) <= 2500",
+    ),
+    # Statewide Florida cadastral (~970k vacant 1ac+ / ~200k ag 5ac+) — Zillow-scale land coverage.
+    # Shard by OBJECTID ranges (CO_NO filters 400 on this service; plain offset stays OBJECTID-biased).
+    # Do NOT orderBy Acres: this layer rejects ORDER BY and slows to failure.
+    # Do NOT filter TOT_LVG_AR in SQL — the service 400s / times out; normalize drops built parcels.
+    ArcgisMarketSource(
+        "fl_parcels_vacant",
+        "Florida Statewide Vacant Land (1ac+)",
+        "https://services5.arcgis.com/GcvM6vDlR2gM4x31/arcgis/rest/services/FL_Parcels/FeatureServer/0/query",
+        "FL",
+        "Statewide",
+        _norm_fl_parcels_vacant,
+        where="Acres>=1 AND Acres<=2500 AND DOR_UC LIKE '00%'",
+        page_size=1000,
+        out_fields=(
+            "PARCEL_ID,OBJECTID,CO_NO,DOR_UC,Acres,LND_SQFOOT,TOT_LVG_AR,"
+            "OWN_NAME,PUBLIC_LND,PHY_ADDR1,PHY_CITY,LND_VAL"
+        ),
+        shard_by_objectid=True,
+        objectid_max=10_900_000,
+    ),
+    ArcgisMarketSource(
+        "fl_parcels_agriculture",
+        "Florida Statewide Agriculture (5ac+)",
+        "https://services5.arcgis.com/GcvM6vDlR2gM4x31/arcgis/rest/services/FL_Parcels/FeatureServer/0/query",
+        "FL",
+        "Statewide",
+        _norm_fl_parcels_ag,
+        where="Acres>=5 AND Acres<=2500 AND DOR_UC >= '050' AND DOR_UC < '070'",
+        page_size=1000,
+        out_fields=(
+            "PARCEL_ID,OBJECTID,CO_NO,DOR_UC,Acres,LND_SQFOOT,TOT_LVG_AR,"
+            "OWN_NAME,PUBLIC_LND,PHY_ADDR1,PHY_CITY,LND_VAL"
+        ),
+        shard_by_objectid=True,
+        objectid_max=10_900_000,
     ),
     ArcgisMarketSource(
         "wyco_ks_tax",
@@ -2005,20 +2232,24 @@ async def _fetch_arcgis_pages(
     src: ArcgisMarketSource,
     *,
     target: int,
-    page_size: int = 200,
+    page_size: int | None = None,
     start_offset: int = 0,
+    where: str | None = None,
 ) -> list[dict]:
     """Page through an ArcGIS layer until we have `target` normalized rows."""
     out: list[dict] = []
     offset = max(0, start_offset)
-    # Cap pages so a single county can't hang the whole discover
-    max_pages = max(1, (target // page_size) + 3)
+    page_size = int(page_size or src.page_size or 200)
+    where_clause = where or src.where
+    # Over-page: statewide vacant DOR rows often fail normalize (~living area), so
+    # raw feature count can be 4–6× the normalized target before we fill the budget.
+    max_pages = max(2, (max(1, target) // page_size) * 6 + 4)
     for _ in range(max_pages):
         if len(out) >= target:
             break
         params = {
-            "where": src.where,
-            "outFields": "*",
+            "where": where_clause,
+            "outFields": getattr(src, "out_fields", None) or "*",
             "returnGeometry": "true",
             "outSR": 4326,
             "resultRecordCount": page_size,
@@ -2030,6 +2261,14 @@ async def _fetch_arcgis_pages(
         resp = await client.get(src.url, params=params, headers=_ARCGIS_HEADERS)
         resp.raise_for_status()
         data = resp.json()
+        if isinstance(data, dict) and data.get("error"):
+            log.warning(
+                "public_tax_arcgis_error",
+                source=src.source_id,
+                error=data.get("error"),
+                where=where_clause[:160],
+            )
+            break
         feats = data.get("features") or []
         if not feats:
             break
@@ -2043,6 +2282,72 @@ async def _fetch_arcgis_pages(
             break
         offset += len(feats)
     return out
+
+
+async def _fetch_arcgis_objectid_shards(
+    client: httpx.AsyncClient,
+    src: ArcgisMarketSource,
+    *,
+    target: int,
+    start_offset: int = 0,
+) -> list[dict]:
+    """Pull a statewide layer via OBJECTID ranges for breadth + Zillow-scale volume.
+
+    Plain resultOffset on ~1M vacant rows is slow/biased; CO_NO predicates 400 on FL_Parcels.
+    OBJECTID windows are fast and fan out across the cadastral.
+    """
+    import asyncio
+
+    if target <= 0:
+        return []
+    max_oid = int(getattr(src, "objectid_max", None) or 11_000_000)
+    shard_count = 40
+    shard_span = max(100_000, (max_oid // shard_count) + 1)
+    ranges = [(lo, min(lo + shard_span, max_oid + 1)) for lo in range(1, max_oid + 1, shard_span)]
+    per_shard = max(40, (target // max(1, len(ranges))) + 30)
+    sem = asyncio.Semaphore(8)
+
+    async def one(lo: int, hi: int) -> list[dict]:
+        where = f"({src.where}) AND OBJECTID>={int(lo)} AND OBJECTID<{int(hi)}"
+        async with sem:
+            for attempt in range(2):
+                try:
+                    return await _fetch_arcgis_pages(
+                        client,
+                        src,
+                        target=per_shard,
+                        start_offset=start_offset,
+                        where=where,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    if attempt == 0:
+                        await asyncio.sleep(0.6)
+                        continue
+                    log.warning(
+                        "public_tax_oid_shard_failed",
+                        source=src.source_id,
+                        lo=lo,
+                        hi=hi,
+                        error=str(exc)[:240],
+                    )
+                    return []
+        return []
+
+    batches = await asyncio.gather(*[one(lo, hi) for lo, hi in ranges])
+    queues = [list(batch) for batch in batches if batch]
+    out: list[dict] = []
+    while queues and len(out) < target:
+        nxt: list[list[dict]] = []
+        for q in queues:
+            if not q:
+                continue
+            out.append(q.pop(0))
+            if q:
+                nxt.append(q)
+            if len(out) >= target:
+                break
+        queues = nxt
+    return out[:target]
 
 
 class PublicTaxSaleProvider(ListingProvider):
@@ -2069,34 +2374,54 @@ class PublicTaxSaleProvider(ListingProvider):
             preferred = [s for s in tax_sources if s.state.upper() in prefer]
             if preferred:
                 tax_sources = preferred
-        # Split the budget across counties so one mega-layer doesn't dominate
-        per_source = max(300, limit // max(1, len(tax_sources)))
+        # Split the budget across counties so one mega-layer doesn't dominate,
+        # but keep a large statewide allotment when present (FL/NJ/NY/MA/AR…).
+        statewide_sources = [s for s in tax_sources if (s.county or "").lower() == "statewide"]
+        county_sources = [s for s in tax_sources if (s.county or "").lower() != "statewide"]
+        statewide_n = len(statewide_sources)
+        statewide_pool = 0
+        statewide_target = None
+        if statewide_n:
+            # Zillow-scale: most budget to statewide vacant/ag; leave a slice for county feeds.
+            statewide_pool = min(limit, max(5000, (limit * 9) // 10))
+            statewide_target = max(300, statewide_pool // statewide_n)
+            per_source = max(100, (limit - statewide_pool) // max(1, len(county_sources))) if county_sources else 0
+        else:
+            per_source = max(300, limit // max(1, len(tax_sources)))
         start_offset = int(query.get("offset") or 0)
-        async with httpx.AsyncClient(timeout=90.0, headers=_ARCGIS_HEADERS) as client:
+        async with httpx.AsyncClient(timeout=120.0, headers=_ARCGIS_HEADERS) as client:
             results = await asyncio_gather_sources(
-                client, tax_sources, per_source, errors, start_offset=start_offset
+                client,
+                tax_sources,
+                per_source,
+                errors,
+                start_offset=start_offset,
+                statewide_target=statewide_target,
+                statewide_pool=statewide_pool,
             )
             for batch in results:
                 out.extend(batch)
-        by_state: dict[str, list[dict]] = {}
+        # Round-robin by feed (not acreage) so large ag parcels don't bury vacant lots.
+        by_feed: dict[str, list[dict]] = {}
         for row in out:
-            by_state.setdefault(row.get("state") or "??", []).append(row)
-        for st in by_state:
-            by_state[st].sort(
+            feed = (row.get("external_id") or "").split(":")[0] or (row.get("state") or "??")
+            by_feed.setdefault(feed, []).append(row)
+        for feed in by_feed:
+            by_feed[feed].sort(
                 key=lambda r: (
                     0 if r.get("asking_price_usd") is not None else 1,
                     -(r.get("acreage") or 0),
                 )
             )
         diversified: list[dict] = []
-        while len(diversified) < limit and any(by_state.values()):
-            for st in list(by_state.keys()):
-                if by_state.get(st):
-                    diversified.append(by_state[st].pop(0))
+        while len(diversified) < limit and any(by_feed.values()):
+            for feed in list(by_feed.keys()):
+                if by_feed.get(feed):
+                    diversified.append(by_feed[feed].pop(0))
                 if len(diversified) >= limit:
                     break
-                if st in by_state and not by_state[st]:
-                    by_state.pop(st, None)
+                if feed in by_feed and not by_feed[feed]:
+                    by_feed.pop(feed, None)
         return ProviderResult(
             True,
             ProviderStatus.CONFIGURED,
@@ -2123,13 +2448,38 @@ async def asyncio_gather_sources(
     per_source: int,
     errors: list[str],
     start_offset: int = 0,
+    *,
+    statewide_target: int | None = None,
+    statewide_pool: int = 0,
 ) -> list[list[dict]]:
     import asyncio
 
+    statewide_sources = [s for s in sources if (s.county or "").lower() == "statewide"]
+    vacant_statewide = [s for s in statewide_sources if "vacant" in s.source_id]
+    other_statewide = [s for s in statewide_sources if s not in vacant_statewide]
+
     async def one(src: ArcgisMarketSource) -> list[dict]:
+        target = per_source
+        # Statewide cadastral screens can support Zillow-scale land coverage —
+        # bias the pool toward vacant lots (listing-site shape) over ag acreage.
+        if statewide_pool and (src.county or "").lower() == "statewide":
+            if src in vacant_statewide:
+                share = 0.75 if other_statewide else 1.0
+                target = max(statewide_target or per_source, int(statewide_pool * share))
+            elif src in other_statewide:
+                share = 0.25 / max(1, len(other_statewide))
+                target = max(statewide_target or per_source, int(statewide_pool * share))
+            else:
+                target = max(per_source, statewide_target or per_source)
+        elif statewide_target and (src.county or "").lower() == "statewide":
+            target = max(per_source, statewide_target)
         try:
+            if getattr(src, "shard_by_objectid", False):
+                return await _fetch_arcgis_objectid_shards(
+                    client, src, target=target, start_offset=start_offset
+                )
             return await _fetch_arcgis_pages(
-                client, src, target=per_source, start_offset=start_offset
+                client, src, target=target, start_offset=start_offset
             )
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{src.source_id}: {exc}")
