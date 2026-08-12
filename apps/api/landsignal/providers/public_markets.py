@@ -27,6 +27,12 @@ from landsignal.scoring.geospatial import acres_from_square_meters, ring_area_sq
 
 log = structlog.get_logger()
 
+# Some county GIS stacks (e.g. Lake County FL) 403 bare httpx clients.
+_ARCGIS_HEADERS = {
+    "User-Agent": "LandSignalBot/1.0 (+https://landsignal.app; public GIS inventory)",
+    "Accept": "application/json,application/geo+json,*/*",
+}
+
 
 def _acres_from_geom(geom: dict | None) -> tuple[float | None, float | None, float | None, list | None]:
     if not geom:
@@ -709,6 +715,9 @@ _NON_MARKET_OWNER_MARKERS = (
     "GAME & FISH",
     "GAME AND FISH",
     "FISH AND WILDLIFE",
+    "WATER MGMT",
+    "WATER MANAGEMENT",
+    "WMD ",
     "ARMY",
     "AIR FORCE",
     "NAVY ",
@@ -1476,7 +1485,10 @@ def _norm_ftl(raw: dict) -> dict | None:
     acreage, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
     if acreage is None and sqft:
         acreage = float(sqft) / 43560.0
-    if acreage is not None and acreage < 0.2:
+    # Keep urban surplus, but drop flea-lot scraps that used to dominate FL inventory.
+    if acreage is None or acreage < 1.0 or acreage > 2500:
+        return None
+    if not polygon:
         return None
     pid = props.get("PARCELID") or props.get("FOLIO")
     return {
@@ -1493,6 +1505,140 @@ def _norm_ftl(raw: dict) -> dict | None:
         "county": "Broward",
         "apn": str(pid),
         "address": f"{props.get('SITEADDRESS') or ''}, {props.get('PARCELCITY') or 'Fort Lauderdale'}, FL".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": None,
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_lake_fl_vacant(raw: dict) -> dict | None:
+    """Lake County FL open-data vacant parcels (1ac+) — rural acreage Florida lacked."""
+    props = raw.get("properties") or {}
+    if str(props.get("Vacant") or "").strip().lower() not in {"yes", "y", "true", "1"}:
+        return None
+    owner = props.get("OwnerName")
+    if _non_market_owner(owner):
+        return None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    preferred = _fnum(props.get("Acres"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=1.0)
+    if acreage is None or not polygon:
+        return None
+    # Prefer vacant residential / commercial / industrial / ag-style DOR codes.
+    luc = str(props.get("LandUseCode") or "").strip()
+    if luc and not luc.startswith(("00", "10", "40", "50", "60", "66", "70", "80", "99")):
+        return None
+    pid = props.get("ParcelNumber") or props.get("AltKey") or props.get("OBJECTID")
+    land_val = _fnum(props.get("LandValue"))
+    bldg = _fnum(props.get("BuildingValue")) or 0
+    if bldg > 0:
+        return None
+    addr = (props.get("PropertyAddress") or "").strip() or "Unassigned"
+    use = props.get("LandUseDescription") or luc or "Vacant"
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"lake_fl:{pid}",
+        "title": f"Lake FL vacant · {acreage:.1f} ac · {use}",
+        "description": (
+            f"Lake County FL property-appraiser vacant parcel screen. "
+            f"Use={use}. Owner={owner}. Land value=${land_val}. "
+            "Public GIS — not MLS/Land.com."
+        ),
+        "asking_price_usd": None,
+        "acreage": acreage,
+        "state": "FL",
+        "county": "Lake",
+        "apn": str(pid) if pid else None,
+        "address": f"{addr}, Lake County, FL",
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": props.get("PropertyLink"),
+        "status": "ACTIVE",
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
+        "is_demo": False,
+    }
+
+
+def _norm_pbc_fl_vacant(raw: dict) -> dict | None:
+    """Palm Beach County FDOR-joined vacant parcels (5ac+) via LND_SQFOOT."""
+    props = raw.get("properties") or {}
+    dor = str(props.get("DOR_UC") or "").strip()
+    if not dor.startswith("00"):
+        return None
+    if _non_market_owner(props.get("OWN_NAME")):
+        return None
+    public = str(props.get("PUBLIC_LND") or "").strip().upper()
+    if public in {"Y", "YES", "1", "T", "TRUE"}:
+        return None
+    living = _fnum(props.get("TOT_LVG_AR")) or 0
+    if living > 0:
+        return None
+    sqft = _fnum(props.get("LND_SQFOOT"))
+    preferred = (sqft / 43560.0) if sqft else None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=5.0)
+    if acreage is None or not polygon:
+        return None
+    pid = props.get("PARCEL_ID") or props.get("PARCELNO") or props.get("OBJECTID")
+    city = (props.get("PHY_CITY") or "").strip() or "Palm Beach County"
+    addr1 = (props.get("PHY_ADDR1") or "").strip()
+    land_val = _fnum(props.get("LND_VAL"))
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"pbc_fl:{pid}",
+        "title": f"Palm Beach FL vacant · {acreage:.1f} ac · DOR {dor}",
+        "description": (
+            f"Palm Beach County vacant (DOR 00*) parcel screen. "
+            f"Owner={props.get('OWN_NAME')}. Land value=${land_val}. "
+            "Public GIS — not MLS/Land.com."
+        ),
+        "asking_price_usd": None,
+        "acreage": acreage,
+        "state": "FL",
+        "county": "Palm Beach",
+        "apn": str(pid) if pid else None,
+        "address": f"{addr1}, {city}, FL".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": None,
+        "status": "ACTIVE",
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
+        "is_demo": False,
+    }
+
+
+def _norm_collier_fl_large(raw: dict) -> dict | None:
+    """Collier County large parcels (5ac+) — acreage diversity for SW Florida."""
+    props = raw.get("properties") or {}
+    owner = props.get("NAME1") or props.get("OWNERNAME")
+    if _non_market_owner(owner):
+        return None
+    preferred = _fnum(props.get("TOTALACRES"))
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=5.0)
+    if acreage is None or not polygon:
+        return None
+    pid = props.get("FOLIO") or props.get("PARCELID") or props.get("OID")
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"collier_fl:{pid}",
+        "title": f"Collier FL parcel · {acreage:.1f} ac",
+        "description": (
+            f"Collier County parcel screen ({acreage:.1f} ac). Owner={owner}. "
+            "Public GIS — not MLS/Land.com."
+        ),
+        "asking_price_usd": None,
+        "acreage": acreage,
+        "state": "FL",
+        "county": "Collier",
+        "apn": str(pid) if pid else None,
+        "address": f"Collier County, FL · folio {pid}",
         "latitude": lat,
         "longitude": lon,
         "polygon": polygon,
@@ -1539,11 +1685,45 @@ SOURCES: list[ArcgisMarketSource] = [
     ),
     ArcgisMarketSource(
         "ftl_surplus",
-        "Fort Lauderdale Surplus Property",
+        "Fort Lauderdale Surplus Property (1ac+)",
         "https://gis.fortlauderdale.gov/arcgis/rest/services/PropertyReporter/Interactive/MapServer/37/query",
         "FL",
         "Broward",
         _norm_ftl,
+    ),
+    # Florida acreage coverage — FTL surplus alone was only sub-acre urban lots.
+    ArcgisMarketSource(
+        "lake_fl_vacant",
+        "Lake County FL Vacant Land (1ac+)",
+        "https://gis.lakecountyfl.gov/lakegis/rest/services/OpenData/OpenData1/FeatureServer/12/query",
+        "FL",
+        "Lake",
+        _norm_lake_fl_vacant,
+        # NOTE: avoid BuildingValue predicates here — Lake's WAF 403s some NULL checks.
+        where="Vacant='Yes' AND Acres>=1 AND Acres<=2500 AND LandUseCode LIKE '00%'",
+        order_by="Acres DESC",
+    ),
+    ArcgisMarketSource(
+        "pbc_fl_vacant",
+        "Palm Beach County FL Vacant Land (5ac+)",
+        "https://services.arcgis.com/B7X7NCOKKXditlwZ/arcgis/rest/services/Palm_Beach_County_Parcels/FeatureServer/0/query",
+        "FL",
+        "Palm Beach",
+        _norm_pbc_fl_vacant,
+        where=(
+            "DOR_UC LIKE '00%' AND LND_SQFOOT>=217800 AND LND_SQFOOT<=108900000 "
+            "AND TOT_LVG_AR=0"
+        ),
+        order_by="LND_SQFOOT DESC",
+    ),
+    ArcgisMarketSource(
+        "collier_fl_large",
+        "Collier County FL Large Parcels (5ac+)",
+        "https://services2.arcgis.com/SlIq32SqARUHIhSx/arcgis/rest/services/Parcels/FeatureServer/42/query",
+        "FL",
+        "Collier",
+        _norm_collier_fl_large,
+        where="CAST(TOTALACRES AS FLOAT) >= 5 AND CAST(TOTALACRES AS FLOAT) <= 2500",
     ),
     ArcgisMarketSource(
         "wyco_ks_tax",
@@ -1847,7 +2027,7 @@ async def _fetch_arcgis_pages(
         }
         if getattr(src, "order_by", None):
             params["orderByFields"] = src.order_by
-        resp = await client.get(src.url, params=params)
+        resp = await client.get(src.url, params=params, headers=_ARCGIS_HEADERS)
         resp.raise_for_status()
         data = resp.json()
         feats = data.get("features") or []
@@ -1892,7 +2072,7 @@ class PublicTaxSaleProvider(ListingProvider):
         # Split the budget across counties so one mega-layer doesn't dominate
         per_source = max(300, limit // max(1, len(tax_sources)))
         start_offset = int(query.get("offset") or 0)
-        async with httpx.AsyncClient(timeout=90.0) as client:
+        async with httpx.AsyncClient(timeout=90.0, headers=_ARCGIS_HEADERS) as client:
             results = await asyncio_gather_sources(
                 client, tax_sources, per_source, errors, start_offset=start_offset
             )
@@ -1979,7 +2159,7 @@ class PublicSurplusProvider(ListingProvider):
                 surplus_sources = preferred
         errors: list[str] = []
         per_source = max(50, limit // max(1, len(surplus_sources)))
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60.0, headers=_ARCGIS_HEADERS) as client:
             batches = await asyncio_gather_sources(client, surplus_sources, per_source, errors)
             for batch in batches:
                 out.extend(batch)
