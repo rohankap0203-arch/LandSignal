@@ -12,6 +12,7 @@ No ToS-circumventing scrapers.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Callable
 
 import httpx
@@ -32,6 +33,21 @@ _ARCGIS_HEADERS = {
     "User-Agent": "LandSignalBot/1.0 (+https://landsignal.app; public GIS inventory)",
     "Accept": "application/json,application/geo+json,*/*",
 }
+
+# Credible US inventory only — reject junk normalize output before it hits discover.
+_US_STATE_CODES = frozenset(
+    {
+        "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN",
+        "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV",
+        "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN",
+        "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "DC",
+    }
+)
+
+# Per-source wall clock so one hung ArcGIS host cannot stall nationwide discover.
+_SOURCE_FETCH_TIMEOUT_S = 75.0
+_STATE_FETCH_TIMEOUT_S = 120.0
+_HTTP_RETRY_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 
 def _acres_from_geom(geom: dict | None) -> tuple[float | None, float | None, float | None, list | None]:
@@ -701,6 +717,64 @@ def _bounded_acres(
     if acreage < min_ac:
         return None
     return float(acreage)
+
+
+def _validate_inventory_row(row: dict | None) -> dict | None:
+    """Reject non-credible normalize output before it enters discover/search."""
+    if not isinstance(row, dict):
+        return None
+    try:
+        state = str(row.get("state") or "").upper().strip()
+        if state not in _US_STATE_CODES:
+            return None
+        ext = str(row.get("external_id") or "").strip()
+        if not ext or ":" not in ext:
+            return None
+        provider = str(row.get("provider_id") or "").strip()
+        if provider not in {"public_vacant_gis", "public_tax_sale", "public_surplus"}:
+            return None
+        acres = float(row.get("acreage"))
+        if acres < 0.05 or acres > 50_000:
+            return None
+        lat = float(row.get("latitude"))
+        lon = float(row.get("longitude"))
+        if lat < -90 or lat > 90 or lon < -180 or lon > 180:
+            return None
+        # Rough North America guard — keeps ocean/null-island junk out.
+        if lat < 17.0 or lat > 72.0 or lon < -180.0 or lon > -60.0:
+            return None
+        poly = row.get("polygon")
+        if poly is not None:
+            if not isinstance(poly, list) or not poly or not isinstance(poly[0], list):
+                return None
+        title = str(row.get("title") or "").strip()
+        if not title:
+            return None
+        out = dict(row)
+        out["state"] = state
+        out["acreage"] = acres
+        out["latitude"] = lat
+        out["longitude"] = lon
+        out["external_id"] = ext
+        out["provider_id"] = provider
+        out["is_demo"] = False
+        if out.get("status") is None:
+            out["status"] = "ACTIVE"
+        return out
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _dedupe_inventory_rows(rows: list[dict]) -> list[dict]:
+    seen: set[tuple[str, str]] = set()
+    out: list[dict] = []
+    for row in rows:
+        key = (str(row.get("provider_id") or ""), str(row.get("external_id") or ""))
+        if not key[1] or key in seen:
+            continue
+        seen.add(key)
+        out.append(row)
+    return out
 
 
 _NON_MARKET_OWNER_MARKERS = (
@@ -2251,6 +2325,58 @@ from landsignal.providers.statewide_inventory import SOURCES as _STATEWIDE_EXTRA
 SOURCES.extend(_STATEWIDE_EXTRA_SOURCES)
 
 
+async def _arcgis_get_json(
+    client: httpx.AsyncClient,
+    url: str,
+    params: dict[str, Any],
+    *,
+    source_id: str,
+    attempts: int = 3,
+) -> dict[str, Any] | None:
+    """GET ArcGIS JSON with retries. Never raises — returns None on hard failure."""
+    last_err: Exception | None = None
+    for attempt in range(max(1, attempts)):
+        try:
+            resp = await client.get(url, params=params, headers=_ARCGIS_HEADERS)
+            if resp.status_code in _HTTP_RETRY_STATUSES and attempt + 1 < attempts:
+                await asyncio.sleep(0.35 * (attempt + 1))
+                continue
+            if resp.status_code >= 400:
+                log.warning(
+                    "public_tax_http_error",
+                    source=source_id,
+                    status=resp.status_code,
+                    attempt=attempt + 1,
+                )
+                return None
+            try:
+                data = resp.json()
+            except Exception as exc:  # noqa: BLE001
+                last_err = exc
+                if attempt + 1 < attempts:
+                    await asyncio.sleep(0.35 * (attempt + 1))
+                    continue
+                return None
+            if isinstance(data, dict) and data.get("error"):
+                # Invalid outFields / where often 200+error — caller may retry with *.
+                return data
+            return data if isinstance(data, dict) else None
+        except (httpx.TimeoutException, httpx.TransportError, httpx.HTTPError) as exc:
+            last_err = exc
+            if attempt + 1 < attempts:
+                await asyncio.sleep(0.45 * (attempt + 1))
+                continue
+            log.warning(
+                "public_tax_transport_failed",
+                source=source_id,
+                error=str(exc)[:200],
+            )
+            return None
+    if last_err:
+        log.warning("public_tax_get_exhausted", source=source_id, error=str(last_err)[:200])
+    return None
+
+
 async def _fetch_arcgis_pages(
     client: httpx.AsyncClient,
     src: ArcgisMarketSource,
@@ -2260,20 +2386,26 @@ async def _fetch_arcgis_pages(
     start_offset: int = 0,
     where: str | None = None,
 ) -> list[dict]:
-    """Page through an ArcGIS layer until we have `target` normalized rows."""
+    """Page through an ArcGIS layer until we have `target` validated rows.
+
+    Soft-fails on host errors so one bad county cannot fail nationwide discover.
+    """
     out: list[dict] = []
+    if target <= 0:
+        return out
     offset = max(0, start_offset)
-    page_size = int(page_size or src.page_size or 200)
+    page_size = max(1, int(page_size or src.page_size or 200))
     where_clause = where or src.where
-    # Over-page: statewide vacant DOR rows often fail normalize (~living area), so
-    # raw feature count can be 4–6× the normalized target before we fill the budget.
-    max_pages = max(2, (max(1, target) // page_size) * 6 + 4)
+    out_fields = (getattr(src, "out_fields", None) or "*").strip() or "*"
+    # Over-page: statewide vacant rows often fail normalize, so raw ≫ normalized.
+    max_pages = max(2, min(40, (max(1, target) // page_size) * 5 + 3))
+    consecutive_failures = 0
     for _ in range(max_pages):
         if len(out) >= target:
             break
         params = {
             "where": where_clause,
-            "outFields": getattr(src, "out_fields", None) or "*",
+            "outFields": out_fields,
             "returnGeometry": "true",
             "outSR": 4326,
             "resultRecordCount": page_size,
@@ -2282,24 +2414,48 @@ async def _fetch_arcgis_pages(
         }
         if getattr(src, "order_by", None):
             params["orderByFields"] = src.order_by
-        resp = await client.get(src.url, params=params, headers=_ARCGIS_HEADERS)
-        resp.raise_for_status()
-        data = resp.json()
-        if isinstance(data, dict) and data.get("error"):
+        data = await _arcgis_get_json(client, src.url, params, source_id=src.source_id)
+        if data is None:
+            consecutive_failures += 1
+            if consecutive_failures >= 2:
+                break
+            continue
+        if data.get("error"):
+            err = data.get("error") or {}
+            details = " ".join(str(x) for x in (err.get("details") or []))
+            # Common: invalid outFields — retry once with *.
+            if out_fields != "*" and "outFields" in details:
+                log.warning(
+                    "public_tax_outfields_fallback",
+                    source=src.source_id,
+                    out_fields=out_fields[:120],
+                )
+                out_fields = "*"
+                consecutive_failures = 0
+                continue
             log.warning(
                 "public_tax_arcgis_error",
                 source=src.source_id,
-                error=data.get("error"),
+                error=err,
                 where=where_clause[:160],
             )
-            break
+            consecutive_failures += 1
+            if consecutive_failures >= 2:
+                break
+            continue
+        consecutive_failures = 0
         feats = data.get("features") or []
         if not feats:
             break
         for feat in feats:
-            row = src.normalize(feat)
-            if row:
-                out.append(row)
+            try:
+                row = src.normalize(feat)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("public_tax_normalize_failed", source=src.source_id, error=str(exc)[:160])
+                continue
+            valid = _validate_inventory_row(row)
+            if valid:
+                out.append(valid)
                 if len(out) >= target:
                     break
         if len(feats) < page_size:
@@ -2316,8 +2472,6 @@ async def _fetch_arcgis_value_shards(
     start_offset: int = 0,
 ) -> list[dict]:
     """Shard a layer by discrete field values (county name / FIPS) for geographic breadth."""
-    import asyncio
-
     values = [str(v) for v in (getattr(src, "shard_values", None) or []) if v]
     field = getattr(src, "shard_field", None)
     if not values or not field or target <= 0:
@@ -2369,7 +2523,13 @@ async def _fetch_arcgis_value_shards(
             if len(out) >= target:
                 break
         queues = nxt
-    return out[:target]
+    if out:
+        return out[:target]
+    # Shard predicates failed everywhere — degrade to plain paging so inventory still fills.
+    log.warning("public_tax_value_shard_empty_fallback", source=src.source_id, field=field)
+    return await _fetch_arcgis_pages(
+        client, src, target=target, start_offset=start_offset
+    )
 
 
 async def _fetch_arcgis_objectid_shards(
@@ -2384,8 +2544,6 @@ async def _fetch_arcgis_objectid_shards(
     Plain resultOffset on ~1M vacant rows is slow/biased; CO_NO predicates 400 on FL_Parcels.
     OBJECTID windows are fast and fan out across the cadastral.
     """
-    import asyncio
-
     if target <= 0:
         return []
     max_oid = int(getattr(src, "objectid_max", None) or 11_000_000)
@@ -2436,7 +2594,12 @@ async def _fetch_arcgis_objectid_shards(
             if len(out) >= target:
                 break
         queues = nxt
-    return out[:target]
+    if out:
+        return out[:target]
+    log.warning("public_tax_oid_shard_empty_fallback", source=src.source_id)
+    return await _fetch_arcgis_pages(
+        client, src, target=target, start_offset=start_offset
+    )
 
 
 class PublicTaxSaleProvider(ListingProvider):
@@ -2449,113 +2612,123 @@ class PublicTaxSaleProvider(ListingProvider):
         return ProviderStatus.CONFIGURED
 
     async def search_listings(self, query: dict[str, Any]) -> ProviderResult[list[dict]]:
-        limit = int(query.get("limit") or 2000)
-        out: list[dict] = []
-        errors: list[str] = []
-        tax_sources = [
-            s
-            for s in SOURCES
-            if "surplus" not in s.source_id and "fairfax" not in s.source_id
-        ]
-        prefer = {str(s).upper() for s in (query.get("states") or []) if s}
-        if prefer:
-            # When a state filter is active, spend budget on that state's layers first
-            preferred = [s for s in tax_sources if s.state.upper() in prefer]
-            if preferred:
-                tax_sources = preferred
-        # Fair per-state budgets so FL-style statewide screens don't starve other states.
+        """Pull public GIS inventory. Always returns ok=True — soft-fails per source/state."""
         from collections import defaultdict
-        import asyncio
 
-        by_state_sources: dict[str, list[ArcgisMarketSource]] = defaultdict(list)
-        for src in tax_sources:
-            by_state_sources[src.state.upper()].append(src)
-        state_keys = sorted(by_state_sources.keys())
-        per_state = max(150, limit // max(1, len(state_keys)))
-        if prefer and len(state_keys) <= 3:
-            # Single-/few-state discovers can spend nearly the full Zillow-scale budget.
-            per_state = max(per_state, min(limit, max(4000, (limit * 9) // 10 // max(1, len(state_keys)))))
-        start_offset = int(query.get("offset") or 0)
-
-        async with httpx.AsyncClient(timeout=120.0, headers=_ARCGIS_HEADERS) as client:
-
-            async def fetch_state(st: str) -> list[dict]:
-                srcs = by_state_sources[st]
-                statewide = [s for s in srcs if (s.county or "").lower() == "statewide"]
-                county = [s for s in srcs if s not in statewide]
-                st_limit = per_state
-                if statewide:
-                    pool = min(st_limit, max(200, (st_limit * 9) // 10))
-                    county_budget = max(0, st_limit - pool)
-                    per_county = (
-                        max(40, county_budget // max(1, len(county))) if county else 0
-                    )
-                    batches = await asyncio_gather_sources(
-                        client,
-                        srcs,
-                        per_county,
-                        errors,
-                        start_offset=start_offset,
-                        statewide_target=max(100, pool // max(1, len(statewide))),
-                        statewide_pool=pool,
-                    )
-                else:
-                    per_src = max(40, st_limit // max(1, len(srcs)))
-                    batches = await asyncio_gather_sources(
-                        client,
-                        srcs,
-                        per_src,
-                        errors,
-                        start_offset=start_offset,
-                    )
-                rows: list[dict] = []
-                for batch in batches:
-                    rows.extend(batch)
-                return rows
-
-            results = await asyncio.gather(*[fetch_state(st) for st in state_keys])
-            for batch in results:
-                out.extend(batch)
-
-        # Round-robin by STATE first (nationwide fairness), then by feed inside each state.
-        by_state_feed: dict[str, dict[str, list[dict]]] = defaultdict(lambda: defaultdict(list))
-        for row in out:
-            st = (row.get("state") or "??").upper()
-            feed = (row.get("external_id") or "").split(":")[0] or st
-            by_state_feed[st][feed].append(row)
-        for st in by_state_feed:
-            for feed in by_state_feed[st]:
-                by_state_feed[st][feed].sort(
-                    key=lambda r: (
-                        0 if r.get("asking_price_usd") is not None else 1,
-                        -(r.get("acreage") or 0),
-                    )
+        limit = max(1, int(query.get("limit") or 2000))
+        errors: list[str] = []
+        try:
+            tax_sources = [
+                s
+                for s in SOURCES
+                if "surplus" not in s.source_id and "fairfax" not in s.source_id
+            ]
+            prefer = {str(s).upper() for s in (query.get("states") or []) if s}
+            if prefer:
+                # Honor the filter even when empty — never silently widen to all states.
+                tax_sources = [s for s in tax_sources if s.state.upper() in prefer]
+            if not tax_sources:
+                return ProviderResult(
+                    True,
+                    ProviderStatus.CONFIGURED,
+                    [],
+                    error="No sources for request" if prefer else None,
                 )
-        diversified: list[dict] = []
-        while len(diversified) < limit and by_state_feed:
-            for st in list(by_state_feed.keys()):
-                feeds = by_state_feed.get(st) or {}
-                if not feeds:
-                    by_state_feed.pop(st, None)
-                    continue
-                # One row from each feed in this state, then next state.
-                for feed in list(feeds.keys()):
-                    if feeds.get(feed):
-                        diversified.append(feeds[feed].pop(0))
-                    if not feeds.get(feed):
-                        feeds.pop(feed, None)
+
+            by_state_sources: dict[str, list[ArcgisMarketSource]] = defaultdict(list)
+            for src in tax_sources:
+                by_state_sources[src.state.upper()].append(src)
+            state_keys = sorted(by_state_sources.keys())
+            per_state = max(150, limit // max(1, len(state_keys)))
+            if prefer and len(state_keys) <= 3:
+                per_state = max(
+                    per_state,
+                    min(limit, max(4000, (limit * 9) // 10 // max(1, len(state_keys)))),
+                )
+            start_offset = max(0, int(query.get("offset") or 0))
+            out: list[dict] = []
+            timeout = httpx.Timeout(connect=12.0, read=55.0, write=30.0, pool=30.0)
+            state_sem = asyncio.Semaphore(8)
+
+            async with httpx.AsyncClient(timeout=timeout, headers=_ARCGIS_HEADERS) as client:
+
+                async def fetch_state(st: str) -> list[dict]:
+                    async with state_sem:
+                        try:
+                            return await asyncio.wait_for(
+                                _fetch_state_inventory(
+                                    client,
+                                    by_state_sources[st],
+                                    per_state=per_state,
+                                    errors=errors,
+                                    start_offset=start_offset,
+                                ),
+                                timeout=_STATE_FETCH_TIMEOUT_S,
+                            )
+                        except asyncio.TimeoutError:
+                            errors.append(f"{st}: state fetch timed out")
+                            log.warning("public_tax_state_timeout", state=st)
+                            return []
+                        except Exception as exc:  # noqa: BLE001
+                            errors.append(f"{st}: {exc}")
+                            log.warning("public_tax_state_failed", state=st, error=str(exc)[:200])
+                            return []
+
+                results = await asyncio.gather(*[fetch_state(st) for st in state_keys])
+                for batch in results:
+                    out.extend(batch)
+
+            out = _dedupe_inventory_rows(
+                [r for r in (_validate_inventory_row(x) for x in out) if r]
+            )
+
+            by_state_feed: dict[str, dict[str, list[dict]]] = defaultdict(
+                lambda: defaultdict(list)
+            )
+            for row in out:
+                st = (row.get("state") or "??").upper()
+                feed = (row.get("external_id") or "").split(":")[0] or st
+                by_state_feed[st][feed].append(row)
+            for st in by_state_feed:
+                for feed in by_state_feed[st]:
+                    by_state_feed[st][feed].sort(
+                        key=lambda r: (
+                            0 if r.get("asking_price_usd") is not None else 1,
+                            -(r.get("acreage") or 0),
+                        )
+                    )
+            diversified: list[dict] = []
+            while len(diversified) < limit and by_state_feed:
+                for st in list(by_state_feed.keys()):
+                    feeds = by_state_feed.get(st) or {}
+                    if not feeds:
+                        by_state_feed.pop(st, None)
+                        continue
+                    for feed in list(feeds.keys()):
+                        if feeds.get(feed):
+                            diversified.append(feeds[feed].pop(0))
+                        if not feeds.get(feed):
+                            feeds.pop(feed, None)
+                        if len(diversified) >= limit:
+                            break
+                    if not feeds:
+                        by_state_feed.pop(st, None)
                     if len(diversified) >= limit:
                         break
-                if not feeds:
-                    by_state_feed.pop(st, None)
-                if len(diversified) >= limit:
-                    break
-        return ProviderResult(
-            True,
-            ProviderStatus.CONFIGURED,
-            diversified,
-            error="; ".join(errors) if errors else None,
-        )
+            return ProviderResult(
+                True,
+                ProviderStatus.CONFIGURED,
+                diversified,
+                error="; ".join(errors[:12]) if errors else None,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.exception("public_tax_search_fatal", error=str(exc))
+            return ProviderResult(
+                True,
+                ProviderStatus.CONFIGURED,
+                [],
+                error=f"soft-fail: {exc}",
+            )
 
     async def get_listing(self, external_id: str) -> ProviderResult[dict]:
         res = await self.search_listings({"limit": 200})
@@ -2570,6 +2743,44 @@ class PublicTaxSaleProvider(ListingProvider):
         return raw
 
 
+async def _fetch_state_inventory(
+    client: httpx.AsyncClient,
+    srcs: list[ArcgisMarketSource],
+    *,
+    per_state: int,
+    errors: list[str],
+    start_offset: int = 0,
+) -> list[dict]:
+    statewide = [s for s in srcs if (s.county or "").lower() == "statewide"]
+    county = [s for s in srcs if s not in statewide]
+    if statewide:
+        pool = min(per_state, max(200, (per_state * 9) // 10))
+        county_budget = max(0, per_state - pool)
+        per_county = max(40, county_budget // max(1, len(county))) if county else 0
+        batches = await asyncio_gather_sources(
+            client,
+            srcs,
+            per_county,
+            errors,
+            start_offset=start_offset,
+            statewide_target=max(100, pool // max(1, len(statewide))),
+            statewide_pool=pool,
+        )
+    else:
+        per_src = max(40, per_state // max(1, len(srcs)))
+        batches = await asyncio_gather_sources(
+            client,
+            srcs,
+            per_src,
+            errors,
+            start_offset=start_offset,
+        )
+    rows: list[dict] = []
+    for batch in batches:
+        rows.extend(batch)
+    return rows
+
+
 async def asyncio_gather_sources(
     client: httpx.AsyncClient,
     sources: list[ArcgisMarketSource],
@@ -2580,18 +2791,13 @@ async def asyncio_gather_sources(
     statewide_target: int | None = None,
     statewide_pool: int = 0,
 ) -> list[list[dict]]:
-    import asyncio
-
     statewide_sources = [s for s in sources if (s.county or "").lower() == "statewide"]
     vacant_statewide = [s for s in statewide_sources if "vacant" in s.source_id]
     other_statewide = [s for s in statewide_sources if s not in vacant_statewide]
 
     async def one(src: ArcgisMarketSource) -> list[dict]:
-        target = per_source
-        # Statewide cadastral screens can support Zillow-scale land coverage —
-        # bias the pool toward vacant lots (listing-site shape) over ag acreage.
+        target = max(0, int(per_source))
         if statewide_pool and (src.county or "").lower() == "statewide":
-            # Split the pool across sources (do NOT give every vacant 75% of the pool).
             if src in vacant_statewide:
                 share = (0.75 if other_statewide else 1.0) / max(1, len(vacant_statewide))
                 target = max(statewide_target or per_source, int(statewide_pool * share))
@@ -2602,7 +2808,8 @@ async def asyncio_gather_sources(
                 target = max(per_source, statewide_target or per_source)
         elif statewide_target and (src.county or "").lower() == "statewide":
             target = max(per_source, statewide_target)
-        try:
+
+        async def _pull() -> list[dict]:
             if getattr(src, "shard_field", None) and getattr(src, "shard_values", None):
                 return await _fetch_arcgis_value_shards(
                     client, src, target=target, start_offset=start_offset
@@ -2614,11 +2821,29 @@ async def asyncio_gather_sources(
             return await _fetch_arcgis_pages(
                 client, src, target=target, start_offset=start_offset
             )
+
+        try:
+            return await asyncio.wait_for(_pull(), timeout=_SOURCE_FETCH_TIMEOUT_S)
+        except asyncio.TimeoutError:
+            errors.append(f"{src.source_id}: timed out")
+            log.warning("public_tax_source_timeout", source=src.source_id)
+            # Last-chance plain page — often recovers partial inventory quickly.
+            try:
+                return await asyncio.wait_for(
+                    _fetch_arcgis_pages(
+                        client, src, target=min(target, 200), start_offset=start_offset
+                    ),
+                    timeout=25.0,
+                )
+            except Exception:  # noqa: BLE001
+                return []
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{src.source_id}: {exc}")
             log.warning("public_tax_source_failed", source=src.source_id, error=str(exc))
             return []
 
+    if not sources:
+        return []
     return list(await asyncio.gather(*[one(s) for s in sources]))
 
 
@@ -2632,22 +2857,39 @@ class PublicSurplusProvider(ListingProvider):
         return ProviderStatus.CONFIGURED
 
     async def search_listings(self, query: dict[str, Any]) -> ProviderResult[list[dict]]:
-        limit = int(query.get("limit") or 200)
-        out: list[dict] = []
-        surplus_sources = [s for s in SOURCES if "surplus" in s.source_id or "fairfax" in s.source_id]
-        prefer = {str(s).upper() for s in (query.get("states") or []) if s}
-        if prefer:
-            preferred = [s for s in surplus_sources if s.state.upper() in prefer]
-            if preferred:
-                surplus_sources = preferred
+        limit = max(1, int(query.get("limit") or 200))
         errors: list[str] = []
-        per_source = max(50, limit // max(1, len(surplus_sources)))
-        async with httpx.AsyncClient(timeout=60.0, headers=_ARCGIS_HEADERS) as client:
-            batches = await asyncio_gather_sources(client, surplus_sources, per_source, errors)
-            for batch in batches:
-                out.extend(batch)
-        out.sort(key=lambda r: -(r.get("acreage") or 0))
-        return ProviderResult(True, ProviderStatus.CONFIGURED, out[:limit], error="; ".join(errors) if errors else None)
+        try:
+            surplus_sources = [
+                s for s in SOURCES if "surplus" in s.source_id or "fairfax" in s.source_id
+            ]
+            prefer = {str(s).upper() for s in (query.get("states") or []) if s}
+            if prefer:
+                surplus_sources = [s for s in surplus_sources if s.state.upper() in prefer]
+            if not surplus_sources:
+                return ProviderResult(True, ProviderStatus.CONFIGURED, [])
+            per_source = max(50, limit // max(1, len(surplus_sources)))
+            out: list[dict] = []
+            timeout = httpx.Timeout(connect=12.0, read=45.0, write=20.0, pool=20.0)
+            async with httpx.AsyncClient(timeout=timeout, headers=_ARCGIS_HEADERS) as client:
+                batches = await asyncio_gather_sources(
+                    client, surplus_sources, per_source, errors
+                )
+                for batch in batches:
+                    out.extend(batch)
+            out = _dedupe_inventory_rows(
+                [r for r in (_validate_inventory_row(x) for x in out) if r]
+            )
+            out.sort(key=lambda r: -(r.get("acreage") or 0))
+            return ProviderResult(
+                True,
+                ProviderStatus.CONFIGURED,
+                out[:limit],
+                error="; ".join(errors[:12]) if errors else None,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.exception("public_surplus_search_fatal", error=str(exc))
+            return ProviderResult(True, ProviderStatus.CONFIGURED, [], error=f"soft-fail: {exc}")
 
     async def get_listing(self, external_id: str) -> ProviderResult[dict]:
         res = await self.search_listings({"limit": 200})
