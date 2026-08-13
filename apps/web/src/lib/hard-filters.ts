@@ -33,21 +33,31 @@ function regionPasses(row: RadarRow, region?: string | null): boolean {
   return words.some((w) => hay.includes(w));
 }
 
-/** True only when the row satisfies every hard constraint the user selected. */
+/**
+ * Hard gate for search results.
+ * - State is always hard.
+ * - When broaden=true (default), acres/price/region trust the API's never-empty cascade
+ *   (API may widen ~35% or fall back inside the state) so legitimate land still shows.
+ * - When broaden=false, acres/price/region are strict client-side too.
+ * - Strategy + hold never drop rows.
+ */
 export function rowPassesHardFilters(row: RadarRow, filters: SearchFilters): boolean {
   const state = (filters.state || "").trim().toUpperCase();
   if (state && state !== "ANY") {
     if ((row.state || "").toUpperCase() !== state) return false;
   }
+  const broaden = filters.broaden !== false;
+  if (broaden) {
+    // Trust API effective bands — only reject clear wrong-state rows.
+    return true;
+  }
   if (!regionPasses(row, filters.region)) return false;
   if (!inHardBand(row.acres, filters.min_acres, filters.max_acres)) return false;
-  // Budget filter uses ask (market / assessed land) — never model estimated_value.
   if (!inHardBand(row.ask, filters.min_price, filters.max_price)) return false;
-  // Strategy + hold are ranking-only on the API — never drop rows here.
   return true;
 }
 
-/** Drop every row that violates the active filter set. Never trust the API alone. */
+/** Drop every row that violates the active filter set. Never trust the API alone for state. */
 export function enforceHardFilters(
   rows: RadarRow[],
   filters: SearchFilters,

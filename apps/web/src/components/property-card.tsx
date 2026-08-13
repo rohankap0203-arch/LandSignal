@@ -224,9 +224,14 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             <div className="k">Our estimate</div>
             <div className="v">{row.estimated_value_display}</div>
           </div>
-          <div className="metric">
+            <div className="metric">
             <div className="k">Opportunity</div>
-            <div className="v">{Math.round(row.opportunity)}</div>
+            <div
+              className="v"
+              title="Personalized to your strategy / hold filters when set; otherwise the global score"
+            >
+              {Math.round(row.fit_score ?? row.personalized_opportunity ?? row.opportunity)}
+            </div>
           </div>
           <div className="metric">
             <div className="k">Risk</div>

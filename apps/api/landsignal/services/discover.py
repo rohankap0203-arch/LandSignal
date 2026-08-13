@@ -102,7 +102,8 @@ async def discover_opportunities(
     blm_res, tax_res, surplus_res = await asyncio.gather(
         blm.search_listings(
             {
-                "limit": min(5000, max(500, min_per_state)),
+                # Deep western BLM haul — helps AK/AZ/CA/CO/ID/MT/NM/NV/OR/UT/WY toward 10k.
+                "limit": min(30000, max(2000, min_per_state * 2)),
                 "min_acres": max(1.0, min_acres),
                 "max_acres": max_acres,
                 "states": states,
@@ -233,7 +234,18 @@ async def discover_opportunities(
         to_score.append(parcel.id)
         new_parcel_ids.add(parcel.id)
 
-    sem = asyncio.Semaphore(24 if fast else 6)
+    # Cap concurrency by inventory size — 200k+ parcels + 24 scorers OOMs a 16GB box.
+    inv_now = sum(1 for p in store.parcels.values() if not p.is_demo)
+    if inv_now >= 200_000:
+        score_conc = 6 if fast else 3
+        chunk = 80
+    elif inv_now >= 80_000:
+        score_conc = 12 if fast else 4
+        chunk = 120
+    else:
+        score_conc = 24 if fast else 6
+        chunk = 200
+    sem = asyncio.Semaphore(score_conc)
     scored = 0
 
     async def _score_one(pid: UUID) -> None:
@@ -266,11 +278,23 @@ async def discover_opportunities(
                 log.warning("discover_analyze_failed", parcel_id=str(pid), error=str(exc))
 
     # Score in chunks so radar can see inventory while the rest indexes
-    chunk = 200
     for i in range(0, len(to_score), chunk):
         batch = to_score[i : i + chunk]
         await asyncio.gather(*[_score_one(pid) for pid in batch])
-        log.info("discover_batch_scored", scored=scored, total=len(to_score))
+        log.info(
+            "discover_batch_scored",
+            scored=scored,
+            total=len(to_score),
+            inventory=inv_now,
+            concurrency=score_conc,
+        )
+        if inv_now >= 50_000 and i > 0 and (i // chunk) % 8 == 0:
+            try:
+                from landsignal.store import persist_store
+
+                persist_store(store)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("discover_mid_persist_failed", error=str(exc)[:200])
 
     return {
         "imported": len(set(parcel_ids)),

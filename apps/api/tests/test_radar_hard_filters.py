@@ -132,7 +132,21 @@ async def test_stacked_state_acres_price_filters(isolated_store):
 
 
 @pytest.mark.asyncio
-async def test_no_matches_when_band_empty_does_not_leak_other_acres(isolated_store):
+async def test_no_matches_when_band_empty_strict_mode(isolated_store):
+    """broaden=false keeps empty bands empty (no state fallback)."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get(
+            "/v1/radar",
+            params={"state": "FL", "min_acres": 5000, "broaden": False, "limit": 50},
+        )
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+@pytest.mark.asyncio
+async def test_extreme_band_broadens_inside_state(isolated_store):
+    """broaden=true never invents parcels — it falls back to real land in-state."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         r = await client.get(
@@ -140,7 +154,10 @@ async def test_no_matches_when_band_empty_does_not_leak_other_acres(isolated_sto
             params={"state": "FL", "min_acres": 5000, "broaden": True, "limit": 50},
         )
     assert r.status_code == 200
-    assert r.json() == []
+    rows = r.json()
+    assert len(rows) >= 1
+    assert all(row.get("state") == "FL" for row in rows)
+    assert all((row.get("acres") or 0) < 5000 for row in rows)
 
 
 @pytest.mark.asyncio

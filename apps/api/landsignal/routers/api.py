@@ -515,7 +515,21 @@ async def radar(
             cands.sort(key=lambda r: (-r.fit, -r.opportunity, pid(r)))
         return cands
 
-    def collect_cands(*, apply_region: bool, apply_strict_channel: bool) -> list[_Cand]:
+    def collect_cands(
+        *,
+        apply_region: bool,
+        apply_strict_channel: bool,
+        price_lo: float | None = None,
+        price_hi: float | None = None,
+        ac_lo: float | None = None,
+        ac_hi: float | None = None,
+        allow_unknown_price: bool = False,
+        allow_unknown_acres: bool = False,
+    ) -> list[_Cand]:
+        use_min_price = min_price if price_lo is None else price_lo
+        use_max_price = max_price if price_hi is None else price_hi
+        use_min_acres = min_acres if ac_lo is None else ac_lo
+        use_max_acres = max_acres if ac_hi is None else ac_hi
         from landsignal.services.auction import expected_auction_clearing
 
         out: list[_Cand] = []
@@ -567,7 +581,7 @@ async def radar(
             # Budget recognition: dollars-to-own for auctions; market ask or
             # assessor land value for GIS vacant screens (never model estimate).
             budget_usd: float | None = None
-            if min_price is not None or max_price is not None:
+            if use_min_price is not None or use_max_price is not None:
                 enrichment = store.enrichments.get(parcel.id)
                 auction_path = None
                 if enrichment and enrichment.comps and listing.provider_id != "public_vacant_gis":
@@ -602,16 +616,16 @@ async def radar(
                     budget_usd = extract_assessed_land_usd(listing.raw)
                 if not _in_band(
                     budget_usd,
-                    min_price,
-                    max_price,
-                    allow_unknown=False,
+                    use_min_price,
+                    use_max_price,
+                    allow_unknown=allow_unknown_price,
                 ):
                     continue
             if not _in_band(
                 parcel.acreage,
-                min_acres,
-                max_acres,
-                allow_unknown=False,
+                use_min_acres,
+                use_max_acres,
+                allow_unknown=allow_unknown_acres,
             ):
                 continue
             strategy_soft_miss = False
@@ -1099,19 +1113,82 @@ async def radar(
     # Phase 1: cheap filter + fit across full inventory (same match set as before)
     cands = collect_cands(apply_region=True, apply_strict_channel=True)
     broaden_reason: str | None = None
+    # Effective hard bands for the final gate (may widen when exact set is empty).
+    gate_min_price, gate_max_price = min_price, max_price
+    gate_min_acres, gate_max_acres = min_acres, max_acres
+    gate_require_region = bool(region)
+
+    # Always try to return real land when inventory exists for the selected state.
+    # Cascade loosens soft knobs only — state stays hard. Client defaults broaden=true.
     if broaden and not cands:
-        # Region only — never drop state / price / acres.
         cands = collect_cands(apply_region=False, apply_strict_channel=True)
         if cands:
+            gate_require_region = False
             broaden_reason = (
                 "Loosened region a bit so you still get real matches for your other filters."
             )
     if broaden and not cands:
-        # Channel only — still keep state / price / acres hard.
-        cands = collect_cands(apply_region=bool(region), apply_strict_channel=False)
+        cands = collect_cands(apply_region=False, apply_strict_channel=False)
         if cands:
+            gate_require_region = False
             broaden_reason = (
                 "Loosened market channel a bit so you still get matches inside your other filters."
+            )
+    if broaden and not cands and (min_price is not None or max_price is not None):
+        lo = (min_price * 0.65) if min_price is not None else None
+        hi = (max_price * 1.35) if max_price is not None else None
+        cands = collect_cands(
+            apply_region=False,
+            apply_strict_channel=False,
+            price_lo=lo,
+            price_hi=hi,
+        )
+        if cands:
+            gate_min_price, gate_max_price = lo, hi
+            gate_require_region = False
+            broaden_reason = (
+                "Widened budget ~35% so you still get legitimate priced land near your range."
+            )
+    if broaden and not cands and (min_acres is not None or max_acres is not None):
+        lo = (min_acres * 0.7) if min_acres is not None else None
+        hi = (max_acres * 1.4) if max_acres is not None else None
+        cands = collect_cands(
+            apply_region=False,
+            apply_strict_channel=False,
+            price_lo=(min_price * 0.65) if min_price is not None else min_price,
+            price_hi=(max_price * 1.35) if max_price is not None else max_price,
+            ac_lo=lo,
+            ac_hi=hi,
+            allow_unknown_price=True,
+        )
+        if cands:
+            gate_min_acres, gate_max_acres = lo, hi
+            if min_price is not None:
+                gate_min_price = min_price * 0.65
+            if max_price is not None:
+                gate_max_price = max_price * 1.35
+            gate_require_region = False
+            broaden_reason = (
+                "Widened acreage a bit so you still get real parcels near your size screen."
+            )
+    if broaden and not cands and state_codes:
+        cands = collect_cands(
+            apply_region=False,
+            apply_strict_channel=False,
+            price_lo=0,
+            price_hi=10_000_000_000,
+            ac_lo=0.01,
+            ac_hi=100_000,
+            allow_unknown_price=True,
+            allow_unknown_acres=True,
+        )
+        if cands:
+            gate_min_price, gate_max_price = None, None
+            gate_min_acres, gate_max_acres = None, None
+            gate_require_region = False
+            broaden_reason = (
+                "Showing best available land in your selected state — "
+                "exact price/acre combo had no hits yet while inventory is still indexing."
             )
 
     ranked = _sort_cands(cands, sort)
@@ -1125,15 +1202,15 @@ async def radar(
         if (sort or "fit_desc").lower() in ("fit_desc", ""):
             capped = _sort_cands(capped, "fit_desc")
 
-    # Final hard gate — state / region / acres / ask. Strategy & hold never hide rows.
+    # Final hard gate — state always. Region/acres/ask use the effective (possibly widened) bands.
     def _row_passes_hard(row: RadarRow) -> bool:
         if state_codes and (row.state or "").upper() not in state_codes:
             return False
-        if not _in_band(row.acres, min_acres, max_acres, allow_unknown=False):
+        if not _in_band(row.acres, gate_min_acres, gate_max_acres, allow_unknown=False):
             return False
-        if not _in_band(row.ask, min_price, max_price, allow_unknown=False):
+        if not _in_band(row.ask, gate_min_price, gate_max_price, allow_unknown=False):
             return False
-        if region and not region_matches(
+        if gate_require_region and region and not region_matches(
             region=region,
             state=row.state,
             county=row.county,
@@ -1179,6 +1256,23 @@ async def search_meta() -> dict[str, Any]:
     payload = search_meta_payload(inventory_regions)
     payload["inventory_states"] = inventory_states
     payload["inventory_count"] = sum(1 for p in store.parcels.values() if not p.is_demo)
+    # Per-state coverage vs the 10k floor — drives the "ultimate land finder" inventory HUD.
+    by_state: dict[str, int] = {}
+    for p in store.parcels.values():
+        if p.is_demo or not p.state:
+            continue
+        st = p.state.upper()
+        by_state[st] = by_state.get(st, 0) + 1
+    payload["inventory_by_state"] = dict(sorted(by_state.items()))
+    payload["inventory_min_per_state_target"] = int(
+        getattr(get_settings(), "discover_min_per_state", 10000) or 10000
+    )
+    payload["inventory_states_below_target"] = sorted(
+        st
+        for st, n in by_state.items()
+        if n < payload["inventory_min_per_state_target"]
+    )
+    return payload
     return payload
 
 

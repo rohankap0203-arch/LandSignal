@@ -2392,9 +2392,16 @@ SOURCES: list[ArcgisMarketSource] = [
 ]
 
 # Merge additional verified statewide vacant/ag screens (NC/NE/WA/WI/UT/IN/VT/CT…).
-from landsignal.providers.statewide_inventory import SOURCES as _STATEWIDE_EXTRA_SOURCES
+# Lazy import avoids circular init when extras import ArcgisMarketSource helpers.
+def _extend_statewide_sources() -> None:
+    from landsignal.providers.statewide_inventory import SOURCES as _STATEWIDE_EXTRA_SOURCES
+    from landsignal.providers.statewide_inventory_extra import SOURCES as _STATEWIDE_COVERAGE_SOURCES
 
-SOURCES.extend(_STATEWIDE_EXTRA_SOURCES)
+    SOURCES.extend(_STATEWIDE_EXTRA_SOURCES)
+    SOURCES.extend(_STATEWIDE_COVERAGE_SOURCES)
+
+
+_extend_statewide_sources()
 
 
 async def _arcgis_get_json(

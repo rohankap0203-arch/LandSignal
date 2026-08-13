@@ -226,8 +226,9 @@ export default function SearchPage() {
         unpriced_mode: "include",
         include_unpriced: true,
         sort: f.sort,
-        // Never auto-loosen filters — results must match what the user selected.
-        broaden: false,
+        // Prefer returning real land: server widens soft knobs only when exact set is empty.
+        // State stays hard; strategy/hold never hide rows.
+        broaden: true,
       };
     },
     [meta],
