@@ -4,9 +4,10 @@
   "remote.forwardOnOpen": true,
   "remote.portsAttributes": {
     "3000": {
-      "label": "LandSignal Web",
+      "label": "LandSignal",
       "onAutoForward": "openBrowser",
-      "protocol": "http"
+      "protocol": "http",
+      "elevateIfNeeded": false
     },
     "8000": {
       "label": "LandSignal API",
