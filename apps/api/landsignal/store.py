@@ -437,6 +437,10 @@ def load_persisted_store(store: MemoryStore) -> int:
             # $0 bids are missing prices — never treat as free land
             if L.asking_price_usd is not None and L.asking_price_usd <= 0:
                 L.asking_price_usd = None
+            # Every state: promote nested CAD land values into ask so budget filters work.
+            from landsignal.services.assessed_price import backfill_listing_ask_from_assessed
+
+            backfill_listing_ask_from_assessed(L)
             store.listings[L.id] = L
             store.index_listing(L)
         except Exception:

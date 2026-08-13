@@ -253,15 +253,16 @@ def _norm_wi_parcels_vacant(raw: dict) -> dict | None:
     pid = props.get("PARCELID") or props.get("OBJECTID")
     county = str(props.get("PARCELSRC") or props.get("COUNTY") or "Wisconsin").title()
     addr = (props.get("SITEADRESS") or props.get("PSTLADRESS") or "").strip()
+    land_val = _fnum(props.get("LNDVALUE") or props.get("LANDVALUE") or props.get("CNTASSDVALUE"))
     return {
         "provider_id": "public_vacant_gis",
         "external_id": f"wi_parcels:{pid}",
         "title": f"Wisconsin vacant · {acreage:.1f} ac · {county}",
         "description": (
             f"Wisconsin statewide parcel (WLIP V11+). PROPCLASS={pclass}. County={county}. "
-            f"Owner={props.get('OWNERNME1')}. Public GIS — not MLS/Zillow."
+            f"Owner={props.get('OWNERNME1')}. Land value=${land_val}. Public GIS — not MLS/Zillow."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": acreage,
         "state": "WI",
         "county": county,
@@ -293,15 +294,16 @@ def _norm_wi_parcels_ag(raw: dict) -> dict | None:
     pid = props.get("PARCELID") or props.get("OBJECTID")
     county = str(props.get("PARCELSRC") or props.get("COUNTY") or "Wisconsin").title()
     addr = (props.get("SITEADRESS") or props.get("PSTLADRESS") or "").strip()
+    land_val = _fnum(props.get("LNDVALUE") or props.get("LANDVALUE") or props.get("CNTASSDVALUE"))
     return {
         "provider_id": "public_vacant_gis",
         "external_id": f"wi_ag:{pid}",
         "title": f"Wisconsin ag · {acreage:.1f} ac · {county}",
         "description": (
             f"Wisconsin statewide agricultural parcel (WLIP). PROPCLASS={pclass}. "
-            f"County={county}. Public GIS — not MLS/Zillow."
+            f"County={county}. Land value=${land_val}. Public GIS — not MLS/Zillow."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": acreage,
         "state": "WI",
         "county": county,
@@ -415,15 +417,16 @@ def _norm_vt_parcels_vacant(raw: dict) -> dict | None:
         return None
     pid = props.get("SPAN") or props.get("OBJECTID")
     town = str(props.get("TOWN") or "Vermont").title()
+    land_val = _fnum(props.get("LAND_LV") or props.get("REAL_FLV") or props.get("REAL_VALUE"))
     return {
         "provider_id": "public_vacant_gis",
         "external_id": f"vt_parcels:{pid}",
         "title": f"Vermont land · {acreage:.1f} ac · {town}",
         "description": (
             f"Vermont statewide standardized parcel (VCGI). Town={town}. DESCPROP={props.get('DESCPROP')}. "
-            "Public GIS — not MLS/Zillow."
+            f"Land value=${land_val}. Public GIS — not MLS/Zillow."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": acreage,
         "state": "VT",
         "county": town,
@@ -680,7 +683,7 @@ SOURCES: list[ArcgisMarketSource] = [
         objectid_max=3_600_000,
         out_fields=(
             "OBJECTID,PARCELID,PROPCLASS,AUXCLASS,GISACRES,ASSDACRES,DEEDACRES,"
-            "OWNERNME1,PARCELSRC,SITEADRESS,PSTLADRESS"
+            "OWNERNME1,PARCELSRC,SITEADRESS,PSTLADRESS,LNDVALUE,CNTASSDVALUE"
         ),
     ),
     _src(
@@ -694,7 +697,7 @@ SOURCES: list[ArcgisMarketSource] = [
         objectid_max=3_600_000,
         out_fields=(
             "OBJECTID,PARCELID,PROPCLASS,AUXCLASS,GISACRES,ASSDACRES,DEEDACRES,"
-            "OWNERNME1,PARCELSRC,SITEADRESS,PSTLADRESS"
+            "OWNERNME1,PARCELSRC,SITEADRESS,PSTLADRESS,LNDVALUE,CNTASSDVALUE"
         ),
     ),
     _src(
@@ -729,7 +732,7 @@ SOURCES: list[ArcgisMarketSource] = [
         _norm_vt_parcels_vacant,
         where="DESCPROP LIKE 'LAND%' AND ACRESGL>=1 AND ACRESGL<=2500",
         page_size=1000,
-        out_fields="OBJECTID,SPAN,PROPTYPE,DESCPROP,ACRESGL,TOWN,OWNER1",
+        out_fields="OBJECTID,SPAN,PROPTYPE,DESCPROP,ACRESGL,TOWN,OWNER1,LAND_LV,REAL_FLV",
     ),
     _src(
         "ct_parcels_vacant",

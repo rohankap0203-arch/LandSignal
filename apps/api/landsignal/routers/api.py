@@ -435,40 +435,9 @@ async def radar(
         ask = listing.asking_price_usd
         if ask is not None and ask > 0:
             return float(ask)
-        raw = listing.raw or {}
-        # Persisted GIS rows nest CAD props under raw["raw"] — search both levels.
-        blobs: list[dict] = []
-        if isinstance(raw, dict):
-            blobs.append(raw)
-            inner = raw.get("raw")
-            if isinstance(inner, dict):
-                blobs.append(inner)
-        for blob in blobs:
-            for key in (
-                "LND_VAL",
-                "LAND_VAL",
-                "Land_Value",
-                "LandVal",
-                "land_value",
-                "LAND_VALUE",
-                "LAND_AV",
-                "VALUE_LAND",
-                "landval",
-                "Assessed_Land",
-                "Assessed_Land_Value",
-                "assessed_land_usd",
-                "Land",
-            ):
-                val = blob.get(key)
-                if val is None:
-                    continue
-                try:
-                    num = float(val)
-                except (TypeError, ValueError):
-                    continue
-                if num > 0:
-                    return num
-        return None
+        from landsignal.services.assessed_price import extract_assessed_land_usd
+
+        return extract_assessed_land_usd(listing.raw)
 
     def _sort_cands(cands: list[_Cand], sort_key: str | None) -> list[_Cand]:
         key = (sort_key or "fit_desc").lower()

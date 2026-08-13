@@ -34,6 +34,18 @@ async def startup() -> None:
 
     store = get_store(settings.demo_seed)
     store.rebuild_listing_index()
+    # Promote assessor land marks → ask for every state (NJ/NY/MA/AR/WI/VT/TN/…).
+    try:
+        import structlog
+
+        from landsignal.services.assessed_price import backfill_store_assessed_asks
+
+        bf = backfill_store_assessed_asks(store)
+        structlog.get_logger().info("startup_assessed_ask_backfill", **bf)
+    except Exception as exc:  # noqa: BLE001
+        import structlog
+
+        structlog.get_logger().warning("startup_assessed_ask_backfill_failed", error=str(exc))
     # Default high-conviction alert rule
     if not store.alert_rules:
         from landsignal.services.alerts import create_rule

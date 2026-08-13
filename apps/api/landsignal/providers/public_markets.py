@@ -849,7 +849,7 @@ def _norm_nj_mod4_vacant(raw: dict) -> dict | None:
             f"Land desc={props.get('LAND_DESC') or 'n/a'}. "
             "Public map screen — not a confirmed tax sale; confirm owner / sale path before chasing."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "NJ",
         "county": county,
@@ -860,7 +860,7 @@ def _norm_nj_mod4_vacant(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://maps.nj.gov/",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -888,7 +888,7 @@ def _norm_nj_mod4_farm(raw: dict) -> dict | None:
             f"County={county}. Municipality={mun or 'n/a'}. Land appraisal mark=${land_val}. "
             "Public map screen — not MLS; confirm whether the owner will sell before underwriting."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "NJ",
         "county": county,
@@ -899,7 +899,7 @@ def _norm_nj_mod4_farm(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://maps.nj.gov/",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -941,7 +941,7 @@ def _norm_ny_orpts_vacant(raw: dict) -> dict | None:
             f"Land assessed value mark=${land_val}. "
             "Public cadastral screen — not a tax-sale calendar; confirm owner / sale path before chasing."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "NY",
         "county": county,
@@ -952,7 +952,7 @@ def _norm_ny_orpts_vacant(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://gis.ny.gov/parcels",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -992,7 +992,7 @@ def _norm_ny_orpts_ag(raw: dict) -> dict | None:
             f"Land assessed value mark=${land_val}. "
             "Public cadastral screen — not MLS; confirm whether the owner will sell before underwriting."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "NY",
         "county": county,
@@ -1003,7 +1003,7 @@ def _norm_ny_orpts_ag(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://gis.ny.gov/parcels",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -1044,7 +1044,7 @@ def _norm_ar_geostor_vacant(raw: dict) -> dict | None:
             "Unimproved map screen — coverage varies by county production block; "
             "not a tax-sale list. Confirm owner / sale path before chasing."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "AR",
         "county": county,
@@ -1055,7 +1055,7 @@ def _norm_ar_geostor_vacant(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://gis.arkansas.gov/",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -1095,7 +1095,7 @@ def _norm_ma_massgis_vacant(raw: dict) -> dict | None:
             f"Use={use} ({use_desc}). City/town={city}. Land value mark=${land_val}. "
             "Public cadastral screen — not a confirmed listing; confirm owner / sale path before chasing."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "MA",
         "county": city,  # MassGIS is town-based; city/town is the practical locality key
@@ -1106,7 +1106,7 @@ def _norm_ma_massgis_vacant(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://www.mass.gov/info-details/massgis-data-property-tax-parcels",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -1144,7 +1144,7 @@ def _norm_ma_massgis_chapter61(raw: dict) -> dict | None:
             f"Use={use} ({use_desc}). City/town={city}. Land value mark=${land_val}. "
             "Public cadastral screen — not MLS; confirm whether the owner will sell before underwriting."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "MA",
         "county": city,
@@ -1155,7 +1155,7 @@ def _norm_ma_massgis_chapter61(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://www.mass.gov/info-details/massgis-data-property-tax-parcels",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -1440,7 +1440,7 @@ def _norm_nashville_vacant(raw: dict) -> dict | None:
     if acreage is None or float(acreage) < 1.0:
         return None
     pid = props.get("APN") or props.get("ParID") or props.get("OBJECTID")
-    land = props.get("LandAppr")
+    land = _fnum(props.get("LandAppr") or props.get("LandAssd"))
     return {
         # Vacant cadastral GIS — NOT a confirmed tax-sale calendar. Mis-tagging as
         # public_tax_sale was inventing huge “buy edges” and crowding the radar with TN.
@@ -1452,8 +1452,8 @@ def _norm_nashville_vacant(raw: dict) -> dict | None:
             f"Use={props.get('LUDesc')}. Land appraisal mark=${land}. "
             "Public map screen — not a confirmed tax sale and not MLS."
         ),
-        # LandAppr is assessed mark, not a list/bid price
-        "asking_price_usd": None,
+        # Assessed land is the budget-filter price for vacant GIS (same as FL/TX/NY).
+        "asking_price_usd": float(land) if land and land > 0 else None,
         "acreage": float(acreage),
         "state": "TN",
         "county": "Davidson",
@@ -1464,7 +1464,7 @@ def _norm_nashville_vacant(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://www.padctn.org/",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
