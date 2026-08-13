@@ -57,7 +57,8 @@ async def startup() -> None:
 
         log = structlog.get_logger()
         try:
-            summary = await rescore_stale(store)
+            # Keep startup light — large inventories used to pin CPU for minutes.
+            summary = await rescore_stale(store, limit=500, concurrency=8)
             log.info("startup_rescore", **summary)
         except Exception as exc:  # noqa: BLE001
             log.warning("startup_rescore_failed", error=str(exc))
