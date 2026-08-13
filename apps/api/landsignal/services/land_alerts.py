@@ -819,8 +819,15 @@ def _maybe_notify(
         return
 
     listing = store.listing_for_parcel(parcel.id)
-    acres = f"{parcel.acreage:g} acres" if parcel.acreage else "Land"
-    price = f"${listing.asking_price_usd:,.0f}" if listing and listing.asking_price_usd else "Price n/a"
+    summary_bits: list[str] = []
+    if parcel.acreage:
+        summary_bits.append(f"{parcel.acreage:g} acres")
+    if parcel.state:
+        summary_bits.append(parcel.state)
+    elif not summary_bits:
+        summary_bits.append("US")
+    if listing and listing.asking_price_usd is not None:
+        summary_bits.append(f"${listing.asking_price_usd:,.0f}")
     kind_label = {
         "price_drop": "Price drop",
         "price_increase": "Price increase",
@@ -832,6 +839,7 @@ def _maybe_notify(
     scouted_at = _clamp_not_future(_listing_scouted_at(listing, match))
     scouted_iso = scouted_at.isoformat().replace("+00:00", "Z")
     title = f"{kind_label} — {match.preference_match_pct:.0f}% Match"
+    summary_core = " • ".join(summary_bits) if summary_bits else "Land"
     body = {
         "property": (listing.title if listing else None) or parcel.apn or str(parcel.id),
         "location": f"{parcel.county or ''}, {parcel.state or ''}".strip(", "),
@@ -841,7 +849,7 @@ def _maybe_notify(
         "landsignal_score": match.landsignal_score,
         "why_matched": match.why_matched[:3],
         "watch_flags": match.watch_flags[:2],
-        "summary": f"{acres} • {parcel.state or 'US'} • {price}. Strong match for your land profile.",
+        "summary": f"{summary_core}. Strong match for your land profile.",
         "deep_link": f"/parcels/{parcel.id}",
         "profile_id": str(profile.id),
         "match_id": str(match.id),
@@ -1019,6 +1027,11 @@ def matches_for_user(
     return rows
 
 
+def filter_mappable_matches(store: MemoryStore, matches: list[LandAlertMatch]) -> list[LandAlertMatch]:
+    """Keep only matches the Land Viewer can open (real boundary + valid pin)."""
+    return [m for m in matches if _parcel_is_mappable(store.parcels.get(m.parcel_id))]
+
+
 def _imagery_url(lat: float | None, lon: float | None, acres: float | None = None) -> str | None:
     """Esri World Imagery snapshot centered on the parcel (no Mapbox required)."""
     if lat is None or lon is None:
@@ -1088,7 +1101,8 @@ def match_card(store: MemoryStore, match: LandAlertMatch) -> dict[str, Any]:
         "imagery_url": imagery_url,
         "latitude": parcel.latitude if parcel else None,
         "longitude": parcel.longitude if parcel else None,
-        "has_boundary": _parcel_has_real_boundary(parcel),
+        # Same gate as notifications / View land — pin-only or synthetic squares stay out.
+        "has_boundary": _parcel_is_mappable(parcel),
         # Polygon omitted from list cards (multi‑MB payload). Viewer loads it via /parcels/{id}/geometry.
         "polygon": None,
         "viewed_at": match.viewed_at.isoformat() if match.viewed_at else None,

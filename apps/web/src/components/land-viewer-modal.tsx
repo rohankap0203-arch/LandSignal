@@ -240,34 +240,6 @@ function legitimatePriceDisplay(priceDisplay?: string | null): string | null {
   return raw;
 }
 
-function ringAreaAcres(ring: [number, number][]) {
-  if (ring.length < 3) return 0;
-  let lat0 = 0;
-  let lon0 = 0;
-  for (const [lat, lon] of ring) {
-    if (!isValidLatLon(lat, lon)) return 0;
-    lat0 += lat;
-    lon0 += lon;
-  }
-  lat0 /= ring.length;
-  lon0 /= ring.length;
-  const mPerDegLat = 111320;
-  const mPerDegLon = 111320 * Math.cos((lat0 * Math.PI) / 180);
-  if (!Number.isFinite(mPerDegLon) || mPerDegLon <= 0) return 0;
-  let area = 0;
-  for (let i = 0; i < ring.length; i++) {
-    const [lat1, lon1] = ring[i];
-    const [lat2, lon2] = ring[(i + 1) % ring.length];
-    const x1 = (lon1 - lon0) * mPerDegLon;
-    const y1 = (lat1 - lat0) * mPerDegLat;
-    const x2 = (lon2 - lon0) * mPerDegLon;
-    const y2 = (lat2 - lat0) * mPerDegLat;
-    area += x1 * y2 - x2 * y1;
-  }
-  const acres = Math.abs(area / 2) / 4046.8564224;
-  return Number.isFinite(acres) && acres > 0 ? acres : 0;
-}
-
 type OverpassElement = {
   type?: string;
   id?: number;
@@ -839,6 +811,7 @@ export function LandViewerModal({
         weight: 2.5,
         dashArray: "7 5",
       }).addTo(layer);
+      const detailHtml = hit.detail ? `<br/><em>${hit.detail}</em>` : "";
       L.circleMarker([hit.lat, hit.lon], {
         radius: 8,
         color: "#fff",
@@ -847,7 +820,7 @@ export function LandViewerModal({
         fillOpacity: 1,
       })
         .bindPopup(
-          `<strong>${rank} ${hit.label}</strong><br/>${hit.name}<br/>${formatDistance(hit.meters)} away`,
+          `<strong>${rank} ${hit.label}</strong><br/>${hit.name}<br/>${formatDistance(hit.meters)} away${detailHtml}`,
         )
         .addTo(layer)
         .openPopup();
@@ -855,7 +828,10 @@ export function LandViewerModal({
         padding: [60, 60],
         maxZoom: 14,
       });
-      setNearbyStatus(`${rank} ${hit.label}: ${formatDistance(hit.meters)} · ${hit.name}`);
+      const detailSuffix = hit.detail ? ` · ${hit.detail}` : "";
+      setNearbyStatus(
+        `${rank} ${hit.label}: ${formatDistance(hit.meters)} · ${hit.name}${detailSuffix}`,
+      );
     },
     [center],
   );
@@ -1294,8 +1270,15 @@ export function LandViewerModal({
               type="button"
               className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
               style={{ ["--chip" as string]: chip.color }}
-              disabled={!hasGeo || nearbyLoading}
+              disabled={!hasGeo}
               onClick={() => void showNearby(chip.kind)}
+              title={
+                nearbyLoading && nearbyActive === chip.kind
+                  ? "Cancel search"
+                  : nearbyLoading
+                    ? `Switch to ${chip.label}`
+                    : chip.label
+              }
             >
               {chip.label}
             </button>

@@ -1,0 +1,18 @@
+{
+  "remote.autoForwardPorts": true,
+  "remote.autoForwardPortsSource": "hybrid",
+  "remote.forwardOnOpen": true,
+  "remote.portsAttributes": {
+    "3000": {
+      "label": "LandSignal",
+      "onAutoForward": "openBrowser",
+      "protocol": "http",
+      "elevateIfNeeded": false
+    },
+    "8000": {
+      "label": "LandSignal API",
+      "onAutoForward": "silent",
+      "protocol": "http"
+    }
+  }
+}
