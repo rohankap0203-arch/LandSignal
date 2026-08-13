@@ -209,3 +209,45 @@ async def test_strategy_filter_is_hard(isolated_store):
     rows = r.json()
     assert len(rows) == 1
     assert rows[0]["best_strategy"] == "ENERGY"
+
+
+@pytest.mark.asyncio
+async def test_model_estimate_never_bypasses_budget_filter(isolated_store, monkeypatch):
+    """Huge estimated_value must not make a cheap ask look like it fails ≤$250k — or pass wrongly."""
+    store = isolated_store
+    # Cheap ask, absurd model value (the UX bug users read as "filter failed")
+    _seed_scored_parcel(
+        store,
+        state="FL",
+        county="Osceola",
+        acreage=900.0,
+        ask=110_000,
+        external_id="fl-huge-model",
+    )
+    parcel_ids = [p.id for p in store.parcels.values() if p.apn == "fl-huge-model"]
+    assert parcel_ids
+    scores = store.scores[parcel_ids[0]]
+    scores[0].estimated_value_usd = 7_000_000
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get(
+            "/v1/radar",
+            params={
+                "state": "FL",
+                "min_acres": 20,
+                "max_price": 250_000,
+                "broaden": False,
+                "limit": 50,
+            },
+        )
+    assert r.status_code == 200
+    rows = r.json()
+    assert rows
+    hit = next(row for row in rows if row.get("acres") == 900.0)
+    assert hit["ask"] == 110_000
+    assert hit["ask"] <= 250_000
+    assert hit["estimated_value"] == 7_000_000
+    # Every returned row must still satisfy the hard budget on ask, not estimate.
+    assert all((row.get("ask") or 0) <= 250_000 for row in rows)
+    assert all((row.get("acres") or 0) >= 20 for row in rows)

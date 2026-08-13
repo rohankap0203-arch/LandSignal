@@ -192,19 +192,29 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             <div className="v">{row.acres_display}</div>
           </div>
           <div className="metric">
-            <div className="k" title="This is the price your budget filter uses">
-              {row.price_label || "Price"}
+            <div className="k" title="This is the only price your budget filter uses">
+              Filter price
             </div>
             <div className="v">
-              {row.ask != null && row.ask > 0 ? shortPrice(row.price_display) : "No public price"}
+              {row.ask != null && row.ask > 0
+                ? shortPrice(row.price_display)
+                : "No public price"}
             </div>
+            {row.price_label && row.ask != null && row.ask > 0 ? (
+              <div className="text-[10px] text-[var(--muted)] mt-0.5">{row.price_label}</div>
+            ) : null}
           </div>
           <div className="metric">
-            <div className="k" title="Model estimate only — not used for your budget filter">
+            <div className="k" title="Desktop model only — never used for your budget filter">
               Model estimate
             </div>
-            <div className="v" style={{ opacity: 0.75 }}>
-              {row.estimated_value_display}
+            <div className="v" style={{ opacity: 0.65 }}>
+              {row.ask != null &&
+              row.ask > 0 &&
+              row.estimated_value != null &&
+              row.estimated_value / row.ask > 12
+                ? "Not used for filters"
+                : row.estimated_value_display}
             </div>
           </div>
         </div>

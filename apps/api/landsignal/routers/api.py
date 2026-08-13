@@ -816,11 +816,21 @@ async def radar(
             headline_disc = score.asking_discount_pct
         if listing.provider_id == "public_vacant_gis":
             acres_h = f"{acres:,.0f} ac" if acres is not None else "tract"
-            headline = (
-                f"Vacant map screen · {acres_h} · confirm owner path"
-                if score.opportunity < 62
-                else f"Worth a look · {acres_h} vacant map screen — verify it’s buyable"
-            )
+            # Lead with filter price (assessed / ask) so budget filters are obvious —
+            # never lead with model estimated_value (can be multi‑million on cheap land).
+            price_h = pd.get("display") if ask else None
+            if price_h:
+                headline = (
+                    f"{price_h} assessed land · {acres_h}"
+                    if score.opportunity < 62
+                    else f"Worth a look · {price_h} · {acres_h}"
+                )
+            else:
+                headline = (
+                    f"Vacant map screen · {acres_h} · confirm owner path"
+                    if score.opportunity < 62
+                    else f"Worth a look · {acres_h} vacant map screen — verify it’s buyable"
+                )
         elif headline_disc is not None and headline_disc < -8:
             headline = (
                 f"Likely finish ~{abs(headline_disc):.0f}% under our value"
@@ -1011,11 +1021,22 @@ async def radar(
         if (sort or "fit_desc").lower() in ("fit_desc", ""):
             capped = _sort_cands(capped, "fit_desc")
 
-    # Phase 2: full presentation cards only for the capped result set
+    # Phase 2: full presentation cards only for the capped result set.
+    # Final hard gate — never return a row that violates state / acres / price,
+    # even if presentation rebuilds ask/acres differently than the candidate pass.
+    def _row_passes_hard(row: RadarRow) -> bool:
+        if state_code and (row.state or "").upper() != state_code:
+            return False
+        if not _in_hard_band(row.acres, min_acres, max_acres, allow_unknown=False):
+            return False
+        if not _in_hard_band(row.ask, min_price, max_price, allow_unknown=False):
+            return False
+        return True
+
     rows: list[RadarRow] = []
     for c in capped:
         row = fat_row(c, broaden_reason=broaden_reason)
-        if row is not None:
+        if row is not None and _row_passes_hard(row):
             rows.append(row)
     return rows
 

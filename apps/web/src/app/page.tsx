@@ -12,6 +12,7 @@ import {
   type SearchFilters,
   type SearchMeta,
 } from "@/lib/api";
+import { describeHardFilters, enforceHardFilters } from "@/lib/hard-filters";
 
 type FormState = {
   state: string;
@@ -135,6 +136,7 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [appliedFilters, setAppliedFilters] = useState<SearchFilters | null>(null);
 
   const regionOptions = useMemo(() => {
     const code = stateCode(form.state);
@@ -203,7 +205,14 @@ export default function SearchPage() {
         include_unpriced: true,
         sort: f.sort,
         // Broaden may loosen region/channel only — never price, acres, or state.
-        broaden: true,
+        // Still send broaden=false whenever hard bands are set so the request is unambiguous.
+        broaden: !(
+          priceBounds.min != null ||
+          priceBounds.max != null ||
+          acreBounds.min != null ||
+          acreBounds.max != null ||
+          (stateCode(f.state) !== "Any" && !!stateCode(f.state))
+        ),
       };
     },
     [meta],
@@ -220,15 +229,22 @@ export default function SearchPage() {
       });
       try {
         const active = override ?? form;
-        const data = await landsignalApi.radar(filtersFromForm(active));
-        setRows(data);
+        const filters = filtersFromForm(active);
+        setAppliedFilters(filters);
+        const data = await landsignalApi.radar(filters);
+        // Client hard gate — results that violate the selected filters never render.
+        const { kept, dropped } = enforceHardFilters(data, filters);
+        setRows(kept);
         const metaNow = await landsignalApi.searchMeta().catch(() => null);
         if (metaNow) setMeta(metaNow);
-        const total = metaNow?.inventory_count ?? data.length;
+        const total = metaNow?.inventory_count ?? kept.length;
+        const filterLabel = describeHardFilters(filters);
         setStatus(
-          data.length
-            ? `Showing top ${data.length.toLocaleString()} matches · ${total.toLocaleString()} live parcels indexed`
-            : "No matches for these filters. Try Reset to Any, then Show matches again.",
+          kept.length
+            ? `Strict filters: ${filterLabel} · showing ${kept.length.toLocaleString()} matches` +
+                (dropped ? ` · ${dropped} out-of-band dropped` : "") +
+                ` · ${total.toLocaleString()} live parcels indexed`
+            : `No matches inside strict filters (${filterLabel}). Widen price/acres/state, then Show matches again.`,
         );
         // Re-align after results paint
         requestAnimationFrame(() => {
@@ -269,7 +285,8 @@ export default function SearchPage() {
   }
 
   const sortedRows = useMemo(() => {
-    const list = [...rows];
+    // Re-enforce hard filters on every render so sort/UI never resurfaces violators.
+    const list = appliedFilters ? enforceHardFilters(rows, appliedFilters).kept : [...rows];
     const key = form.sort;
     const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
     list.sort((a, b) => {
@@ -292,7 +309,7 @@ export default function SearchPage() {
       }
     });
     return list;
-  }, [rows, form.sort]);
+  }, [rows, form.sort, appliedFilters]);
 
   const inventoryStates = meta?.inventory_states || [];
 
@@ -504,8 +521,10 @@ export default function SearchPage() {
                 type="button"
                 className="btn btn-secondary filter-action-top"
                 disabled={loading}
+                title="Ranks the strongest matches inside your current filters — never clears them"
                 onClick={() => {
-                  const next = { ...DEFAULT_FORM, sort: "score_desc" };
+                  // Keep every filter the user selected; only boost opportunity sort.
+                  const next = { ...form, sort: "score_desc" };
                   setForm(next);
                   void runSearch(next);
                 }}
@@ -586,7 +605,9 @@ export default function SearchPage() {
         <div className="panel empty-state">
           <div className="display text-2xl text-[var(--ink)]">Find buys others can’t see</div>
           <p className="mx-auto mt-2 max-w-lg">
-            Hit <strong>Top opportunities</strong> for the strongest engine-ranked files nationwide.
+            Set your filters, then hit <strong>Show matches</strong>. Results only include parcels
+            that pass every filter you selected. <strong>Top opportunities</strong> ranks the
+            strongest matches inside those same filters — it never clears them.
           </p>
         </div>
       )}
