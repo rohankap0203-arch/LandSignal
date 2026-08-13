@@ -15,5 +15,9 @@
       "onAutoForward": "silent",
       "protocol": "http"
     }
-  }
+  },
+  "remote.forwardPorts": [
+    3000,
+    8000
+  ]
 }
