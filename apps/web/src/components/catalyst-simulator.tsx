@@ -560,7 +560,6 @@ export function CatalystSimulator({
   engine: Engine | null | undefined;
 }) {
   const [open, setOpen] = useState(false);
-  const [revealing, setRevealing] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [stress, setStress] = useState("custom");
   const [burst, setBurst] = useState<{ id: number; tone: "up" | "down" } | null>(null);
@@ -611,7 +610,6 @@ export function CatalystSimulator({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setOpen(false);
-        setRevealing(false);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -621,27 +619,12 @@ export function CatalystSimulator({
     };
   }, [open]);
 
-  useEffect(() => {
-    if (!revealing) return;
-    const reduce =
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) {
-      setRevealing(false);
-      return;
-    }
-    const t = window.setTimeout(() => setRevealing(false), 1150);
-    return () => window.clearTimeout(t);
-  }, [revealing]);
-
   const openEngine = () => {
     setOpen(true);
-    setRevealing(true);
   };
 
   const closeEngine = () => {
     setOpen(false);
-    setRevealing(false);
   };
 
   if (!engine) return null;
@@ -690,124 +673,121 @@ export function CatalystSimulator({
       >
         <span className="fse-launch-scene" aria-hidden>
           <span className="fse-scene-actor fse-scene-shovel">
-            <svg viewBox="0 0 40 40" width="28" height="28" fill="none">
+            <svg viewBox="0 0 44 44" width="32" height="32" fill="none">
+              {/* Clear shovel: handle + shaft + blade digging into a dirt mound */}
               <path
-                d="M23.8 6.4c.9-.9 2.4-.9 3.3 0l2.6 2.6c.9.9.9 2.4 0 3.3L16.4 25.6c-.35.35-.8.55-1.3.55h-3.4c-.7 0-1.25-.55-1.25-1.25v-3.4c0-.5.2-.95.55-1.3L23.8 6.4z"
+                d="M28.2 5.8c1.15-1.15 3-1.15 4.15 0l3.1 3.1c1.15 1.15 1.15 3 0 4.15L19.2 29.3c-.4.4-.95.65-1.55.65h-4.1c-.85 0-1.55-.7-1.55-1.55v-4.1c0-.6.25-1.15.65-1.55L28.2 5.8z"
                 fill="currentColor"
-                fillOpacity="0.12"
+                fillOpacity="0.2"
                 stroke="currentColor"
-                strokeWidth="1.55"
+                strokeWidth="1.75"
                 strokeLinejoin="round"
               />
-              <path d="M22.8 9.2l3.6 3.6" stroke="currentColor" strokeWidth="1.15" strokeLinecap="round" />
-              <rect
-                x="12.2"
-                y="22.6"
-                width="4.2"
-                height="2.2"
-                rx="0.6"
-                transform="rotate(-45 12.2 22.6)"
-                fill="currentColor"
-                fillOpacity="0.18"
-                stroke="currentColor"
-                strokeWidth="1.1"
-              />
+              <path d="M27.2 9.2l4.2 4.2" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
               <path
-                d="M9.6 25.2c-2.4 1.5-3.8 4.6-2.3 7.1.85 1.45 2.55 2.15 4.25 1.85 2.5-.45 4.6-2.7 5.7-5"
+                d="M10.2 27.8c-3.1 1.9-4.9 5.8-2.9 9.1 1.15 1.9 3.45 2.85 5.7 2.45 3.3-.55 6.05-3.5 7.45-6.45"
                 fill="currentColor"
-                fillOpacity="0.14"
+                fillOpacity="0.22"
                 stroke="currentColor"
-                strokeWidth="1.55"
+                strokeWidth="1.75"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
               <path
-                d="M11.2 28.4c.7 1.1 1.9 1.7 3.2 1.55"
+                d="M12.4 31.6c.95 1.45 2.55 2.2 4.25 2"
                 stroke="currentColor"
-                strokeWidth="1"
+                strokeWidth="1.15"
                 strokeLinecap="round"
-                opacity="0.55"
+                opacity="0.65"
+              />
+              <ellipse
+                className="fse-scene-dirt"
+                cx="14.5"
+                cy="37.6"
+                rx="7.2"
+                ry="2.6"
+                fill="currentColor"
+                fillOpacity="0.28"
+                stroke="currentColor"
+                strokeWidth="1.2"
               />
               <path
                 className="fse-scene-dirt"
-                d="M6.8 34.6c1.5-.95 3-.75 4.4.15 1.4-.95 3.1-1.15 4.7.15"
+                d="M8.2 36.4c1.8-1.1 3.6-.9 5.2.2 1.7-1.15 3.7-1.35 5.6.15"
                 stroke="currentColor"
-                strokeWidth="1.4"
+                strokeWidth="1.35"
                 strokeLinecap="round"
               />
             </svg>
           </span>
           <span className="fse-scene-actor fse-scene-build">
-            <svg viewBox="0 0 40 40" width="28" height="28" fill="none">
-              <path d="M7.5 34.5h23" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <svg viewBox="0 0 44 44" width="32" height="32" fill="none">
+              {/* Mid-rise building floors rising — construction essence */}
+              <path d="M6.5 37.5h29" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
               <path
                 className="fse-build-floor fse-build-floor-a"
-                d="M10.5 34.5V21.5h17v13"
+                d="M10 37.5V22.2h20.5V37.5"
                 fill="currentColor"
-                fillOpacity="0.1"
+                fillOpacity="0.16"
                 stroke="currentColor"
-                strokeWidth="1.45"
+                strokeWidth="1.65"
                 strokeLinejoin="round"
               />
               <path
                 className="fse-build-floor fse-build-floor-b"
-                d="M12.8 21.5V13.2h12.4v8.3"
+                d="M13 22.2V13.4h14.5v8.8"
                 fill="currentColor"
-                fillOpacity="0.1"
+                fillOpacity="0.16"
                 stroke="currentColor"
-                strokeWidth="1.45"
+                strokeWidth="1.65"
                 strokeLinejoin="round"
               />
               <path
                 className="fse-build-floor fse-build-floor-c"
-                d="M15 13.2V7.2h8v6"
+                d="M16 13.4V6.8h8.5V13.4"
                 fill="currentColor"
-                fillOpacity="0.1"
+                fillOpacity="0.16"
                 stroke="currentColor"
-                strokeWidth="1.45"
+                strokeWidth="1.65"
                 strokeLinejoin="round"
               />
-              <path d="M17.2 7.2l1.8-2.4h2l1.8 2.4" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-              <rect className="fse-build-win fse-build-win-a" x="13.8" y="24.8" width="3.2" height="3.4" rx="0.35" stroke="currentColor" strokeWidth="1.1" />
-              <rect className="fse-build-win fse-build-win-a" x="20.8" y="24.8" width="3.2" height="3.4" rx="0.35" stroke="currentColor" strokeWidth="1.1" />
-              <rect className="fse-build-win fse-build-win-b" x="16.6" y="15.4" width="3.4" height="2.8" rx="0.35" stroke="currentColor" strokeWidth="1.1" />
-              <path d="M18.8 28.8v5.7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.7" />
-              <path className="fse-build-scaffold" d="M9.5 21.5h19M12 13.2h14" stroke="currentColor" strokeWidth="1" strokeDasharray="2 1.6" opacity="0.75" />
+              <path d="M18.2 6.8l2.1-2.8h3.4l2.1 2.8" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
+              <rect className="fse-build-win fse-build-win-a" x="13.6" y="26.2" width="3.6" height="3.8" rx="0.4" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="1.2" />
+              <rect className="fse-build-win fse-build-win-a" x="22.2" y="26.2" width="3.6" height="3.8" rx="0.4" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="1.2" />
+              <rect className="fse-build-win fse-build-win-b" x="17.4" y="15.8" width="3.8" height="3.2" rx="0.4" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="1.2" />
+              <path d="M20.2 30.6v6.9" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" opacity="0.75" />
+              <path className="fse-build-scaffold" d="M9 22.2h22.5M12.5 13.4h15.5" stroke="currentColor" strokeWidth="1.15" strokeDasharray="2.2 1.8" opacity="0.85" />
             </svg>
           </span>
           <span className="fse-scene-actor fse-scene-crane">
-            <svg viewBox="0 0 40 40" width="30" height="30" fill="none">
-              <path d="M6.8 35.2h9.2" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" />
-              <path
-                d="M9.2 35.2V11.2h3.4"
-                stroke="currentColor"
-                strokeWidth="1.55"
-                strokeLinejoin="round"
-              />
-              <path d="M8.4 18.5h5M8.4 24.5h5M8.4 30h5" stroke="currentColor" strokeWidth="1" opacity="0.55" />
+            <svg viewBox="0 0 44 44" width="34" height="34" fill="none">
+              {/* Tower crane with lifting hook — reads at a glance */}
+              <path d="M6.2 38h11.2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+              <path d="M9.4 38V10.8h4" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" />
+              <path d="M8.4 18.8h6M8.4 25.6h6M8.4 32h6" stroke="currentColor" strokeWidth="1.15" opacity="0.6" />
               <rect
                 x="8.6"
-                y="9.4"
-                width="4.8"
-                height="3.2"
-                rx="0.5"
+                y="8.6"
+                width="5.6"
+                height="3.6"
+                rx="0.55"
                 fill="currentColor"
-                fillOpacity="0.14"
+                fillOpacity="0.2"
                 stroke="currentColor"
-                strokeWidth="1.2"
+                strokeWidth="1.35"
               />
-              <path d="M10.8 12.6h19.2" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" />
-              <path d="M12.4 12.6l3.6-4.6h4.6l1.2 1.6" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
-              <path d="M29.8 12.6l2.2-2.4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-              <path d="M14.2 16.4l5-3.8M19 16.4l5-3.8M23.8 16.4l4.4-3.4" stroke="currentColor" strokeWidth="1" opacity="0.7" />
-              <path className="fse-crane-cable" d="M28.6 12.6v12" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+              <path d="M11.2 12.2h21.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+              <path d="M13 12.2l4.1-5.2h5.2l1.4 1.8" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+              <path d="M32.4 12.2l2.5-2.7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              <path d="M15.2 16.6l5.5-4.2M20.6 16.6l5.5-4.2M26 16.6l4.9-3.8" stroke="currentColor" strokeWidth="1.1" opacity="0.75" />
+              <path className="fse-crane-cable" d="M31.2 12.2v13.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
               <path
                 className="fse-crane-hook"
-                d="M26.4 24.6h4.4v2.1l-1.15 1.4h-2.1l-1.15-1.4v-2.1z"
+                d="M28.6 25.7h5.2v2.4l-1.35 1.6h-2.5l-1.35-1.6v-2.4z"
                 fill="currentColor"
-                fillOpacity="0.14"
+                fillOpacity="0.22"
                 stroke="currentColor"
-                strokeWidth="1.2"
+                strokeWidth="1.35"
                 strokeLinejoin="round"
               />
             </svg>
@@ -836,77 +816,12 @@ export function CatalystSimulator({
           onClick={closeEngine}
         >
           <div
-            className={`fse-modal${revealing ? " is-revealing" : ""}`}
+            className="fse-modal"
             role="dialog"
             aria-modal="true"
             aria-label="Future Scenario Engine"
             onClick={(e) => e.stopPropagation()}
           >
-            {revealing ? (
-              <div className="fse-dirt-reveal" aria-hidden>
-                <div className="fse-dirt-layer">
-                  <svg className="fse-dirt-clipart" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
-                    <g fill="var(--bg-elevated)" stroke="var(--ink)" strokeWidth="2.4" strokeLinejoin="round">
-                      <ellipse cx="70" cy="210" rx="78" ry="52" />
-                      <ellipse cx="160" cy="195" rx="86" ry="58" />
-                      <ellipse cx="260" cy="205" rx="92" ry="56" />
-                      <ellipse cx="345" cy="215" rx="70" ry="48" />
-                      <ellipse cx="110" cy="145" rx="58" ry="38" />
-                      <ellipse cx="205" cy="132" rx="64" ry="42" />
-                      <ellipse cx="300" cy="148" rx="56" ry="36" />
-                      <ellipse cx="155" cy="95" rx="42" ry="28" />
-                      <ellipse cx="245" cy="88" rx="46" ry="30" />
-                      <circle cx="95" cy="165" r="10" />
-                      <circle cx="180" cy="155" r="9" />
-                      <circle cx="275" cy="170" r="11" />
-                      <circle cx="330" cy="155" r="8" />
-                      <circle cx="140" cy="115" r="7" />
-                      <circle cx="225" cy="108" r="8" />
-                      <circle cx="52" cy="188" r="7" />
-                      <circle cx="368" cy="190" r="7" />
-                    </g>
-                    <g fill="none" stroke="var(--ink)" strokeWidth="1.7" strokeLinecap="round" opacity="0.5">
-                      <path d="M48 205c10-8 22-8 32 0M130 185c12-9 26-8 38 1M220 195c11-8 24-7 35 2" />
-                      <path d="M310 205c9-7 20-6 30 1M100 145c8-6 18-5 26 1M190 130c10-7 20-6 29 1M280 145c8-6 17-5 25 1" />
-                      <path d="M145 95c6-4 14-4 20 0M235 88c7-5 15-4 22 1" />
-                    </g>
-                    <rect x="-2" y="248" width="404" height="56" fill="var(--bg-elevated)" stroke="var(--ink)" strokeWidth="2.2" />
-                    <g fill="none" stroke="var(--ink)" strokeWidth="1.5" opacity="0.4">
-                      <path d="M20 265h40M80 278h50M150 262h45M220 275h55M300 268h60" strokeLinecap="round" />
-                    </g>
-                  </svg>
-                </div>
-                <div className="fse-dirt-shovel-wrap">
-                  <svg className="fse-dirt-shovel" viewBox="0 0 56 56" width="58" height="58" fill="none">
-                    <path
-                      className="fse-dirt-shovel-shaft"
-                      d="M33.2 7.5c1.2-1.2 3.1-1.2 4.3 0l3 3c1.2 1.2 1.2 3.1 0 4.3L22.8 32.5c-.45.45-1 .7-1.65.7h-3.6c-.85 0-1.55-.7-1.55-1.55v-3.6c0-.65.25-1.2.7-1.65L33.2 7.5z"
-                      stroke="var(--ink)"
-                      strokeWidth="2.1"
-                      strokeLinejoin="round"
-                    />
-                    <path d="M32.4 11.4l3.8 3.8" stroke="var(--ink)" strokeWidth="1.5" strokeLinecap="round" />
-                    <path
-                      className="fse-dirt-shovel-blade"
-                      d="M14.2 33.8c-2.9 1.9-4.6 5.7-2.9 8.8 1 1.9 3.2 2.9 5.4 2.5 3.1-.6 5.7-3.4 7-6.2"
-                      stroke="var(--ink)"
-                      strokeWidth="2.1"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M16.2 37.2c.85 1.25 2.2 1.9 3.7 1.7"
-                      stroke="var(--ink)"
-                      strokeWidth="1.2"
-                      strokeLinecap="round"
-                      opacity="0.45"
-                    />
-                    <circle cx="38.6" cy="12.4" r="1.6" fill="var(--ink)" opacity="0.3" />
-                  </svg>
-                  <span className="fse-dirt-spray" />
-                </div>
-              </div>
-            ) : null}
             <DollarBurst burst={burst} />
             <header className="fse-modal-head">
               <div className="fse-modal-head-main">

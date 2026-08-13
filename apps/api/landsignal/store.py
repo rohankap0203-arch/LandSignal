@@ -56,6 +56,8 @@ class MemoryStore:
         self.watch_snapshots: dict[UUID, dict[str, Any]] = {}
         # O(1) parcel → listing lookup (kept in sync on upsert / restore)
         self._listing_id_by_parcel: dict[UUID, UUID] = {}
+        # O(1) (provider_id, external_id) → listing — required for 100k+ discovers
+        self._listing_id_by_external: dict[tuple[str, str], UUID] = {}
 
     def seed_demo(self) -> None:
         """Deterministic DEMO fixtures for UI walkthrough — never labeled as live feeds."""
@@ -318,9 +320,24 @@ class MemoryStore:
 
     def index_listing(self, listing: ListingRecord) -> None:
         self._listing_id_by_parcel[listing.parcel_id] = listing.id
+        if listing.provider_id and listing.external_id:
+            self._listing_id_by_external[(listing.provider_id, listing.external_id)] = listing.id
 
     def rebuild_listing_index(self) -> None:
         self._listing_id_by_parcel = {L.parcel_id: L.id for L in self.listings.values()}
+        self._listing_id_by_external = {
+            (L.provider_id, L.external_id): L.id
+            for L in self.listings.values()
+            if L.provider_id and L.external_id
+        }
+
+    def listing_by_external(self, provider_id: str | None, external_id: str | None) -> ListingRecord | None:
+        if not provider_id or not external_id:
+            return None
+        lid = self._listing_id_by_external.get((provider_id, external_id))
+        if lid is None:
+            return None
+        return self.listings.get(lid)
 
     def listing_for_parcel(self, parcel_id: UUID) -> ListingRecord | None:
         lid = self._listing_id_by_parcel.get(parcel_id)
@@ -437,6 +454,10 @@ def load_persisted_store(store: MemoryStore) -> int:
             # $0 bids are missing prices — never treat as free land
             if L.asking_price_usd is not None and L.asking_price_usd <= 0:
                 L.asking_price_usd = None
+            # Every state: promote nested CAD land values into ask so budget filters work.
+            from landsignal.services.assessed_price import backfill_listing_ask_from_assessed
+
+            backfill_listing_ask_from_assessed(L)
             store.listings[L.id] = L
             store.index_listing(L)
         except Exception:

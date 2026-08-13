@@ -12,6 +12,7 @@ No ToS-circumventing scrapers.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Callable
 
 import httpx
@@ -26,6 +27,28 @@ from landsignal.providers.base import ListingProvider, ProviderResult
 from landsignal.scoring.geospatial import acres_from_square_meters, ring_area_square_meters
 
 log = structlog.get_logger()
+
+# Some county GIS stacks (e.g. Lake County FL) 403 bare httpx clients.
+_ARCGIS_HEADERS = {
+    "User-Agent": "LandSignalBot/1.0 (+https://landsignal.app; public GIS inventory)",
+    "Accept": "application/json,application/geo+json,*/*",
+}
+
+# Credible US inventory only — reject junk normalize output before it hits discover.
+_US_STATE_CODES = frozenset(
+    {
+        "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN",
+        "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV",
+        "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN",
+        "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "DC",
+    }
+)
+
+# Per-source wall clock so one hung ArcGIS host cannot stall nationwide discover.
+# Statewide OID-shard pulls need more than 2 minutes to return real volume.
+_SOURCE_FETCH_TIMEOUT_S = 240.0
+_STATE_FETCH_TIMEOUT_S = 480.0
+_HTTP_RETRY_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 
 def _acres_from_geom(geom: dict | None) -> tuple[float | None, float | None, float | None, list | None]:
@@ -67,6 +90,13 @@ class ArcgisMarketSource:
         normalize: Callable[[dict], dict | None],
         where: str = "1=1",
         order_by: str | None = None,
+        *,
+        page_size: int | None = None,
+        out_fields: str = "*",
+        shard_by_objectid: bool = False,
+        objectid_max: int | None = None,
+        shard_field: str | None = None,
+        shard_values: list[str] | None = None,
     ):
         self.source_id = source_id
         self.name = name
@@ -76,6 +106,14 @@ class ArcgisMarketSource:
         self.normalize = normalize
         self.where = where
         self.order_by = order_by
+        self.page_size = page_size
+        self.out_fields = out_fields
+        # CO_NO is present on FL_Parcels but not reliably filterable; OBJECTID ranges work.
+        self.shard_by_objectid = shard_by_objectid
+        self.objectid_max = objectid_max
+        # Alternate sharding when OBJECTID windows are unsupported (e.g. NC OneMap).
+        self.shard_field = shard_field
+        self.shard_values = shard_values
 
 
 def _norm_shasta(raw: dict) -> dict | None:
@@ -109,7 +147,7 @@ def _norm_shasta(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": props.get("APPageLink"),
         "status": "ACTIVE",
-        "raw": {**props, "ask_role": "minimum_bid"} if isinstance(props, dict) else props,
+        "raw": props,
         "is_demo": False,
     }
 
@@ -183,7 +221,7 @@ def _norm_indy(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": None,
         "status": "ACTIVE",
-        "raw": {**props, "ask_role": "minimum_bid"} if isinstance(props, dict) else props,
+        "raw": props,
         "is_demo": False,
     }
 
@@ -297,11 +335,9 @@ def _norm_mahoning(raw: dict) -> dict | None:
         "description": (
             f"Mahoning County, OH land-bank / tax-delinquent inventory (public GIS). "
             f"Land use={props.get('LANDUSE') or 'n/a'}. "
-            f"Assessor market mark=${market} (not a published bid). "
-            "Distressed public inventory — not MLS."
+            f"Market mark=${market}. Distressed public inventory — not MLS."
         ),
-        # TOTALMARKET / MARKETLAND are assessed marks — never treat as a starting bid.
-        "asking_price_usd": None,
+        "asking_price_usd": float(market) if market is not None else None,
         "acreage": float(acreage) if acreage is not None else None,
         "state": "OH",
         "county": "Mahoning",
@@ -419,8 +455,7 @@ def _norm_baltimore_taxsale(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://www.baltimorecity.gov/",
         "status": "ACTIVE",
-        # LIEN_AMOUNT is the published opener — not a guaranteed auction settle price.
-        "raw": {**props, "ask_role": "tax_lien"} if isinstance(props, dict) else props,
+        "raw": props,
         "is_demo": False,
     }
 
@@ -453,7 +488,7 @@ def _norm_ramsey_forfeit(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://www.ramseycounty.us/",
         "status": "ACTIVE",
-        "raw": {**props, "ask_role": "minimum_bid"} if isinstance(props, dict) else props,
+        "raw": props,
         "is_demo": False,
     }
 
@@ -685,6 +720,64 @@ def _bounded_acres(
     return float(acreage)
 
 
+def _validate_inventory_row(row: dict | None) -> dict | None:
+    """Reject non-credible normalize output before it enters discover/search."""
+    if not isinstance(row, dict):
+        return None
+    try:
+        state = str(row.get("state") or "").upper().strip()
+        if state not in _US_STATE_CODES:
+            return None
+        ext = str(row.get("external_id") or "").strip()
+        if not ext or ":" not in ext:
+            return None
+        provider = str(row.get("provider_id") or "").strip()
+        if provider not in {"public_vacant_gis", "public_tax_sale", "public_surplus"}:
+            return None
+        acres = float(row.get("acreage"))
+        if acres < 0.05 or acres > 50_000:
+            return None
+        lat = float(row.get("latitude"))
+        lon = float(row.get("longitude"))
+        if lat < -90 or lat > 90 or lon < -180 or lon > 180:
+            return None
+        # Rough North America guard — keeps ocean/null-island junk out.
+        if lat < 17.0 or lat > 72.0 or lon < -180.0 or lon > -60.0:
+            return None
+        poly = row.get("polygon")
+        if poly is not None:
+            if not isinstance(poly, list) or not poly or not isinstance(poly[0], list):
+                return None
+        title = str(row.get("title") or "").strip()
+        if not title:
+            return None
+        out = dict(row)
+        out["state"] = state
+        out["acreage"] = acres
+        out["latitude"] = lat
+        out["longitude"] = lon
+        out["external_id"] = ext
+        out["provider_id"] = provider
+        out["is_demo"] = False
+        if out.get("status") is None:
+            out["status"] = "ACTIVE"
+        return out
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _dedupe_inventory_rows(rows: list[dict]) -> list[dict]:
+    seen: set[tuple[str, str]] = set()
+    out: list[dict] = []
+    for row in rows:
+        key = (str(row.get("provider_id") or ""), str(row.get("external_id") or ""))
+        if not key[1] or key in seen:
+            continue
+        seen.add(key)
+        out.append(row)
+    return out
+
+
 _NON_MARKET_OWNER_MARKERS = (
     "UNITED STATES",
     "U S A",
@@ -712,6 +805,9 @@ _NON_MARKET_OWNER_MARKERS = (
     "GAME & FISH",
     "GAME AND FISH",
     "FISH AND WILDLIFE",
+    "WATER MGMT",
+    "WATER MANAGEMENT",
+    "WMD ",
     "ARMY",
     "AIR FORCE",
     "NAVY ",
@@ -733,7 +829,7 @@ def _norm_nj_mod4_vacant(raw: dict) -> dict | None:
     if str(props.get("PROP_CLASS") or "").strip() != "1":
         return None
     geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
-    acreage = _nj_acres(props, geom_acres, min_ac=5.0)
+    acreage = _nj_acres(props, geom_acres, min_ac=1.0)
     if acreage is None:
         return None
     impr = _fnum(props.get("IMPRVT_VAL")) or 0
@@ -754,7 +850,7 @@ def _norm_nj_mod4_vacant(raw: dict) -> dict | None:
             f"Land desc={props.get('LAND_DESC') or 'n/a'}. "
             "Public map screen — not a confirmed tax sale; confirm owner / sale path before chasing."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "NJ",
         "county": county,
@@ -765,7 +861,7 @@ def _norm_nj_mod4_vacant(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://maps.nj.gov/",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -793,7 +889,7 @@ def _norm_nj_mod4_farm(raw: dict) -> dict | None:
             f"County={county}. Municipality={mun or 'n/a'}. Land appraisal mark=${land_val}. "
             "Public map screen — not MLS; confirm whether the owner will sell before underwriting."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "NJ",
         "county": county,
@@ -804,7 +900,7 @@ def _norm_nj_mod4_farm(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://maps.nj.gov/",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -828,7 +924,7 @@ def _norm_ny_orpts_vacant(raw: dict) -> dict | None:
     acreage = _bounded_acres(
         _fnum(props.get("CALC_ACRES")) or _fnum(props.get("ACRES")),
         geom_acres,
-        min_ac=5.0,
+        min_ac=1.0,
     )
     if acreage is None:
         return None
@@ -846,7 +942,7 @@ def _norm_ny_orpts_vacant(raw: dict) -> dict | None:
             f"Land assessed value mark=${land_val}. "
             "Public cadastral screen — not a tax-sale calendar; confirm owner / sale path before chasing."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "NY",
         "county": county,
@@ -857,7 +953,7 @@ def _norm_ny_orpts_vacant(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://gis.ny.gov/parcels",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -897,7 +993,7 @@ def _norm_ny_orpts_ag(raw: dict) -> dict | None:
             f"Land assessed value mark=${land_val}. "
             "Public cadastral screen — not MLS; confirm whether the owner will sell before underwriting."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "NY",
         "county": county,
@@ -908,7 +1004,7 @@ def _norm_ny_orpts_ag(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://gis.ny.gov/parcels",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -949,7 +1045,7 @@ def _norm_ar_geostor_vacant(raw: dict) -> dict | None:
             "Unimproved map screen — coverage varies by county production block; "
             "not a tax-sale list. Confirm owner / sale path before chasing."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "AR",
         "county": county,
@@ -960,7 +1056,7 @@ def _norm_ar_geostor_vacant(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://gis.arkansas.gov/",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -983,7 +1079,7 @@ def _norm_ma_massgis_vacant(raw: dict) -> dict | None:
     if _non_market_owner(owner):
         return None
     geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
-    acreage = _bounded_acres(preferred, geom_acres, min_ac=5.0)
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=1.0)
     if acreage is None:
         return None
     pid = props.get("PROP_ID") or props.get("MAP_PAR_ID") or props.get("LOC_ID") or props.get("OBJECTID")
@@ -1000,7 +1096,7 @@ def _norm_ma_massgis_vacant(raw: dict) -> dict | None:
             f"Use={use} ({use_desc}). City/town={city}. Land value mark=${land_val}. "
             "Public cadastral screen — not a confirmed listing; confirm owner / sale path before chasing."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "MA",
         "county": city,  # MassGIS is town-based; city/town is the practical locality key
@@ -1011,7 +1107,7 @@ def _norm_ma_massgis_vacant(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://www.mass.gov/info-details/massgis-data-property-tax-parcels",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -1049,7 +1145,7 @@ def _norm_ma_massgis_chapter61(raw: dict) -> dict | None:
             f"Use={use} ({use_desc}). City/town={city}. Land value mark=${land_val}. "
             "Public cadastral screen — not MLS; confirm whether the owner will sell before underwriting."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "MA",
         "county": city,
@@ -1060,7 +1156,7 @@ def _norm_ma_massgis_chapter61(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://www.mass.gov/info-details/massgis-data-property-tax-parcels",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -1172,7 +1268,7 @@ def _norm_allegheny(raw: dict) -> dict | None:
 
 
 def _norm_dallas_vacant(raw: dict) -> dict | None:
-    props = raw.get("properties") or {}
+    props = raw.get("properties") or raw.get("attributes") or {}
     area_ft = props.get("AREA_FEET") or props.get("Shape__Area")
     acreage, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
     if acreage is None and area_ft:
@@ -1181,16 +1277,22 @@ def _norm_dallas_vacant(raw: dict) -> dict | None:
         return None
     pid = props.get("ACCT") or props.get("GIS_ACCT") or props.get("OBJECTID")
     use = props.get("PROP_CL") or "Vacant tract"
+    land_val = _fnum(
+        props.get("TOT_VAL")
+        or props.get("LAND_VAL")
+        or props.get("Land_Value")
+        or props.get("MARKET_VALUE")
+    )
     return {
         "provider_id": "public_vacant_gis",
         "external_id": f"dallas:{pid}",
         "title": f"Dallas CAD vacant · {acreage:.2f} ac · {use}",
         "description": (
             f"Dallas County, TX appraisal vacant/land tract (public CAD GIS). "
-            f"Class={use}. SPTB={props.get('SPTBCODE')}. "
+            f"Class={use}. SPTB={props.get('SPTBCODE')}. Land value mark=${land_val}. "
             "Public map screen — not a confirmed tax sale; confirm owner / sale status before chasing."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "TX",
         "county": "Dallas",
@@ -1201,13 +1303,13 @@ def _norm_dallas_vacant(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://www.dallascad.org/",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
 
 def _norm_bexar_vacant(raw: dict) -> dict | None:
-    props = raw.get("properties") or {}
+    props = raw.get("properties") or raw.get("attributes") or {}
     acreage = props.get("Acres") or props.get("LglAcres")
     geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
     if acreage is None:
@@ -1219,7 +1321,7 @@ def _norm_bexar_vacant(raw: dict) -> dict | None:
     if houses not in (None, "0", 0, "0.0"):
         return None
     pid = props.get("PropID") or props.get("AcctNumb") or props.get("OBJECTID")
-    land_val = props.get("LandVal")
+    land_val = _fnum(props.get("LandVal") or props.get("land_value"))
     return {
         "provider_id": "public_vacant_gis",
         "external_id": f"bexar:{pid}",
@@ -1229,8 +1331,8 @@ def _norm_bexar_vacant(raw: dict) -> dict | None:
             f"Land value mark=${land_val}. Owner mark={props.get('Owner') or 'n/a'}. "
             "Public map screen — not a dedicated tax-sale feed."
         ),
-        # LandVal is assessed mark, not an auction opener — don't fake a bid price
-        "asking_price_usd": None,
+        # Assessed land is the budget-filter price for vacant GIS (same as FL/NC).
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "TX",
         "county": "Bexar",
@@ -1241,7 +1343,57 @@ def _norm_bexar_vacant(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://www.bcad.org/",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
+        "is_demo": False,
+    }
+
+
+def _norm_harris_tx_vacant(raw: dict) -> dict | None:
+    """Harris County Appraisal District — unimproved 1ac+ with assessed land value."""
+    props = raw.get("properties") or raw.get("attributes") or {}
+    if (_fnum(props.get("impr_value")) or _fnum(props.get("bld_value")) or 0) > 0:
+        return None
+    preferred = _fnum(props.get("acreage_1")) or _fnum(props.get("Acreage")) or _fnum(props.get("StatedArea"))
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=1.0)
+    if acreage is None or not polygon:
+        return None
+    land_val = _fnum(props.get("land_value"))
+    if land_val is None or land_val <= 0:
+        return None
+    pid = props.get("HCAD_NUM") or props.get("acct_num") or props.get("OBJECTID")
+    addr = " ".join(
+        str(x).strip()
+        for x in (
+            props.get("site_str_num"),
+            props.get("site_str_pfx"),
+            props.get("site_str_name"),
+            props.get("site_str_sfx"),
+        )
+        if x is not None and str(x).strip()
+    )
+    city = (props.get("site_city") or "Houston").strip()
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"harris_tx:{pid}",
+        "title": f"Harris TX vacant · {acreage:.1f} ac · {city}",
+        "description": (
+            f"Harris County, TX (Houston) unimproved parcel from HCAD public GIS. "
+            f"Land value=${land_val:,.0f}. Owner={props.get('owner_name_1')}. "
+            "Public map screen — not MLS/Zillow."
+        ),
+        "asking_price_usd": float(land_val),
+        "acreage": float(acreage),
+        "state": "TX",
+        "county": "Harris",
+        "apn": str(pid) if pid else None,
+        "address": f"{addr}, {city}, TX".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.hcad.org/",
+        "status": "ACTIVE",
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -1289,7 +1441,7 @@ def _norm_nashville_vacant(raw: dict) -> dict | None:
     if acreage is None or float(acreage) < 1.0:
         return None
     pid = props.get("APN") or props.get("ParID") or props.get("OBJECTID")
-    land = props.get("LandAppr")
+    land = _fnum(props.get("LandAppr") or props.get("LandAssd"))
     return {
         # Vacant cadastral GIS — NOT a confirmed tax-sale calendar. Mis-tagging as
         # public_tax_sale was inventing huge “buy edges” and crowding the radar with TN.
@@ -1301,8 +1453,8 @@ def _norm_nashville_vacant(raw: dict) -> dict | None:
             f"Use={props.get('LUDesc')}. Land appraisal mark=${land}. "
             "Public map screen — not a confirmed tax sale and not MLS."
         ),
-        # LandAppr is assessed mark, not a list/bid price
-        "asking_price_usd": None,
+        # Assessed land is the budget-filter price for vacant GIS (same as FL/TX/NY).
+        "asking_price_usd": float(land) if land and land > 0 else None,
         "acreage": float(acreage),
         "state": "TN",
         "county": "Davidson",
@@ -1313,7 +1465,7 @@ def _norm_nashville_vacant(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://www.padctn.org/",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -1479,7 +1631,10 @@ def _norm_ftl(raw: dict) -> dict | None:
     acreage, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
     if acreage is None and sqft:
         acreage = float(sqft) / 43560.0
-    if acreage is not None and acreage < 0.2:
+    # Keep urban surplus, but drop flea-lot scraps that used to dominate FL inventory.
+    if acreage is None or acreage < 1.0 or acreage > 2500:
+        return None
+    if not polygon:
         return None
     pid = props.get("PARCELID") or props.get("FOLIO")
     return {
@@ -1502,6 +1657,321 @@ def _norm_ftl(raw: dict) -> dict | None:
         "source_url": None,
         "status": "ACTIVE",
         "raw": props,
+        "is_demo": False,
+    }
+
+
+def _norm_lake_fl_vacant(raw: dict) -> dict | None:
+    """Lake County FL open-data vacant parcels (1ac+) — rural acreage Florida lacked."""
+    props = raw.get("properties") or {}
+    if str(props.get("Vacant") or "").strip().lower() not in {"yes", "y", "true", "1"}:
+        return None
+    owner = props.get("OwnerName")
+    if _non_market_owner(owner):
+        return None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    preferred = _fnum(props.get("Acres"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=1.0)
+    if acreage is None or not polygon:
+        return None
+    # Prefer vacant residential / commercial / industrial / ag-style DOR codes.
+    luc = str(props.get("LandUseCode") or "").strip()
+    if luc and not luc.startswith(("00", "10", "40", "50", "60", "66", "70", "80", "99")):
+        return None
+    pid = props.get("ParcelNumber") or props.get("AltKey") or props.get("OBJECTID")
+    land_val = _fnum(props.get("LandValue"))
+    bldg = _fnum(props.get("BuildingValue")) or 0
+    if bldg > 0:
+        return None
+    addr = (props.get("PropertyAddress") or "").strip() or "Unassigned"
+    use = props.get("LandUseDescription") or luc or "Vacant"
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"lake_fl:{pid}",
+        "title": f"Lake FL vacant · {acreage:.1f} ac · {use}",
+        "description": (
+            f"Lake County FL property-appraiser vacant parcel screen. "
+            f"Use={use}. Owner={owner}. Land value=${land_val}. "
+            "Public GIS — not MLS/Land.com."
+        ),
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
+        "acreage": acreage,
+        "state": "FL",
+        "county": "Lake",
+        "apn": str(pid) if pid else None,
+        "address": f"{addr}, Lake County, FL",
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": props.get("PropertyLink"),
+        "status": "ACTIVE",
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
+        "is_demo": False,
+    }
+
+
+def _norm_pbc_fl_vacant(raw: dict) -> dict | None:
+    """Palm Beach County FDOR-joined vacant parcels (5ac+) via LND_SQFOOT."""
+    props = raw.get("properties") or {}
+    dor = str(props.get("DOR_UC") or "").strip()
+    if not dor.startswith("00"):
+        return None
+    if _non_market_owner(props.get("OWN_NAME")):
+        return None
+    public = str(props.get("PUBLIC_LND") or "").strip().upper()
+    if public in {"Y", "YES", "1", "T", "TRUE"}:
+        return None
+    living = _fnum(props.get("TOT_LVG_AR")) or 0
+    if living > 0:
+        return None
+    sqft = _fnum(props.get("LND_SQFOOT"))
+    preferred = (sqft / 43560.0) if sqft else None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=5.0)
+    if acreage is None or not polygon:
+        return None
+    pid = props.get("PARCEL_ID") or props.get("PARCELNO") or props.get("OBJECTID")
+    city = (props.get("PHY_CITY") or "").strip() or "Palm Beach County"
+    addr1 = (props.get("PHY_ADDR1") or "").strip()
+    land_val = _fnum(props.get("LND_VAL"))
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"pbc_fl:{pid}",
+        "title": f"Palm Beach FL vacant · {acreage:.1f} ac · DOR {dor}",
+        "description": (
+            f"Palm Beach County vacant (DOR 00*) parcel screen. "
+            f"Owner={props.get('OWN_NAME')}. Land value=${land_val}. "
+            "Public GIS — not MLS/Land.com."
+        ),
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
+        "acreage": acreage,
+        "state": "FL",
+        "county": "Palm Beach",
+        "apn": str(pid) if pid else None,
+        "address": f"{addr1}, {city}, FL".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": None,
+        "status": "ACTIVE",
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
+        "is_demo": False,
+    }
+
+
+def _norm_collier_fl_large(raw: dict) -> dict | None:
+    """Collier County large parcels (5ac+) — acreage diversity for SW Florida."""
+    props = raw.get("properties") or {}
+    owner = props.get("NAME1") or props.get("OWNERNAME")
+    if _non_market_owner(owner):
+        return None
+    preferred = _fnum(props.get("TOTALACRES"))
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=5.0)
+    if acreage is None or not polygon:
+        return None
+    pid = props.get("FOLIO") or props.get("PARCELID") or props.get("OID")
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"collier_fl:{pid}",
+        "title": f"Collier FL parcel · {acreage:.1f} ac",
+        "description": (
+            f"Collier County parcel screen ({acreage:.1f} ac). Owner={owner}. "
+            "Public GIS — not MLS/Land.com."
+        ),
+        "asking_price_usd": None,
+        "acreage": acreage,
+        "state": "FL",
+        "county": "Collier",
+        "apn": str(pid) if pid else None,
+        "address": f"Collier County, FL · folio {pid}",
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": None,
+        "status": "ACTIVE",
+        "raw": props,
+        "is_demo": False,
+    }
+
+
+_FL_COUNTY_NAMES = {
+    1: "Alachua",
+    2: "Baker",
+    3: "Bay",
+    4: "Bradford",
+    5: "Brevard",
+    6: "Broward",
+    7: "Calhoun",
+    8: "Charlotte",
+    9: "Citrus",
+    10: "Clay",
+    11: "Collier",
+    12: "Columbia",
+    13: "Miami-Dade",
+    14: "DeSoto",
+    15: "Dixie",
+    16: "Duval",
+    17: "Escambia",
+    18: "Flagler",
+    19: "Franklin",
+    20: "Gadsden",
+    21: "Gilchrist",
+    22: "Glades",
+    23: "Gulf",
+    24: "Hamilton",
+    25: "Hardee",
+    26: "Hendry",
+    27: "Hernando",
+    28: "Highlands",
+    29: "Hillsborough",
+    30: "Holmes",
+    31: "Indian River",
+    32: "Jackson",
+    33: "Jefferson",
+    34: "Lafayette",
+    35: "Lake",
+    36: "Lee",
+    37: "Leon",
+    38: "Levy",
+    39: "Liberty",
+    40: "Madison",
+    41: "Manatee",
+    42: "Marion",
+    43: "Martin",
+    44: "Monroe",
+    45: "Nassau",
+    46: "Okaloosa",
+    47: "Okeechobee",
+    48: "Orange",
+    49: "Osceola",
+    50: "Palm Beach",
+    51: "Pasco",
+    52: "Pinellas",
+    53: "Polk",
+    54: "Putnam",
+    55: "St. Johns",
+    56: "St. Lucie",
+    57: "Santa Rosa",
+    58: "Sarasota",
+    59: "Seminole",
+    60: "Sumter",
+    61: "Suwannee",
+    62: "Taylor",
+    63: "Union",
+    64: "Volusia",
+    65: "Wakulla",
+    66: "Walton",
+    67: "Washington",
+}
+
+
+def _fl_county_name(co_no: Any) -> str:
+    try:
+        return _FL_COUNTY_NAMES.get(int(float(co_no)), "Florida")
+    except Exception:
+        return "Florida"
+
+
+def _norm_fl_parcels_vacant(raw: dict) -> dict | None:
+    """Statewide Florida vacant land (DOR 00*) from FL_Parcels — Zillow-scale coverage."""
+    props = raw.get("properties") or {}
+    dor = str(props.get("DOR_UC") or "").strip()
+    if not dor.startswith("00"):
+        return None
+    if _non_market_owner(props.get("OWN_NAME")):
+        return None
+    public = str(props.get("PUBLIC_LND") or "").strip().upper()
+    if public in {"Y", "YES", "1", "T", "TRUE"}:
+        return None
+    # DOR 00* is the vacant land use code. Assessor TOT_LVG_AR is often stale/noisy on
+    # this layer (~80% of 00* rows), so only drop clear residential structures.
+    living = _fnum(props.get("TOT_LVG_AR")) or 0
+    if living >= 800:
+        return None
+    preferred = _fnum(props.get("Acres"))
+    if preferred is None:
+        sqft = _fnum(props.get("LND_SQFOOT"))
+        preferred = (sqft / 43560.0) if sqft else None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=1.0)
+    if acreage is None or not polygon:
+        return None
+    pid = props.get("PARCEL_ID") or props.get("OBJECTID")
+    county = _fl_county_name(props.get("CO_NO"))
+    city = (props.get("PHY_CITY") or "").strip() or county
+    addr1 = (props.get("PHY_ADDR1") or "").strip()
+    land_val = _fnum(props.get("LND_VAL"))
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"fl_parcels:{pid}",
+        "title": f"Florida vacant · {acreage:.1f} ac · {county}",
+        "description": (
+            f"Florida statewide vacant parcel (DOR {dor}). "
+            f"County={county}. Owner={props.get('OWN_NAME')}. Land value=${land_val}. "
+            "Public GIS — not MLS/Zillow."
+        ),
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
+        "acreage": acreage,
+        "state": "FL",
+        "county": county,
+        "apn": str(pid) if pid else None,
+        "address": f"{addr1}, {city}, FL".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": None,
+        "status": "ACTIVE",
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
+        "is_demo": False,
+    }
+
+
+def _norm_fl_parcels_ag(raw: dict) -> dict | None:
+    """Statewide Florida agricultural parcels (DOR 050–069)."""
+    props = raw.get("properties") or {}
+    dor = str(props.get("DOR_UC") or "").strip()
+    if not (dor >= "050" and dor < "070"):
+        return None
+    if _non_market_owner(props.get("OWN_NAME")):
+        return None
+    public = str(props.get("PUBLIC_LND") or "").strip().upper()
+    if public in {"Y", "YES", "1", "T", "TRUE"}:
+        return None
+    preferred = _fnum(props.get("Acres"))
+    if preferred is None:
+        sqft = _fnum(props.get("LND_SQFOOT"))
+        preferred = (sqft / 43560.0) if sqft else None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=5.0)
+    if acreage is None or not polygon:
+        return None
+    pid = props.get("PARCEL_ID") or props.get("OBJECTID")
+    county = _fl_county_name(props.get("CO_NO"))
+    city = (props.get("PHY_CITY") or "").strip() or county
+    addr1 = (props.get("PHY_ADDR1") or "").strip()
+    land_val = _fnum(props.get("LND_VAL"))
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"fl_ag:{pid}",
+        "title": f"Florida ag · {acreage:.1f} ac · {county}",
+        "description": (
+            f"Florida statewide agricultural parcel (DOR {dor}). "
+            f"County={county}. Owner={props.get('OWN_NAME')}. Land value=${land_val}. "
+            "Public GIS — not MLS/Zillow."
+        ),
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
+        "acreage": acreage,
+        "state": "FL",
+        "county": county,
+        "apn": str(pid) if pid else None,
+        "address": f"{addr1}, {city}, FL".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": None,
+        "status": "ACTIVE",
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -1542,11 +2012,81 @@ SOURCES: list[ArcgisMarketSource] = [
     ),
     ArcgisMarketSource(
         "ftl_surplus",
-        "Fort Lauderdale Surplus Property",
+        "Fort Lauderdale Surplus Property (1ac+)",
         "https://gis.fortlauderdale.gov/arcgis/rest/services/PropertyReporter/Interactive/MapServer/37/query",
         "FL",
         "Broward",
         _norm_ftl,
+    ),
+    # Florida acreage coverage — FTL surplus alone was only sub-acre urban lots.
+    ArcgisMarketSource(
+        "lake_fl_vacant",
+        "Lake County FL Vacant Land (1ac+)",
+        "https://gis.lakecountyfl.gov/lakegis/rest/services/OpenData/OpenData1/FeatureServer/12/query",
+        "FL",
+        "Lake",
+        _norm_lake_fl_vacant,
+        # NOTE: avoid BuildingValue predicates here — Lake's WAF 403s some NULL checks.
+        where="Vacant='Yes' AND Acres>=1 AND Acres<=2500 AND LandUseCode LIKE '00%'",
+        order_by="Acres DESC",
+    ),
+    ArcgisMarketSource(
+        "pbc_fl_vacant",
+        "Palm Beach County FL Vacant Land (5ac+)",
+        "https://services.arcgis.com/B7X7NCOKKXditlwZ/arcgis/rest/services/Palm_Beach_County_Parcels/FeatureServer/0/query",
+        "FL",
+        "Palm Beach",
+        _norm_pbc_fl_vacant,
+        where=(
+            "DOR_UC LIKE '00%' AND LND_SQFOOT>=217800 AND LND_SQFOOT<=108900000 "
+            "AND TOT_LVG_AR=0"
+        ),
+        order_by="LND_SQFOOT DESC",
+    ),
+    ArcgisMarketSource(
+        "collier_fl_large",
+        "Collier County FL Large Parcels (5ac+)",
+        "https://services2.arcgis.com/SlIq32SqARUHIhSx/arcgis/rest/services/Parcels/FeatureServer/42/query",
+        "FL",
+        "Collier",
+        _norm_collier_fl_large,
+        where="CAST(TOTALACRES AS FLOAT) >= 5 AND CAST(TOTALACRES AS FLOAT) <= 2500",
+    ),
+    # Statewide Florida cadastral (~970k vacant 1ac+ / ~200k ag 5ac+) — Zillow-scale land coverage.
+    # Shard by OBJECTID ranges (CO_NO filters 400 on this service; plain offset stays OBJECTID-biased).
+    # Do NOT orderBy Acres: this layer rejects ORDER BY and slows to failure.
+    # Do NOT filter TOT_LVG_AR in SQL — the service 400s / times out; normalize drops built parcels.
+    ArcgisMarketSource(
+        "fl_parcels_vacant",
+        "Florida Statewide Vacant Land (1ac+)",
+        "https://services5.arcgis.com/GcvM6vDlR2gM4x31/arcgis/rest/services/FL_Parcels/FeatureServer/0/query",
+        "FL",
+        "Statewide",
+        _norm_fl_parcels_vacant,
+        where="Acres>=1 AND Acres<=2500 AND DOR_UC LIKE '00%'",
+        page_size=1000,
+        out_fields=(
+            "PARCEL_ID,OBJECTID,CO_NO,DOR_UC,Acres,LND_SQFOOT,TOT_LVG_AR,"
+            "OWN_NAME,PUBLIC_LND,PHY_ADDR1,PHY_CITY,LND_VAL"
+        ),
+        shard_by_objectid=True,
+        objectid_max=10_900_000,
+    ),
+    ArcgisMarketSource(
+        "fl_parcels_agriculture",
+        "Florida Statewide Agriculture (5ac+)",
+        "https://services5.arcgis.com/GcvM6vDlR2gM4x31/arcgis/rest/services/FL_Parcels/FeatureServer/0/query",
+        "FL",
+        "Statewide",
+        _norm_fl_parcels_ag,
+        where="Acres>=5 AND Acres<=2500 AND DOR_UC >= '050' AND DOR_UC < '070'",
+        page_size=1000,
+        out_fields=(
+            "PARCEL_ID,OBJECTID,CO_NO,DOR_UC,Acres,LND_SQFOOT,TOT_LVG_AR,"
+            "OWN_NAME,PUBLIC_LND,PHY_ADDR1,PHY_CITY,LND_VAL"
+        ),
+        shard_by_objectid=True,
+        objectid_max=10_900_000,
     ),
     ArcgisMarketSource(
         "wyco_ks_tax",
@@ -1685,6 +2225,21 @@ SOURCES: list[ArcgisMarketSource] = [
         where="Houses='0' AND Acres>=2",
     ),
     ArcgisMarketSource(
+        "harris_tx_vacant",
+        "Harris County TX Vacant Land (1ac+)",
+        "https://www.gis.hctx.net/arcgis/rest/services/HCAD/Parcels/MapServer/0/query",
+        "TX",
+        "Harris",
+        _norm_harris_tx_vacant,
+        where="impr_value=0 AND acreage_1>=1 AND acreage_1<=2500 AND land_value>0",
+        page_size=1000,
+        out_fields=(
+            "OBJECTID,HCAD_NUM,acct_num,Acreage,acreage_1,StatedArea,impr_value,bld_value,"
+            "land_value,owner_name_1,site_str_num,site_str_pfx,site_str_name,site_str_sfx,"
+            "site_city,site_county,state_class,land_use,total_market_val"
+        ),
+    ),
+    ArcgisMarketSource(
         "king_wa_vacant",
         "King County WA Vacant Land",
         "https://gismaps.kingcounty.gov/arcgis/rest/services/Property/KingCo_PropertyInfo/MapServer/0/query",
@@ -1737,13 +2292,15 @@ SOURCES: list[ArcgisMarketSource] = [
     ),
     ArcgisMarketSource(
         "nj_mod4_vacant",
-        "New Jersey MOD-IV Vacant Land (5ac+)",
+        "New Jersey MOD-IV Vacant Land (1ac+)",
         "https://maps.nj.gov/arcgis/rest/services/Framework/Cadastral/MapServer/0/query",
         "NJ",
         "Statewide",
         _norm_nj_mod4_vacant,
-        where="PROP_CLASS='1' AND CALC_ACRE>=5 AND IMPRVT_VAL=0",
-        order_by="CALC_ACRE DESC",
+        where="PROP_CLASS='1' AND CALC_ACRE>=1 AND IMPRVT_VAL=0",
+        page_size=1000,
+        shard_by_objectid=True,
+        objectid_max=4_000_000,
     ),
     ArcgisMarketSource(
         "nj_mod4_farmland",
@@ -1753,23 +2310,27 @@ SOURCES: list[ArcgisMarketSource] = [
         "Statewide",
         _norm_nj_mod4_farm,
         where="PROP_CLASS='3B' AND CALC_ACRE>=10",
-        order_by="CALC_ACRE DESC",
+        page_size=1000,
+        shard_by_objectid=True,
+        objectid_max=4_000_000,
     ),
-    # Statewide cadastral screens — only states with verified official vacant/ag attributes.
-    # Skipped for now (no equally clean public vacant filter): DE, HI, IA, KY, LA, ME, MS,
-    # ND, NH, OK, RI, SC, SD, VT, WV, DC (county-only / centroids-only / stale / no class codes).
+    # Statewide cadastral screens — FL/NJ/NY/MA/AR here; NC/NE/WA/WI/UT/IN/VT/CT appended
+    # from statewide_inventory.py. Remaining gaps stay on county tax-sale/surplus feeds until
+    # a clean public vacant class filter exists (DE/HI/IA/KY/LA/ME/MS/ND/NH/OK/RI/SC/SD/WV/…).
     ArcgisMarketSource(
         "ny_orpts_vacant",
-        "New York ORPTS Vacant Land (5ac+)",
+        "New York ORPTS Vacant Land (1ac+)",
         "https://gisservices.its.ny.gov/arcgis/rest/services/NYS_Tax_Parcels_Public/MapServer/1/query",
         "NY",
         "Statewide",
         _norm_ny_orpts_vacant,
         where=(
             "PROP_CLASS >= 300 AND PROP_CLASS < 400 AND PROP_CLASS <> 315 "
-            "AND CALC_ACRES >= 5 AND CALC_ACRES <= 2500 AND OWNER_TYPE='8'"
+            "AND CALC_ACRES >= 1 AND CALC_ACRES <= 2500 AND OWNER_TYPE='8'"
         ),
-        order_by="CALC_ACRES DESC",
+        page_size=1000,
+        shard_by_objectid=True,
+        objectid_max=5_000_000,
     ),
     ArcgisMarketSource(
         "ny_orpts_agriculture",
@@ -1782,7 +2343,9 @@ SOURCES: list[ArcgisMarketSource] = [
             "PROP_CLASS >= 100 AND PROP_CLASS < 200 "
             "AND CALC_ACRES >= 10 AND CALC_ACRES <= 2500 AND OWNER_TYPE='8'"
         ),
-        order_by="CALC_ACRES DESC",
+        page_size=1000,
+        shard_by_objectid=True,
+        objectid_max=5_000_000,
     ),
     ArcgisMarketSource(
         "ar_geostor_vacant",
@@ -1792,20 +2355,24 @@ SOURCES: list[ArcgisMarketSource] = [
         "Statewide",
         _norm_ar_geostor_vacant,
         where="impvalue=0 AND taxarea>=5 AND taxarea<=2500 AND landvalue>0 AND parceltype='AV'",
-        order_by="taxarea DESC",
+        page_size=1000,
+        shard_by_objectid=True,
+        objectid_max=3_000_000,
     ),
     ArcgisMarketSource(
         "ma_massgis_vacant",
-        "Massachusetts MassGIS Vacant Land (5ac+)",
+        "Massachusetts MassGIS Vacant Land (1ac+)",
         "https://services1.arcgis.com/hGdibHYSPO59RG1h/arcgis/rest/services/Massachusetts_Property_Tax_Parcels/FeatureServer/0/query",
         "MA",
         "Statewide",
         _norm_ma_massgis_vacant,
         where=(
-            "BLDG_VAL=0 AND LOT_UNITS='Acres' AND LOT_SIZE>=5 AND LOT_SIZE<=2500 "
+            "BLDG_VAL=0 AND LOT_UNITS='Acres' AND LOT_SIZE>=1 AND LOT_SIZE<=2500 "
             "AND USE_CODE IN ('130','131','132','201','202','390','391','392','393')"
         ),
-        order_by="LOT_SIZE DESC",
+        page_size=1000,
+        shard_by_objectid=True,
+        objectid_max=3_000_000,
     ),
     ArcgisMarketSource(
         "ma_massgis_chapter61",
@@ -1818,9 +2385,68 @@ SOURCES: list[ArcgisMarketSource] = [
             "BLDG_VAL=0 AND LOT_UNITS='Acres' AND LOT_SIZE>=10 AND LOT_SIZE<=2500 "
             "AND USE_CODE IN ('601','602','713','714','717','718')"
         ),
-        order_by="LOT_SIZE DESC",
+        page_size=1000,
+        shard_by_objectid=True,
+        objectid_max=3_000_000,
     ),
 ]
+
+# Merge additional verified statewide vacant/ag screens (NC/NE/WA/WI/UT/IN/VT/CT…).
+from landsignal.providers.statewide_inventory import SOURCES as _STATEWIDE_EXTRA_SOURCES
+
+SOURCES.extend(_STATEWIDE_EXTRA_SOURCES)
+
+
+async def _arcgis_get_json(
+    client: httpx.AsyncClient,
+    url: str,
+    params: dict[str, Any],
+    *,
+    source_id: str,
+    attempts: int = 3,
+) -> dict[str, Any] | None:
+    """GET ArcGIS JSON with retries. Never raises — returns None on hard failure."""
+    last_err: Exception | None = None
+    for attempt in range(max(1, attempts)):
+        try:
+            resp = await client.get(url, params=params, headers=_ARCGIS_HEADERS)
+            if resp.status_code in _HTTP_RETRY_STATUSES and attempt + 1 < attempts:
+                await asyncio.sleep(0.35 * (attempt + 1))
+                continue
+            if resp.status_code >= 400:
+                log.warning(
+                    "public_tax_http_error",
+                    source=source_id,
+                    status=resp.status_code,
+                    attempt=attempt + 1,
+                )
+                return None
+            try:
+                data = resp.json()
+            except Exception as exc:  # noqa: BLE001
+                last_err = exc
+                if attempt + 1 < attempts:
+                    await asyncio.sleep(0.35 * (attempt + 1))
+                    continue
+                return None
+            if isinstance(data, dict) and data.get("error"):
+                # Invalid outFields / where often 200+error — caller may retry with *.
+                return data
+            return data if isinstance(data, dict) else None
+        except (httpx.TimeoutException, httpx.TransportError, httpx.HTTPError) as exc:
+            last_err = exc
+            if attempt + 1 < attempts:
+                await asyncio.sleep(0.45 * (attempt + 1))
+                continue
+            log.warning(
+                "public_tax_transport_failed",
+                source=source_id,
+                error=str(exc)[:200],
+            )
+            return None
+    if last_err:
+        log.warning("public_tax_get_exhausted", source=source_id, error=str(last_err)[:200])
+    return None
 
 
 async def _fetch_arcgis_pages(
@@ -1828,20 +2454,30 @@ async def _fetch_arcgis_pages(
     src: ArcgisMarketSource,
     *,
     target: int,
-    page_size: int = 200,
+    page_size: int | None = None,
     start_offset: int = 0,
+    where: str | None = None,
 ) -> list[dict]:
-    """Page through an ArcGIS layer until we have `target` normalized rows."""
+    """Page through an ArcGIS layer until we have `target` validated rows.
+
+    Soft-fails on host errors so one bad county cannot fail nationwide discover.
+    """
     out: list[dict] = []
+    if target <= 0:
+        return out
     offset = max(0, start_offset)
-    # Cap pages so a single county can't hang the whole discover
-    max_pages = max(1, (target // page_size) + 3)
+    page_size = max(1, int(page_size or src.page_size or 200))
+    where_clause = where or src.where
+    out_fields = (getattr(src, "out_fields", None) or "*").strip() or "*"
+    # Over-page: statewide vacant rows often fail normalize, so raw ≫ normalized.
+    max_pages = max(2, min(40, (max(1, target) // page_size) * 5 + 3))
+    consecutive_failures = 0
     for _ in range(max_pages):
         if len(out) >= target:
             break
         params = {
-            "where": src.where,
-            "outFields": "*",
+            "where": where_clause,
+            "outFields": out_fields,
             "returnGeometry": "true",
             "outSR": 4326,
             "resultRecordCount": page_size,
@@ -1850,22 +2486,192 @@ async def _fetch_arcgis_pages(
         }
         if getattr(src, "order_by", None):
             params["orderByFields"] = src.order_by
-        resp = await client.get(src.url, params=params)
-        resp.raise_for_status()
-        data = resp.json()
+        data = await _arcgis_get_json(client, src.url, params, source_id=src.source_id)
+        if data is None:
+            consecutive_failures += 1
+            if consecutive_failures >= 2:
+                break
+            continue
+        if data.get("error"):
+            err = data.get("error") or {}
+            details = " ".join(str(x) for x in (err.get("details") or []))
+            # Common: invalid outFields — retry once with *.
+            if out_fields != "*" and "outFields" in details:
+                log.warning(
+                    "public_tax_outfields_fallback",
+                    source=src.source_id,
+                    out_fields=out_fields[:120],
+                )
+                out_fields = "*"
+                consecutive_failures = 0
+                continue
+            log.warning(
+                "public_tax_arcgis_error",
+                source=src.source_id,
+                error=err,
+                where=where_clause[:160],
+            )
+            consecutive_failures += 1
+            if consecutive_failures >= 2:
+                break
+            continue
+        consecutive_failures = 0
         feats = data.get("features") or []
         if not feats:
             break
         for feat in feats:
-            row = src.normalize(feat)
-            if row:
-                out.append(row)
+            try:
+                row = src.normalize(feat)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("public_tax_normalize_failed", source=src.source_id, error=str(exc)[:160])
+                continue
+            valid = _validate_inventory_row(row)
+            if valid:
+                out.append(valid)
                 if len(out) >= target:
                     break
         if len(feats) < page_size:
             break
         offset += len(feats)
     return out
+
+
+async def _fetch_arcgis_value_shards(
+    client: httpx.AsyncClient,
+    src: ArcgisMarketSource,
+    *,
+    target: int,
+    start_offset: int = 0,
+) -> list[dict]:
+    """Shard a layer by discrete field values (county name / FIPS) for geographic breadth."""
+    values = [str(v) for v in (getattr(src, "shard_values", None) or []) if v]
+    field = getattr(src, "shard_field", None)
+    if not values or not field or target <= 0:
+        return await _fetch_arcgis_pages(
+            client, src, target=target, start_offset=start_offset
+        )
+    per_value = max(15, (target // len(values)) + 10)
+    sem = asyncio.Semaphore(6)
+
+    async def one(val: str) -> list[dict]:
+        # Quote strings; leave bare tokens that look numeric.
+        literal = val if val.replace(".", "", 1).isdigit() else f"'{val.replace(chr(39), chr(39)+chr(39))}'"
+        where = f"({src.where}) AND {field}={literal}"
+        async with sem:
+            for attempt in range(2):
+                try:
+                    return await _fetch_arcgis_pages(
+                        client,
+                        src,
+                        target=per_value,
+                        start_offset=start_offset,
+                        where=where,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    if attempt == 0:
+                        await asyncio.sleep(0.4)
+                        continue
+                    log.warning(
+                        "public_tax_value_shard_failed",
+                        source=src.source_id,
+                        field=field,
+                        value=val,
+                        error=str(exc)[:200],
+                    )
+                    return []
+        return []
+
+    batches = await asyncio.gather(*[one(v) for v in values])
+    queues = [list(batch) for batch in batches if batch]
+    out: list[dict] = []
+    while queues and len(out) < target:
+        nxt: list[list[dict]] = []
+        for q in queues:
+            if not q:
+                continue
+            out.append(q.pop(0))
+            if q:
+                nxt.append(q)
+            if len(out) >= target:
+                break
+        queues = nxt
+    if out:
+        return out[:target]
+    # Shard predicates failed everywhere — degrade to plain paging so inventory still fills.
+    log.warning("public_tax_value_shard_empty_fallback", source=src.source_id, field=field)
+    return await _fetch_arcgis_pages(
+        client, src, target=target, start_offset=start_offset
+    )
+
+
+async def _fetch_arcgis_objectid_shards(
+    client: httpx.AsyncClient,
+    src: ArcgisMarketSource,
+    *,
+    target: int,
+    start_offset: int = 0,
+) -> list[dict]:
+    """Pull a statewide layer via OBJECTID ranges for breadth + Zillow-scale volume.
+
+    Plain resultOffset on ~1M vacant rows is slow/biased; CO_NO predicates 400 on FL_Parcels.
+    OBJECTID windows are fast and fan out across the cadastral.
+    """
+    if target <= 0:
+        return []
+    max_oid = int(getattr(src, "objectid_max", None) or 11_000_000)
+    shard_count = 40
+    shard_span = max(100_000, (max_oid // shard_count) + 1)
+    ranges = [(lo, min(lo + shard_span, max_oid + 1)) for lo in range(1, max_oid + 1, shard_span)]
+    per_shard = max(40, (target // max(1, len(ranges))) + 30)
+    # Keep concurrency modest — this ArcGIS host 504s when hammered.
+    sem = asyncio.Semaphore(10)
+
+    async def one(lo: int, hi: int) -> list[dict]:
+        where = f"({src.where}) AND OBJECTID>={int(lo)} AND OBJECTID<{int(hi)}"
+        async with sem:
+            for attempt in range(2):
+                try:
+                    return await _fetch_arcgis_pages(
+                        client,
+                        src,
+                        target=per_shard,
+                        start_offset=start_offset,
+                        where=where,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    if attempt == 0:
+                        await asyncio.sleep(0.6)
+                        continue
+                    log.warning(
+                        "public_tax_oid_shard_failed",
+                        source=src.source_id,
+                        lo=lo,
+                        hi=hi,
+                        error=str(exc)[:240],
+                    )
+                    return []
+        return []
+
+    batches = await asyncio.gather(*[one(lo, hi) for lo, hi in ranges])
+    queues = [list(batch) for batch in batches if batch]
+    out: list[dict] = []
+    while queues and len(out) < target:
+        nxt: list[list[dict]] = []
+        for q in queues:
+            if not q:
+                continue
+            out.append(q.pop(0))
+            if q:
+                nxt.append(q)
+            if len(out) >= target:
+                break
+        queues = nxt
+    if out:
+        return out[:target]
+    log.warning("public_tax_oid_shard_empty_fallback", source=src.source_id)
+    return await _fetch_arcgis_pages(
+        client, src, target=target, start_offset=start_offset
+    )
 
 
 class PublicTaxSaleProvider(ListingProvider):
@@ -1878,54 +2684,153 @@ class PublicTaxSaleProvider(ListingProvider):
         return ProviderStatus.CONFIGURED
 
     async def search_listings(self, query: dict[str, Any]) -> ProviderResult[list[dict]]:
-        limit = int(query.get("limit") or 2000)
-        out: list[dict] = []
+        """Pull public GIS inventory. Always returns ok=True — soft-fails per source/state."""
+        from collections import defaultdict
+
+        limit = max(1, int(query.get("limit") or 2000))
         errors: list[str] = []
-        tax_sources = [
-            s
-            for s in SOURCES
-            if "surplus" not in s.source_id and "fairfax" not in s.source_id
-        ]
-        prefer = {str(s).upper() for s in (query.get("states") or []) if s}
-        if prefer:
-            # When a state filter is active, spend budget on that state's layers first
-            preferred = [s for s in tax_sources if s.state.upper() in prefer]
-            if preferred:
-                tax_sources = preferred
-        # Split the budget across counties so one mega-layer doesn't dominate
-        per_source = max(300, limit // max(1, len(tax_sources)))
-        start_offset = int(query.get("offset") or 0)
-        async with httpx.AsyncClient(timeout=90.0) as client:
-            results = await asyncio_gather_sources(
-                client, tax_sources, per_source, errors, start_offset=start_offset
-            )
-            for batch in results:
-                out.extend(batch)
-        by_state: dict[str, list[dict]] = {}
-        for row in out:
-            by_state.setdefault(row.get("state") or "??", []).append(row)
-        for st in by_state:
-            by_state[st].sort(
-                key=lambda r: (
-                    0 if r.get("asking_price_usd") is not None else 1,
-                    -(r.get("acreage") or 0),
+        try:
+            # Include land-bank / LRA feeds in the tax inventory path so MO/VA-style
+            # states get the same large equal-state budget (not the tiny surplus cap).
+            tax_sources = [
+                s
+                for s in SOURCES
+                if "fairfax" not in s.source_id
+                and (
+                    "surplus" not in s.source_id
+                    or "landbank" in s.source_id
+                    or "land_bank" in s.source_id
+                    or "lra" in s.source_id
                 )
+            ]
+            prefer = {str(s).upper() for s in (query.get("states") or []) if s}
+            if prefer:
+                # Honor the filter even when empty — never silently widen to all states.
+                tax_sources = [s for s in tax_sources if s.state.upper() in prefer]
+            if not tax_sources:
+                return ProviderResult(
+                    True,
+                    ProviderStatus.CONFIGURED,
+                    [],
+                    error="No sources for request" if prefer else None,
+                )
+
+            by_state_sources: dict[str, list[ArcgisMarketSource]] = defaultdict(list)
+            for src in tax_sources:
+                by_state_sources[src.state.upper()].append(src)
+            state_keys = sorted(by_state_sources.keys())
+            n_states = max(1, len(state_keys))
+            # Every state gets a large floor — FL is not special-cased for nationwide pulls.
+            min_per_state = max(1500, int(query.get("min_per_state") or 5000))
+            per_state = max(min_per_state, (limit + n_states - 1) // n_states)
+            if prefer and n_states <= 3:
+                # Targeted few-state discovers may still consume nearly the full budget.
+                per_state = max(
+                    per_state,
+                    min(limit, max(8000, (limit * 95) // 100 // n_states)),
+                )
+            start_offset = max(0, int(query.get("offset") or 0))
+            out: list[dict] = []
+            timeout = httpx.Timeout(connect=12.0, read=55.0, write=30.0, pool=30.0)
+            # More parallel state fetches so nationwide equal pulls finish sooner.
+            state_sem = asyncio.Semaphore(12)
+
+            async with httpx.AsyncClient(timeout=timeout, headers=_ARCGIS_HEADERS) as client:
+
+                async def fetch_state(st: str) -> list[dict]:
+                    async with state_sem:
+                        try:
+                            return await asyncio.wait_for(
+                                _fetch_state_inventory(
+                                    client,
+                                    by_state_sources[st],
+                                    per_state=per_state,
+                                    errors=errors,
+                                    start_offset=start_offset,
+                                ),
+                                timeout=_STATE_FETCH_TIMEOUT_S,
+                            )
+                        except asyncio.TimeoutError:
+                            errors.append(f"{st}: state fetch timed out")
+                            log.warning("public_tax_state_timeout", state=st)
+                            return []
+                        except Exception as exc:  # noqa: BLE001
+                            errors.append(f"{st}: {exc}")
+                            log.warning("public_tax_state_failed", state=st, error=str(exc)[:200])
+                            return []
+
+                results = await asyncio.gather(*[fetch_state(st) for st in state_keys])
+                for batch in results:
+                    out.extend(batch)
+
+            out = _dedupe_inventory_rows(
+                [r for r in (_validate_inventory_row(x) for x in out) if r]
             )
-        diversified: list[dict] = []
-        while len(diversified) < limit and any(by_state.values()):
-            for st in list(by_state.keys()):
-                if by_state.get(st):
-                    diversified.append(by_state[st].pop(0))
-                if len(diversified) >= limit:
-                    break
-                if st in by_state and not by_state[st]:
-                    by_state.pop(st, None)
-        return ProviderResult(
-            True,
-            ProviderStatus.CONFIGURED,
-            diversified,
-            error="; ".join(errors) if errors else None,
-        )
+
+            by_state_feed: dict[str, dict[str, list[dict]]] = defaultdict(
+                lambda: defaultdict(list)
+            )
+            for row in out:
+                st = (row.get("state") or "??").upper()
+                feed = (row.get("external_id") or "").split(":")[0] or st
+                by_state_feed[st][feed].append(row)
+            for st in by_state_feed:
+                for feed in by_state_feed[st]:
+                    by_state_feed[st][feed].sort(
+                        key=lambda r: (
+                            0 if r.get("asking_price_usd") is not None else 1,
+                            -(r.get("acreage") or 0),
+                        )
+                    )
+            # Equal-state quota first so large states (e.g. FL) cannot crowd out others.
+            state_quota = max(1, min(per_state, (limit + n_states - 1) // n_states))
+            taken: dict[str, int] = {st: 0 for st in state_keys}
+            diversified: list[dict] = []
+
+            def _take_round(*, respect_quota: bool) -> bool:
+                """Return True if any row was taken this pass."""
+                progressed = False
+                for st in list(by_state_feed.keys()):
+                    if respect_quota and taken.get(st, 0) >= state_quota:
+                        continue
+                    if len(diversified) >= limit:
+                        break
+                    feeds = by_state_feed.get(st) or {}
+                    if not feeds:
+                        by_state_feed.pop(st, None)
+                        continue
+                    for feed in list(feeds.keys()):
+                        if not feeds.get(feed):
+                            feeds.pop(feed, None)
+                            continue
+                        diversified.append(feeds[feed].pop(0))
+                        taken[st] = taken.get(st, 0) + 1
+                        progressed = True
+                        if not feeds.get(feed):
+                            feeds.pop(feed, None)
+                        break
+                    if not feeds:
+                        by_state_feed.pop(st, None)
+                return progressed
+
+            while len(diversified) < limit and by_state_feed and _take_round(respect_quota=True):
+                pass
+            while len(diversified) < limit and by_state_feed and _take_round(respect_quota=False):
+                pass
+            return ProviderResult(
+                True,
+                ProviderStatus.CONFIGURED,
+                diversified,
+                error="; ".join(errors[:12]) if errors else None,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.exception("public_tax_search_fatal", error=str(exc))
+            return ProviderResult(
+                True,
+                ProviderStatus.CONFIGURED,
+                [],
+                error=f"soft-fail: {exc}",
+            )
 
     async def get_listing(self, external_id: str) -> ProviderResult[dict]:
         res = await self.search_listings({"limit": 200})
@@ -1940,25 +2845,111 @@ class PublicTaxSaleProvider(ListingProvider):
         return raw
 
 
+async def _fetch_state_inventory(
+    client: httpx.AsyncClient,
+    srcs: list[ArcgisMarketSource],
+    *,
+    per_state: int,
+    errors: list[str],
+    start_offset: int = 0,
+) -> list[dict]:
+    statewide = [s for s in srcs if (s.county or "").lower() == "statewide"]
+    county = [s for s in srcs if s not in statewide]
+    if statewide:
+        pool = min(per_state, max(200, (per_state * 9) // 10))
+        county_budget = max(0, per_state - pool)
+        per_county = max(40, county_budget // max(1, len(county))) if county else 0
+        batches = await asyncio_gather_sources(
+            client,
+            srcs,
+            per_county,
+            errors,
+            start_offset=start_offset,
+            statewide_target=max(100, pool // max(1, len(statewide))),
+            statewide_pool=pool,
+        )
+    else:
+        per_src = max(40, per_state // max(1, len(srcs)))
+        batches = await asyncio_gather_sources(
+            client,
+            srcs,
+            per_src,
+            errors,
+            start_offset=start_offset,
+        )
+    rows: list[dict] = []
+    for batch in batches:
+        rows.extend(batch)
+    return rows
+
+
 async def asyncio_gather_sources(
     client: httpx.AsyncClient,
     sources: list[ArcgisMarketSource],
     per_source: int,
     errors: list[str],
     start_offset: int = 0,
+    *,
+    statewide_target: int | None = None,
+    statewide_pool: int = 0,
 ) -> list[list[dict]]:
-    import asyncio
+    statewide_sources = [s for s in sources if (s.county or "").lower() == "statewide"]
+    vacant_statewide = [s for s in statewide_sources if "vacant" in s.source_id]
+    other_statewide = [s for s in statewide_sources if s not in vacant_statewide]
 
     async def one(src: ArcgisMarketSource) -> list[dict]:
-        try:
+        target = max(0, int(per_source))
+        if statewide_pool and (src.county or "").lower() == "statewide":
+            if src in vacant_statewide:
+                share = (0.75 if other_statewide else 1.0) / max(1, len(vacant_statewide))
+                target = max(statewide_target or per_source, int(statewide_pool * share))
+            elif src in other_statewide:
+                share = 0.25 / max(1, len(other_statewide))
+                target = max(statewide_target or per_source, int(statewide_pool * share))
+            else:
+                target = max(per_source, statewide_target or per_source)
+        elif statewide_target and (src.county or "").lower() == "statewide":
+            target = max(per_source, statewide_target)
+
+        async def _pull() -> list[dict]:
+            if getattr(src, "shard_field", None) and getattr(src, "shard_values", None):
+                return await _fetch_arcgis_value_shards(
+                    client, src, target=target, start_offset=start_offset
+                )
+            if getattr(src, "shard_by_objectid", False):
+                return await _fetch_arcgis_objectid_shards(
+                    client, src, target=target, start_offset=start_offset
+                )
             return await _fetch_arcgis_pages(
-                client, src, target=per_source, start_offset=start_offset
+                client, src, target=target, start_offset=start_offset
             )
+
+        # OID / value shards need a longer wall clock than single-page county feeds.
+        pull_timeout = _SOURCE_FETCH_TIMEOUT_S
+        if getattr(src, "shard_by_objectid", False) or getattr(src, "shard_field", None):
+            pull_timeout = max(pull_timeout, 360.0)
+        try:
+            return await asyncio.wait_for(_pull(), timeout=pull_timeout)
+        except asyncio.TimeoutError:
+            errors.append(f"{src.source_id}: timed out")
+            log.warning("public_tax_source_timeout", source=src.source_id)
+            # Last-chance plain page — often recovers partial inventory quickly.
+            try:
+                return await asyncio.wait_for(
+                    _fetch_arcgis_pages(
+                        client, src, target=min(target, 800), start_offset=start_offset
+                    ),
+                    timeout=45.0,
+                )
+            except Exception:  # noqa: BLE001
+                return []
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{src.source_id}: {exc}")
             log.warning("public_tax_source_failed", source=src.source_id, error=str(exc))
             return []
 
+    if not sources:
+        return []
     return list(await asyncio.gather(*[one(s) for s in sources]))
 
 
@@ -1972,22 +2963,39 @@ class PublicSurplusProvider(ListingProvider):
         return ProviderStatus.CONFIGURED
 
     async def search_listings(self, query: dict[str, Any]) -> ProviderResult[list[dict]]:
-        limit = int(query.get("limit") or 200)
-        out: list[dict] = []
-        surplus_sources = [s for s in SOURCES if "surplus" in s.source_id or "fairfax" in s.source_id]
-        prefer = {str(s).upper() for s in (query.get("states") or []) if s}
-        if prefer:
-            preferred = [s for s in surplus_sources if s.state.upper() in prefer]
-            if preferred:
-                surplus_sources = preferred
+        limit = max(1, int(query.get("limit") or 200))
         errors: list[str] = []
-        per_source = max(50, limit // max(1, len(surplus_sources)))
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            batches = await asyncio_gather_sources(client, surplus_sources, per_source, errors)
-            for batch in batches:
-                out.extend(batch)
-        out.sort(key=lambda r: -(r.get("acreage") or 0))
-        return ProviderResult(True, ProviderStatus.CONFIGURED, out[:limit], error="; ".join(errors) if errors else None)
+        try:
+            surplus_sources = [
+                s for s in SOURCES if "surplus" in s.source_id or "fairfax" in s.source_id
+            ]
+            prefer = {str(s).upper() for s in (query.get("states") or []) if s}
+            if prefer:
+                surplus_sources = [s for s in surplus_sources if s.state.upper() in prefer]
+            if not surplus_sources:
+                return ProviderResult(True, ProviderStatus.CONFIGURED, [])
+            per_source = max(50, limit // max(1, len(surplus_sources)))
+            out: list[dict] = []
+            timeout = httpx.Timeout(connect=12.0, read=45.0, write=20.0, pool=20.0)
+            async with httpx.AsyncClient(timeout=timeout, headers=_ARCGIS_HEADERS) as client:
+                batches = await asyncio_gather_sources(
+                    client, surplus_sources, per_source, errors
+                )
+                for batch in batches:
+                    out.extend(batch)
+            out = _dedupe_inventory_rows(
+                [r for r in (_validate_inventory_row(x) for x in out) if r]
+            )
+            out.sort(key=lambda r: -(r.get("acreage") or 0))
+            return ProviderResult(
+                True,
+                ProviderStatus.CONFIGURED,
+                out[:limit],
+                error="; ".join(errors[:12]) if errors else None,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.exception("public_surplus_search_fatal", error=str(exc))
+            return ProviderResult(True, ProviderStatus.CONFIGURED, [], error=f"soft-fail: {exc}")
 
     async def get_listing(self, external_id: str) -> ProviderResult[dict]:
         res = await self.search_listings({"limit": 200})

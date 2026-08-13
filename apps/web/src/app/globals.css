@@ -2878,6 +2878,58 @@ a.btn-intel:hover {
   color: color-mix(in srgb, var(--brand) 55%, var(--ink));
 }
 
+/* Spaced en-dash between finish band numbers (~$214,366 – $412,243) */
+.bid-ticket-cell.is-finish .bid-ticket-val {
+  word-spacing: 0.02em;
+}
+
+@media (min-width: 1100px) {
+  .bid-ticket {
+    --stub: 3.05rem;
+    --cut-sm: 8px;
+    --cut-lg: 8px;
+    --perf-cut: 7px;
+    min-height: 4.45rem;
+    max-width: 700px;
+    border-radius: 3px;
+    /* Equal side bites — same radius top/mid/bottom so wide tickets don’t look mangled */
+    -webkit-mask-image:
+      radial-gradient(circle var(--cut-sm) at 0% 20%, transparent 97%, #000 99%),
+      radial-gradient(circle var(--cut-sm) at 0% 50%, transparent 97%, #000 99%),
+      radial-gradient(circle var(--cut-sm) at 0% 80%, transparent 97%, #000 99%),
+      radial-gradient(circle var(--cut-sm) at 100% 20%, transparent 97%, #000 99%),
+      radial-gradient(circle var(--cut-sm) at 100% 50%, transparent 97%, #000 99%),
+      radial-gradient(circle var(--cut-sm) at 100% 80%, transparent 97%, #000 99%),
+      radial-gradient(circle var(--perf-cut) at var(--stub) 0%, transparent 97%, #000 99%),
+      radial-gradient(circle var(--perf-cut) at var(--stub) 100%, transparent 97%, #000 99%);
+    mask-image:
+      radial-gradient(circle var(--cut-sm) at 0% 20%, transparent 97%, #000 99%),
+      radial-gradient(circle var(--cut-sm) at 0% 50%, transparent 97%, #000 99%),
+      radial-gradient(circle var(--cut-sm) at 0% 80%, transparent 97%, #000 99%),
+      radial-gradient(circle var(--cut-sm) at 100% 20%, transparent 97%, #000 99%),
+      radial-gradient(circle var(--cut-sm) at 100% 50%, transparent 97%, #000 99%),
+      radial-gradient(circle var(--cut-sm) at 100% 80%, transparent 97%, #000 99%),
+      radial-gradient(circle var(--perf-cut) at var(--stub) 0%, transparent 97%, #000 99%),
+      radial-gradient(circle var(--perf-cut) at var(--stub) 100%, transparent 97%, #000 99%);
+    -webkit-mask-composite: source-in, source-in, source-in, source-in, source-in, source-in, source-in;
+    mask-composite: intersect;
+    filter: drop-shadow(0 5px 11px rgba(20, 32, 28, 0.11));
+  }
+
+  .bid-ticket-main {
+    padding: 0.72rem 1.4rem 0.72rem 1.05rem;
+  }
+
+  .bid-ticket-prices {
+    gap: 0.65rem 0.95rem;
+  }
+
+  .bid-ticket-cell.is-finish .bid-ticket-val {
+    font-size: 1.08rem;
+    letter-spacing: 0.01em;
+  }
+}
+
 @media (max-width: 420px) {
   .bid-ticket-prices {
     grid-template-columns: 1fr;
@@ -2989,10 +3041,19 @@ a.btn-intel:hover {
 .clearing-chart {
   width: 100%;
   height: auto;
-  min-height: 200px;
+  min-height: 168px;
+  max-width: 100%;
   background: color-mix(in srgb, var(--brand) 6%, var(--bg-soft));
   border-radius: 14px;
   overflow: visible;
+}
+
+/* Large screens: keep the bidding chart compact so the panel doesn’t dominate */
+@media (min-width: 1100px) {
+  .signal-cockpit .clearing-chart {
+    max-width: 460px;
+    min-height: 150px;
+  }
 }
 
 .chart-tick,
@@ -4017,9 +4078,17 @@ a.btn-intel:hover {
 .traj-chart {
   width: 100%;
   height: auto;
-  min-height: 160px;
+  min-height: 140px;
+  max-width: 100%;
   background: var(--bg-soft);
   border-radius: 14px;
+}
+
+@media (min-width: 1100px) {
+  .price-trajectory .traj-chart {
+    max-width: 560px;
+    min-height: 130px;
+  }
 }
 
 .traj-chart.interactive {
@@ -7136,15 +7205,15 @@ a.acquire-block:hover {
   border-color: #0a0a0a;
 }
 
-/* Tiny construction scene behind the FSE label — cute, on-theme, non-noisy. */
+/* Construction scene behind the FSE label — clearer shovel / build / crane. */
 .fse-launch-scene {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-  color: color-mix(in srgb, var(--brand) 48%, var(--ink) 52%);
-  opacity: 0.52;
+  color: color-mix(in srgb, var(--brand) 62%, var(--ink) 38%);
+  opacity: 0.72;
 }
 
 .fse-scene-ground {
@@ -7170,20 +7239,22 @@ a.acquire-block:hover {
 }
 
 .fse-scene-shovel {
-  left: 7%;
-  bottom: 0.12rem;
-  transform-origin: 72% 88%;
-  animation: fse-shovel-dig 2.6s ease-in-out infinite;
+  left: 5%;
+  bottom: 0.08rem;
+  transform-origin: 70% 90%;
+  animation: fse-shovel-dig 2.2s ease-in-out infinite;
+  filter: drop-shadow(0 1px 0 color-mix(in srgb, var(--bg-elevated) 70%, transparent));
 }
 
 .fse-scene-dirt {
-  opacity: 0.55;
-  animation: fse-dirt-puff 2.6s ease-in-out infinite;
+  opacity: 0.75;
+  animation: fse-dirt-puff 2.2s ease-in-out infinite;
 }
 
 .fse-scene-build {
-  left: 40%;
-  bottom: 0.1rem;
+  left: 38%;
+  bottom: 0.06rem;
+  filter: drop-shadow(0 1px 0 color-mix(in srgb, var(--bg-elevated) 70%, transparent));
 }
 
 .fse-build-floor {
@@ -7219,10 +7290,11 @@ a.acquire-block:hover {
 }
 
 .fse-scene-crane {
-  right: 20%;
-  bottom: 0.08rem;
-  animation: fse-crane-sway 3.8s ease-in-out infinite;
+  right: 18%;
+  bottom: 0.04rem;
+  animation: fse-crane-sway 3.4s ease-in-out infinite;
   transform-origin: 28% 92%;
+  filter: drop-shadow(0 1px 0 color-mix(in srgb, var(--bg-elevated) 70%, transparent));
 }
 
 .fse-crane-cable,
@@ -7233,7 +7305,7 @@ a.acquire-block:hover {
 }
 
 .fse-launch:hover .fse-launch-scene {
-  opacity: 0.48;
+  opacity: 0.82;
 }
 
 .fse-launch-label {
@@ -7294,26 +7366,33 @@ a.acquire-block:hover {
 @keyframes fse-shovel-dig {
   0%,
   100% {
-    transform: rotate(-8deg) translateY(0);
+    transform: rotate(-18deg) translateY(0);
   }
-  40% {
-    transform: rotate(16deg) translateY(1px);
+  35% {
+    transform: rotate(22deg) translateY(2px);
   }
-  55% {
-    transform: rotate(10deg) translateY(-1px);
+  50% {
+    transform: rotate(8deg) translateY(-2px);
+  }
+  65% {
+    transform: rotate(-6deg) translateY(0);
   }
 }
 
 @keyframes fse-dirt-puff {
   0%,
-  35%,
+  30%,
   100% {
-    opacity: 0.2;
-    transform: translateY(0);
+    opacity: 0.15;
+    transform: translate(0, 0) scale(0.85);
   }
-  48% {
-    opacity: 0.85;
-    transform: translateY(-1px);
+  42% {
+    opacity: 1;
+    transform: translate(1px, -2px) scale(1.05);
+  }
+  55% {
+    opacity: 0.55;
+    transform: translate(2px, -1px) scale(1);
   }
 }
 
@@ -7447,147 +7526,6 @@ a.acquire-block:hover {
   flex-direction: column;
   min-height: 0;
   position: relative;
-}
-
-/* Clipart dirt bury → shovel wipe (white + ink outlines, blends with modal) */
-.fse-dirt-reveal {
-  position: absolute;
-  inset: 0;
-  z-index: 40;
-  border-radius: inherit;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.fse-dirt-layer {
-  position: absolute;
-  inset: 0;
-  /* Near-white so it blends with the modal, with ink outlines carrying the clipart look */
-  background: var(--bg-elevated);
-  animation: fse-dirt-clear 1.15s cubic-bezier(0.45, 0.05, 0.55, 1) forwards;
-}
-
-.fse-dirt-clipart {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.fse-dirt-clipart g:first-child {
-  stroke-width: 2.6;
-}
-
-.fse-dirt-shovel-wrap {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: -8%;
-  height: 12%;
-  display: grid;
-  place-items: center;
-  animation: fse-shovel-sweep 1.1s cubic-bezier(0.45, 0.05, 0.55, 1) forwards;
-  z-index: 2;
-}
-
-.fse-dirt-shovel {
-  display: block;
-  transform: rotate(-18deg);
-  animation: fse-shovel-dig-reveal 0.28s ease-in-out infinite;
-}
-
-.fse-dirt-shovel-shaft,
-.fse-dirt-shovel-blade {
-  fill: var(--bg-elevated);
-  stroke: var(--ink);
-}
-
-.fse-dirt-spray {
-  position: absolute;
-  width: 62%;
-  height: 14px;
-  border-radius: 999px;
-  background:
-    radial-gradient(circle at 18% 50%, var(--bg-elevated) 0 3px, transparent 3.5px),
-    radial-gradient(circle at 38% 40%, var(--bg-elevated) 0 2.5px, transparent 3px),
-    radial-gradient(circle at 58% 55%, var(--bg-elevated) 0 3px, transparent 3.5px),
-    radial-gradient(circle at 78% 45%, var(--bg-elevated) 0 2.2px, transparent 2.7px);
-  box-shadow:
-    0 0 0 1.25px color-mix(in srgb, var(--ink) 45%, transparent);
-  opacity: 0.55;
-  transform: translateY(18px);
-  animation: fse-dirt-spray 1.1s ease-out forwards;
-}
-
-@keyframes fse-dirt-clear {
-  0%,
-  14% {
-    clip-path: inset(0 0 0 0);
-    opacity: 1;
-  }
-  90% {
-    opacity: 1;
-  }
-  100% {
-    clip-path: inset(100% 0 0 0);
-    opacity: 0.9;
-  }
-}
-
-@keyframes fse-shovel-sweep {
-  0%,
-  10% {
-    top: -8%;
-    opacity: 1;
-  }
-  92% {
-    opacity: 1;
-  }
-  100% {
-    top: 96%;
-    opacity: 0;
-  }
-}
-
-@keyframes fse-shovel-dig-reveal {
-  0%,
-  100% {
-    transform: rotate(-22deg) translateX(-2px);
-  }
-  50% {
-    transform: rotate(-10deg) translateX(3px);
-  }
-}
-
-@keyframes fse-dirt-spray {
-  0% {
-    opacity: 0.1;
-    transform: translateY(10px) scaleX(0.55);
-  }
-  35% {
-    opacity: 0.7;
-  }
-  100% {
-    opacity: 0.15;
-    transform: translateY(22px) scaleX(1.05);
-  }
-}
-
-.fse-modal.is-revealing {
-  /* Keep interactions off until dirt is cleared */
-}
-
-.fse-modal.is-revealing .fse-modal-head,
-.fse-modal.is-revealing .fse-work,
-.fse-modal.is-revealing .fse-body {
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fse-dirt-reveal {
-    display: none;
-  }
 }
 
 .fse-work {

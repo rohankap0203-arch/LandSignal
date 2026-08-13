@@ -12,6 +12,7 @@ import {
   type SearchFilters,
   type SearchMeta,
 } from "@/lib/api";
+import { describeHardFilters, enforceHardFilters } from "@/lib/hard-filters";
 import { SEARCH_META_FALLBACK } from "@/lib/search-meta-fallback";
 
 type PriceUnit = "K" | "M";
@@ -244,11 +245,14 @@ export default function SearchPage() {
       });
       try {
         const active = override ?? form;
-        const data = await landsignalApi.radar(filtersFromForm(active));
+        const filters = filtersFromForm(active);
+        const data = await landsignalApi.radar(filters);
         if (!Array.isArray(data)) {
           throw new Error("Search returned an unexpected response. Try Show matches again.");
         }
-        setRows(data);
+        // Client hard gate for state / region / acres / price — strategy & hold never drop rows.
+        const { kept, dropped } = enforceHardFilters(data, filters);
+        setRows(kept);
         const metaNow = await landsignalApi.searchMeta().catch(() => null);
         if (metaNow) {
           setMeta({
@@ -257,11 +261,14 @@ export default function SearchPage() {
             states: metaNow.states?.length ? metaNow.states : SEARCH_META_FALLBACK.states,
           });
         }
-        const total = metaNow?.inventory_count ?? data.length;
+        const total = metaNow?.inventory_count ?? kept.length;
+        const filterLabel = describeHardFilters(filters);
         setStatus(
-          data.length
-            ? `Showing ${data.length.toLocaleString()} matches for your filters · ${total.toLocaleString()} live parcels indexed`
-            : "No parcels match these exact filters. Widen price/acres/strategy, or Reset to Any, then Show matches again.",
+          kept.length
+            ? `Filters: ${filterLabel} · showing ${kept.length.toLocaleString()} matches` +
+                (dropped ? ` · ${dropped} out-of-band dropped` : "") +
+                ` · ${total.toLocaleString()} live parcels indexed`
+            : `No parcels match ${filterLabel}. Widen price/acres/state, or Reset to Any, then Show matches again.`,
         );
         // Re-align after results paint
         requestAnimationFrame(() => {
@@ -318,7 +325,7 @@ export default function SearchPage() {
     setScanning(true);
     setStatus("Inventory refresh started in the background. Click Show matches when you want results.");
     try {
-      await landsignalApi.discover(10000, 0.1, false, undefined, true);
+      await landsignalApi.discover(500000, 0.1, false, undefined, true);
       const nextMeta = await landsignalApi.searchMeta();
       setMeta({
         ...SEARCH_META_FALLBACK,
@@ -730,7 +737,7 @@ export default function SearchPage() {
               return (
                 <>
                   Nothing in live inventory matches these exact filters. Widen price, acres, or
-                  strategy — or Reset to Any — then click Show matches again.
+                  price/acres — or Reset to Any — then click Show matches again.
                 </>
               );
             })()}

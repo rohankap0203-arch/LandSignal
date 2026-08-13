@@ -620,10 +620,15 @@ def personalized_score(
         score -= 25
     if acreage is not None and min_acres is not None and acreage < min_acres:
         score -= 20
-    if best_strategy and preferred and best_strategy not in preferred:
-        score -= 10
-    elif best_strategy and best_strategy in preferred:
-        score += 5
+    # Strategy is ranking-only: preferred strategies float up; mismatches sink
+    # but stay in the result set so quantity is never reduced by strategy choice.
+    if preferred:
+        pref_set = {str(p).upper().replace(" ", "_") for p in preferred}
+        strat = (best_strategy or "").upper().replace(" ", "_")
+        if strat and strat in pref_set:
+            score += 12
+        else:
+            score -= 8
     if profile.get("risk_tolerance") == "LOW" and risk > 40:
         score -= 10
     if profile.get("risk_tolerance") == "HIGH" and risk < 60:

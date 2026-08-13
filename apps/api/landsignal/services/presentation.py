@@ -166,7 +166,7 @@ def price_display(
                 # Prefer a finish band when available; still reads as start → likely finish.
                 if lo and hi and float(hi) > float(lo):
                     display = (
-                        f"${ask:,.0f} start · ~${float(lo):,.0f}–${float(hi):,.0f} likely finish"
+                        f"${ask:,.0f} start · ~${float(lo):,.0f} – ${float(hi):,.0f} likely finish"
                     )
                 else:
                     display = f"${ask:,.0f} start · ~${float(settle):,.0f} likely finish"

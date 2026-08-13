@@ -656,6 +656,11 @@ function peelBidFace(raw: string): { amount: string; role: "start" | "finish" | 
   return { amount: t, role: null };
 }
 
+/** Widen the gap around the lo–hi dash on large-screen bid coupons. */
+function spaceFinishBand(amount: string): string {
+  return amount.replace(/\s*[–—-]\s*/g, "\u2002–\u2002");
+}
+
 /** Starting bid → likely finish — admit-one ticket (above Buy case).
  *  Auction / tax-sale floors only — retail asks and unpriced estimates stay plain. */
 function PriceStat({ label, value, kind }: { label: string; value: string; kind?: string }) {
@@ -688,7 +693,7 @@ function PriceStat({ label, value, kind }: { label: string; value: string; kind?
             <span className="bid-ticket-split" aria-hidden />
             <div className="bid-ticket-cell is-finish">
               <span className="bid-ticket-tag">LIKELY FINISH</span>
-              <span className="bid-ticket-val">{finish.amount}</span>
+              <span className="bid-ticket-val">{spaceFinishBand(finish.amount)}</span>
             </div>
           </div>
         ) : (

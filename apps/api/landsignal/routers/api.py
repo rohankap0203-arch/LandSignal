@@ -403,9 +403,11 @@ async def radar(
 ) -> list[RadarRow]:
     """Search results with investor filters. Pass nothing / omit for Any.
 
-    Selected state / region / price / acres / strategy are hard filters.
+    Selected state / region / price / acres are hard filters.
+    Strategy and hold period never shrink the match set — they only re-rank
+    opportunity / fit so preferred strategies and hold lengths float higher.
     broaden=True is opt-in only: if the exact set is empty it may loosen region
-    then price/acres — but never crosses a selected state boundary.
+    or market channel — never price, acres, or state.
     """
     from landsignal.geo_meta import region_matches
     from landsignal.scoring.engine import personalized_score
@@ -538,6 +540,13 @@ async def radar(
             ):
                 continue
 
+            from landsignal.services.assessed_price import (
+                backfill_listing_ask_from_assessed,
+                extract_assessed_land_usd,
+            )
+
+            # GIS vacant screens often only have assessor land value — promote to ask.
+            backfill_listing_ask_from_assessed(listing)
             ask = listing.asking_price_usd
             if ask is not None and ask <= 0:
                 ask = None
@@ -555,11 +564,8 @@ async def radar(
                 ):
                     continue
 
-            # Budget recognition: compare against dollars-to-own, not teaser openers.
-            # - Auctions → likely settle (expected clearing)
-            # - Priced listings → published ask
-            # - Unpriced process parcels → our estimate (so a $250k budget
-            #   does not surface $2M “no public price” cards)
+            # Budget recognition: dollars-to-own for auctions; market ask or
+            # assessor land value for GIS vacant screens (never model estimate).
             budget_usd: float | None = None
             if min_price is not None or max_price is not None:
                 enrichment = store.enrichments.get(parcel.id)
@@ -592,11 +598,8 @@ async def radar(
                             budget_usd = None
                 if budget_usd is None and ask is not None and ask > 0:
                     budget_usd = float(ask)
-                if budget_usd is None and score.estimated_value_usd is not None:
-                    try:
-                        budget_usd = float(score.estimated_value_usd)
-                    except (TypeError, ValueError):
-                        budget_usd = None
+                if budget_usd is None:
+                    budget_usd = extract_assessed_land_usd(listing.raw)
                 if not _in_band(
                     budget_usd,
                     min_price,
@@ -628,8 +631,8 @@ async def radar(
                         hit_any = True
                         break
                 if not hit_any:
-                    # Strategy is a hard filter when the user picked one.
-                    continue
+                    # Strategy never hides inventory — only re-ranks via fit/score.
+                    strategy_soft_miss = True
             if min_score is not None and score.opportunity < min_score:
                 continue
             if max_risk is not None and score.risk > max_risk:
@@ -760,7 +763,7 @@ async def radar(
         )
         if strategy_soft_miss:
             reasons = [
-                "Strategy is a soft match — ranked lower, not hidden, so you still see nearby options.",
+                "Strategy preference re-ranked this file — not hidden so inventory stays full.",
                 *reasons,
             ][:5]
         if broaden_reason:
@@ -770,7 +773,7 @@ async def radar(
                 lo = auction_path.get("settle_low_usd")
                 hi = auction_path.get("settle_high_usd")
                 if lo and hi and float(hi) > float(lo):
-                    finish_s = f"~${float(lo):,.0f}–${float(hi):,.0f}"
+                    finish_s = f"~${float(lo):,.0f} – ${float(hi):,.0f}"
                 else:
                     finish_s = f"~${auction_path['expected_settle_usd']:,.0f}"
                 reasons = [
@@ -920,7 +923,7 @@ async def radar(
             settle = auction_path.get("expected_settle_usd") or 0
             if lo and hi and float(hi) > float(lo):
                 headline = (
-                    f"Starts ${float(opener):,.0f} → likely ~${float(lo):,.0f}–${float(hi):,.0f}"
+                    f"Starts ${float(opener):,.0f} → likely ~${float(lo):,.0f} – ${float(hi):,.0f}"
                 )
             else:
                 headline = f"Starts ${float(opener):,.0f} → likely ~${float(settle):,.0f}"
@@ -1097,23 +1100,19 @@ async def radar(
     cands = collect_cands(apply_region=True, apply_strict_channel=True)
     broaden_reason: str | None = None
     if broaden and not cands:
+        # Region only — never drop state / price / acres.
         cands = collect_cands(apply_region=False, apply_strict_channel=True)
-        broaden_reason = "Loosened region a bit so you still get real matches for your other filters."
-    if broaden and not cands and (
-        min_price is not None or max_price is not None or min_acres is not None or max_acres is not None
-    ):
-        saved_min, saved_max = min_price, max_price
-        saved_amin, saved_amax = min_acres, max_acres
-        min_price = None
-        max_price = None
-        min_acres = None
-        max_acres = None
-        cands = collect_cands(apply_region=False, apply_strict_channel=False)
-        min_price, max_price = saved_min, saved_max
-        min_acres, max_acres = saved_amin, saved_amax
-        broaden_reason = (
-            "Your exact price/acre band had no hits — showing the closest live opportunities instead."
-        )
+        if cands:
+            broaden_reason = (
+                "Loosened region a bit so you still get real matches for your other filters."
+            )
+    if broaden and not cands:
+        # Channel only — still keep state / price / acres hard.
+        cands = collect_cands(apply_region=bool(region), apply_strict_channel=False)
+        if cands:
+            broaden_reason = (
+                "Loosened market channel a bit so you still get matches inside your other filters."
+            )
 
     ranked = _sort_cands(cands, sort)
     capped = ranked[: max(1, min(limit, 500))] if ranked else []
@@ -1126,11 +1125,28 @@ async def radar(
         if (sort or "fit_desc").lower() in ("fit_desc", ""):
             capped = _sort_cands(capped, "fit_desc")
 
+    # Final hard gate — state / region / acres / ask. Strategy & hold never hide rows.
+    def _row_passes_hard(row: RadarRow) -> bool:
+        if state_codes and (row.state or "").upper() not in state_codes:
+            return False
+        if not _in_band(row.acres, min_acres, max_acres, allow_unknown=False):
+            return False
+        if not _in_band(row.ask, min_price, max_price, allow_unknown=False):
+            return False
+        if region and not region_matches(
+            region=region,
+            state=row.state,
+            county=row.county,
+            title=row.property_name,
+        ):
+            return False
+        return True
+
     # Phase 2: full presentation cards only for the capped result set
     rows: list[RadarRow] = []
     for c in capped:
         row = fat_row(c, broaden_reason=broaden_reason)
-        if row is not None:
+        if row is not None and _row_passes_hard(row):
             rows.append(row)
     return rows
 

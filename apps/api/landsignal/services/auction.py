@@ -135,7 +135,7 @@ def expected_auction_clearing(
         f"Screen on {acres_s} in {st}: published ${opening_bid:,.0f} is a floor / lien figure, "
         f"not what you should expect to pay. Finish screen uses a ~{mult_base:.1f}× bid-up prior "
         f"(band {mult_low:.1f}×–{mult_high:.1f}×) → roughly "
-        f"${settle_low:,.0f}–${settle_high:,.0f}"
+        f"${settle_low:,.0f} – ${settle_high:,.0f}"
         + (
             f" (vs model ${model_value:,.0f})."
             if model_value

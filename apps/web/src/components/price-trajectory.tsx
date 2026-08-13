@@ -219,8 +219,9 @@ export function PriceTrajectory({
     const padR = 18;
     const padT = 22;
     const padB = 38;
-    const w = compact ? 300 : 520;
-    const h = compact ? 160 : 260;
+    const w = compact ? 300 : 480;
+    // Slightly shorter path chart; large screens also cap width in CSS.
+    const h = compact ? 150 : 210;
     const span = Math.max(1, maxYear - minYear);
     const xScale = (year: number) => padL + ((year - minYear) / span) * (w - padL - padR);
     const yScale = (y: number) => padT + (1 - (y - minY) / Math.max(1, maxY - minY)) * (h - padT - padB);
