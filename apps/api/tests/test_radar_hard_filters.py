@@ -18,6 +18,8 @@ def _seed_scored_parcel(
     acreage: float,
     ask: float | None,
     external_id: str,
+    assessed_land: float | None = None,
+    strategy: Strategy = Strategy.FARMLAND,
 ) -> None:
     parcel = ParcelRecord(
         parcel_id=external_id,
@@ -30,6 +32,9 @@ def _seed_scored_parcel(
         acreage=acreage,
         is_demo=False,
     )
+    raw: dict = {"ask_role": "assessed_land"}
+    if assessed_land is not None:
+        raw["LND_VAL"] = assessed_land
     listing = ListingRecord(
         parcel_id=parcel.id,
         provider_id="public_vacant_gis",
@@ -39,6 +44,7 @@ def _seed_scored_parcel(
         price_per_acre_usd=(ask / acreage) if ask and acreage else None,
         status="ACTIVE",
         is_demo=False,
+        raw=raw,
     )
     store.parcels[parcel.id] = parcel
     store.listings[listing.id] = listing
@@ -54,9 +60,9 @@ def _seed_scored_parcel(
             confidence=80.0,
             asymmetry=10.0,
             signal=Signal.WATCH,
-            best_strategy=Strategy.FARMLAND,
+            best_strategy=strategy,
             secondary_strategy=Strategy.LAND_BANK,
-            estimated_value_usd=ask or 100_000,
+            estimated_value_usd=ask or assessed_land or 100_000,
             asking_discount_pct=None,
             deal_readiness=55.0,
             input_hash=f"test-{external_id}",
@@ -137,14 +143,24 @@ async def test_no_matches_when_band_empty_does_not_leak_other_acres(isolated_sto
 
 
 @pytest.mark.asyncio
-async def test_max_price_only_keeps_unpriced_gis_rows(isolated_store):
+async def test_budget_uses_assessed_land_when_unpriced(isolated_store):
     _seed_scored_parcel(
         isolated_store,
         state="FL",
         county="Hardee",
         acreage=30.0,
         ask=None,
-        external_id="fl-unpriced-30",
+        assessed_land=220_000,
+        external_id="fl-assessed-30",
+    )
+    _seed_scored_parcel(
+        isolated_store,
+        state="FL",
+        county="DeSoto",
+        acreage=35.0,
+        ask=None,
+        assessed_land=900_000,
+        external_id="fl-assessed-expensive",
     )
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -160,6 +176,36 @@ async def test_max_price_only_keeps_unpriced_gis_rows(isolated_store):
         )
     assert r.status_code == 200
     rows = r.json()
-    assert any(row.get("ask") is None and (row.get("acres") or 0) >= 20 for row in rows)
-    assert all((row.get("ask") is None) or row["ask"] <= 250_000 for row in rows)
+    assert rows
     assert all((row.get("acres") or 0) >= 20 for row in rows)
+    assert all((row.get("ask") or 0) <= 250_000 for row in rows)
+    assert not any(row.get("acres") == 35.0 for row in rows)
+
+
+@pytest.mark.asyncio
+async def test_strategy_filter_is_hard(isolated_store):
+    _seed_scored_parcel(
+        isolated_store,
+        state="FL",
+        county="Levy",
+        acreage=50.0,
+        ask=200_000,
+        external_id="fl-energy",
+        strategy=Strategy.ENERGY,
+    )
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get(
+            "/v1/radar",
+            params={
+                "state": "FL",
+                "min_acres": 20,
+                "strategy": "ENERGY",
+                "broaden": True,
+                "limit": 50,
+            },
+        )
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 1
+    assert rows[0]["best_strategy"] == "ENERGY"

@@ -45,8 +45,8 @@ _US_STATE_CODES = frozenset(
 )
 
 # Per-source wall clock so one hung ArcGIS host cannot stall nationwide discover.
-_SOURCE_FETCH_TIMEOUT_S = 75.0
-_STATE_FETCH_TIMEOUT_S = 120.0
+_SOURCE_FETCH_TIMEOUT_S = 120.0
+_STATE_FETCH_TIMEOUT_S = 300.0
 _HTTP_RETRY_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 
@@ -1637,7 +1637,7 @@ def _norm_lake_fl_vacant(raw: dict) -> dict | None:
             f"Use={use}. Owner={owner}. Land value=${land_val}. "
             "Public GIS — not MLS/Land.com."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": acreage,
         "state": "FL",
         "county": "Lake",
@@ -1686,7 +1686,7 @@ def _norm_pbc_fl_vacant(raw: dict) -> dict | None:
             f"Owner={props.get('OWN_NAME')}. Land value=${land_val}. "
             "Public GIS — not MLS/Land.com."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": acreage,
         "state": "FL",
         "county": "Palm Beach",
@@ -1854,7 +1854,7 @@ def _norm_fl_parcels_vacant(raw: dict) -> dict | None:
             f"County={county}. Owner={props.get('OWN_NAME')}. Land value=${land_val}. "
             "Public GIS — not MLS/Zillow."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": acreage,
         "state": "FL",
         "county": county,
@@ -1903,7 +1903,7 @@ def _norm_fl_parcels_ag(raw: dict) -> dict | None:
             f"County={county}. Owner={props.get('OWN_NAME')}. Land value=${land_val}. "
             "Public GIS — not MLS/Zillow."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": acreage,
         "state": "FL",
         "county": county,
@@ -2641,9 +2641,11 @@ class PublicTaxSaleProvider(ListingProvider):
             state_keys = sorted(by_state_sources.keys())
             per_state = max(150, limit // max(1, len(state_keys)))
             if prefer and len(state_keys) <= 3:
+                # Single-/few-state discovers (e.g. FL) get nearly the full budget so we
+                # can approach Zillow-scale statewide vacant/ag coverage.
                 per_state = max(
                     per_state,
-                    min(limit, max(4000, (limit * 9) // 10 // max(1, len(state_keys)))),
+                    min(limit, max(8000, (limit * 95) // 100 // max(1, len(state_keys)))),
                 )
             start_offset = max(0, int(query.get("offset") or 0))
             out: list[dict] = []

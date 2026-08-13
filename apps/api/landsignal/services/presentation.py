@@ -146,6 +146,7 @@ def price_display(
     acres: float | None = None,
     apn: str | None = None,
     comps_normalized: dict[str, Any] | None = None,
+    ask_role: str | None = None,
 ) -> dict[str, Any]:
     src = estimate_source(
         ask=ask,
@@ -179,6 +180,14 @@ def price_display(
                 "display": f"${ask:,.0f} start (usually finishes higher)",
                 "kind": "minimum_bid",
                 "opening_bid_usd": ask,
+                "estimate_source": None,
+            }
+        if (ask_role or "").lower() in {"assessed_land", "assessed", "land_value"}:
+            return {
+                "amount_usd": ask,
+                "label": "Assessed land value",
+                "display": f"${ask:,.0f} assessed",
+                "kind": "assessed_land",
                 "estimate_source": None,
             }
         return {

@@ -93,7 +93,7 @@ def _norm_nc_parcels_vacant(raw: dict) -> dict | None:
             f"Owner={props.get('ownname')}. Land value=${land_val}. "
             "Public GIS — not MLS/Zillow."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": acreage,
         "state": "NC",
         "county": county,
@@ -133,7 +133,7 @@ def _norm_ne_parcels_vacant(raw: dict) -> dict | None:
             f"Nebraska statewide parcel (OCIO / county CAMA merge). County_ID={county}. "
             f"Land value=${land_val}. Public GIS — not MLS/Zillow."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": acreage,
         "state": "NE",
         "county": f"County {county}" if county.isdigit() or len(county) <= 3 else county.title(),
@@ -178,7 +178,7 @@ def _norm_wa_parcels_vacant(raw: dict) -> dict | None:
             f"Washington statewide parcel (WaTech / DOR land use {lu}). County={county}. "
             f"Land value=${land_val}. Public GIS — not MLS/Zillow."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": acreage,
         "state": "WA",
         "county": county,
@@ -295,7 +295,7 @@ def _norm_ut_parcels_vacant(raw: dict) -> dict | None:
             f"Utah statewide LIR parcel (AGRC). County={county}. Land market value=${land_val}. "
             "Public GIS — not MLS/Zillow."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": acreage,
         "state": "UT",
         "county": county,
@@ -424,7 +424,7 @@ def _norm_ct_parcels_vacant(raw: dict) -> dict | None:
             f"Connecticut statewide CAMA parcel. Use={use} ({props.get('State_Use_Description')}). "
             f"Town={town}. Assessed land=${land_val}. Public GIS — not MLS/Zillow."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": acreage,
         "state": "CT",
         "county": town,

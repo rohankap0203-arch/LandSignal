@@ -419,20 +419,47 @@ async def radar(
         *,
         allow_unknown: bool = False,
     ) -> bool:
-        """Strict inclusive band. Unknown values fail unless explicitly allowed.
-
-        Price: unpriced GIS rows may pass an open max-only ceiling (no ask ≠ over budget),
-        but never a min-price floor. Acreage: unknown always fails when a band is set.
-        """
+        """Strict inclusive band. Unknown values fail unless explicitly allowed."""
         if lo is None and hi is None:
             return True
         if value is None:
-            return bool(allow_unknown and lo is None)
+            return bool(allow_unknown)
         if lo is not None and value < lo:
             return False
         if hi is not None and value > hi:
             return False
         return True
+
+    def _price_for_filter(listing: Any) -> float | None:
+        """Market ask when present; else assessor land value so budget filters still apply."""
+        ask = listing.asking_price_usd
+        if ask is not None and ask > 0:
+            return float(ask)
+        raw = listing.raw or {}
+        for key in (
+            "LND_VAL",
+            "LAND_VAL",
+            "Land_Value",
+            "LAND_AV",
+            "VALUE_LAND",
+            "landval",
+            "Assessed_Land",
+            "assessed_land_usd",
+            "Land",
+            "Improvements_Value",  # never use improvements alone
+        ):
+            if key == "Improvements_Value":
+                continue
+            val = raw.get(key)
+            if val is None:
+                continue
+            try:
+                num = float(val)
+            except (TypeError, ValueError):
+                continue
+            if num > 0:
+                return num
+        return None
 
     def _sort_cands(cands: list[_Cand], sort_key: str | None) -> list[_Cand]:
         key = (sort_key or "fit_desc").lower()
@@ -480,6 +507,7 @@ async def radar(
             ask = listing.asking_price_usd
             if ask is not None and ask <= 0:
                 ask = None
+            filter_price = _price_for_filter(listing)
             priced = ask is not None and ask > 0
             if mode == "priced" and not priced:
                 continue
@@ -494,8 +522,13 @@ async def radar(
                 ):
                     continue
 
-            # Price + acre filters are hard constraints (stacked with state/region/etc.).
-            if not _in_hard_band(ask, min_price, max_price, allow_unknown=True):
+            # Price + acre + strategy are hard constraints (stacked with state/region).
+            if not _in_hard_band(
+                filter_price,
+                min_price,
+                max_price,
+                allow_unknown=False,
+            ):
                 continue
             if not _in_hard_band(parcel.acreage, min_acres, max_acres, allow_unknown=False):
                 continue
@@ -508,11 +541,11 @@ async def radar(
                         score.secondary_strategy and score.secondary_strategy.value == s_up
                     )
                     if not hit:
-                        strategy_soft_miss = True
+                        continue
                 else:
                     blob = f"{listing.title} {listing.description or ''} {_strategy_label(score.best_strategy)}".lower()
                     if strategy.lower() not in blob and s_up.lower().replace("_", " ") not in blob:
-                        strategy_soft_miss = True
+                        continue
             if min_score is not None and score.opportunity < min_score:
                 continue
             if max_risk is not None and score.risk > max_risk:
@@ -528,13 +561,11 @@ async def radar(
             fit = personalized_score(
                 score.opportunity,
                 profile,
-                ask,
+                ask if ask is not None else filter_price,
                 parcel.acreage,
                 score.best_strategy.value if score.best_strategy else None,
                 score.risk,
             )
-            if strategy_soft_miss:
-                fit = max(0, fit - 12)
             out.append(
                 _Cand(
                     parcel_id=parcel.id,
@@ -543,7 +574,7 @@ async def radar(
                     opportunity=float(score.opportunity),
                     risk=float(score.risk),
                     confidence=float(score.confidence),
-                    ask=ask,
+                    ask=ask if ask is not None else filter_price,
                     acres=parcel.acreage,
                     discount_pct=score.asking_discount_pct,
                     strategy_soft_miss=strategy_soft_miss,
@@ -584,6 +615,11 @@ async def radar(
         comps_n = {}
         if enrichment and enrichment.comps:
             comps_n = enrichment.comps.normalized or enrichment.comps.value or {}
+        ask_role = None
+        if isinstance(listing.raw, dict):
+            ask_role = listing.raw.get("ask_role")
+        if ask_role is None and ask is not None and listing.asking_price_usd is None:
+            ask_role = "assessed_land"
         pd = price_display(
             ask,
             listing.provider_id,
@@ -594,6 +630,7 @@ async def radar(
             acres=parcel.acreage,
             apn=parcel.apn,
             comps_normalized=comps_n if isinstance(comps_n, dict) else {},
+            ask_role=str(ask_role) if ask_role else None,
         )
         vd = value_display(
             score.estimated_value_usd,
@@ -945,18 +982,19 @@ async def radar(
     # Phase 1: cheap filter + fit across full inventory (same match set as before)
     cands = collect_cands(apply_region=True, apply_strict_channel=True)
     broaden_reason: str | None = None
-    if broaden and not cands:
+    # Broaden never drops state / price / acres / strategy. Explicit region stays hard.
+    if broaden and not cands and not region:
         cands = collect_cands(apply_region=False, apply_strict_channel=True)
         if cands:
             broaden_reason = (
                 "Loosened region a bit so you still get real matches for your other filters."
             )
     if broaden and not cands:
-        # Channel only — never drop state / price / acre hard filters.
-        cands = collect_cands(apply_region=False, apply_strict_channel=False)
+        # Channel only — never drop state / price / acre / strategy / explicit region.
+        cands = collect_cands(apply_region=bool(region), apply_strict_channel=False)
         if cands:
             broaden_reason = (
-                "Loosened market channel a bit so you still get matches inside your price/acre filters."
+                "Loosened market channel a bit so you still get matches inside your other filters."
             )
 
     ranked = _sort_cands(cands, sort)
