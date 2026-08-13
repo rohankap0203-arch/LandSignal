@@ -2639,18 +2639,21 @@ class PublicTaxSaleProvider(ListingProvider):
             for src in tax_sources:
                 by_state_sources[src.state.upper()].append(src)
             state_keys = sorted(by_state_sources.keys())
-            per_state = max(150, limit // max(1, len(state_keys)))
-            if prefer and len(state_keys) <= 3:
-                # Single-/few-state discovers (e.g. FL) get nearly the full budget so we
-                # can approach Zillow-scale statewide vacant/ag coverage.
+            n_states = max(1, len(state_keys))
+            # Every state gets a large floor — FL is not special-cased for nationwide pulls.
+            min_per_state = max(1500, int(query.get("min_per_state") or 5000))
+            per_state = max(min_per_state, (limit + n_states - 1) // n_states)
+            if prefer and n_states <= 3:
+                # Targeted few-state discovers may still consume nearly the full budget.
                 per_state = max(
                     per_state,
-                    min(limit, max(8000, (limit * 95) // 100 // max(1, len(state_keys)))),
+                    min(limit, max(8000, (limit * 95) // 100 // n_states)),
                 )
             start_offset = max(0, int(query.get("offset") or 0))
             out: list[dict] = []
             timeout = httpx.Timeout(connect=12.0, read=55.0, write=30.0, pool=30.0)
-            state_sem = asyncio.Semaphore(8)
+            # More parallel state fetches so nationwide equal pulls finish sooner.
+            state_sem = asyncio.Semaphore(12)
 
             async with httpx.AsyncClient(timeout=timeout, headers=_ARCGIS_HEADERS) as client:
 
@@ -2699,24 +2702,41 @@ class PublicTaxSaleProvider(ListingProvider):
                             -(r.get("acreage") or 0),
                         )
                     )
+            # Equal-state quota first so large states (e.g. FL) cannot crowd out others.
+            state_quota = max(1, min(per_state, (limit + n_states - 1) // n_states))
+            taken: dict[str, int] = {st: 0 for st in state_keys}
             diversified: list[dict] = []
-            while len(diversified) < limit and by_state_feed:
+
+            def _take_round(*, respect_quota: bool) -> bool:
+                """Return True if any row was taken this pass."""
+                progressed = False
                 for st in list(by_state_feed.keys()):
+                    if respect_quota and taken.get(st, 0) >= state_quota:
+                        continue
+                    if len(diversified) >= limit:
+                        break
                     feeds = by_state_feed.get(st) or {}
                     if not feeds:
                         by_state_feed.pop(st, None)
                         continue
                     for feed in list(feeds.keys()):
-                        if feeds.get(feed):
-                            diversified.append(feeds[feed].pop(0))
                         if not feeds.get(feed):
                             feeds.pop(feed, None)
-                        if len(diversified) >= limit:
-                            break
+                            continue
+                        diversified.append(feeds[feed].pop(0))
+                        taken[st] = taken.get(st, 0) + 1
+                        progressed = True
+                        if not feeds.get(feed):
+                            feeds.pop(feed, None)
+                        break
                     if not feeds:
                         by_state_feed.pop(st, None)
-                    if len(diversified) >= limit:
-                        break
+                return progressed
+
+            while len(diversified) < limit and by_state_feed and _take_round(respect_quota=True):
+                pass
+            while len(diversified) < limit and by_state_feed and _take_round(respect_quota=False):
+                pass
             return ProviderResult(
                 True,
                 ProviderStatus.CONFIGURED,

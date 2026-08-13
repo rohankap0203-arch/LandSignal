@@ -16,15 +16,16 @@ class Settings(BaseSettings):
     demo_seed: bool = False
     force_live_on_demo: bool = False
     auto_discover_on_startup: bool = True
-    # Aim for Zillow-scale statewide vacant/ag screens (esp. FL_Parcels).
-    discover_limit: int = 100000
+    # Nationwide Zillow-scale vacant/ag screens — every wired state gets a large pull.
+    discover_limit: int = 250000
+    discover_min_per_state: int = 5000
     discover_min_acres: float = 0.1
     # Always-on Land Alerts monitor (seconds between discovery cycles; respects source rate limits)
     land_alerts_monitor_enabled: bool = True
     land_alerts_poll_seconds: int = 900
     # Keep in step with discover_limit so the always-on monitor rebuilds full inventory
     # after restarts (memory store) instead of capping around ~2.5k parcels.
-    land_alerts_discover_limit: int = 100000
+    land_alerts_discover_limit: int = 250000
     http_timeout_seconds: float = 20.0
     mapbox_token: str | None = None
     smtp_url: str | None = None

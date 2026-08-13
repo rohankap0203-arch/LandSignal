@@ -79,13 +79,30 @@ async def discover_opportunities(
     tax = PublicTaxSaleProvider()
     surplus = PublicSurplusProvider()
 
+    min_per_state = max(500, int(getattr(settings, "discover_min_per_state", 5000) or 5000))
+    if states:
+        wired_states = len({s.upper() for s in states if s})
+    else:
+        from landsignal.providers.public_markets import SOURCES
+
+        wired_states = len(
+            {
+                s.state.upper()
+                for s in SOURCES
+                if "surplus" not in s.source_id and "fairfax" not in s.source_id
+            }
+        )
+    # Budget must fit a large equal pull for every wired state (not just FL).
+    tax_limit = max(limit, min_per_state * max(1, wired_states))
+    tax_limit = min(300000, max(500, tax_limit))
+
     # Ask each source for a large page — tax/surplus GIS layers have tens of thousands of rows.
     # Always start county layers at offset 0: a global offset skips brand-new sources that have
     # fewer rows than already-indexed inventory. Dedup happens below via external_id.
     blm_res, tax_res, surplus_res = await asyncio.gather(
         blm.search_listings(
             {
-                "limit": min(2500, max(200, limit // 4)),
+                "limit": min(5000, max(500, min_per_state)),
                 "min_acres": max(1.0, min_acres),
                 "max_acres": max_acres,
                 "states": states,
@@ -93,8 +110,9 @@ async def discover_opportunities(
         ),
         tax.search_listings(
             {
-                # Statewide vacant GIS (esp. FL_Parcels) can fill Zillow-scale land inventory.
-                "limit": min(100000, max(500, limit)),
+                # Equal large statewide vacant/ag pulls across every wired state.
+                "limit": tax_limit,
+                "min_per_state": min_per_state,
                 "min_acres": min_acres,
                 "offset": 0,
                 "states": states,
@@ -102,7 +120,7 @@ async def discover_opportunities(
         ),
         surplus.search_listings(
             {
-                "limit": min(800, max(50, limit // 8)),
+                "limit": min(2000, max(100, min_per_state // 2)),
                 "states": states,
             }
         ),
