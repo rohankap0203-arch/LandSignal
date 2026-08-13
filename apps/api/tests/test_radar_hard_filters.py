@@ -212,6 +212,40 @@ async def test_strategy_filter_is_hard(isolated_store):
 
 
 @pytest.mark.asyncio
+async def test_nested_landval_powers_budget_filter(isolated_store):
+    """Persisted TX GIS nests CAD props under raw['raw'] — budget must still apply."""
+    _seed_scored_parcel(
+        isolated_store,
+        state="TX",
+        county="Bexar",
+        acreage=90.0,
+        ask=None,
+        external_id="tx-nested-landval",
+    )
+    # Overwrite listing raw to the nested shape used by persisted inventory.
+    for listing in isolated_store.listings.values():
+        if listing.external_id == "tx-nested-landval":
+            listing.asking_price_usd = None
+            listing.raw = {
+                "provider_id": "public_vacant_gis",
+                "external_id": "tx-nested-landval",
+                "raw": {"LandVal": 420_000, "Acres": 90.0, "ask_role": "assessed_land"},
+            }
+            break
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get(
+            "/v1/radar",
+            params={"state": "TX", "min_acres": 20, "max_price": 1_000_000, "limit": 50},
+        )
+    assert r.status_code == 200
+    rows = r.json()
+    assert rows
+    assert all((row.get("ask") or 0) <= 1_000_000 for row in rows)
+    assert any((row.get("acres") or 0) == 90.0 for row in rows)
+
+
+@pytest.mark.asyncio
 async def test_model_estimate_never_bypasses_budget_filter(isolated_store, monkeypatch):
     """Huge estimated_value must not make a cheap ask look like it fails ≤$250k — or pass wrongly."""
     store = isolated_store

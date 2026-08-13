@@ -1267,7 +1267,7 @@ def _norm_allegheny(raw: dict) -> dict | None:
 
 
 def _norm_dallas_vacant(raw: dict) -> dict | None:
-    props = raw.get("properties") or {}
+    props = raw.get("properties") or raw.get("attributes") or {}
     area_ft = props.get("AREA_FEET") or props.get("Shape__Area")
     acreage, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
     if acreage is None and area_ft:
@@ -1276,16 +1276,22 @@ def _norm_dallas_vacant(raw: dict) -> dict | None:
         return None
     pid = props.get("ACCT") or props.get("GIS_ACCT") or props.get("OBJECTID")
     use = props.get("PROP_CL") or "Vacant tract"
+    land_val = _fnum(
+        props.get("TOT_VAL")
+        or props.get("LAND_VAL")
+        or props.get("Land_Value")
+        or props.get("MARKET_VALUE")
+    )
     return {
         "provider_id": "public_vacant_gis",
         "external_id": f"dallas:{pid}",
         "title": f"Dallas CAD vacant · {acreage:.2f} ac · {use}",
         "description": (
             f"Dallas County, TX appraisal vacant/land tract (public CAD GIS). "
-            f"Class={use}. SPTB={props.get('SPTBCODE')}. "
+            f"Class={use}. SPTB={props.get('SPTBCODE')}. Land value mark=${land_val}. "
             "Public map screen — not a confirmed tax sale; confirm owner / sale status before chasing."
         ),
-        "asking_price_usd": None,
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "TX",
         "county": "Dallas",
@@ -1296,13 +1302,13 @@ def _norm_dallas_vacant(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://www.dallascad.org/",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
 
 def _norm_bexar_vacant(raw: dict) -> dict | None:
-    props = raw.get("properties") or {}
+    props = raw.get("properties") or raw.get("attributes") or {}
     acreage = props.get("Acres") or props.get("LglAcres")
     geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
     if acreage is None:
@@ -1314,7 +1320,7 @@ def _norm_bexar_vacant(raw: dict) -> dict | None:
     if houses not in (None, "0", 0, "0.0"):
         return None
     pid = props.get("PropID") or props.get("AcctNumb") or props.get("OBJECTID")
-    land_val = props.get("LandVal")
+    land_val = _fnum(props.get("LandVal") or props.get("land_value"))
     return {
         "provider_id": "public_vacant_gis",
         "external_id": f"bexar:{pid}",
@@ -1324,8 +1330,8 @@ def _norm_bexar_vacant(raw: dict) -> dict | None:
             f"Land value mark=${land_val}. Owner mark={props.get('Owner') or 'n/a'}. "
             "Public map screen — not a dedicated tax-sale feed."
         ),
-        # LandVal is assessed mark, not an auction opener — don't fake a bid price
-        "asking_price_usd": None,
+        # Assessed land is the budget-filter price for vacant GIS (same as FL/NC).
+        "asking_price_usd": float(land_val) if land_val and land_val > 0 else None,
         "acreage": float(acreage),
         "state": "TX",
         "county": "Bexar",
@@ -1336,7 +1342,57 @@ def _norm_bexar_vacant(raw: dict) -> dict | None:
         "polygon": polygon,
         "source_url": "https://www.bcad.org/",
         "status": "ACTIVE",
-        "raw": props,
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
+        "is_demo": False,
+    }
+
+
+def _norm_harris_tx_vacant(raw: dict) -> dict | None:
+    """Harris County Appraisal District — unimproved 1ac+ with assessed land value."""
+    props = raw.get("properties") or raw.get("attributes") or {}
+    if (_fnum(props.get("impr_value")) or _fnum(props.get("bld_value")) or 0) > 0:
+        return None
+    preferred = _fnum(props.get("acreage_1")) or _fnum(props.get("Acreage")) or _fnum(props.get("StatedArea"))
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=1.0)
+    if acreage is None or not polygon:
+        return None
+    land_val = _fnum(props.get("land_value"))
+    if land_val is None or land_val <= 0:
+        return None
+    pid = props.get("HCAD_NUM") or props.get("acct_num") or props.get("OBJECTID")
+    addr = " ".join(
+        str(x).strip()
+        for x in (
+            props.get("site_str_num"),
+            props.get("site_str_pfx"),
+            props.get("site_str_name"),
+            props.get("site_str_sfx"),
+        )
+        if x is not None and str(x).strip()
+    )
+    city = (props.get("site_city") or "Houston").strip()
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"harris_tx:{pid}",
+        "title": f"Harris TX vacant · {acreage:.1f} ac · {city}",
+        "description": (
+            f"Harris County, TX (Houston) unimproved parcel from HCAD public GIS. "
+            f"Land value=${land_val:,.0f}. Owner={props.get('owner_name_1')}. "
+            "Public map screen — not MLS/Zillow."
+        ),
+        "asking_price_usd": float(land_val),
+        "acreage": float(acreage),
+        "state": "TX",
+        "county": "Harris",
+        "apn": str(pid) if pid else None,
+        "address": f"{addr}, {city}, TX".strip(", "),
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://www.hcad.org/",
+        "status": "ACTIVE",
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
         "is_demo": False,
     }
 
@@ -2166,6 +2222,21 @@ SOURCES: list[ArcgisMarketSource] = [
         "Bexar",
         _norm_bexar_vacant,
         where="Houses='0' AND Acres>=2",
+    ),
+    ArcgisMarketSource(
+        "harris_tx_vacant",
+        "Harris County TX Vacant Land (1ac+)",
+        "https://www.gis.hctx.net/arcgis/rest/services/HCAD/Parcels/MapServer/0/query",
+        "TX",
+        "Harris",
+        _norm_harris_tx_vacant,
+        where="impr_value=0 AND acreage_1>=1 AND acreage_1<=2500 AND land_value>0",
+        page_size=1000,
+        out_fields=(
+            "OBJECTID,HCAD_NUM,acct_num,Acreage,acreage_1,StatedArea,impr_value,bld_value,"
+            "land_value,owner_name_1,site_str_num,site_str_pfx,site_str_name,site_str_sfx,"
+            "site_city,site_county,state_class,land_use,total_market_val"
+        ),
     ),
     ArcgisMarketSource(
         "king_wa_vacant",

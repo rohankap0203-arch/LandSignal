@@ -68,6 +68,49 @@ def _props(raw: dict) -> dict:
     return raw.get("properties") or raw.get("attributes") or {}
 
 
+def _norm_tx_hillcountry_vacant(raw: dict) -> dict | None:
+    """Texas A&M NRI StratMap parcel model — unimproved Hill Country counties with land_value."""
+    props = _props(raw)
+    if (_fnum(props.get("imp_value")) or 0) > 0:
+        return None
+    preferred = _fnum(props.get("gis_area"))
+    unit = str(props.get("gis_area_u") or "Acres").strip().lower()
+    if preferred is not None and unit.startswith("sq"):
+        preferred = preferred / 43560.0
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=1.0)
+    if acreage is None or not polygon:
+        return None
+    land_val = _fnum(props.get("land_value"))
+    if land_val is None or land_val <= 0:
+        return None
+    pid = props.get("prop_id") or props.get("objectid")
+    county = str(props.get("county") or "Texas").title()
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"tx_nri:{pid}",
+        "title": f"Texas vacant · {acreage:.1f} ac · {county}",
+        "description": (
+            f"Texas StratMap/NRI parcel screen (unimproved). County={county}. "
+            f"Owner={props.get('owner_name')}. Land value=${land_val:,.0f}. "
+            "Public GIS — not MLS/Zillow."
+        ),
+        "asking_price_usd": float(land_val),
+        "acreage": float(acreage),
+        "state": "TX",
+        "county": county,
+        "apn": str(pid) if pid else None,
+        "address": f"{county} County, TX",
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://gis.nri.tamu.edu/",
+        "status": "ACTIVE",
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
+        "is_demo": False,
+    }
+
+
 def _norm_nc_parcels_vacant(raw: dict) -> dict | None:
     """NC OneMap statewide parcels — unimproved 1ac+ (improvval=0)."""
     props = _props(raw)
@@ -571,6 +614,21 @@ def _src(
 
 # Extra statewide screens merged into public_markets.SOURCES at import time.
 SOURCES: list[ArcgisMarketSource] = [
+    _src(
+        "tx_hillcountry_vacant",
+        "Texas Hill Country Vacant Land (1ac+)",
+        "https://gis.nri.tamu.edu/arcgis/rest/services/Hosted/cbsl_Parcels2024_Model/FeatureServer/0/query",
+        "TX",
+        _norm_tx_hillcountry_vacant,
+        where="imp_value=0 AND gis_area>=1 AND gis_area<=2500 AND land_value>0",
+        shard=True,
+        objectid_max=250_000,
+        page_size=1000,
+        out_fields=(
+            "objectid,prop_id,owner_name,gis_area,gis_area_u,land_value,imp_value,"
+            "mkt_value,county,fips,stat_land_,loc_land_u"
+        ),
+    ),
     _src(
         "nc_parcels_vacant",
         "North Carolina OneMap Vacant Land (1ac+)",

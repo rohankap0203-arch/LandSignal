@@ -436,29 +436,38 @@ async def radar(
         if ask is not None and ask > 0:
             return float(ask)
         raw = listing.raw or {}
-        for key in (
-            "LND_VAL",
-            "LAND_VAL",
-            "Land_Value",
-            "LAND_AV",
-            "VALUE_LAND",
-            "landval",
-            "Assessed_Land",
-            "assessed_land_usd",
-            "Land",
-            "Improvements_Value",  # never use improvements alone
-        ):
-            if key == "Improvements_Value":
-                continue
-            val = raw.get(key)
-            if val is None:
-                continue
-            try:
-                num = float(val)
-            except (TypeError, ValueError):
-                continue
-            if num > 0:
-                return num
+        # Persisted GIS rows nest CAD props under raw["raw"] — search both levels.
+        blobs: list[dict] = []
+        if isinstance(raw, dict):
+            blobs.append(raw)
+            inner = raw.get("raw")
+            if isinstance(inner, dict):
+                blobs.append(inner)
+        for blob in blobs:
+            for key in (
+                "LND_VAL",
+                "LAND_VAL",
+                "Land_Value",
+                "LandVal",
+                "land_value",
+                "LAND_VALUE",
+                "LAND_AV",
+                "VALUE_LAND",
+                "landval",
+                "Assessed_Land",
+                "Assessed_Land_Value",
+                "assessed_land_usd",
+                "Land",
+            ):
+                val = blob.get(key)
+                if val is None:
+                    continue
+                try:
+                    num = float(val)
+                except (TypeError, ValueError):
+                    continue
+                if num > 0:
+                    return num
         return None
 
     def _sort_cands(cands: list[_Cand], sort_key: str | None) -> list[_Cand]:
@@ -820,8 +829,9 @@ async def radar(
             # never lead with model estimated_value (can be multi‑million on cheap land).
             price_h = pd.get("display") if ask else None
             if price_h:
+                # price_display already includes "assessed" when ask_role is assessed_land
                 headline = (
-                    f"{price_h} assessed land · {acres_h}"
+                    f"{price_h} · {acres_h}"
                     if score.opportunity < 62
                     else f"Worth a look · {price_h} · {acres_h}"
                 )
