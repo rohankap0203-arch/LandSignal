@@ -396,6 +396,83 @@ def _norm_vt_parcels_vacant(raw: dict) -> dict | None:
     }
 
 
+def _norm_ia_parcels_ag(raw: dict) -> dict | None:
+    """Iowa statewide parcels (2017 HSEMD mirror) — agricultural 5ac+."""
+    props = _props(raw)
+    pclass = str(props.get("PARCELCLAS") or "").strip().upper()
+    if pclass not in {"AGRICULTURAL", "AG", "FARM"}:
+        return None
+    if _non_market_owner(props.get("DEEDHOLDER")):
+        return None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(None, geom_acres, min_ac=5.0)
+    if acreage is None or not polygon:
+        return None
+    pid = props.get("STATEPARID") or props.get("PARCELNUMB") or props.get("OBJECTID")
+    county = str(props.get("COUNTYNAME") or "Iowa").title()
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"ia_parcels:{pid}",
+        "title": f"Iowa agricultural · {acreage:.1f} ac · {county}",
+        "description": (
+            f"Iowa statewide parcel screen (HSEMD 2017 mirror). Class={pclass}. "
+            f"County={county}. Owner={props.get('DEEDHOLDER')}. "
+            "Public GIS — not MLS/Zillow."
+        ),
+        "asking_price_usd": None,
+        "acreage": acreage,
+        "state": "IA",
+        "county": county,
+        "apn": str(pid) if pid else None,
+        "address": f"{county} County, IA",
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://eoc.iowa.gov/",
+        "status": "ACTIVE",
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
+        "is_demo": False,
+    }
+
+
+def _norm_ky_industrial_vacant(raw: dict) -> dict | None:
+    """Kentucky Cabinet for Economic Development vacant industrial site tracts."""
+    props = _props(raw)
+    status = str(props.get("STATUS") or "").strip().lower()
+    if "vacant" not in status:
+        return None
+    preferred = _fnum(props.get("ACRES")) or _fnum(props.get("TRACRES"))
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=1.0)
+    if acreage is None or not polygon:
+        return None
+    pid = props.get("SITE_ID") or props.get("SITETR_ID") or props.get("OBJECTID_1") or props.get("OBJECTID")
+    label = (props.get("TRACTLBL1") or props.get("TRACTTXT") or "Kentucky").strip()
+    county = label.split(",")[0].strip().title() if label else "Kentucky"
+    return {
+        "provider_id": "public_vacant_gis",
+        "external_id": f"ky_edis:{pid}",
+        "title": f"Kentucky vacant site · {acreage:.1f} ac · {county}",
+        "description": (
+            f"Kentucky EDIS industrial site tract (STATUS={props.get('STATUS')}). "
+            f"Site={props.get('SITE_ID')}. Public GIS — not MLS/Zillow."
+        ),
+        "asking_price_usd": None,
+        "acreage": acreage,
+        "state": "KY",
+        "county": county,
+        "apn": str(pid) if pid else None,
+        "address": f"{county}, KY",
+        "latitude": lat,
+        "longitude": lon,
+        "polygon": polygon,
+        "source_url": "https://ced.ky.gov/",
+        "status": "ACTIVE",
+        "raw": {**props, "ask_role": "assessed_land"} if isinstance(props, dict) else props,
+        "is_demo": False,
+    }
+
+
 def _norm_ct_parcels_vacant(raw: dict) -> dict | None:
     """Connecticut statewide CAMA/parcel layer — vacant use + no building assessment."""
     props = _props(raw)
@@ -611,5 +688,26 @@ SOURCES: list[ArcgisMarketSource] = [
             "OBJECTID,Link,Location,State_Use,State_Use_Description,Land_Acres,"
             "Assessed_Building,Assessed_Land,Town_Name,Owner"
         ),
+    ),
+    _src(
+        "ia_parcels_agriculture",
+        "Iowa Statewide Agricultural Land (5ac+)",
+        "https://services3.arcgis.com/kd9gaiUExYqUbnoq/ArcGIS/rest/services/Iowa_Parcels_2017/FeatureServer/0/query",
+        "IA",
+        _norm_ia_parcels_ag,
+        where="PARCELCLAS='AGRICULTURAL'",
+        shard=True,
+        objectid_max=3_000_000,
+        out_fields="OBJECTID,COUNTYNAME,STATEPARID,UNPARCELID,PARCELNUMB,PARCELCLAS,DEEDHOLDER",
+    ),
+    _src(
+        "ky_edis_vacant",
+        "Kentucky EDIS Vacant Industrial Sites (1ac+)",
+        "https://kygisserver.ky.gov/arcgis/rest/services/WGS84WM_Services/Ky_Industrial_Site_Tracts_WGS84WM/MapServer/0/query",
+        "KY",
+        _norm_ky_industrial_vacant,
+        where="STATUS LIKE '%vacant%' AND ACRES>=1",
+        page_size=1000,
+        out_fields="OBJECTID,OBJECTID_1,SITE_ID,SITETR_ID,STATUS,ACRES,TRACRES,TRACTLBL1,TRACTTXT",
     ),
 ]

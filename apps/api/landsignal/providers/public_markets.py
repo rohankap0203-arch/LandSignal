@@ -2618,10 +2618,18 @@ class PublicTaxSaleProvider(ListingProvider):
         limit = max(1, int(query.get("limit") or 2000))
         errors: list[str] = []
         try:
+            # Include land-bank / LRA feeds in the tax inventory path so MO/VA-style
+            # states get the same large equal-state budget (not the tiny surplus cap).
             tax_sources = [
                 s
                 for s in SOURCES
-                if "surplus" not in s.source_id and "fairfax" not in s.source_id
+                if "fairfax" not in s.source_id
+                and (
+                    "surplus" not in s.source_id
+                    or "landbank" in s.source_id
+                    or "land_bank" in s.source_id
+                    or "lra" in s.source_id
+                )
             ]
             prefer = {str(s).upper() for s in (query.get("states") or []) if s}
             if prefer:
