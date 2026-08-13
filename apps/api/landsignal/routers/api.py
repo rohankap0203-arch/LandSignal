@@ -1001,8 +1001,8 @@ async def radar(
             capped = _sort_cands(capped, "fit_desc")
 
     # Phase 2: full presentation cards only for the capped result set.
-    # Final hard gate — never return a row that violates state / acres / price,
-    # even if presentation rebuilds ask/acres differently than the candidate pass.
+    # Final hard gate — every selected filter option is absolute (any preset /
+    # custom band / strategy / region / state), never just one demo combo.
     def _row_passes_hard(row: RadarRow) -> bool:
         if state_code and (row.state or "").upper() != state_code:
             return False
@@ -1010,6 +1010,26 @@ async def radar(
             return False
         if not _in_hard_band(row.ask, min_price, max_price, allow_unknown=False):
             return False
+        if region and not region_matches(
+            region=region,
+            state=row.state,
+            county=row.county,
+            title=row.property_name,
+        ):
+            return False
+        if strategy and strategy.upper() not in ("ANY", "CUSTOM", ""):
+            known = {"FARMLAND", "DEVELOPMENT", "LAND_BANK", "RECREATIONAL", "ENERGY", "TIMBER"}
+            s_up = strategy.upper().replace(" ", "_")
+            if s_up in known:
+                blob = f"{row.best_strategy or ''} {row.best_strategy_label or ''} {row.secondary_strategy_label or ''}".upper().replace(
+                    " ", "_"
+                )
+                if s_up not in blob:
+                    return False
+            else:
+                blob = f"{row.property_name or ''} {row.summary or ''} {row.best_strategy_label or ''}".lower()
+                if strategy.lower() not in blob and s_up.lower().replace("_", " ") not in blob:
+                    return False
         return True
 
     rows: list[RadarRow] = []

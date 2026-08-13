@@ -204,13 +204,15 @@ export default function SearchPage() {
         unpriced_mode: "include",
         include_unpriced: true,
         sort: f.sort,
-        // Broaden may loosen region/channel only — never price, acres, or state.
-        // Still send broaden=false whenever hard bands are set so the request is unambiguous.
+        // Broaden may loosen region/channel only — never price, acres, state, or strategy.
+        // Off whenever any hard option is set (every preset / custom band counts).
         broaden: !(
           priceBounds.min != null ||
           priceBounds.max != null ||
           acreBounds.min != null ||
           acreBounds.max != null ||
+          !!region ||
+          !!strategy ||
           (stateCode(f.state) !== "Any" && !!stateCode(f.state))
         ),
       };
@@ -553,6 +555,15 @@ export default function SearchPage() {
             <div className="filter-inventory-note">
               Live inventory: {meta.inventory_count} parcels
               {inventoryStates.length ? ` across ${inventoryStates.length} states (${inventoryStates.join(", ")})` : ""}
+            </div>
+          )}
+          {appliedFilters ? (
+            <div className="filter-inventory-note mt-2" title="Every option you pick is a hard constraint">
+              Active hard filters: {describeHardFilters(appliedFilters)}
+            </div>
+          ) : (
+            <div className="filter-inventory-note mt-2">
+              Every State / Region / Price / Acreage / Strategy option is enforced strictly — not just 20+ ac or ≤ $1M.
             </div>
           )}
         </div>

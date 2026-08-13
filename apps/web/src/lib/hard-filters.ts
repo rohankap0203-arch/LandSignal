@@ -14,27 +14,60 @@ export function inHardBand(
   return true;
 }
 
+function regionPasses(row: RadarRow, region?: string | null): boolean {
+  if (!region || region === "Any") return true;
+  const needle = region.toLowerCase().trim();
+  if (!needle) return true;
+  const hay = [row.county, row.state, row.location, row.region, row.property_name]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (hay.includes(needle)) return true;
+  const token = needle.replace(/\s+county\b/g, "").trim();
+  if (token && hay.includes(token)) return true;
+  // Word overlap for macro labels ("Hill Country", "Phoenix metro…")
+  const words = needle
+    .replace(/[\/\-]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !["metro", "edge", "fringe", "corridor", "region", "area", "county"].includes(w));
+  return words.some((w) => hay.includes(w));
+}
+
 /** True only when the row satisfies every hard constraint the user selected. */
 export function rowPassesHardFilters(row: RadarRow, filters: SearchFilters): boolean {
   const state = (filters.state || "").trim().toUpperCase();
   if (state && state !== "ANY") {
     if ((row.state || "").toUpperCase() !== state) return false;
   }
+  if (!regionPasses(row, filters.region)) return false;
   if (!inHardBand(row.acres, filters.min_acres, filters.max_acres)) return false;
   // Budget filter uses ask (market / assessed land) — never model estimated_value.
   if (!inHardBand(row.ask, filters.min_price, filters.max_price)) return false;
-  const strategy = (filters.strategy || "").trim().toUpperCase().replace(/\s+/g, "_");
-  if (strategy && strategy !== "ANY" && strategy !== "CUSTOM") {
+  const rawStrategy = (filters.strategy || "").trim();
+  if (rawStrategy && !["Any", "ANY", "CUSTOM"].includes(rawStrategy)) {
+    const known = new Set([
+      "FARMLAND",
+      "DEVELOPMENT",
+      "LAND_BANK",
+      "RECREATIONAL",
+      "ENERGY",
+      "TIMBER",
+    ]);
+    const sUp = rawStrategy.toUpperCase().replace(/\s+/g, "_");
     const blob = [
       row.best_strategy,
       row.best_strategy_label,
       row.secondary_strategy_label,
+      row.property_name,
+      row.summary,
     ]
       .filter(Boolean)
-      .join(" ")
-      .toUpperCase()
-      .replace(/\s+/g, "_");
-    if (!blob.includes(strategy)) return false;
+      .join(" ");
+    if (known.has(sUp)) {
+      if (!blob.toUpperCase().replace(/\s+/g, "_").includes(sUp)) return false;
+    } else if (!blob.toLowerCase().includes(rawStrategy.toLowerCase())) {
+      return false;
+    }
   }
   return true;
 }
@@ -53,6 +86,7 @@ export function describeHardFilters(filters: SearchFilters): string {
   const bits: string[] = [];
   const state = (filters.state || "").trim().toUpperCase();
   if (state && state !== "ANY") bits.push(state);
+  if (filters.region) bits.push(filters.region);
   if (filters.min_acres != null || filters.max_acres != null) {
     if (filters.min_acres != null && filters.max_acres != null) {
       bits.push(`${filters.min_acres}–${filters.max_acres} ac`);
@@ -78,6 +112,5 @@ export function describeHardFilters(filters: SearchFilters): string {
     }
   }
   if (filters.strategy && filters.strategy !== "Any") bits.push(filters.strategy);
-  if (filters.region) bits.push(filters.region);
   return bits.length ? bits.join(" · ") : "Any filters";
 }
