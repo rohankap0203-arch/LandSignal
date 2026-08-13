@@ -1,0 +1,21 @@
+{
+  "name": "LandSignal",
+  "install": "cd apps/web && npm ci\ncd apps/api && python3 -m pip install -e . -q",
+  "start": "bash scripts/dev-servers.sh",
+  "ports": [
+    { "name": "LandSignal Web", "port": 3000 },
+    { "name": "LandSignal API", "port": 8000 }
+  ],
+  "terminals": [
+    {
+      "name": "web",
+      "command": "cd apps/web && npm run dev",
+      "description": "Next.js on http://localhost:3000 (dual-stack ::) — Cursor auto-forwards this port"
+    },
+    {
+      "name": "api",
+      "command": "cd apps/api && AUTO_DISCOVER_ON_STARTUP=false LAND_ALERTS_MONITOR_ENABLED=false python3 -m uvicorn landsignal.main:app --host :: --port 8000",
+      "description": "FastAPI on http://localhost:8000 (proxied by Next /v1)"
+    }
+  ]
+}
