@@ -72,6 +72,60 @@ function parseMoney(v: string): number | undefined {
   return Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 
+function normPresetLabel(s: string): string {
+  return s
+    .replace(/\u2264/g, "<=")
+    .replace(/≤/g, "<=")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/** Resolve min/max from catalog presets, with label parsing fallback so filters never silently drop. */
+function resolvePresetBounds(
+  label: string,
+  presets: Array<{ label: string; min: number | null; max: number | null }> | undefined,
+  kind: "price" | "acres",
+): { min?: number; max?: number } {
+  if (!label || label === "Any") return {};
+  const hit =
+    presets?.find((p) => p.label === label) ||
+    presets?.find((p) => normPresetLabel(p.label) === normPresetLabel(label));
+  if (hit) {
+    return {
+      min: hit.min == null ? undefined : hit.min,
+      max: hit.max == null ? undefined : hit.max,
+    };
+  }
+  if (kind === "price") {
+    const upto = label.match(/(?:≤|<=)\s*\$?\s*([\d,.]+)\s*([kmb])?/i);
+    if (upto) {
+      let n = Number(String(upto[1]).replace(/,/g, ""));
+      const u = (upto[2] || "").toLowerCase();
+      if (u === "k") n *= 1_000;
+      if (u === "m") n *= 1_000_000;
+      if (u === "b") n *= 1_000_000_000;
+      if (Number.isFinite(n)) return { max: n };
+    }
+    const plus = label.match(/\$?\s*([\d,.]+)\s*([kmb])?\s*\+/i);
+    if (plus) {
+      let n = Number(String(plus[1]).replace(/,/g, ""));
+      const u = (plus[2] || "").toLowerCase();
+      if (u === "k") n *= 1_000;
+      if (u === "m") n *= 1_000_000;
+      if (Number.isFinite(n)) return { min: n };
+    }
+  }
+  if (kind === "acres") {
+    const plus = label.match(/^([\d,.]+)\s*\+/i);
+    if (plus) {
+      const n = Number(String(plus[1]).replace(/,/g, ""));
+      if (Number.isFinite(n)) return { min: n };
+    }
+  }
+  return {};
+}
+
 export default function SearchPage() {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [meta, setMeta] = useState<SearchMeta | null>(null);
@@ -108,10 +162,14 @@ export default function SearchPage() {
 
   const filtersFromForm = useCallback(
     (f: FormState): SearchFilters => {
-      const price = meta?.price_presets.find((p) => p.label === f.pricePreset);
-      const acres = meta?.acre_presets.find((p) => p.label === f.acrePreset);
       const customPrice = f.pricePreset.toLowerCase().includes("custom");
       const customAcres = f.acrePreset.toLowerCase().includes("custom");
+      const priceBounds = customPrice
+        ? { min: parseMoney(f.priceMin), max: parseMoney(f.priceMax) }
+        : resolvePresetBounds(f.pricePreset, meta?.price_presets, "price");
+      const acreBounds = customAcres
+        ? { min: parseMoney(f.acreMin), max: parseMoney(f.acreMax) }
+        : resolvePresetBounds(f.acrePreset, meta?.acre_presets, "acres");
       const region =
         f.regionCustom.trim() ||
         (f.region.startsWith("Type a") || f.region === "Any" ? undefined : f.region);
@@ -134,13 +192,13 @@ export default function SearchPage() {
       return {
         state: stateCode(f.state),
         region,
-        min_price: customPrice ? parseMoney(f.priceMin) : price?.min ?? undefined,
-        max_price: customPrice ? parseMoney(f.priceMax) : price?.max ?? undefined,
-        min_acres: customAcres ? parseMoney(f.acreMin) : acres?.min ?? undefined,
-        max_acres: customAcres ? parseMoney(f.acreMax) : acres?.max ?? undefined,
+        min_price: priceBounds.min,
+        max_price: priceBounds.max,
+        min_acres: acreBounds.min,
+        max_acres: acreBounds.max,
         strategy,
         hold_years: Number.isFinite(hold as number) ? hold : undefined,
-        // Always include unpriced federal / surplus — no UI filter for this
+        // Unpriced GIS can still match via assessed land value on the API.
         unpriced_mode: "include",
         include_unpriced: true,
         sort: f.sort,

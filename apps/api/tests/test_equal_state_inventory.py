@@ -19,7 +19,7 @@ def test_every_tax_source_state_gets_large_floor_budget():
     )
     assert len(wired) >= 20
     min_per_state = settings.discover_min_per_state
-    assert min_per_state >= 5000
+    assert min_per_state >= 10000
     # Total discover budget must fit equal floors for all wired states.
     assert settings.discover_limit >= min_per_state * len(wired) // 2
     tax_limit = max(settings.discover_limit, min_per_state * len(wired))

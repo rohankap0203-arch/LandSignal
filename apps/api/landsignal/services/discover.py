@@ -94,7 +94,7 @@ async def discover_opportunities(
         )
     # Budget must fit a large equal pull for every wired state (not just FL).
     tax_limit = max(limit, min_per_state * max(1, wired_states))
-    tax_limit = min(300000, max(500, tax_limit))
+    tax_limit = min(500000, max(500, tax_limit))
 
     # Ask each source for a large page — tax/surplus GIS layers have tens of thousands of rows.
     # Always start county layers at offset 0: a global offset skips brand-new sources that have

@@ -179,28 +179,33 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           </p>
         ) : null}
 
-        <div className="card-meta-line mt-2" title="Interest · filter match · listed price">
+        <div className="card-meta-line mt-2" title="Interest · filter match">
           <span className={`conviction-pill ${conviction.toLowerCase()}`}>{convictionLabel(conviction)}</span>
           <span className="meta-match" title="How well this matches your filters (0–100)">
             Match {Math.round(row.fit_score ?? row.opportunity)}
-          </span>
-          <span className="meta-price" title={row.ask != null && row.ask > 0 ? row.price_display : "No public price"}>
-            {row.ask != null && row.ask > 0 ? shortPrice(row.price_display) : "No public price"}
           </span>
         </div>
 
         <div className="metric-row">
           <div className="metric">
-            <div className="k">Our estimate</div>
-            <div className="v">{row.estimated_value_display}</div>
+            <div className="k">Acres</div>
+            <div className="v">{row.acres_display}</div>
           </div>
           <div className="metric">
-            <div className="k">Opportunity</div>
-            <div className="v">{Math.round(row.opportunity)}</div>
+            <div className="k" title="This is the price your budget filter uses">
+              {row.price_label || "Price"}
+            </div>
+            <div className="v">
+              {row.ask != null && row.ask > 0 ? shortPrice(row.price_display) : "No public price"}
+            </div>
           </div>
           <div className="metric">
-            <div className="k">Risk</div>
-            <div className="v">{Math.round(row.risk)}</div>
+            <div className="k" title="Model estimate only — not used for your budget filter">
+              Model estimate
+            </div>
+            <div className="v" style={{ opacity: 0.75 }}>
+              {row.estimated_value_display}
+            </div>
           </div>
         </div>
 
@@ -215,7 +220,12 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
               Scout pick
             </span>
           )}
-          <span className="chip">{row.discount_display}</span>
+          {row.ask != null &&
+          row.estimated_value != null &&
+          row.ask > 0 &&
+          row.estimated_value / row.ask > 12 ? null : (
+            <span className="chip">{row.discount_display}</span>
+          )}
           <span className="chip">{row.best_strategy_label}</span>
           <span className="chip" title="Detail page builds a year-by-year path from soil, flood, growth, channel, and more">
             Multi-factor path

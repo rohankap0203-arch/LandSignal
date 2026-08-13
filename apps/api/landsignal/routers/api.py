@@ -618,6 +618,9 @@ async def radar(
         ask_role = None
         if isinstance(listing.raw, dict):
             ask_role = listing.raw.get("ask_role")
+        # Vacant GIS rows use assessor land marks for budget filters — never "listed MLS".
+        if listing.provider_id == "public_vacant_gis":
+            ask_role = ask_role or "assessed_land"
         if ask_role is None and ask is not None and listing.asking_price_usd is None:
             ask_role = "assessed_land"
         pd = price_display(
