@@ -800,22 +800,58 @@ select {
 
 .analyze-listing-trigger-sheen {
   position: absolute;
-  top: -60%;
-  left: -45%;
-  width: 22%;
-  height: 220%;
+  top: -55%;
+  left: 0;
+  width: 28%;
+  height: 210%;
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.025) 42%,
-    rgba(255, 255, 255, 0.07) 50%,
-    rgba(255, 255, 255, 0.025) 58%,
+    rgba(255, 255, 255, 0.03) 42%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.03) 58%,
     transparent 100%
   );
-  transform: translate3d(0, 0, 0) rotate(24deg);
-  animation: analyze-sheen 2.1s linear infinite;
+  transform: translate3d(-120%, 0, 0) rotate(24deg);
+  animation: analyze-sheen 2.4s ease-in-out infinite alternate;
   pointer-events: none;
   will-change: transform;
+}
+
+.analyze-listing-trigger-twinkle {
+  position: absolute;
+  top: 5px;
+  right: 9px;
+  z-index: 2;
+  width: 7px;
+  height: 7px;
+  pointer-events: none;
+  opacity: 0;
+  animation: analyze-twinkle 3s ease-in-out infinite;
+  will-change: opacity, transform;
+}
+
+.analyze-listing-trigger-twinkle::before,
+.analyze-listing-trigger-twinkle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 5px 1px rgba(255, 255, 255, 0.35);
+  transform: translate(-50%, -50%);
+}
+
+.analyze-listing-trigger-twinkle::before {
+  width: 7px;
+  height: 1.5px;
+  border-radius: 1px;
+}
+
+.analyze-listing-trigger-twinkle::after {
+  width: 1.5px;
+  height: 7px;
+  border-radius: 1px;
 }
 
 .analyze-listing-trigger-label {
@@ -839,10 +875,31 @@ select {
 
 @keyframes analyze-sheen {
   0% {
-    transform: translate3d(0, 0, 0) rotate(24deg);
+    transform: translate3d(-120%, 0, 0) rotate(24deg);
   }
   100% {
-    transform: translate3d(520%, 0, 0) rotate(24deg);
+    transform: translate3d(420%, 0, 0) rotate(24deg);
+  }
+}
+
+@keyframes analyze-twinkle {
+  0%,
+  86%,
+  100% {
+    opacity: 0;
+    transform: scale(0.35);
+  }
+  90% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  94% {
+    opacity: 0.55;
+    transform: scale(0.85);
+  }
+  97% {
+    opacity: 0;
+    transform: scale(0.4);
   }
 }
 
@@ -1282,6 +1339,7 @@ select {
   .analyze-listing-stages .stage,
   .stage-pulse,
   .analyze-listing-trigger-sheen,
+  .analyze-listing-trigger-twinkle,
   .analyze-land-visual.is-active .analyze-land-ridge-a,
   .analyze-land-visual.is-active .analyze-land-ridge-b,
   .analyze-land-visual.is-active .analyze-land-parcel,

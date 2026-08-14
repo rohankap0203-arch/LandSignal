@@ -441,6 +441,7 @@ export function AnalyzeListingPanel() {
         }}
       >
         <span className="analyze-listing-trigger-sheen" aria-hidden />
+        <span className="analyze-listing-trigger-twinkle" aria-hidden />
         <span className="analyze-listing-trigger-label">Analyze a Listing</span>
       </button>
       {modal}
