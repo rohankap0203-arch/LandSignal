@@ -622,7 +622,7 @@ export default function SearchPage() {
               >
                 Reset to Any
               </button>
-              <Link href="/alerts" className="btn btn-land-alerts btn-search-primary">
+              <Link href="/alerts" className="btn btn-secondary btn-search-primary">
                 Land Alerts
               </Link>
             </div>
