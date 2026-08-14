@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FilterField } from "@/components/filter-field";
+import { HeroSelect } from "@/components/hero-select";
 import { LandLoader } from "@/components/land-loader";
 import { PropertyCard } from "@/components/property-card";
 import {
@@ -11,18 +12,24 @@ import {
   type SearchFilters,
   type SearchMeta,
 } from "@/lib/api";
+import { describeHardFilters, enforceHardFilters } from "@/lib/hard-filters";
+import { SEARCH_META_FALLBACK } from "@/lib/search-meta-fallback";
+
+type PriceUnit = "K" | "M";
 
 type FormState = {
-  state: string;
+  states: string[];
   region: string;
   regionCustom: string;
   pricePreset: string;
   priceMin: string;
   priceMax: string;
+  priceMinUnit: PriceUnit;
+  priceMaxUnit: PriceUnit;
   acrePreset: string;
   acreMin: string;
   acreMax: string;
-  strategy: string;
+  strategies: string[];
   strategyCustom: string;
   holdYears: string;
   holdCustom: string;
@@ -30,16 +37,18 @@ type FormState = {
 };
 
 const DEFAULT_FORM: FormState = {
-  state: "Any",
+  states: ["Any"],
   region: "Any",
   regionCustom: "",
   pricePreset: "Any",
   priceMin: "",
   priceMax: "",
+  priceMinUnit: "K",
+  priceMaxUnit: "K",
   acrePreset: "Any",
   acreMin: "",
   acreMax: "",
-  strategy: "Any",
+  strategies: ["Any"],
   strategyCustom: "",
   holdYears: "Any",
   holdCustom: "",
@@ -66,14 +75,75 @@ function stateCode(label: string): string {
   return label.split("—")[0]?.trim().toUpperCase() || label;
 }
 
-function parseMoney(v: string): number | undefined {
-  const n = Number(String(v).replace(/[$,\s]/g, ""));
-  return Number.isFinite(n) && n >= 0 ? n : undefined;
+function selectedStates(labels: string[]): string[] {
+  return labels.map(stateCode).filter((c) => c && c !== "Any");
+}
+
+/** Digits + optional single decimal only. */
+function sanitizeDecimal(raw: string): string {
+  let out = String(raw).replace(/[^\d.]/g, "");
+  const firstDot = out.indexOf(".");
+  if (firstDot !== -1) {
+    out = out.slice(0, firstDot + 1) + out.slice(firstDot + 1).replace(/\./g, "");
+  }
+  return out;
+}
+
+/** Whole numbers only, capped. */
+function sanitizeInt(raw: string, max: number): string {
+  const digits = String(raw).replace(/\D/g, "");
+  if (!digits) return "";
+  const n = Number(digits);
+  if (!Number.isFinite(n)) return "";
+  return String(Math.min(max, n));
+}
+
+function parseUnitMoney(v: string, unit: PriceUnit): number | undefined {
+  const n = Number(sanitizeDecimal(v));
+  if (!Number.isFinite(n) || n < 0 || v.trim() === "") return undefined;
+  return n * (unit === "M" ? 1_000_000 : 1_000);
+}
+
+function parseAcres(v: string): number | undefined {
+  const n = Number(sanitizeDecimal(v));
+  return Number.isFinite(n) && n >= 0 && v.trim() !== "" ? n : undefined;
+}
+
+function UnitToggle({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: PriceUnit;
+  onChange: (u: PriceUnit) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <div className="filter-unit-toggle" role="group" aria-label={ariaLabel}>
+      <button
+        type="button"
+        className={value === "K" ? "is-active" : undefined}
+        aria-pressed={value === "K"}
+        onClick={() => onChange("K")}
+      >
+        K
+      </button>
+      <button
+        type="button"
+        className={value === "M" ? "is-active" : undefined}
+        aria-pressed={value === "M"}
+        onClick={() => onChange("M")}
+      >
+        M
+      </button>
+    </div>
+  );
 }
 
 export default function SearchPage() {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
-  const [meta, setMeta] = useState<SearchMeta | null>(null);
+  // Seed full catalogs immediately so phones never flash/stuck on only "Any".
+  const [meta, setMeta] = useState<SearchMeta>(SEARCH_META_FALLBACK);
   const [rows, setRows] = useState<RadarRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -82,18 +152,33 @@ export default function SearchPage() {
   const [hasSearched, setHasSearched] = useState(false);
 
   const regionOptions = useMemo(() => {
-    const code = stateCode(form.state);
-    const byState = meta?.regions_by_state?.[code] || meta?.regions_by_state?.Any || ["Any"];
-    const live = (meta?.regions || []).filter((r) => r !== "Any");
-    const merged = ["Any", ...byState.filter((r) => r !== "Any")];
-    for (const r of live) {
-      if (code === "Any" || r.endsWith(`, ${code}`) || r.includes(` ${code}`)) {
-        if (!merged.includes(r)) merged.push(r);
+    const codes = selectedStates(form.states);
+    const catalogs = meta?.regions_by_state || {};
+    const merged = ["Any"];
+    const pushUnique = (r: string) => {
+      if (r && r !== "Any" && !merged.includes(r)) merged.push(r);
+    };
+
+    if (!codes.length) {
+      for (const r of catalogs.Any || []) pushUnique(r);
+    } else {
+      for (const code of codes) {
+        for (const r of catalogs[code] || []) pushUnique(r);
       }
+      const live = (meta?.regions || []).filter((r) => {
+        if (!r || r === "Any") return false;
+        return codes.some(
+          (code) =>
+            r.endsWith(`, ${code}`) ||
+            r.endsWith(` ${code}`) ||
+            r.toUpperCase().includes(`, ${code}`),
+        );
+      });
+      for (const r of live) pushUnique(r);
     }
-    if (!merged.includes("Type a city / county…")) merged.push("Type a city / county…");
+    if (!merged.includes("Type a region…")) merged.push("Type a region…");
     return merged;
-  }, [form.state, meta]);
+  }, [form.states, meta]);
 
   const filtersFromForm = useCallback(
     (f: FormState): SearchFilters => {
@@ -107,32 +192,42 @@ export default function SearchPage() {
 
       let hold: number | undefined;
       if (f.holdYears === "__custom__") {
-        const n = Number(f.holdCustom);
-        if (Number.isFinite(n)) hold = Math.max(1, Math.min(100, n));
+        const n = Number(sanitizeInt(f.holdCustom, 500));
+        if (Number.isFinite(n) && n >= 1) hold = Math.min(500, n);
       } else if (f.holdYears !== "Any") {
         hold = Number(f.holdYears);
       }
 
-      const strategy =
-        f.strategy === "CUSTOM"
-          ? f.strategyCustom.trim() || undefined
-          : f.strategy === "Any"
-            ? undefined
-            : f.strategy;
+      const pickedStrategies = (f.strategies || []).filter((s) => s && s !== "Any");
+      const strategyParts: string[] = [];
+      for (const s of pickedStrategies) {
+        if (s === "CUSTOM") {
+          const custom = f.strategyCustom.trim();
+          if (custom) strategyParts.push(custom);
+        } else {
+          strategyParts.push(s);
+        }
+      }
+      const strategy = strategyParts.length ? strategyParts.join(",") : undefined;
+
+      const stateCodes = selectedStates(f.states);
+      const state = stateCodes.length ? stateCodes.join(",") : undefined;
 
       return {
-        state: stateCode(f.state),
+        state,
         region,
-        min_price: customPrice ? parseMoney(f.priceMin) : price?.min ?? undefined,
-        max_price: customPrice ? parseMoney(f.priceMax) : price?.max ?? undefined,
-        min_acres: customAcres ? parseMoney(f.acreMin) : acres?.min ?? undefined,
-        max_acres: customAcres ? parseMoney(f.acreMax) : acres?.max ?? undefined,
+        min_price: customPrice ? parseUnitMoney(f.priceMin, f.priceMinUnit) : price?.min ?? undefined,
+        max_price: customPrice ? parseUnitMoney(f.priceMax, f.priceMaxUnit) : price?.max ?? undefined,
+        min_acres: customAcres ? parseAcres(f.acreMin) : acres?.min ?? undefined,
+        max_acres: customAcres ? parseAcres(f.acreMax) : acres?.max ?? undefined,
         strategy,
         hold_years: Number.isFinite(hold as number) ? hold : undefined,
         // Always include unpriced federal / surplus — no UI filter for this
         unpriced_mode: "include",
         include_unpriced: true,
         sort: f.sort,
+        // Prefer returning real land: server widens soft knobs only when exact set is empty.
+        // State stays hard; strategy/hold never hide rows.
         broaden: true,
       };
     },
@@ -144,28 +239,53 @@ export default function SearchPage() {
       setLoading(true);
       setError(null);
       setHasSearched(true);
+      setRows([]);
       // Smooth-scroll to results as soon as search starts
       requestAnimationFrame(() => {
         document.getElementById("search-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
       try {
         const active = override ?? form;
-        const data = await landsignalApi.radar(filtersFromForm(active));
-        setRows(data);
+        const filters = filtersFromForm(active);
+        const data = await landsignalApi.radar(filters);
+        if (!Array.isArray(data)) {
+          throw new Error("Search returned an unexpected response. Try Show matches again.");
+        }
+        // Client hard gate for state / region / acres / price — strategy & hold never drop rows.
+        const { kept, dropped } = enforceHardFilters(data, filters);
+        setRows(kept);
         const metaNow = await landsignalApi.searchMeta().catch(() => null);
-        if (metaNow) setMeta(metaNow);
-        const total = metaNow?.inventory_count ?? data.length;
+        if (metaNow) {
+          setMeta({
+            ...SEARCH_META_FALLBACK,
+            ...metaNow,
+            states: metaNow.states?.length ? metaNow.states : SEARCH_META_FALLBACK.states,
+          });
+        }
+        const total = metaNow?.inventory_count ?? kept.length;
+        const filterLabel = describeHardFilters(filters);
         setStatus(
-          data.length
-            ? `Showing top ${data.length.toLocaleString()} matches · ${total.toLocaleString()} live parcels indexed`
-            : "No matches for these filters. Try Reset to Any, then Show matches again.",
+          kept.length
+            ? `Filters: ${filterLabel} · showing ${kept.length.toLocaleString()} matches` +
+                (dropped ? ` · ${dropped} out-of-band dropped` : "") +
+                ` · ${total.toLocaleString()} live parcels indexed`
+            : `No parcels match ${filterLabel}. Widen price/acres/state, or Reset to Any, then Show matches again.`,
         );
         // Re-align after results paint
         requestAnimationFrame(() => {
           document.getElementById("search-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
         });
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Search failed");
+        const raw = e instanceof Error ? e.message : "Search failed";
+        const friendly = /not reachable|could not reach|Internal Server Error/i.test(raw)
+          ? "LandSignal API is not reachable. Start it with `npm run dev:api`, then try Show matches again."
+          : /Failed to fetch|NetworkError|Load failed|timeout|abort/i.test(raw)
+            ? "Search failed to load results. Tap Show matches again — if it keeps failing, refresh the page."
+            : raw.length > 280
+              ? "Search failed. Tap Show matches again — if it keeps failing, try Reset to Any first."
+              : raw;
+        setError(friendly);
+        setStatus(null);
       } finally {
         setLoading(false);
       }
@@ -174,20 +294,45 @@ export default function SearchPage() {
   );
 
   useEffect(() => {
-    // Load filter catalogs only — do NOT auto-search
+    // Load live catalogs (inventory counts, regions) — keep fallback if this fails
+    let cancelled = false;
     landsignalApi
       .searchMeta()
-      .then(setMeta)
-      .catch(() => setMeta(null));
+      .then((live) => {
+        if (cancelled || !live) return;
+        setMeta({
+          ...SEARCH_META_FALLBACK,
+          ...live,
+          states: live.states?.length ? live.states : SEARCH_META_FALLBACK.states,
+          strategies: live.strategies?.length ? live.strategies : SEARCH_META_FALLBACK.strategies,
+          price_presets: live.price_presets?.length
+            ? live.price_presets
+            : SEARCH_META_FALLBACK.price_presets,
+          acre_presets: live.acre_presets?.length
+            ? live.acre_presets
+            : SEARCH_META_FALLBACK.acre_presets,
+          hold_years: live.hold_years?.length ? live.hold_years : SEARCH_META_FALLBACK.hold_years,
+        });
+      })
+      .catch(() => {
+        /* keep SEARCH_META_FALLBACK — absolute localhost API bases fail on phones */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function scanFresh() {
     setScanning(true);
     setStatus("Inventory refresh started in the background. Click Show matches when you want results.");
     try {
-      await landsignalApi.discover(10000, 0.1, false, undefined, true);
+      await landsignalApi.discover(500000, 0.1, false, undefined, true);
       const nextMeta = await landsignalApi.searchMeta();
-      setMeta(nextMeta);
+      setMeta({
+        ...SEARCH_META_FALLBACK,
+        ...nextMeta,
+        states: nextMeta.states?.length ? nextMeta.states : SEARCH_META_FALLBACK.states,
+      });
       setStatus(
         `Inventory refresh running · ${nextMeta.inventory_count?.toLocaleString() ?? 0} parcels indexed so far. Click Show matches to search.`,
       );
@@ -202,29 +347,44 @@ export default function SearchPage() {
     const list = [...rows];
     const key = form.sort;
     const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    const pid = (r: RadarRow) => String(r.parcel_id || "");
+    // Keep secondary keys aligned with the API — parcel_id last so ties stay stable.
     list.sort((a, b) => {
+      let cmp = 0;
       switch (key) {
         case "score_desc":
-          return num(b.opportunity) - num(a.opportunity);
+          cmp = num(b.opportunity) - num(a.opportunity) || num(b.fit_score) - num(a.fit_score);
+          break;
         case "risk_asc":
-          return num(a.risk) - num(b.risk);
+          cmp = num(a.risk) - num(b.risk) || num(b.fit_score) - num(a.fit_score);
+          break;
         case "confidence_desc":
-          return num(b.confidence) - num(a.confidence);
+          cmp = num(b.confidence) - num(a.confidence) || num(b.opportunity) - num(a.opportunity);
+          break;
         case "price_asc":
-          return (a.ask ?? Number.POSITIVE_INFINITY) - (b.ask ?? Number.POSITIVE_INFINITY);
+          cmp =
+            (a.ask ?? Number.POSITIVE_INFINITY) - (b.ask ?? Number.POSITIVE_INFINITY);
+          break;
         case "acres_desc":
-          return num(b.acres) - num(a.acres);
+          cmp = num(b.acres) - num(a.acres);
+          break;
         case "discount_asc":
-          return num(a.discount_pct ?? 0) - num(b.discount_pct ?? 0);
+          cmp = num(a.discount_pct ?? 999) - num(b.discount_pct ?? 999);
+          break;
         case "fit_desc":
         default:
-          return num(b.fit_score ?? b.opportunity) - num(a.fit_score ?? a.opportunity);
+          cmp =
+            num(b.fit_score ?? b.opportunity) - num(a.fit_score ?? a.opportunity) ||
+            num(b.opportunity) - num(a.opportunity);
+          break;
       }
+      return cmp || pid(a).localeCompare(pid(b));
     });
     return list;
   }, [rows, form.sort]);
 
   const inventoryStates = meta?.inventory_states || [];
+  const strategyHasCustom = form.strategies.includes("CUSTOM");
 
   return (
     <div>
@@ -242,116 +402,134 @@ export default function SearchPage() {
 
         <div className="filter-grid filter-grid-12">
           <FilterField label="State">
-            <select
-              value={form.state}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, state: e.target.value, region: "Any", regionCustom: "" }))
-              }
-            >
-              {(meta?.states || ["Any"]).map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+            <HeroSelect
+              multi
+              ariaLabel="State"
+              values={form.states}
+              options={(meta.states?.length ? meta.states : SEARCH_META_FALLBACK.states).map((s) => ({
+                value: s,
+                label: s,
+              }))}
+              onChange={(v) => setForm((f) => ({ ...f, states: v, region: "Any", regionCustom: "" }))}
+            />
           </FilterField>
 
-          <FilterField label="City / region">
-            <select
+          <FilterField label="Region">
+            <HeroSelect
+              ariaLabel="Region"
               value={form.region}
-              onChange={(e) =>
+              options={regionOptions.map((s) => ({ value: s, label: s }))}
+              onChange={(v) =>
                 setForm((f) => ({
                   ...f,
-                  region: e.target.value,
-                  regionCustom: e.target.value.startsWith("Type a") ? f.regionCustom : "",
+                  region: v,
+                  regionCustom: v.startsWith("Type a") ? f.regionCustom : "",
                 }))
               }
-            >
-              {regionOptions.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+            />
             {form.region.startsWith("Type a") ? (
               <input
                 className="mt-1.5"
                 value={form.regionCustom}
-                placeholder="Type city, county, or corridor…"
+                placeholder="e.g. Piedmont, Hill Country, Ozarks…"
                 onChange={(e) => setForm((f) => ({ ...f, regionCustom: e.target.value }))}
               />
             ) : null}
           </FilterField>
 
           <FilterField label="Price range">
-            <select
+            <HeroSelect
+              ariaLabel="Price range"
               value={form.pricePreset}
-              onChange={(e) => {
-                const v = e.target.value;
+              options={(meta.price_presets?.length
+                ? meta.price_presets
+                : SEARCH_META_FALLBACK.price_presets
+              ).map((p) => ({
+                value: p.label,
+                label: p.label,
+              }))}
+              onChange={(v) =>
                 setForm((f) => ({
                   ...f,
                   pricePreset: v,
                   ...(v.toLowerCase().includes("custom")
                     ? {}
-                    : { priceMin: "", priceMax: "" }),
-                }));
-              }}
-            >
-              {(meta?.price_presets || [{ label: "Any" }]).map((p) => (
-                <option key={p.label} value={p.label}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
+                    : { priceMin: "", priceMax: "", priceMinUnit: "K", priceMaxUnit: "K" }),
+                }))
+              }
+            />
             {form.pricePreset.toLowerCase().includes("custom") ? (
-              <div className="filter-custom-pair mt-1.5">
-                <input
-                  value={form.priceMin}
-                  placeholder="Min $"
-                  inputMode="decimal"
-                  onChange={(e) => setForm((f) => ({ ...f, priceMin: e.target.value }))}
-                />
-                <input
-                  value={form.priceMax}
-                  placeholder="Max $"
-                  inputMode="decimal"
-                  onChange={(e) => setForm((f) => ({ ...f, priceMax: e.target.value }))}
-                />
+              <div className="filter-custom-stack mt-1.5">
+                <div className="filter-money-field">
+                  <input
+                    value={form.priceMin}
+                    placeholder="Min"
+                    inputMode="decimal"
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, priceMin: sanitizeDecimal(e.target.value) }))
+                    }
+                  />
+                  <UnitToggle
+                    value={form.priceMinUnit}
+                    ariaLabel="Min price unit"
+                    onChange={(u) => setForm((f) => ({ ...f, priceMinUnit: u }))}
+                  />
+                </div>
+                <div className="filter-money-field">
+                  <input
+                    value={form.priceMax}
+                    placeholder="Max"
+                    inputMode="decimal"
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, priceMax: sanitizeDecimal(e.target.value) }))
+                    }
+                  />
+                  <UnitToggle
+                    value={form.priceMaxUnit}
+                    ariaLabel="Max price unit"
+                    onChange={(u) => setForm((f) => ({ ...f, priceMaxUnit: u }))}
+                  />
+                </div>
               </div>
             ) : null}
           </FilterField>
 
           <FilterField label="Acreage">
-            <select
+            <HeroSelect
+              ariaLabel="Acreage"
               value={form.acrePreset}
-              onChange={(e) => {
-                const v = e.target.value;
+              options={(meta.acre_presets?.length
+                ? meta.acre_presets
+                : SEARCH_META_FALLBACK.acre_presets
+              ).map((p) => ({
+                value: p.label,
+                label: p.label,
+              }))}
+              onChange={(v) =>
                 setForm((f) => ({
                   ...f,
                   acrePreset: v,
                   ...(v.toLowerCase().includes("custom") ? {} : { acreMin: "", acreMax: "" }),
-                }));
-              }}
-            >
-              {(meta?.acre_presets || [{ label: "Any" }]).map((p) => (
-                <option key={p.label} value={p.label}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
+                }))
+              }
+            />
             {form.acrePreset.toLowerCase().includes("custom") ? (
               <div className="filter-custom-pair mt-1.5">
                 <input
                   value={form.acreMin}
                   placeholder="Min ac"
                   inputMode="decimal"
-                  onChange={(e) => setForm((f) => ({ ...f, acreMin: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, acreMin: sanitizeDecimal(e.target.value) }))
+                  }
                 />
                 <input
                   value={form.acreMax}
                   placeholder="Max ac"
                   inputMode="decimal"
-                  onChange={(e) => setForm((f) => ({ ...f, acreMax: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, acreMax: sanitizeDecimal(e.target.value) }))
+                  }
                 />
               </div>
             ) : null}
@@ -360,28 +538,30 @@ export default function SearchPage() {
           <FilterField
             label="Strategy"
             tip={{
-              title: "What strategy does",
-              body: "Prefers parcels that fit that use (farm, develop, timber…). Others stay in results — they just rank lower.",
+              title: "Strategy",
+              body: "Boosts matching uses (farm, develop, timber…). Other results stay — they just rank lower.",
             }}
           >
-            <select
-              value={form.strategy}
-              onChange={(e) => {
-                const v = e.target.value;
+            <HeroSelect
+              multi
+              ariaLabel="Strategy"
+              values={form.strategies}
+              options={(meta.strategies?.length
+                ? meta.strategies
+                : SEARCH_META_FALLBACK.strategies
+              ).map((s) => ({
+                value: s,
+                label: s === "Any" ? "Any" : s === "CUSTOM" ? "Type my own…" : s.replaceAll("_", " "),
+              }))}
+              onChange={(v) =>
                 setForm((f) => ({
                   ...f,
-                  strategy: v,
-                  strategyCustom: v === "CUSTOM" ? f.strategyCustom : "",
-                }));
-              }}
-            >
-              {(meta?.strategies || ["Any"]).map((s) => (
-                <option key={s} value={s}>
-                  {s === "Any" ? "Any" : s === "CUSTOM" ? "Type my own…" : s.replaceAll("_", " ")}
-                </option>
-              ))}
-            </select>
-            {form.strategy === "CUSTOM" ? (
+                  strategies: v,
+                  strategyCustom: v.includes("CUSTOM") ? f.strategyCustom : "",
+                }))
+              }
+            />
+            {strategyHasCustom ? (
               <input
                 className="mt-1.5"
                 value={form.strategyCustom}
@@ -391,39 +571,37 @@ export default function SearchPage() {
             ) : null}
           </FilterField>
 
-          <FilterField
-            label="Hold period"
-            tip={{
-              title: "What hold period does",
-              body: "Doesn’t remove results — only reorders them.",
-            }}
-          >
-            <select
+          <FilterField label="Hold period">
+            <HeroSelect
+              ariaLabel="Hold period"
               value={form.holdYears}
-              onChange={(e) => {
-                const v = e.target.value;
+              options={[
+                ...(meta?.hold_years?.length ? meta.hold_years : HOLD_YEAR_OPTIONS).map((s) => ({
+                  value: String(s),
+                  label: s === "Any" ? "Any" : `${s} years`,
+                })),
+                { value: "__custom__", label: "Type my own…" },
+              ]}
+              onChange={(v) =>
                 setForm((f) => ({
                   ...f,
                   holdYears: v,
                   holdCustom: v === "__custom__" ? f.holdCustom : "",
-                }));
-              }}
-            >
-              {(meta?.hold_years?.length ? meta.hold_years : HOLD_YEAR_OPTIONS).map((s) => (
-                <option key={String(s)} value={String(s)}>
-                  {s === "Any" ? "Any" : `${s} years`}
-                </option>
-              ))}
-              <option value="__custom__">Type my own…</option>
-            </select>
+                }))
+              }
+            />
             {form.holdYears === "__custom__" ? (
               <input
                 className="mt-1.5"
                 value={form.holdCustom}
-                placeholder="Years (1–100)"
+                placeholder="Years"
                 inputMode="numeric"
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, holdCustom: e.target.value, holdYears: "__custom__" }))
+                  setForm((f) => ({
+                    ...f,
+                    holdCustom: sanitizeInt(e.target.value, 500),
+                    holdYears: "__custom__",
+                  }))
                 }
               />
             ) : null}
@@ -466,7 +644,7 @@ export default function SearchPage() {
                 onClick={scanFresh}
                 disabled={scanning}
               >
-                {scanning ? "Starting refresh…" : "Refresh live inventory"}
+                {scanning ? "Refreshing" : "Refresh live inventory"}
               </button>
               <button
                 type="button"
@@ -534,11 +712,7 @@ export default function SearchPage() {
         <div className="panel empty-state">
           <div className="display text-2xl text-[var(--ink)]">Find buys others can’t see</div>
           <p className="mx-auto mt-2 max-w-lg">
-            Hit <strong>Top opportunities</strong> for the strongest engine-ranked files nationwide, or
-            set filters and <strong>Show matches</strong> for this page’s search.{" "}
-            <strong>Land Alerts</strong> is separate — a saved watch profile that notifies you over time.
-            Use <strong>Refresh live inventory</strong> to pull new tax-sale / surplus / BLM postings into
-            the queue.
+            Hit <strong>Top opportunities</strong> for the strongest engine-ranked files nationwide.
           </p>
         </div>
       )}
@@ -547,7 +721,27 @@ export default function SearchPage() {
         <div className="panel empty-state">
           <div className="display text-2xl text-[var(--ink)]">No matches for this search</div>
           <p className="mx-auto mt-2 max-w-lg">
-            Try Reset to Any, widen price/acres, or pick another state — then click Show matches again.
+            {(() => {
+              const picked = selectedStates(form.states);
+              const live = new Set(inventoryStates || []);
+              const missing = picked.filter((c) => live.size > 0 && !live.has(c));
+              if (missing.length) {
+                return (
+                  <>
+                    No live inventory indexed for{" "}
+                    <strong>{missing.join(", ")}</strong> right now — results stay empty on purpose
+                    (we don’t fill with other states). Reset to Any, pick a state that shows in
+                    inventory, or run Inventory refresh, then Show matches again.
+                  </>
+                );
+              }
+              return (
+                <>
+                  Nothing in live inventory matches these exact filters. Widen price, acres, or
+                  price/acres — or Reset to Any — then click Show matches again.
+                </>
+              );
+            })()}
           </p>
         </div>
       )}

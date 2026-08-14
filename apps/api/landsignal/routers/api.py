@@ -237,6 +237,19 @@ def _maybe_retag_vacant_gis(listing) -> None:
         return
     if ext.startswith(_VACANT_GIS_PREFIXES) or "cadastral gis" in desc or "public cad gis" in desc:
         listing.provider_id = "public_vacant_gis"
+    # Strip assessed market values that were wrongly stored as asking/starting bids.
+    raw = getattr(listing, "raw", None) or {}
+    props = raw.get("raw") if isinstance(raw.get("raw"), dict) else raw
+    if not isinstance(props, dict):
+        return
+    market = props.get("TOTALMARKET") or props.get("MARKETLAND")
+    ask = getattr(listing, "asking_price_usd", None)
+    if market is not None and ask is not None:
+        try:
+            if abs(float(market) - float(ask)) < 0.02:
+                listing.asking_price_usd = None
+        except Exception:
+            pass
 
 
 def _provider_label(provider_id: str | None, county: str | None = None) -> str:
@@ -276,6 +289,33 @@ def _normalize_state(state: str | None) -> str | None:
     return raw.upper()[:2] if len(raw) >= 2 else raw.upper()
 
 
+def _normalize_states(state: str | None) -> list[str] | None:
+    """Accept a single state or comma/semicolon-separated multi-select."""
+    if not state or state.upper() in ("ANY", ""):
+        return None
+    parts = [p.strip() for p in state.replace(";", ",").split(",") if p.strip()]
+    codes: list[str] = []
+    for part in parts:
+        code = _normalize_state(part)
+        if code and code not in codes:
+            codes.append(code)
+    return codes or None
+
+
+def _parse_strategies(strategy: str | None) -> list[str]:
+    """Accept a single strategy or comma-separated multi-select (ranking preference)."""
+    if not strategy or strategy.upper() in ("ANY", "CUSTOM", ""):
+        return []
+    out: list[str] = []
+    for part in strategy.replace(";", ",").split(","):
+        raw = part.strip()
+        if not raw or raw.upper() in ("ANY", "CUSTOM"):
+            continue
+        if raw not in out:
+            out.append(raw)
+    return out
+
+
 def _sort_rows(rows: list[RadarRow], sort: str | None) -> list[RadarRow]:
     key = (sort or "fit_desc").lower()
 
@@ -283,22 +323,26 @@ def _sort_rows(rows: list[RadarRow], sort: str | None) -> list[RadarRow]:
         # more negative discount = bigger bargain
         return r.discount_pct if r.discount_pct is not None else 999.0
 
+    def pid(r: RadarRow) -> str:
+        return str(r.parcel_id)
+
+    # Negated numerics + ascending parcel_id — deterministic, never shuffled on refresh.
     if key == "score_desc":
-        rows.sort(key=lambda r: (r.opportunity, r.fit_score or 0), reverse=True)
+        rows.sort(key=lambda r: (-r.opportunity, -(r.fit_score or 0), pid(r)))
     elif key == "risk_asc":
-        rows.sort(key=lambda r: (r.risk, -(r.fit_score or 0)))
+        rows.sort(key=lambda r: (r.risk, -(r.fit_score or 0), pid(r)))
     elif key == "confidence_desc":
-        rows.sort(key=lambda r: (r.confidence, r.opportunity), reverse=True)
+        rows.sort(key=lambda r: (-r.confidence, -r.opportunity, pid(r)))
     elif key == "price_asc":
-        rows.sort(key=lambda r: (r.ask is None, r.ask if r.ask is not None else 0))
+        rows.sort(key=lambda r: (r.ask is None, r.ask if r.ask is not None else 0, pid(r)))
     elif key == "price_desc":
-        rows.sort(key=lambda r: (r.ask is None, -(r.ask or 0)))
+        rows.sort(key=lambda r: (r.ask is None, -(r.ask or 0), pid(r)))
     elif key == "acres_desc":
-        rows.sort(key=lambda r: (r.acres is None, -(r.acres or 0)))
+        rows.sort(key=lambda r: (r.acres is None, -(r.acres or 0), pid(r)))
     elif key == "discount_asc":
-        rows.sort(key=discount_key)
+        rows.sort(key=lambda r: (discount_key(r), pid(r)))
     else:
-        rows.sort(key=lambda r: (r.fit_score or 0, r.opportunity), reverse=True)
+        rows.sort(key=lambda r: (-(r.fit_score or 0), -r.opportunity, pid(r)))
     return rows
 
 
@@ -337,6 +381,7 @@ def _apply_hold_priority(rows: list[RadarRow], hold_years: int | None) -> list[R
 @router.get("/radar", response_model=list[RadarRow])
 async def radar(
     state: str | None = None,
+    states: str | None = None,  # alias used by some clients / bookmarks
     region: str | None = None,
     min_price: float | None = None,
     max_price: float | None = None,
@@ -353,13 +398,16 @@ async def radar(
     market_channel: str | None = None,
     sort: str | None = "fit_desc",
     q: str | None = None,
-    broaden: bool = True,
+    broaden: bool = False,
     limit: int = 200,
 ) -> list[RadarRow]:
     """Search results with investor filters. Pass nothing / omit for Any.
 
-    broaden=True softens region/strategy when they would otherwise return zero rows,
-    but never crosses a selected state boundary.
+    Selected state / region / price / acres are hard filters.
+    Strategy and hold period never shrink the match set — they only re-rank
+    opportunity / fit so preferred strategies and hold lengths float higher.
+    broaden=True is opt-in only: if the exact set is empty it may loosen region
+    or market channel — never price, acres, or state.
     """
     from landsignal.geo_meta import region_matches
     from landsignal.scoring.engine import personalized_score
@@ -368,16 +416,19 @@ async def radar(
         build_return_thesis,
         match_reasons,
         price_display,
-        rating_breakdown,
         sourcing_card,
         value_display,
     )
     store = get_store(get_settings().demo_seed)
     # Never block search on enrichment — unscored parcels are omitted until discover finishes them
 
-    state_code = _normalize_state(state)
+    # Prefer explicit `state`; accept `states` as a synonym so filters never silently drop.
+    state_codes = _normalize_states(state or states)
+    strategy_prefs = _parse_strategies(strategy)
+    if hold_years is not None:
+        hold_years = max(1, min(500, int(hold_years)))
     filters = {
-        "state": state_code,
+        "state": ",".join(state_codes) if state_codes else None,
         "region": region,
         "hold_years": hold_years,
         "target_roi": target_roi,
@@ -390,8 +441,13 @@ async def radar(
         profile["max_price_usd"] = max_price
     if min_acres is not None:
         profile["min_acres"] = min_acres
-    if strategy and strategy.upper() not in ("ANY", "CUSTOM", ""):
-        profile["preferred_strategies"] = [strategy.upper()]
+    if strategy_prefs:
+        known = {"FARMLAND", "DEVELOPMENT", "LAND_BANK", "RECREATIONAL", "ENERGY", "TIMBER"}
+        preferred: list[str] = []
+        for s in strategy_prefs:
+            key = s.upper().replace(" ", "_")
+            preferred.append(key if key in known else s.upper())
+        profile["preferred_strategies"] = preferred
 
     mode = (unpriced_mode or ("include" if include_unpriced else "priced")).lower()
     channel = (market_channel or "Any").strip()
@@ -412,40 +468,83 @@ async def radar(
         strategy_soft_miss: bool
         best_strategy: Any
 
+    def _in_band(
+        value: float | None,
+        lo: float | None,
+        hi: float | None,
+        *,
+        allow_unknown: bool,
+    ) -> bool:
+        """Hard min/max band. Unknown values pass only when allow_unknown is True."""
+        if lo is None and hi is None:
+            return True
+        if value is None:
+            return allow_unknown
+        if lo is not None and value < lo:
+            return False
+        if hi is not None and value > hi:
+            return False
+        return True
+
     def _sort_cands(cands: list[_Cand], sort_key: str | None) -> list[_Cand]:
         key = (sort_key or "fit_desc").lower()
 
         def discount_key(r: _Cand) -> float:
             return r.discount_pct if r.discount_pct is not None else 999.0
 
+        # Final key is always ascending parcel_id so equal scores stay stable across refreshes.
+        # Use negated numerics (not reverse=True) so the id tie-break never flips.
+        def pid(r: _Cand) -> str:
+            return str(r.parcel_id)
+
         if key == "score_desc":
-            cands.sort(key=lambda r: (r.opportunity, r.fit), reverse=True)
+            cands.sort(key=lambda r: (-r.opportunity, -r.fit, pid(r)))
         elif key == "risk_asc":
-            cands.sort(key=lambda r: (r.risk, -r.fit))
+            cands.sort(key=lambda r: (r.risk, -r.fit, pid(r)))
         elif key == "confidence_desc":
-            cands.sort(key=lambda r: (r.confidence, r.opportunity), reverse=True)
+            cands.sort(key=lambda r: (-r.confidence, -r.opportunity, pid(r)))
         elif key == "price_asc":
-            cands.sort(key=lambda r: (r.ask is None, r.ask if r.ask is not None else 0))
+            cands.sort(key=lambda r: (r.ask is None, r.ask if r.ask is not None else 0, pid(r)))
         elif key == "price_desc":
-            cands.sort(key=lambda r: (r.ask is None, -(r.ask or 0)))
+            cands.sort(key=lambda r: (r.ask is None, -(r.ask or 0), pid(r)))
         elif key == "acres_desc":
-            cands.sort(key=lambda r: (r.acres is None, -(r.acres or 0)))
+            cands.sort(key=lambda r: (r.acres is None, -(r.acres or 0), pid(r)))
         elif key == "discount_asc":
-            cands.sort(key=discount_key)
+            cands.sort(key=lambda r: (discount_key(r), pid(r)))
         else:
-            cands.sort(key=lambda r: (r.fit, r.opportunity), reverse=True)
+            cands.sort(key=lambda r: (-r.fit, -r.opportunity, pid(r)))
         return cands
 
-    def collect_cands(*, apply_region: bool, apply_strict_channel: bool) -> list[_Cand]:
+    def collect_cands(
+        *,
+        apply_region: bool,
+        apply_strict_channel: bool,
+        price_lo: float | None = None,
+        price_hi: float | None = None,
+        ac_lo: float | None = None,
+        ac_hi: float | None = None,
+        allow_unknown_price: bool = False,
+        allow_unknown_acres: bool = False,
+    ) -> list[_Cand]:
+        use_min_price = min_price if price_lo is None else price_lo
+        use_max_price = max_price if price_hi is None else price_hi
+        use_min_acres = min_acres if ac_lo is None else ac_lo
+        use_max_acres = max_acres if ac_hi is None else ac_hi
+        from landsignal.services.auction import expected_auction_clearing
+
         out: list[_Cand] = []
-        for parcel in store.parcels.values():
+        # Snapshot keys so a concurrent discover can't reshuffle mid-search.
+        for pid in sorted(store.parcels.keys(), key=str):
+            parcel = store.parcels.get(pid)
+            if not parcel:
+                continue
             score = store.latest_score(parcel.id)
             listing = store.listing_for_parcel(parcel.id)
             if not score or not listing or parcel.is_demo:
                 continue
             _maybe_retag_vacant_gis(listing)
 
-            if state_code and (parcel.state or "").upper() != state_code:
+            if state_codes and (parcel.state or "").upper() not in state_codes:
                 continue
             if apply_region and not region_matches(
                 region=region,
@@ -455,6 +554,13 @@ async def radar(
             ):
                 continue
 
+            from landsignal.services.assessed_price import (
+                backfill_listing_ask_from_assessed,
+                extract_assessed_land_usd,
+            )
+
+            # GIS vacant screens often only have assessor land value — promote to ask.
+            backfill_listing_ask_from_assessed(listing)
             ask = listing.asking_price_usd
             if ask is not None and ask <= 0:
                 ask = None
@@ -472,28 +578,75 @@ async def radar(
                 ):
                     continue
 
-            if min_price is not None and (ask is None or ask < min_price):
-                continue
-            if max_price is not None and ask is not None and ask > max_price:
-                continue
-            if min_acres is not None and (parcel.acreage is None or parcel.acreage < min_acres):
-                continue
-            if max_acres is not None and parcel.acreage is not None and parcel.acreage > max_acres:
+            # Budget recognition: dollars-to-own for auctions; market ask or
+            # assessor land value for GIS vacant screens (never model estimate).
+            budget_usd: float | None = None
+            if use_min_price is not None or use_max_price is not None:
+                enrichment = store.enrichments.get(parcel.id)
+                auction_path = None
+                if enrichment and enrichment.comps and listing.provider_id != "public_vacant_gis":
+                    comps_n = enrichment.comps.normalized or enrichment.comps.value or {}
+                    if isinstance(comps_n, dict):
+                        raw_ap = comps_n.get("auction_path")
+                        if isinstance(raw_ap, dict):
+                            auction_path = raw_ap
+                if auction_path is None and ask and listing.provider_id in (
+                    "public_tax_sale",
+                    "public_surplus",
+                ):
+                    auction_path = expected_auction_clearing(
+                        opening_bid=ask,
+                        model_value=score.estimated_value_usd,
+                        acres=parcel.acreage,
+                        provider_id=listing.provider_id,
+                        state=parcel.state,
+                    )
+                if isinstance(auction_path, dict):
+                    settle = auction_path.get("expected_settle_usd") or auction_path.get(
+                        "settle_high_usd"
+                    )
+                    if settle is not None:
+                        try:
+                            budget_usd = float(settle)
+                        except (TypeError, ValueError):
+                            budget_usd = None
+                if budget_usd is None and ask is not None and ask > 0:
+                    budget_usd = float(ask)
+                if budget_usd is None:
+                    budget_usd = extract_assessed_land_usd(listing.raw)
+                if not _in_band(
+                    budget_usd,
+                    use_min_price,
+                    use_max_price,
+                    allow_unknown=allow_unknown_price,
+                ):
+                    continue
+            if not _in_band(
+                parcel.acreage,
+                use_min_acres,
+                use_max_acres,
+                allow_unknown=allow_unknown_acres,
+            ):
                 continue
             strategy_soft_miss = False
-            if strategy and strategy.upper() not in ("ANY", "CUSTOM", ""):
+            if strategy_prefs:
                 known = {"FARMLAND", "DEVELOPMENT", "LAND_BANK", "RECREATIONAL", "ENERGY", "TIMBER"}
-                s_up = strategy.upper().replace(" ", "_")
-                if s_up in known:
-                    hit = (score.best_strategy and score.best_strategy.value == s_up) or (
-                        score.secondary_strategy and score.secondary_strategy.value == s_up
-                    )
-                    if not hit:
-                        strategy_soft_miss = True
-                else:
-                    blob = f"{listing.title} {listing.description or ''} {_strategy_label(score.best_strategy)}".lower()
-                    if strategy.lower() not in blob and s_up.lower().replace("_", " ") not in blob:
-                        strategy_soft_miss = True
+                hit_any = False
+                blob = f"{listing.title} {listing.description or ''} {_strategy_label(score.best_strategy)}".lower()
+                for pref in strategy_prefs:
+                    s_up = pref.upper().replace(" ", "_")
+                    if s_up in known:
+                        if (score.best_strategy and score.best_strategy.value == s_up) or (
+                            score.secondary_strategy and score.secondary_strategy.value == s_up
+                        ):
+                            hit_any = True
+                            break
+                    elif pref.lower() in blob or s_up.lower().replace("_", " ") in blob:
+                        hit_any = True
+                        break
+                if not hit_any:
+                    # Strategy never hides inventory — only re-ranks via fit/score.
+                    strategy_soft_miss = True
             if min_score is not None and score.opportunity < min_score:
                 continue
             if max_risk is not None and score.risk > max_risk:
@@ -514,8 +667,6 @@ async def radar(
                 score.best_strategy.value if score.best_strategy else None,
                 score.risk,
             )
-            if strategy_soft_miss:
-                fit = max(0, fit - 12)
             out.append(
                 _Cand(
                     parcel_id=parcel.id,
@@ -562,6 +713,13 @@ async def radar(
                 provider_id=listing.provider_id,
                 state=parcel.state,
             )
+        if isinstance(auction_path, dict) and not auction_path.get("published_price_role"):
+            from landsignal.services.auction import detect_published_price_role
+
+            auction_path = {
+                **auction_path,
+                "published_price_role": detect_published_price_role(listing),
+            }
         comps_n = {}
         if enrichment and enrichment.comps:
             comps_n = enrichment.comps.normalized or enrichment.comps.value or {}
@@ -619,17 +777,23 @@ async def radar(
         )
         if strategy_soft_miss:
             reasons = [
-                "Strategy is a soft match — ranked lower, not hidden, so you still see nearby options.",
+                "Strategy preference re-ranked this file — not hidden so inventory stays full.",
                 *reasons,
             ][:5]
         if broaden_reason:
             reasons = [broaden_reason, *reasons][:5]
         if isinstance(auction_path, dict) and auction_path.get("expected_settle_usd"):
             if not any("likely auction finish" in r.lower() or "likely finish" in r.lower() for r in reasons):
+                lo = auction_path.get("settle_low_usd")
+                hi = auction_path.get("settle_high_usd")
+                if lo and hi and float(hi) > float(lo):
+                    finish_s = f"~${float(lo):,.0f} – ${float(hi):,.0f}"
+                else:
+                    finish_s = f"~${auction_path['expected_settle_usd']:,.0f}"
                 reasons = [
                     (
                         f"Starts at ${auction_path['opening_bid_usd']:,.0f}; auctions like this "
-                        f"usually finish near ${auction_path['expected_settle_usd']:,.0f} "
+                        f"usually finish near {finish_s} "
                         f"(about {auction_path.get('bid_inflation_mult_base', 0):.1f}× the start)"
                     ),
                     *reasons,
@@ -640,10 +804,8 @@ async def radar(
         if isinstance(auction_path, dict):
             settle_disc = auction_path.get("settle_discount_pct")
         if settle_disc is not None:
-            discount_display = (
-                f"Likely finish {settle_disc:+.1f}% vs our value "
-                f"(start bid looked {auction_path.get('opener_discount_pct', 0):+.0f}%)"
-            )
+            # Keep chip copy short — opener gap belongs in help / reasons, not the label.
+            discount_display = f"Likely finish {settle_disc:+.1f}% vs our value"
         elif score.asking_discount_pct is not None:
             discount_display = f"{score.asking_discount_pct:+.1f}% vs our value"
         else:
@@ -769,10 +931,16 @@ async def radar(
                 else f"About {abs(headline_disc):.0f}% under our value"
             )
         elif isinstance(auction_path, dict):
-            headline = (
-                f"Starts ${auction_path.get('opening_bid_usd', 0):,.0f} → "
-                f"likely ~${auction_path.get('expected_settle_usd', 0):,.0f}"
-            )
+            opener = auction_path.get("opening_bid_usd") or 0
+            lo = auction_path.get("settle_low_usd")
+            hi = auction_path.get("settle_high_usd")
+            settle = auction_path.get("expected_settle_usd") or 0
+            if lo and hi and float(hi) > float(lo):
+                headline = (
+                    f"Starts ${float(opener):,.0f} → likely ~${float(lo):,.0f} – ${float(hi):,.0f}"
+                )
+            else:
+                headline = f"Starts ${float(opener):,.0f} → likely ~${float(settle):,.0f}"
         else:
             headline = f"{conviction or 'WATCH'} interest · opportunity score {score.opportunity:.0f}/100"
 
@@ -900,7 +1068,9 @@ async def radar(
             fit_score=fit,
             summary=summary,
             match_reasons=reasons,
-            rating_breakdown=rating_breakdown(score, parcel=parcel, listing=listing),
+            # List cards don't render rating breakdown — omit to keep /radar
+            # payloads small enough for phones (was ~3MB of a ~3.6MB response).
+            rating_breakdown=[],
             links=annotated,
             latitude=parcel.latitude,
             longitude=parcel.longitude,
@@ -911,8 +1081,25 @@ async def radar(
             confidence_label=conf_label,
             source_name=source.get("source_name"),
             contact_office=source.get("office"),
-            contact_phone=source.get("phone"),
-            contact_website=source.get("website"),
+            contact_phone=source.get("phone")
+            or next(
+                (
+                    str(l.get("phone") or l.get("label"))
+                    for l in annotated
+                    if l.get("kind") == "contact" and str(l.get("url") or "").startswith("tel:")
+                ),
+                None,
+            ),
+            # Prefer the concrete posting / primary link over a bare hub page.
+            contact_website=next(
+                (
+                    str(l["url"])
+                    for l in annotated
+                    if l.get("kind") == "primary" and str(l.get("url") or "").startswith("http")
+                ),
+                None,
+            )
+            or source.get("website"),
             how_to_buy=source.get("how_to_buy"),
             return_thesis=thesis,
             conviction=conviction,
@@ -926,16 +1113,83 @@ async def radar(
     # Phase 1: cheap filter + fit across full inventory (same match set as before)
     cands = collect_cands(apply_region=True, apply_strict_channel=True)
     broaden_reason: str | None = None
+    # Effective hard bands for the final gate (may widen when exact set is empty).
+    gate_min_price, gate_max_price = min_price, max_price
+    gate_min_acres, gate_max_acres = min_acres, max_acres
+    gate_require_region = bool(region)
+
+    # Always try to return real land when inventory exists for the selected state.
+    # Cascade loosens soft knobs only — state stays hard. Client defaults broaden=true.
     if broaden and not cands:
         cands = collect_cands(apply_region=False, apply_strict_channel=True)
-        broaden_reason = "Loosened city/region a bit so you still get real matches for your other filters."
-    if broaden and not cands and (min_price is not None or max_price is not None):
-        saved_min, saved_max = min_price, max_price
-        min_price = None
-        max_price = None
+        if cands:
+            gate_require_region = False
+            broaden_reason = (
+                "Loosened region a bit so you still get real matches for your other filters."
+            )
+    if broaden and not cands:
         cands = collect_cands(apply_region=False, apply_strict_channel=False)
-        min_price, max_price = saved_min, saved_max
-        broaden_reason = "Your exact price band had no hits — showing the closest live opportunities instead."
+        if cands:
+            gate_require_region = False
+            broaden_reason = (
+                "Loosened market channel a bit so you still get matches inside your other filters."
+            )
+    if broaden and not cands and (min_price is not None or max_price is not None):
+        lo = (min_price * 0.65) if min_price is not None else None
+        hi = (max_price * 1.35) if max_price is not None else None
+        cands = collect_cands(
+            apply_region=False,
+            apply_strict_channel=False,
+            price_lo=lo,
+            price_hi=hi,
+        )
+        if cands:
+            gate_min_price, gate_max_price = lo, hi
+            gate_require_region = False
+            broaden_reason = (
+                "Widened budget ~35% so you still get legitimate priced land near your range."
+            )
+    if broaden and not cands and (min_acres is not None or max_acres is not None):
+        lo = (min_acres * 0.7) if min_acres is not None else None
+        hi = (max_acres * 1.4) if max_acres is not None else None
+        cands = collect_cands(
+            apply_region=False,
+            apply_strict_channel=False,
+            price_lo=(min_price * 0.65) if min_price is not None else min_price,
+            price_hi=(max_price * 1.35) if max_price is not None else max_price,
+            ac_lo=lo,
+            ac_hi=hi,
+            allow_unknown_price=True,
+        )
+        if cands:
+            gate_min_acres, gate_max_acres = lo, hi
+            if min_price is not None:
+                gate_min_price = min_price * 0.65
+            if max_price is not None:
+                gate_max_price = max_price * 1.35
+            gate_require_region = False
+            broaden_reason = (
+                "Widened acreage a bit so you still get real parcels near your size screen."
+            )
+    if broaden and not cands and state_codes:
+        cands = collect_cands(
+            apply_region=False,
+            apply_strict_channel=False,
+            price_lo=0,
+            price_hi=10_000_000_000,
+            ac_lo=0.01,
+            ac_hi=100_000,
+            allow_unknown_price=True,
+            allow_unknown_acres=True,
+        )
+        if cands:
+            gate_min_price, gate_max_price = None, None
+            gate_min_acres, gate_max_acres = None, None
+            gate_require_region = False
+            broaden_reason = (
+                "Showing best available land in your selected state — "
+                "exact price/acre combo had no hits yet while inventory is still indexing."
+            )
 
     ranked = _sort_cands(cands, sort)
     capped = ranked[: max(1, min(limit, 500))] if ranked else []
@@ -948,11 +1202,28 @@ async def radar(
         if (sort or "fit_desc").lower() in ("fit_desc", ""):
             capped = _sort_cands(capped, "fit_desc")
 
+    # Final hard gate — state always. Region/acres/ask use the effective (possibly widened) bands.
+    def _row_passes_hard(row: RadarRow) -> bool:
+        if state_codes and (row.state or "").upper() not in state_codes:
+            return False
+        if not _in_band(row.acres, gate_min_acres, gate_max_acres, allow_unknown=False):
+            return False
+        if not _in_band(row.ask, gate_min_price, gate_max_price, allow_unknown=False):
+            return False
+        if gate_require_region and region and not region_matches(
+            region=region,
+            state=row.state,
+            county=row.county,
+            title=row.property_name,
+        ):
+            return False
+        return True
+
     # Phase 2: full presentation cards only for the capped result set
     rows: list[RadarRow] = []
     for c in capped:
         row = fat_row(c, broaden_reason=broaden_reason)
-        if row is not None:
+        if row is not None and _row_passes_hard(row):
             rows.append(row)
     return rows
 
@@ -985,6 +1256,23 @@ async def search_meta() -> dict[str, Any]:
     payload = search_meta_payload(inventory_regions)
     payload["inventory_states"] = inventory_states
     payload["inventory_count"] = sum(1 for p in store.parcels.values() if not p.is_demo)
+    # Per-state coverage vs the 10k floor — drives the "ultimate land finder" inventory HUD.
+    by_state: dict[str, int] = {}
+    for p in store.parcels.values():
+        if p.is_demo or not p.state:
+            continue
+        st = p.state.upper()
+        by_state[st] = by_state.get(st, 0) + 1
+    payload["inventory_by_state"] = dict(sorted(by_state.items()))
+    payload["inventory_min_per_state_target"] = int(
+        getattr(get_settings(), "discover_min_per_state", 15000) or 15000
+    )
+    payload["inventory_states_below_target"] = sorted(
+        st
+        for st, n in by_state.items()
+        if n < payload["inventory_min_per_state_target"]
+    )
+    return payload
     return payload
 
 
@@ -1335,8 +1623,10 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         )
     mark_for_path = rc.get("mark_usd") or (score.estimated_value_usd if score else None)
     traj_annual = None
+    pace_factors = None
     if isinstance(market_trajectory, dict):
         traj_annual = market_trajectory.get("annual_rate")
+        pace_factors = market_trajectory.get("pace_factors")
 
     return_intelligence = build_return_intelligence(
         parcel=parcel,
@@ -1347,18 +1637,45 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         mark_usd=float(mark_for_path) if mark_for_path is not None else None,
         hold_years=10,
         trajectory_annual=float(traj_annual) if traj_annual is not None else None,
+        pace_factors=pace_factors if isinstance(pace_factors, list) else None,
     )
-    score_drivers = (
-        build_score_drivers(
+    score_drivers: dict[str, Any] = {}
+    if score:
+        from landsignal.services.score_standings import (
+            build_confidence_standings,
+            build_opportunity_standings,
+            build_risk_standings,
+        )
+
+        place = f"{parcel.county or 'this county'}, {parcel.state or ''}".strip(", ")
+        standings = build_opportunity_standings(
+            store=store,
+            score=score,
+            place=place,
+        )
+        risk_standings = build_risk_standings(
+            store=store,
+            score=score,
+            enrichment=enrichment,
+            listing=listing,
+            place=place,
+        )
+        confidence_standings = build_confidence_standings(
+            store=store,
+            score=score,
+            enrichment=enrichment,
+            place=place,
+        )
+        score_drivers = build_score_drivers(
             parcel=parcel,
             listing=listing,
             score=score,
             enrichment=enrichment,
             price=price if isinstance(price, dict) else None,
+            standings=standings,
+            risk_standings=risk_standings,
+            confidence_standings=confidence_standings,
         )
-        if score
-        else {}
-    )
     outreach = build_outreach_playbook(
         parcel=parcel,
         listing=listing,
@@ -1367,6 +1684,22 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         sourcing=source if isinstance(source, dict) else {},
         entry_usd=float(entry_for_path) if entry_for_path is not None else None,
         mark_usd=float(mark_for_path) if mark_for_path is not None else None,
+    )
+
+    from landsignal.services.catalyst_engine import (
+        build_catalyst_engine,
+        flood_zone_label,
+        normalize_strategy,
+        screens_from_score_context,
+    )
+
+    catalyst_screens = screens_from_score_context(score, enrichment)
+    catalyst_engine = build_catalyst_engine(
+        screens=catalyst_screens,
+        strategy=normalize_strategy(score.best_strategy if score else None),
+        acres=float(parcel.acreage) if parcel.acreage is not None else None,
+        flood_zone=flood_zone_label(enrichment),
+        market_trajectory=market_trajectory if isinstance(market_trajectory, dict) else None,
     )
 
     return {
@@ -1388,6 +1721,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         "return_intelligence": return_intelligence,
         "score_drivers": score_drivers,
         "outreach": outreach,
+        "catalyst_engine": catalyst_engine,
         "rating_breakdown": rating_breakdown(score, parcel=parcel, listing=listing) if score else [],
         "score_explained": brief.get("score_story")
         or {
@@ -1407,6 +1741,73 @@ async def parcel_scores(parcel_id: UUID) -> dict[str, Any]:
     if parcel_id not in store.parcels:
         raise HTTPException(404, "Parcel not found")
     return {"scores": store.scores.get(parcel_id, [])}
+
+
+@router.post("/parcels/{parcel_id}/catalyst-simulate")
+async def parcel_catalyst_simulate(parcel_id: UUID, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Run Catalyst Simulator selection and/or natural-language custom scenarios."""
+    from landsignal.services.catalyst_engine import (
+        build_catalyst_engine,
+        build_custom_scenario_from_text,
+        flood_zone_label,
+        normalize_strategy,
+        screens_from_score_context,
+        simulate_selection,
+    )
+    from landsignal.services.market_trajectory import build_market_trajectory
+
+    store = get_store(get_settings().demo_seed)
+    parcel = store.parcels.get(parcel_id)
+    if not parcel:
+        raise HTTPException(404, "Parcel not found")
+    score = store.latest_score(parcel_id)
+    listing = store.listing_for_parcel(parcel_id)
+    enrichment = store.enrichments.get(parcel_id)
+    market_trajectory = build_market_trajectory(
+        parcel=parcel,
+        listing=listing,
+        score=score,
+        enrichment=enrichment,
+    )
+    screens = screens_from_score_context(score, enrichment)
+    strategy = normalize_strategy(score.best_strategy if score else None)
+    acres = float(parcel.acreage) if parcel.acreage is not None else None
+    flood_zone = flood_zone_label(enrichment)
+    engine = build_catalyst_engine(
+        screens=screens,
+        strategy=strategy,
+        acres=acres,
+        flood_zone=flood_zone,
+        market_trajectory=market_trajectory if isinstance(market_trajectory, dict) else None,
+    )
+
+    payload = body or {}
+    custom_text = str(payload.get("custom_text") or "").strip()
+    custom_built = None
+    custom_scenarios: list[dict[str, Any]] = []
+    if custom_text:
+        custom_built = build_custom_scenario_from_text(
+            custom_text,
+            screens=screens,
+            strategy=strategy,
+            acres=acres,
+            flood_zone=flood_zone,
+        )
+        if custom_built.get("ok") and custom_built.get("scenario"):
+            custom_scenarios.append(custom_built["scenario"])
+
+    scenario_ids = [str(x) for x in (payload.get("scenario_ids") or [])]
+    stress_key = str(payload.get("stress_case") or "").strip().lower()
+    if stress_key and stress_key != "custom":
+        stress = (engine.get("stress_cases") or {}).get(stress_key) or {}
+        scenario_ids = list(stress.get("scenario_ids") or [])
+
+    sim = simulate_selection(engine, scenario_ids, custom_scenarios=custom_scenarios or None)
+    return {
+        "engine": engine,
+        "custom": custom_built,
+        "simulation": sim,
+    }
 
 
 @router.post("/parcels/{parcel_id}/memo")
@@ -1484,16 +1885,22 @@ async def get_land_alert_profile() -> dict[str, Any]:
 
 @router.put("/land-alerts/profile")
 async def upsert_land_alert_profile(body: LandAlertProfileUpsert) -> dict[str, Any]:
-    from landsignal.services.land_alerts import DEMO_USER_ID, match_card, upsert_profile
+    from landsignal.services.land_alerts import (
+        DEMO_USER_ID,
+        filter_mappable_matches,
+        match_card,
+        upsert_profile,
+    )
 
     store = get_store(get_settings().demo_seed)
     profile, matches = upsert_profile(store, body, DEMO_USER_ID)
-    cards = [match_card(store, m) for m in matches]
+    viewable = filter_mappable_matches(store, matches)
+    cards = [match_card(store, m) for m in viewable]
     cards.sort(key=lambda c: (-(c.get("preference_match_pct") or 0), -(c.get("landsignal_score") or 0)))
     return {
         "profile": profile.model_dump(mode="json"),
-        "match_count": len(matches),
-        "new_count": sum(1 for m in matches if m.status == "new"),
+        "match_count": len(viewable),
+        "new_count": sum(1 for m in viewable if m.status == "new"),
         "matches": cards[:100],
         "note": "Matches recalculated against existing inventory. Preference changes do not create 'new listing' notifications.",
     }
@@ -1526,10 +1933,15 @@ async def resume_land_alert(profile_id: UUID) -> dict[str, Any]:
 
 @router.get("/land-alerts/matches")
 async def list_land_alert_matches(profile_id: UUID | None = None, status: str | None = None) -> dict[str, Any]:
-    from landsignal.services.land_alerts import DEMO_USER_ID, match_card, matches_for_user
+    from landsignal.services.land_alerts import (
+        DEMO_USER_ID,
+        filter_mappable_matches,
+        match_card,
+        matches_for_user,
+    )
 
     store = get_store(get_settings().demo_seed)
-    all_rows = matches_for_user(store, DEMO_USER_ID, profile_id)
+    all_rows = filter_mappable_matches(store, matches_for_user(store, DEMO_USER_ID, profile_id))
     rows = [m for m in all_rows if m.status == status] if status else all_rows
     cards = [match_card(store, m) for m in rows]
     return {
@@ -1559,6 +1971,38 @@ async def parcel_geometry(parcel_id: UUID) -> dict[str, Any]:
         "state": parcel.state,
         "county": parcel.county,
     }
+
+
+@router.get("/nearby")
+async def nearby_landmarks(lat: float, lon: float, kind: str) -> dict[str, Any]:
+    """Closest landmark chips for Land Viewer — works for any lat/lon nationwide."""
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+        raise HTTPException(400, "Invalid coordinates")
+    kind_norm = (kind or "").strip().lower()
+    from landsignal.services.nearby import KIND_META, find_nearby
+
+    if kind_norm not in KIND_META:
+        raise HTTPException(400, f"Unsupported kind: {kind}")
+    return await find_nearby(lat, lon, kind_norm)
+
+
+@router.get("/parcels/{parcel_id}/nearby")
+async def parcel_nearby_landmarks(parcel_id: UUID, kind: str) -> dict[str, Any]:
+    """Closest chips for a specific listing — uses the parcel's stored coordinates."""
+    store = get_store(get_settings().demo_seed)
+    parcel = store.parcels.get(parcel_id)
+    if not parcel:
+        raise HTTPException(404, "Parcel not found")
+    if parcel.latitude is None or parcel.longitude is None:
+        raise HTTPException(422, "Parcel has no coordinates for Closest lookup")
+    kind_norm = (kind or "").strip().lower()
+    from landsignal.services.nearby import KIND_META, find_nearby
+
+    if kind_norm not in KIND_META:
+        raise HTTPException(400, f"Unsupported kind: {kind}")
+    result = await find_nearby(float(parcel.latitude), float(parcel.longitude), kind_norm)
+    result["parcel_id"] = str(parcel.id)
+    return result
 
 
 @router.post("/land-alerts/matches/{parcel_id}/viewed")
@@ -1623,15 +2067,21 @@ async def update_land_alert_notify(body: LandAlertNotify) -> dict[str, Any]:
 
 @router.post("/land-alerts/rescan")
 async def rescan_land_alerts() -> dict[str, Any]:
-    from landsignal.services.land_alerts import DEMO_USER_ID, match_card, rescan_profile
+    from landsignal.services.land_alerts import (
+        DEMO_USER_ID,
+        filter_mappable_matches,
+        match_card,
+        rescan_profile,
+    )
 
     store = get_store(get_settings().demo_seed)
     profiles = [p for p in store.land_alert_profiles.values() if p.user_id == DEMO_USER_ID and not p.paused]
     all_matches = []
     for p in profiles:
         all_matches.extend(rescan_profile(store, p, origin="existing_inventory"))
-    cards = [match_card(store, m) for m in all_matches]
-    return {"match_count": len(all_matches), "matches": cards[:100]}
+    viewable = filter_mappable_matches(store, all_matches)
+    cards = [match_card(store, m) for m in viewable]
+    return {"match_count": len(viewable), "matches": cards[:100]}
 
 
 @router.get("/investor-profile")
@@ -1676,7 +2126,7 @@ async def watch(parcel_id: UUID) -> dict[str, Any]:
         "note": (
             f"Watching. Metric changes will notify {email}."
             if email and email_on
-            else "Watching in-app. Add your email under My criteria to sync updates."
+            else "Watching in-app. Metric changes stay on your Watchlist."
         ),
     }
 

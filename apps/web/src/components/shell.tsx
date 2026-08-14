@@ -10,7 +10,6 @@ const NAV = [
   { href: "/", label: "Search" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/alerts", label: "Land Alerts" },
-  { href: "/profile", label: "My criteria" },
 ];
 
 function navActive(pathname: string, href: string) {
@@ -38,12 +37,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMenuOpen(false);
     };
+    // Do not lock body overflow — hiding the scrollbar reflows the header and shifts this control.
     document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
   if (isAuthPage) {
@@ -133,20 +129,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
               >
                 {theme === "light" ? "Dark mode" : "Light mode"}
               </button>
-              <div className="shell-menu-close-panel">
-                <button
-                  type="button"
-                  className="shell-menu-close-btn"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Close menu
-                </button>
-              </div>
             </nav>
           </>
         ) : null}
       </header>
-      <main className="mx-auto max-w-[1240px] px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-[1240px] min-w-0 overflow-x-clip px-4 py-6">{children}</main>
       <footer className="mx-auto max-w-[1240px] px-4 pb-10 text-center text-sm text-[var(--muted)]">
         LandSignal ranks public land deals with access to intelligent insight on location information
       </footer>

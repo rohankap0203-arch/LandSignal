@@ -1,0 +1,23 @@
+{
+  "remote.autoForwardPorts": true,
+  "remote.autoForwardPortsSource": "hybrid",
+  "remote.forwardOnOpen": true,
+  "workbench.browser.openLocalhostLinks": true,
+  "remote.portsAttributes": {
+    "3000": {
+      "label": "LandSignal (PR #3 FSE)",
+      "onAutoForward": "openBrowser",
+      "protocol": "http",
+      "elevateIfNeeded": false
+    },
+    "8000": {
+      "label": "LandSignal API",
+      "onAutoForward": "silent",
+      "protocol": "http"
+    }
+  },
+  "remote.forwardPorts": [
+    3000,
+    8000
+  ]
+}

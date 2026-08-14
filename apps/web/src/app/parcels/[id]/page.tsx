@@ -5,15 +5,16 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AcquireRail, type OutreachPlaybook } from "@/components/acquire-rail";
-import { AskYourselfTypewriter } from "@/components/ask-yourself-typewriter";
 import { LandLoader } from "@/components/land-loader";
 import { LandViewerModal } from "@/components/land-viewer-modal";
+import { CatalystSimulator } from "@/components/catalyst-simulator";
 import { PriceTrajectory } from "@/components/price-trajectory";
 import { ReturnVisual } from "@/components/return-visual";
 import { ScoreBar } from "@/components/score-bar";
 import { SignalBadge } from "@/components/signal-badge";
 import { SignalCockpit } from "@/components/signal-cockpit";
 import { landsignalApi, type ActionLink } from "@/lib/api";
+import type { MoneyMode } from "@/lib/inflation";
 
 const ParcelMap = dynamic(() => import("@/components/parcel-map").then((m) => m.ParcelMap), {
   ssr: false,
@@ -25,7 +26,11 @@ function firstSentence(text: unknown, max = 140): string {
   const s = String(text || "").trim();
   if (!s) return "";
   const cut = s.split(/(?<=[.!?])\s+/)[0] || s;
-  return cut.length > max ? cut.slice(0, max - 1).trimEnd() + "…" : cut;
+  if (cut.length <= max) return cut;
+  const head = cut.slice(0, max);
+  const at = Math.max(head.lastIndexOf(" "), head.lastIndexOf("·"), head.lastIndexOf("—"));
+  const base = (at > max * 0.55 ? head.slice(0, at) : head).trimEnd().replace(/[.,;:]+$/, "");
+  return `${base}…`;
 }
 
 
@@ -89,6 +94,7 @@ export default function ParcelIntelligencePage() {
   const [watchMsg, setWatchMsg] = useState("");
   const [openRating, setOpenRating] = useState<string | null>(null);
   const [landViewerOpen, setLandViewerOpen] = useState(false);
+  const [moneyMode, setMoneyMode] = useState<MoneyMode>("today");
 
   useEffect(() => {
     setData(null);
@@ -117,7 +123,9 @@ export default function ParcelIntelligencePage() {
   const score = data.score as AnyRec | null;
   const links = (data.links as ActionLink[]) || [];
   const price = data.price as AnyRec;
-  const ratings = (data.rating_breakdown as AnyRec[]) || [];
+  const ratings = ((data.rating_breakdown as AnyRec[]) || []).filter(
+    (r) => String(r.key || "") !== "hbu_optionality",
+  );
   const land = (data.land_readouts as Record<string, AnyRec>) || {};
   const brief = (data.brief as AnyRec) || {};
   const cockpit = (data.cockpit as AnyRec) || {};
@@ -125,7 +133,6 @@ export default function ParcelIntelligencePage() {
   const whyOpp = (brief.why_opportunity as AnyRec[]) || [];
   const whyStill = (brief.why_still_available as AnyRec[]) || [];
   const scenarios = (brief.scenario_cards as AnyRec[]) || (data.scenarios_human as AnyRec[]) || [];
-  const askYourself = (brief.ask_yourself as AnyRec) || null;
   const story = (brief.score_story as Record<string, string>) || {};
   const returnCase = (brief.return_case as AnyRec) || {};
   const drivers = (data.score_drivers as AnyRec) || {};
@@ -198,7 +205,7 @@ export default function ParcelIntelligencePage() {
         </Link>
       </div>
 
-      <section className="panel overflow-hidden">
+      <section className="panel">
         <div className="p-6 pb-4">
           <div className="intel-topbar">
             <div className="intel-topbar-left">
@@ -237,11 +244,13 @@ export default function ParcelIntelligencePage() {
                   <button
                     type="button"
                     className="next-process-action"
-                    onClick={() =>
-                      document
-                        .getElementById("sec-scroll-to")
-                        ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                    }
+                    onClick={() => {
+                      const el = document.getElementById("sec-read-start");
+                      if (!el) return;
+                      // Land below the sticky header + scroll-to chips (slightly lower than before).
+                      const top = el.getBoundingClientRect().top + window.scrollY - 56;
+                      window.scrollTo({ top, behavior: "smooth" });
+                    }}
                   >
                     Start reading ↓
                   </button>
@@ -295,12 +304,12 @@ export default function ParcelIntelligencePage() {
             <div className="scroll-to-row">
               {[
                 { id: "sec-bidding", label: "Bidding by price" },
-                { id: "sec-value", label: "Value path" },
-                { id: "sec-return", label: "Return" },
+                { id: "sec-value", label: "Land value" },
+                { id: "sec-return", label: "Hold return" },
+                { id: "sec-catalyst", label: "Future scenarios" },
                 { id: "sec-why", label: "Why this land" },
                 { id: "sec-score", label: "Score parts" },
                 { id: "sec-land", label: "Land checks" },
-                { id: "sec-ask", label: "Ask yourself" },
               ].map((s) => (
                 <button
                   key={s.id}
@@ -315,6 +324,7 @@ export default function ParcelIntelligencePage() {
               ))}
             </div>
           </nav>
+          <div id="sec-read-start" className="scroll-mt-16">
           <ParcelMap
             latitude={parcel.latitude as number}
             longitude={parcel.longitude as number}
@@ -323,6 +333,7 @@ export default function ParcelIntelligencePage() {
             height={280}
             onExpand={() => setLandViewerOpen(true)}
           />
+          </div>
           <LandViewerModal
             open={landViewerOpen}
             onClose={() => setLandViewerOpen(false)}
@@ -341,6 +352,7 @@ export default function ParcelIntelligencePage() {
             latitude={parcel.latitude as number}
             longitude={parcel.longitude as number}
             polygon={parcel.polygon as number[][][]}
+            parcelId={String(parcel.id || params.id)}
           />
         </div>
 
@@ -349,32 +361,53 @@ export default function ParcelIntelligencePage() {
             <ScoreBar
               label="Opportunity score"
               value={Number(score?.opportunity || 0)}
-              hint={String(oppDrive.verdict || "Tap for why this file scored here")}
+              hint={String(
+                (oppDrive.hint as string) ||
+                  oppDrive.verdict ||
+                  "Tap to see how this stacks up across the site",
+              )}
               verdict={String(oppDrive.verdict || "")}
               bullets={(oppDrive.bullets as string[]) || []}
+              standings={
+                (oppDrive.standings as Parameters<typeof ScoreBar>[0]["standings"]) || null
+              }
             />
             <ScoreBar
               label="Risk"
               value={Number(score?.risk || 0)}
               invert
-              hint={String(riskDrive.verdict || "Tap for what could go wrong")}
+              hint={String(
+                (riskDrive.hint as string) ||
+                  riskDrive.verdict ||
+                  "Tap for what could go wrong",
+              )}
               verdict={String(riskDrive.verdict || "")}
               bullets={(riskDrive.bullets as string[]) || []}
+              standings={
+                (riskDrive.standings as Parameters<typeof ScoreBar>[0]["standings"]) || null
+              }
             />
             <ScoreBar
               label="How complete the file is"
               value={Number(score?.confidence || 0)}
-              hint={String(confDrive.verdict || "Tap to see what’s filled in")}
+              hint={String(
+                (confDrive.hint as string) ||
+                  confDrive.verdict ||
+                  "Tap to see what’s filled in",
+              )}
               verdict={String(confDrive.verdict || "")}
               bullets={(confDrive.bullets as string[]) || []}
+              standings={
+                (confDrive.standings as Parameters<typeof ScoreBar>[0]["standings"]) || null
+              }
             />
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <Stat label={String(price?.label || "Price")} value={String(price?.display || "No public price yet")} />
-            <Stat
-              label="Basics already on file"
-              value={`${Number(score?.deal_readiness || 0).toFixed(0)}/100`}
+          <div className="mt-5">
+            <PriceStat
+              label={String(price?.label || "Price")}
+              value={String(price?.display || "No public price yet")}
+              kind={String((price as AnyRec)?.kind || "")}
             />
           </div>
 
@@ -454,6 +487,8 @@ export default function ParcelIntelligencePage() {
             (data.market_trajectory as Parameters<typeof PriceTrajectory>[0]["trajectory"]) ||
             null
           }
+          moneyMode={moneyMode}
+          onMoneyModeChange={setMoneyMode}
         />
       </section>
 
@@ -473,12 +508,27 @@ export default function ParcelIntelligencePage() {
                 ((data.market_trajectory as AnyRec) || {}).annualRate,
             ) || null
           }
+          moneyMode={moneyMode}
+          onMoneyModeChange={setMoneyMode}
         />
       </section>
 
-      <section id="sec-why" className="grid gap-4 md:grid-cols-2 scroll-mt-20">
-        <InsightList title="Why this property stands out" items={whyOpp} />
-        <InsightList title="Why it might still be available" items={whyStill} />
+      <CatalystSimulator
+        parcelId={String(params.id)}
+        engine={(data.catalyst_engine as Parameters<typeof CatalystSimulator>[0]["engine"]) || null}
+      />
+
+      <section id="sec-why" className="insight-pair scroll-mt-20">
+        <InsightList
+          eyebrow="Scout edge"
+          title="What makes this one worth opening"
+          items={whyOpp}
+        />
+        <InsightList
+          eyebrow="Still on the board"
+          title="Why it hasn’t been scooped yet"
+          items={whyStill}
+        />
       </section>
 
       <section id="sec-score" className="panel p-5 scroll-mt-20">
@@ -531,7 +581,10 @@ export default function ParcelIntelligencePage() {
 
       <section id="sec-land" className="scroll-mt-20">
         <div className="mb-2">
-          <h2 className="display text-lg font-semibold">Land checks that move the needle</h2>
+          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+            Ground truth
+          </div>
+          <h2 className="display text-lg font-semibold">Checks that move the score</h2>
         </div>
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           {(
@@ -578,23 +631,6 @@ export default function ParcelIntelligencePage() {
         </div>
       </section>
 
-      {askYourself?.question ? (
-        <section id="sec-ask" className="panel ask-yourself scroll-mt-20 p-5 md:p-7">
-          <AskYourselfTypewriter
-            label={String(askYourself.label || "Ask yourself")}
-            question={String(askYourself.question)}
-            because={
-              askYourself.because
-                ? String(askYourself.because)
-                : askYourself.aftertaste
-                  ? String(askYourself.aftertaste)
-                  : null
-            }
-            holdMs={10000}
-          />
-        </section>
-      ) : null}
-
     </div>
   );
 }
@@ -608,34 +644,114 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function InsightList({ title, items }: { title: string; items: AnyRec[] }) {
-  const [open, setOpen] = useState(0);
+/** Peel "$1,013 start" / "~$29,228–$56,208 likely finish" into amount + role. */
+function peelBidFace(raw: string): { amount: string; role: "start" | "finish" | null } {
+  const t = raw.trim();
+  if (/\blikely finish\b/i.test(t)) {
+    return { amount: t.replace(/\s*likely finish\s*$/i, "").trim(), role: "finish" };
+  }
+  if (/\bstart\b/i.test(t)) {
+    return { amount: t.replace(/\s*start\s*$/i, "").trim(), role: "start" };
+  }
+  return { amount: t, role: null };
+}
+
+/** Widen the gap around the lo–hi dash on large-screen bid coupons. */
+function spaceFinishBand(amount: string): string {
+  return amount.replace(/\s*[–—-]\s*/g, "\u2002–\u2002");
+}
+
+/** Starting bid → likely finish — admit-one ticket (above Buy case).
+ *  Auction / tax-sale floors only — retail asks and unpriced estimates stay plain. */
+function PriceStat({ label, value, kind }: { label: string; value: string; kind?: string }) {
+  const isBid =
+    kind === "minimum_bid" ||
+    /starting bid/i.test(label) ||
+    (/\bstart\b/i.test(value) && /likely finish/i.test(value));
+  if (!isBid) return <Stat label={label} value={value} />;
+
+  const parts = value.split(/\s·\s/).map((p) => p.trim()).filter(Boolean);
+  const faces = parts.map(peelBidFace);
+  const start = faces.find((f) => f.role === "start") || (faces[0] ? { ...faces[0], role: "start" as const } : null);
+  const finish =
+    faces.find((f) => f.role === "finish") ||
+    (faces.length >= 2 ? { amount: faces.slice(1).map((f) => f.amount).join(" · "), role: "finish" as const } : null);
+
   return (
-    <div className="panel p-4 insight-interactive">
-      <h2 className="display text-lg font-semibold">{title}</h2>
-      <div className="mt-2 space-y-1.5">
-        {items.map((item, i) => {
-          const active = open === i;
-          return (
-            <button
-              key={`${String(item.headline || item)}-${i}`}
-              type="button"
-              className={`w-full rounded-xl bg-[var(--bg-soft)] p-2.5 text-left ${active ? "active" : ""}`}
-              onClick={() => setOpen(active ? -1 : i)}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="font-semibold text-sm leading-snug">{String(item.headline || item)}</div>
-                <span className="text-[10px] text-[var(--muted)] shrink-0">{active ? "−" : "+"}</span>
-              </div>
-              {active && item.detail ? (
-                <p className="mt-1.5 text-xs leading-relaxed text-[var(--muted)]">{String(item.detail)}</p>
-              ) : !active && item.detail ? (
-                <p className="mt-1 text-xs text-[var(--muted)] line-clamp-1">{String(item.detail)}</p>
-              ) : null}
-            </button>
-          );
-        })}
-        {!items.length && <p className="text-sm text-[var(--muted)]">No parcel-specific narrative yet.</p>}
+    <div className="bid-ticket" aria-label={`${label}: ${value}`}>
+      <div className="bid-ticket-stub" aria-hidden>
+        <span className="bid-ticket-stub-k">BID</span>
+      </div>
+      <span className="bid-ticket-perf" aria-hidden />
+      <div className="bid-ticket-main">
+        {start && finish ? (
+          <div className="bid-ticket-prices">
+            <div className="bid-ticket-cell is-start">
+              <span className="bid-ticket-tag">START</span>
+              <span className="bid-ticket-val">{start.amount}</span>
+            </div>
+            <span className="bid-ticket-split" aria-hidden />
+            <div className="bid-ticket-cell is-finish">
+              <span className="bid-ticket-tag">LIKELY FINISH</span>
+              <span className="bid-ticket-val">{spaceFinishBand(finish.amount)}</span>
+            </div>
+          </div>
+        ) : (
+          <span className="bid-ticket-val">{value}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InsightList({
+  title,
+  items,
+  eyebrow,
+}: {
+  title: string;
+  items: AnyRec[];
+  eyebrow?: string;
+}) {
+  const [open, setOpen] = useState<number>(-1);
+  const rows = (items || []).filter((item) => {
+    const headline = String(item?.headline || item || "").trim();
+    return Boolean(headline);
+  });
+  return (
+    <div className="panel insight-interactive">
+      <div className="insight-interactive-inner">
+        {eyebrow ? (
+          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">{eyebrow}</div>
+        ) : null}
+        <h2 className="display text-lg font-semibold leading-snug">{title}</h2>
+        <div className="insight-list">
+          {rows.map((item, i) => {
+            const active = open === i;
+            const detail = String(item.detail || "").trim();
+            return (
+              <button
+                key={`${String(item.headline || item)}-${i}`}
+                type="button"
+                className={`insight-item${active ? " is-open" : ""}`}
+                onClick={() => setOpen(active ? -1 : i)}
+              >
+                <div className="insight-item-head">
+                  <div className="font-semibold text-sm leading-snug">{String(item.headline || item)}</div>
+                  <span className="insight-item-toggle" aria-hidden>
+                    {active ? "−" : "+"}
+                  </span>
+                </div>
+                {active && detail ? (
+                  <p className="insight-item-detail">{detail}</p>
+                ) : null}
+              </button>
+            );
+          })}
+          {!rows.length ? (
+            <p className="text-sm text-[var(--muted)]">No parcel-specific narrative yet.</p>
+          ) : null}
+        </div>
       </div>
     </div>
   );

@@ -78,8 +78,9 @@ CHANNEL_MULT = {
     "csv": 1.0,
 }
 
-# Soft drawdowns / spikes by year offset (relative to today) for realism —
-# 2020–21 land boom, 2022–23 rate-shock cooling, then re-acceleration in Sun Belt.
+# Soft drawdowns / spikes by year offset — HISTORY only (past boom/bust texture).
+# Forward outlook uses a dampened cycle so After inflation doesn’t bounce around
+# from invented near-term spikes (old +1/+2/+3% forward shapers).
 CYCLE_SHAPERS = {
     -10: 0.96,
     -9: 0.97,
@@ -92,9 +93,6 @@ CYCLE_SHAPERS = {
     -2: 0.97,  # rate shock
     -1: 0.99,
     0: 1.00,
-    1: 1.01,
-    2: 1.02,
-    3: 1.03,
 }
 
 
@@ -172,6 +170,33 @@ def _extract_observed_marks(raw: dict | None, ask: float | None) -> list[dict[st
     return [by_year[y] for y in sorted(by_year)]
 
 
+def _pace_factor(
+    key: str,
+    label: str,
+    *,
+    delta_annual: float = 0.0,
+    mult: float | None = None,
+    plain: str,
+    affects: str = "pace",
+    toggleable: bool = True,
+) -> dict[str, Any]:
+    """Decomposable screen — client can toggle and recompute hold/land pace."""
+    direction = "up" if (delta_annual > 0 or (mult or 1) > 1) else "down" if (delta_annual < 0 or (mult or 1) < 1) else "neutral"
+    return {
+        "key": key,
+        "label": label,
+        "delta_annual": round(delta_annual, 6),
+        "mult": mult,
+        "bps": round(delta_annual * 10000, 1) if mult is None else round(((mult or 1.0) - 1.0) * 10000, 1),
+        "plain": plain,
+        "affects": affects,
+        "toggleable": toggleable,
+        "default_on": True,
+        "direction": direction,
+        "kind": affects,
+    }
+
+
 def _base_annual_rate(
     *,
     state: str | None,
@@ -185,9 +210,11 @@ def _base_annual_rate(
     slope_pct: float | None = None,
     liquidity: float | None = None,
     scarcity: float | None = None,
-) -> tuple[float, list[str]]:
+) -> tuple[float, list[str], list[dict[str, Any]]]:
+    """Return (annual_rate, notes, toggleable pace factors). Single source for land + hold."""
     st = (state or "").upper()
     base = STATE_ANNUAL_APPRECIATION.get(st, 0.028)
+    factors: list[dict[str, Any]] = []
     notes = [
         f"Starting point: typical land in {(st or 'this state')} has risen about {base*100:.1f}% per year over long periods."
     ]
@@ -198,82 +225,202 @@ def _base_annual_rate(
         "blm_lpad": "federal BLM land",
         "public_vacant_gis": "vacant land on the public assessor map",
     }.get(provider_id or "", "this listing type")
-    if ch != 1.0:
-        notes.append(
-            f"For {channel_plain}, we use {ch*100:.0f}% of that pace because these sales usually "
-            f"move slower than normal retail land."
-        )
-    rate = base * ch
 
+    factors.append(
+        _pace_factor(
+            "state_prior",
+            "Area land pace",
+            delta_annual=base,
+            plain=f"Typical long-run land pace in {st or 'this state'}: about {base*100:.1f}%/yr.",
+            toggleable=False,
+        )
+    )
+    # Channel cheapens the BUY — not lifelong owned-land appreciation.
+    if ch < 1.0:
+        notes.append(
+            f"{channel_plain.title()} usually clear cheaper than retail — that shows up in the "
+            f"buy / opportunity math, not by permanently cutting this pin’s land pace."
+        )
+        factors.append(
+            _pace_factor(
+                "channel_entry",
+                "How it is sold",
+                delta_annual=0.0,
+                plain=(
+                    f"{channel_plain.title()} usually clear cheaper than retail — scored in the buy "
+                    f"vs our value, not as a permanent cut to owned-land pace."
+                ),
+                affects="entry",
+                toggleable=False,
+            )
+        )
+
+    rate = base
     if growth_score is not None:
         adj = (growth_score - 50) / 50 * 0.012
         rate += adj
         notes.append(
             f"Local growth signal ({growth_score:.0f}/100) changes the yearly pace by {adj*100:+.1f} percentage points."
         )
+        factors.append(
+            _pace_factor(
+                "growth",
+                "Local growth",
+                delta_annual=adj,
+                plain=f"Growth signal {growth_score:.0f}/100 moves yearly pace by {adj*100:+.1f} pts.",
+            )
+        )
 
     if acres is not None:
         if acres < 2:
-            rate *= 0.85
-            notes.append("Under 2 acres: we use a softer path (−15%) because small lots jump around more year to year.")
+            mult = 0.97
+            rate *= mult
+            notes.append("Under 2 acres: slightly softer path (−3%) — small lots jump around more year to year.")
+            factors.append(
+                _pace_factor(
+                    "lot_size",
+                    "Small-lot class",
+                    mult=mult,
+                    plain="Under 2 acres: −3% pace — small lots jump around more year to year.",
+                )
+            )
         elif acres >= 80:
-            rate *= 1.05
+            mult = 1.05
+            rate *= mult
             notes.append("80+ acres: slightly stronger path (+5%) — bigger tracts often track farm/fringe land indexes.")
+            factors.append(
+                _pace_factor(
+                    "lot_size",
+                    "Large-tract scale",
+                    mult=mult,
+                    plain=f"{acres:,.0f} acres: +5% pace — bigger tracts often track farm/fringe indexes.",
+                )
+            )
 
     if prime_pct is not None and prime_pct >= 50 and (acres or 0) >= 10:
-        rate += 0.004
+        adj = 0.004
+        rate += adj
         notes.append(f"About {prime_pct:.0f}% prime farmland on the map adds +0.4 percentage points per year.")
+        factors.append(
+            _pace_factor(
+                "soil",
+                "Soil / prime farmland",
+                delta_annual=adj,
+                plain=f"About {prime_pct:.0f}% prime farmland adds +0.4 pts/yr.",
+            )
+        )
     if flood_pct is not None and flood_pct >= 30:
-        rate -= 0.006
+        adj = -0.006
+        rate += adj
         notes.append(f"About {flood_pct:.0f}% flood overlap on the map subtracts −0.6 percentage points per year.")
+        factors.append(
+            _pace_factor(
+                "flood_pace",
+                "Flood (pace)",
+                delta_annual=adj,
+                plain=f"About {flood_pct:.0f}% flood overlap subtracts −0.6 pts/yr from appreciation.",
+            )
+        )
     if wet_pct is not None and wet_pct >= 25:
-        rate -= 0.004
+        adj = -0.004
+        rate += adj
         notes.append(f"About {wet_pct:.0f}% wetlands on the map subtracts −0.4 percentage points per year.")
+        factors.append(
+            _pace_factor(
+                "wetlands_pace",
+                "Wetlands (pace)",
+                delta_annual=adj,
+                plain=f"About {wet_pct:.0f}% wetlands subtracts −0.4 pts/yr from appreciation.",
+            )
+        )
     if access_score is not None and access_score < 40:
-        rate -= 0.005
+        adj = -0.005
+        rate += adj
         notes.append(f"Weak access screen ({access_score:.0f}/100) slows the path (−0.5 pts/yr).")
+        factors.append(
+            _pace_factor(
+                "access",
+                "Road access",
+                delta_annual=adj,
+                plain=f"Weak access ({access_score:.0f}/100) slows pace (−0.5 pts/yr).",
+            )
+        )
     elif access_score is not None and access_score >= 75:
-        rate += 0.002
+        adj = 0.002
+        rate += adj
         notes.append(f"Clearer access ({access_score:.0f}/100) adds a small lift (+0.2 pts/yr).")
+        factors.append(
+            _pace_factor(
+                "access",
+                "Road access",
+                delta_annual=adj,
+                plain=f"Clearer access ({access_score:.0f}/100) adds +0.2 pts/yr.",
+            )
+        )
     if slope_pct is not None and slope_pct >= 15:
-        rate -= 0.003
+        adj = -0.003
+        rate += adj
         notes.append(f"Steeper ground (avg slope ~{slope_pct:.0f}%) softens long-run pace (−0.3 pts/yr).")
+        factors.append(
+            _pace_factor(
+                "slope",
+                "Terrain / slope",
+                delta_annual=adj,
+                plain=f"Avg slope ~{slope_pct:.0f}% softens pace (−0.3 pts/yr).",
+            )
+        )
     if liquidity is not None and liquidity < 40:
-        rate -= 0.003
+        adj = -0.003
+        rate += adj
         notes.append(f"Thin resale ease ({liquidity:.0f}/100) trims the path (−0.3 pts/yr).")
+        factors.append(
+            _pace_factor(
+                "liquidity",
+                "Ease of resale",
+                delta_annual=adj,
+                plain=f"Thin resale ease ({liquidity:.0f}/100) trims pace (−0.3 pts/yr).",
+            )
+        )
     if scarcity is not None and scarcity >= 70:
-        rate += 0.002
+        adj = 0.002
+        rate += adj
         notes.append(f"Higher scarcity ({scarcity:.0f}/100) adds a small support (+0.2 pts/yr).")
+        factors.append(
+            _pace_factor(
+                "scarcity",
+                "Scarcity",
+                delta_annual=adj,
+                plain=f"Higher scarcity ({scarcity:.0f}/100) adds +0.2 pts/yr.",
+            )
+        )
 
-    # Clamp to sane land ranges — long-run land rarely compounds at stock-like rates
     rate = max(-0.04, min(0.08, rate))
-    return rate, notes
+    return rate, notes, factors
 
 
-def _cycle_shaper(offset: int) -> float:
-    """Mild year-to-year wiggle so long paths are not a perfect straight compound."""
-    if offset in CYCLE_SHAPERS:
+def _cycle_shaper(offset: int, *, forward: bool = False) -> float:
+    """Year-to-year wiggle — full texture on history, dampened on outlook."""
+    if not forward and offset in CYCLE_SHAPERS:
         return CYCLE_SHAPERS[offset]
-    # Longer history: soft multi-year cycle (±3%)
-    return 1.0 + 0.03 * math.sin(offset * 0.55)
+    # Soft multi-year cycle (±3% history, ±0.6% forward)
+    amp = 0.006 if forward else 0.03
+    return 1.0 + amp * math.sin(offset * 0.55)
 
 
 def _forward_fade(year_k: int) -> float:
-    """Long holds mean-revert — 100y is not the same % forever.
+    """Gentle long-hold mean reversion — not a rocket, not a collapse.
 
-    Near-term can track the parcel rate; after ~15y fade hard toward a slow
-    long-run real land pace so terminals stay grounded (not generational rockets).
+    Near-term tracks the parcel’s screened pace. Far years ease toward a
+    slightly slower long-run land pace (uncertainty grows with horizon).
+    This is NOT tuned to force a beat vs CPI; real vs CPI is an output.
     """
-    if year_k <= 8:
+    if year_k <= 15:
         return 1.0
-    if year_k <= 20:
-        return max(0.55, 1.0 - (year_k - 8) * 0.035)
-    if year_k <= 40:
-        return max(0.34, 0.55 - (year_k - 20) * 0.010)
-    if year_k <= 70:
-        return max(0.22, 0.34 - (year_k - 40) * 0.004)
-    # Century mark: mostly real-land drift (~¼ of near-term pace)
-    return max(0.16, 0.22 - (year_k - 70) * 0.002)
+    if year_k <= 35:
+        return max(0.88, 1.0 - (year_k - 15) * 0.006)
+    if year_k <= 60:
+        return max(0.80, 0.88 - (year_k - 35) * 0.003)
+    return max(0.74, 0.80 - (year_k - 60) * 0.0015)
 
 
 def _hitch_severity(
@@ -362,18 +509,17 @@ def _series_from_anchor(
 ) -> dict[int, float]:
     """Build offset→value with cycle + long-run fade + optional future hitch."""
     vals: dict[int, float] = {0: float(anchor)}
-    # History is shared across hitch modes — only the forward path bends
+    # History: full cycle texture. Forward: dampened cycle + gentle fade only
+    # (no stacked fwd×fade haircuts — those invented permanent real decline).
     for k in range(1, years_back + 1):
-        shaper = _cycle_shaper(-k)
-        fade = _forward_fade(k)
-        factor = (1.0 + annual * fade) * shaper
+        shaper = _cycle_shaper(-k, forward=False)
+        # History uses the same long-run prior without forward fade
+        factor = (1.0 + annual) * shaper
         vals[-k] = vals[-k + 1] / max(factor, 0.82)
     for k in range(1, years_forward + 1):
-        shaper = _cycle_shaper(k)
+        shaper = _cycle_shaper(k, forward=True)
         fade = _forward_fade(k)
-        # Forward already conservative; fade + soft drag kill runaway 100y terminals
-        drag = 0.988 if k <= 25 else 0.985 if k <= 50 else 0.982
-        factor = (1.0 + annual * 0.78 * fade) * (drag + (1.0 - drag) * shaper)
+        factor = (1.0 + annual * fade) * shaper
         factor = _apply_hitch(k, factor, hitch, severity=hitch_severity)
         vals[k] = vals[k - 1] * max(factor, 0.82)
     return vals
@@ -433,7 +579,7 @@ def build_market_trajectory(
     liquidity = _f(comps_n.get("liquidity_score"))
     scarcity = _f(comps_n.get("scarcity_score"))
 
-    annual, method_notes = _base_annual_rate(
+    annual, method_notes, pace_factors = _base_annual_rate(
         state=state,
         provider_id=provider,
         acres=acres,
@@ -447,7 +593,7 @@ def build_market_trajectory(
         scarcity=scarcity,
     )
     method_notes.append(
-        "Long horizons fade toward a slower real land pace — 100 years is not the near-term % forever."
+        "Long horizons ease slightly for uncertainty — 100 years is not the near-term % forever."
     )
 
     # Anchor: screening mark preferred; else ask; else synthetic prior
@@ -529,43 +675,42 @@ def build_market_trajectory(
     site_sev = _hitch_severity(
         "site_hitch", flood=flood, wet=wet, access=access_score, growth=growth_score, liquidity=liquidity
     )
-    # Parcel-aware hitch labels — exactly three stress cases for the chart rail
+    # Three future-only what-if cases — plain names for everyday buyers
     hitch_catalog = [
         {
             "id": "rate_shock",
-            "label": "Rate bite",
+            "label": "Higher rates",
             "short": "Rates",
             "plain": (
-                f"From today forward: higher borrowing costs cool bids for a few years on this "
-                f"{provider or 'listing'} channel"
-                f"{' (thin resale)' if (liquidity or 100) < 45 else ''} — then a mild catch-up. "
-                f"Past years stay put."
+                f"If borrowing costs rise, buyers may pay less for a few years"
+                f"{' (resale is already thin here)' if (liquidity or 100) < 45 else ''} — "
+                f"then prices ease back toward the base path. Past years stay the same."
             ),
             "severity": round(rate_sev, 2),
             "points": _points_for("rate_shock"),
         },
         {
             "id": "growth_surge",
-            "label": "Growth surge",
-            "short": "Growth",
+            "label": "Stronger demand",
+            "short": "Demand",
             "plain": (
-                f"From today forward: stronger corridor demand around {county or 'this county'} "
-                f"lifts the mid years, then fades. Past years stay on the shared history."
+                f"If demand around {county or 'this county'} runs hotter than the base case, "
+                f"mid-year values rise, then settle. Past years stay the same."
             ),
             "severity": round(growth_sev, 2),
             "points": _points_for("growth_surge"),
         },
         {
             "id": "site_hitch",
-            "label": "Site hitch",
-            "short": "Site",
+            "label": "Site issue",
+            "short": "Site issue",
             "plain": (
                 (
-                    f"From today forward: flood (~{flood:.0f}%), wetlands, or access surprise "
-                    f"steps value down — then a slower climb. History unchanged."
+                    f"If flood (~{flood:.0f}%), wetlands, or access turns out worse than expected, "
+                    f"the value steps down, then climbs more slowly. Past years stay the same."
                     if (flood or 0) >= 15
-                    else "From today forward: a site/title/access surprise steps value down — "
-                    "then a slower climb. History unchanged."
+                    else "If a site, title, or access problem shows up, the value steps down, "
+                    "then climbs more slowly. Past years stay the same."
                 )
             ),
             "severity": round(site_sev, 2),
@@ -573,26 +718,43 @@ def build_market_trajectory(
         },
     ]
     hitch_help = {
-        "title": "What these hitch buttons do",
+        "title": "What-if cases for the future",
         "body": (
-            "They only bend the future (dashed) side of the chart. The past stays the same so you can "
-            "compare “what if” from today’s mark."
+            "These buttons only change years ahead. History does not move. "
+            "Each case is scaled to this property (severity shown in the math)."
         ),
         "items": [
             {
                 "id": "rate_shock",
-                "label": "Rates",
-                "plain": "What if borrowing costs cool buyers for a few years, then ease a bit?",
+                "label": "Higher rates",
+                "plain": "Borrowing costs rise → buyers bid less for a while.",
+                "math": (
+                    f"Years 1–3: yearly path × (1 − 10% × {rate_sev:.2f}). "
+                    f"Years 4–6: × (1 − 5% × severity). "
+                    f"Years 7–14: mild rebound +0.8% × severity. "
+                    f"Severity rises if resale is thin or access is weak."
+                ),
             },
             {
                 "id": "growth_surge",
-                "label": "Growth",
-                "plain": f"What if {county or 'this county'} gets a mid-term demand surge — then it fades?",
+                "label": "Stronger demand",
+                "plain": "Local demand runs hotter than the base case for a stretch.",
+                "math": (
+                    f"Years 4–18: path × (1 + 2.8% × {growth_sev:.2f}). "
+                    f"Years 19–32: × (1 − 0.6% × severity). "
+                    f"After year 33: × (1 − 0.3% × severity). "
+                    f"Severity follows this property’s growth screen."
+                ),
             },
             {
                 "id": "site_hitch",
-                "label": "Site",
-                "plain": "What if flood, access, or title news steps this pin down after you buy?",
+                "label": "Site issue",
+                "plain": "A flood, wetlands, title, or access surprise hits after you buy.",
+                "math": (
+                    f"Step-downs at years 3–4, 12–13, and 28–29: path × (1 − 5% × {site_sev:.2f}). "
+                    f"After year 30: slight drag −0.2% × severity. "
+                    f"Severity rises with flood, wetlands, or weak access."
+                ),
             },
         ],
     }
@@ -608,8 +770,8 @@ def build_market_trajectory(
         yrs = max(1, end["year"] - start["year"])
         return (end["value_usd"] / start["value_usd"]) ** (1 / yrs) - 1
 
-    # Value-over-time chart presets (hold-period 5-yr steps live on return paths).
-    windows = [1, 3, 5, 10, 15, 30, 50, 75, 100]
+    # Shared presets with hold-return windows so the intelligence page stays aligned.
+    windows = [1, 3, 5, 10, 15, 25, 40, 60, 80, 100]
     window_stats: dict[str, Any] = {}
     for w in windows:
         start = next((p for p in points if p["offset"] == -w), None)
@@ -698,10 +860,17 @@ def build_market_trajectory(
         f"Highest in the full history: {_money(peak['value_usd'])} ({peak['year']}); "
         f"lowest: {_money(trough['value_usd'])} ({trough['year']}).",
     ]
+    from landsignal.services.inflation import DEFAULT_CPI_ANNUAL, deflate, inflation_meta, real_rate
+
+    infl = inflation_meta(DEFAULT_CPI_ANNUAL)
+    fwd_today = (
+        deflate(y_fwd["value_usd"], years_forward, DEFAULT_CPI_ANNUAL) if y_fwd else None
+    )
     if fwd_mult is not None and years_forward >= 50:
         summary_bullets.append(
             f"At {years_forward} years the faded path is about {fwd_mult:.1f}× today’s mark "
-            f"(~{_money(y_fwd['value_usd'])}) — nominal dollars, not a promise of generational wealth."
+            f"(~{_money(y_fwd['value_usd'])} before inflation · ~{_money(fwd_today)} in today’s $) — "
+            f"not a promise of generational wealth."
         )
     if has_observed:
         summary_bullets.append(
@@ -714,8 +883,8 @@ def build_market_trajectory(
         )
     if (flood or 0) >= 20 or (wet or 0) >= 15 or (access_score is not None and access_score < 45):
         summary_bullets.append(
-            "Site screens (flood / wetlands / access) already slow this pin’s base path — "
-            "use the Site hitch to stress a sharper surprise."
+            "Site screens (flood / wetlands / access) already slow this property’s base path — "
+            "use Site issue to test a sharper surprise."
         )
 
     # Card sparkline stays short (last ~10 years)
@@ -732,14 +901,24 @@ def build_market_trajectory(
         "confidence": confidence,
         "annual_rate": annual,
         "annual_rate_display": f"{annual*100:.1f}%/yr",
+        "state_prior_annual": STATE_ANNUAL_APPRECIATION.get((state or "").upper(), 0.028),
+        "pace_factors": pace_factors,
         "cagr_5y": cagr_5,
         "cagr_10y": cagr_10,
         "cagr_forward": cagr_fwd,
+        "cagr_forward_real": real_rate(cagr_fwd, DEFAULT_CPI_ANNUAL),
         "cagr_5y_display": f"{cagr_5*100:+.1f}%/yr" if cagr_5 is not None else "n/a",
         "cagr_10y_display": f"{cagr_10*100:+.1f}%/yr" if cagr_10 is not None else "n/a",
         "cagr_forward_display": f"{cagr_fwd*100:+.1f}%/yr" if cagr_fwd is not None else "n/a",
+        "cagr_forward_real_display": (
+            f"{real_rate(cagr_fwd, DEFAULT_CPI_ANNUAL)*100:+.1f}%/yr after inflation"
+            if cagr_fwd is not None and real_rate(cagr_fwd, DEFAULT_CPI_ANNUAL) is not None
+            else "n/a"
+        ),
         "anchor_usd": round(float(anchor), 0),
         "now_usd": y0["value_usd"],
+        "forward_usd_today": round(fwd_today, 0) if fwd_today is not None else None,
+        "inflation": infl,
         "peak": {"year": peak["year"], "value_usd": peak["value_usd"]},
         "trough": {"year": trough["year"], "value_usd": trough["value_usd"]},
         "from_peak_pct": from_peak,

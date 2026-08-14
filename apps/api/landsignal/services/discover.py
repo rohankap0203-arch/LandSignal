@@ -79,13 +79,31 @@ async def discover_opportunities(
     tax = PublicTaxSaleProvider()
     surplus = PublicSurplusProvider()
 
+    min_per_state = max(500, int(getattr(settings, "discover_min_per_state", 5000) or 5000))
+    if states:
+        wired_states = len({s.upper() for s in states if s})
+    else:
+        from landsignal.providers.public_markets import SOURCES
+
+        wired_states = len(
+            {
+                s.state.upper()
+                for s in SOURCES
+                if "surplus" not in s.source_id and "fairfax" not in s.source_id
+            }
+        )
+    # Budget must fit a large equal pull for every wired state (not just FL).
+    tax_limit = max(limit, min_per_state * max(1, wired_states))
+    tax_limit = min(1_000_000, max(500, tax_limit))
+
     # Ask each source for a large page — tax/surplus GIS layers have tens of thousands of rows.
     # Always start county layers at offset 0: a global offset skips brand-new sources that have
     # fewer rows than already-indexed inventory. Dedup happens below via external_id.
     blm_res, tax_res, surplus_res = await asyncio.gather(
         blm.search_listings(
             {
-                "limit": min(2500, max(200, limit // 4)),
+                # Deep western BLM haul — helps AK/AZ/CA/CO/ID/MT/NM/NV/OR/UT/WY toward 10k.
+                "limit": min(30000, max(2000, min_per_state * 2)),
                 "min_acres": max(1.0, min_acres),
                 "max_acres": max_acres,
                 "states": states,
@@ -93,7 +111,9 @@ async def discover_opportunities(
         ),
         tax.search_listings(
             {
-                "limit": min(8000, max(500, limit)),
+                # Equal large statewide vacant/ag pulls across every wired state.
+                "limit": tax_limit,
+                "min_per_state": min_per_state,
                 "min_acres": min_acres,
                 "offset": 0,
                 "states": states,
@@ -101,7 +121,7 @@ async def discover_opportunities(
         ),
         surplus.search_listings(
             {
-                "limit": min(800, max(50, limit // 8)),
+                "limit": min(2000, max(100, min_per_state // 2)),
                 "states": states,
             }
         ),
@@ -157,18 +177,30 @@ async def discover_opportunities(
         )
     )
 
-    by_provider: dict[str, list[dict]] = {}
+    # Fair nationwide mix: round-robin by state, then by provider inside each state.
+    by_state_provider: dict[str, dict[str, list[dict]]] = {}
     for row in listings:
-        by_provider.setdefault(row.get("provider_id") or "unknown", []).append(row)
+        st = (row.get("state") or "??").upper()
+        prov = row.get("provider_id") or "unknown"
+        by_state_provider.setdefault(st, {}).setdefault(prov, []).append(row)
     diversified: list[dict] = []
-    while len(diversified) < limit and any(by_provider.values()):
-        for prov in list(by_provider.keys()):
-            if by_provider.get(prov):
-                diversified.append(by_provider[prov].pop(0))
+    while len(diversified) < limit and by_state_provider:
+        for st in list(by_state_provider.keys()):
+            provs = by_state_provider.get(st) or {}
+            if not provs:
+                by_state_provider.pop(st, None)
+                continue
+            for prov in list(provs.keys()):
+                if provs.get(prov):
+                    diversified.append(provs[prov].pop(0))
+                if not provs.get(prov):
+                    provs.pop(prov, None)
+                if len(diversified) >= limit:
+                    break
+            if not provs:
+                by_state_provider.pop(st, None)
             if len(diversified) >= limit:
                 break
-            if prov in by_provider and not by_provider[prov]:
-                by_provider.pop(prov, None)
 
     parcel_ids: list[UUID] = []
     to_score: list[UUID] = []
@@ -177,15 +209,7 @@ async def discover_opportunities(
     price_drop_ids: set[UUID] = set()
     price_up_ids: set[UUID] = set()
     for raw in diversified:
-        existing = next(
-            (
-                L
-                for L in store.listings.values()
-                if L.provider_id == raw.get("provider_id")
-                and L.external_id == raw.get("external_id")
-            ),
-            None,
-        )
+        existing = store.listing_by_external(raw.get("provider_id"), raw.get("external_id"))
         if existing:
             old_ask = existing.asking_price_usd
             price_moved = _refresh_listing(store, existing, raw)
@@ -210,7 +234,18 @@ async def discover_opportunities(
         to_score.append(parcel.id)
         new_parcel_ids.add(parcel.id)
 
-    sem = asyncio.Semaphore(24 if fast else 6)
+    # Cap concurrency by inventory size — 200k+ parcels + 24 scorers OOMs a 16GB box.
+    inv_now = sum(1 for p in store.parcels.values() if not p.is_demo)
+    if inv_now >= 200_000:
+        score_conc = 6 if fast else 3
+        chunk = 80
+    elif inv_now >= 80_000:
+        score_conc = 12 if fast else 4
+        chunk = 120
+    else:
+        score_conc = 24 if fast else 6
+        chunk = 200
+    sem = asyncio.Semaphore(score_conc)
     scored = 0
 
     async def _score_one(pid: UUID) -> None:
@@ -243,11 +278,23 @@ async def discover_opportunities(
                 log.warning("discover_analyze_failed", parcel_id=str(pid), error=str(exc))
 
     # Score in chunks so radar can see inventory while the rest indexes
-    chunk = 200
     for i in range(0, len(to_score), chunk):
         batch = to_score[i : i + chunk]
         await asyncio.gather(*[_score_one(pid) for pid in batch])
-        log.info("discover_batch_scored", scored=scored, total=len(to_score))
+        log.info(
+            "discover_batch_scored",
+            scored=scored,
+            total=len(to_score),
+            inventory=inv_now,
+            concurrency=score_conc,
+        )
+        if inv_now >= 50_000 and i > 0 and (i // chunk) % 8 == 0:
+            try:
+                from landsignal.store import persist_store
+
+                persist_store(store)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("discover_mid_persist_failed", error=str(exc)[:200])
 
     return {
         "imported": len(set(parcel_ids)),

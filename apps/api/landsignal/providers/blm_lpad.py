@@ -42,7 +42,8 @@ class BlmLpadProvider(ListingProvider):
         min_acres = float(query.get("min_acres") or 5)
         max_acres = float(query.get("max_acres") or 5000)
         states = query.get("states") or BLM_STATES
-        per_state = max(8, min(250, (limit // max(1, len(states))) + 5))
+        # Western states need deep BLM pulls to help hit the 10k/state floor.
+        per_state = max(50, min(2500, (limit // max(1, len(states))) + 100))
 
         async with httpx.AsyncClient(timeout=45.0) as client:
             results = await asyncio.gather(

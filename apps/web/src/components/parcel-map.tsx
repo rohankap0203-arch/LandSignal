@@ -77,7 +77,7 @@ export function ParcelMap({
         boxZoom: true,
         keyboard: true,
         zoomControl: true,
-        attributionControl: !compact,
+        attributionControl: false,
       }).setView(center, latitude != null ? (compact ? 15 : 11) : 4);
       if (cancelled) {
         map.remove();
@@ -85,15 +85,16 @@ export function ParcelMap({
         return;
       }
       mapRef.current = map;
+      map.zoomControl.setPosition("topleft");
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: compact ? undefined : "&copy; OpenStreetMap",
+        attribution: "",
         maxZoom: 19,
       }).addTo(map);
       L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         {
-          attribution: compact ? undefined : "Esri imagery",
+          attribution: "",
           opacity: 0.85,
           maxZoom: 19,
         },
@@ -165,21 +166,16 @@ export function ParcelMap({
         crossOrigin=""
       />
       <div ref={ref} style={{ height, width: "100%" }} />
-      {!compact ? (
-        <div className="parcel-map-caption">
-          <span>OSM + Esri imagery · Toggle layers expand in Phase 2 (flood/wetlands overlays)</span>
-          {onExpand ? (
-            <button
-              type="button"
-              className="parcel-map-expand"
-              onClick={onExpand}
-              aria-label="Open full screen land view"
-              title="Full screen land view"
-            >
-              <FullscreenIcon />
-            </button>
-          ) : null}
-        </div>
+      {onExpand && !compact ? (
+        <button
+          type="button"
+          className="parcel-map-expand"
+          onClick={onExpand}
+          aria-label="Open full screen land view"
+          title="Full screen land view"
+        >
+          <FullscreenIcon />
+        </button>
       ) : null}
     </div>
   );

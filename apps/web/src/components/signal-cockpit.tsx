@@ -33,7 +33,8 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
     const padT = 28;
     const padB = 44;
     const w = 360;
-    const h = 240;
+    // Slightly shorter canvas — large screens further constrain via CSS max-width.
+    const h = 200;
     const xScale = (x: number) => padL + ((x - minX) / Math.max(1, maxX - minX)) * (w - padL - padR);
     const yScale = (y: number) => padT + (1 - (y - minY) / Math.max(1, maxY - minY)) * (h - padT - padB);
     const mapped = points.map((p) => ({

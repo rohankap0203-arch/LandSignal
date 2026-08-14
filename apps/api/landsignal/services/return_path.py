@@ -14,6 +14,11 @@ import math
 from typing import Any
 
 from landsignal.scoring.financial import irr as irr_solve
+from landsignal.services.inflation import (
+    DEFAULT_CPI_ANNUAL,
+    enrich_endpoint_inflation,
+    inflation_meta,
+)
 from landsignal.services.market_trajectory import STATE_ANNUAL_APPRECIATION, CHANNEL_MULT, _cycle_shaper
 from landsignal.services.voice import place_phrase, this_property
 
@@ -70,6 +75,7 @@ def build_factor_model(
     score,
     enrichment,
     base_annual: float | None = None,
+    channel_already_applied: bool = False,
 ) -> dict[str, Any]:
     """Assemble the nuance ledger that bends the path away from a straight line."""
     state = (getattr(parcel, "state", None) or "US").upper()
@@ -112,25 +118,29 @@ def build_factor_model(
     )
     strat_scores = getattr(score, "strategy_scores", None) or {}
 
+    # Channel cheapens the BUY (opportunity / entry). Once owned, land tracks area pace.
+    from_trajectory = base_annual is not None
     base = base_annual if base_annual is not None else STATE_ANNUAL_APPRECIATION.get(state, 0.028)
     ch = CHANNEL_MULT.get(provider or "", 0.9)
     factors: list[dict[str, Any]] = []
 
-    # Start from state prior, then layer parcel-specific bends (in basis points of annual rate)
     rate = base
     factors.append(
         _factor(
             "state_prior",
             "Area land pace",
             base * 10000,
-            f"Typical long-run land pace in {state}: about {base*100:.1f}%/yr before this property’s own screens.",
+            (
+                f"Starting pace from the land-value path for {state}: about {base*100:.1f}%/yr."
+                if from_trajectory
+                else f"Typical long-run land pace in {state}: about {base*100:.1f}%/yr before this property’s own screens."
+            ),
         )
     )
 
-    # Channel
-    if ch != 1.0:
-        delta = base * (ch - 1.0)
-        rate += delta
+    # Document channel as entry edge — do not cut lifelong appreciation (that made
+    # After inflation always fall below CPI for tax-sale files).
+    if ch < 1.0:
         channel_name = {
             "public_tax_sale": "county tax-sale channel",
             "public_vacant_gis": "vacant public-map screen",
@@ -141,195 +151,215 @@ def build_factor_model(
             _factor(
                 "channel",
                 "How it is sold",
-                delta * 10000,
-                f"{channel_name.title()} usually clears slower than retail land — we use {ch*100:.0f}% of the area pace for {prop}.",
+                0.0,
+                f"{channel_name.title()} usually clears cheaper than retail — that shows up in "
+                f"your buy vs our value for {prop}, not by permanently slowing the land once you own it.",
+                kind="entry",
             )
         )
 
-    # Growth
-    if growth is not None:
-        adj = (growth - 50) / 50 * 0.012
-        rate += adj
-        factors.append(
-            _factor(
-                "growth",
-                "Local growth",
-                adj * 10000,
-                f"Growth signal {growth:.0f}/100 in {county} moves the yearly pace by {adj*100:+.1f} pts.",
-            )
-        )
-
-    # Soil / prime
-    if prime is not None and acres and acres >= 5:
-        adj = (prime - 40) / 100 * 0.008
-        rate += adj
-        factors.append(
-            _factor(
-                "soil",
-                "Soil quality",
-                adj * 10000,
-                f"About {prime:.0f}% prime farmland on the map — {'helps' if adj >= 0 else 'softens'} cash-rent and resale to ag buyers.",
-            )
-        )
-    elif acres is not None and acres < 2:
-        adj = -0.004
-        rate += adj
-        factors.append(
-            _factor(
-                "lot_class",
-                "Small-lot class",
-                adj * 10000,
-                "Under 2 acres: path is lumpier and less farm-index driven than big rural tracts.",
-            )
-        )
-    elif acres is not None and acres >= 80:
-        adj = 0.003
-        rate += adj
-        factors.append(
-            _factor(
-                "scale",
-                "Large-tract scale",
-                adj * 10000,
-                f"{acres:,.0f} acres: institutional-scale tracts often track farm/fringe indexes a bit more tightly.",
-            )
-        )
-
-    # Flood
-    flood_carry = 0.0  # extra annual $ drag later
+    # Flood/wetland still drive carry + usable acres even when pace comes from trajectory.
+    flood_carry = 0.0
     if flood is not None:
-        adj = -min(0.018, (flood / 100) * 0.02)
-        rate += adj
-        flood_carry = (flood / 100) * 0.004  # fraction of land value as extra insurance/fill reserve
-        factors.append(
-            _factor(
-                "flood",
-                "Flood exposure",
-                adj * 10000,
-                f"About {flood:.0f}% flood overlap — slows appreciation and adds carrying cost (insurance/fill reserve).",
-            )
-        )
-
-    # Wetlands
+        flood_carry = (flood / 100) * 0.004
     usable_frac = 1.0
     if wet is not None:
-        adj = -min(0.012, (wet / 100) * 0.015)
-        rate += adj
         usable_frac = max(0.35, 1.0 - (wet / 100) * 0.55)
-        factors.append(
-            _factor(
-                "wetlands",
-                "Wetlands",
-                adj * 10000,
-                f"About {wet:.0f}% wetlands — usable acres may be ~{usable_frac*100:.0f}% of deeded size, which weighs on exit.",
-            )
-        )
 
-    # Access
-    if access is not None and access < 45:
-        adj = -0.005
-        rate += adj
+    if from_trajectory:
+        # Land-value path already layered growth/soil/flood/size/access/etc.
+        # Re-applying them here double-cut every listing and shoved hold pace ≤ CPI.
         factors.append(
             _factor(
-                "access",
-                "Road access",
-                adj * 10000,
-                f"Access confidence looks soft ({access:.0f}/100) — fewer buyers, slower resale.",
+                "path_sync",
+                "Same pace as land-value path",
+                base * 10000,
+                f"Hold return uses the same ~{base*100:.1f}%/yr owned-land pace as the land-value "
+                f"path for {prop} — screens are not applied twice.",
             )
         )
-    elif access is not None and access >= 70:
-        adj = 0.002
-        rate += adj
-        factors.append(
-            _factor(
-                "access",
-                "Road access",
-                adj * 10000,
-                f"Access looks workable ({access:.0f}/100) — helps resale and any build/farm use.",
-            )
-        )
-
-    # Transmission / energy optionality
-    if tx_m is not None and tx_m < 8000 and (strategy == "ENERGY" or (acres or 0) >= 20):
-        adj = 0.0025
-        rate += adj
-        factors.append(
-            _factor(
-                "power",
-                "Nearby power line",
-                adj * 10000,
-                f"Mapped transmission ~{tx_m/1609:.1f} mi away — a small energy-optionality lift, not a grid connection right.",
-            )
-        )
-
-    # Liquidity / scarcity
-    if liq is not None:
-        adj = (liq - 50) / 50 * 0.004
-        rate += adj
-        factors.append(
-            _factor(
-                "liquidity",
-                "Ease of resale",
-                adj * 10000,
-                f"Resale ease {liq:.0f}/100 for this channel/size in {place}.",
-            )
-        )
-    if scar is not None and scar >= 60:
-        adj = 0.002
-        rate += adj
-        factors.append(
-            _factor(
-                "scarcity",
-                "How rare it is",
-                adj * 10000,
-                f"Scarcity screen {scar:.0f}/100 — fewer substitutes nearby can support exit price.",
-            )
-        )
-
-    # Risk cushion
-    if risk is not None and risk >= 55:
-        adj = -((risk - 50) / 100) * 0.01
-        rate += adj
-        factors.append(
-            _factor(
-                "risk",
-                "Map risk",
-                adj * 10000,
-                f"Risk {risk:.0f}/100 — we slow the path until flood/wetland/access homework is cleaner.",
-            )
-        )
-    elif risk is not None and risk <= 30:
-        adj = 0.0015
-        rate += adj
-        factors.append(
-            _factor(
-                "risk",
-                "Map risk",
-                adj * 10000,
-                f"Risk {risk:.0f}/100 — cleaner desktop map checks support a steadier path.",
-            )
-        )
-
-    # Strategy fit
-    if strategy and isinstance(strat_scores, dict):
-        best = _f(strat_scores.get(strategy))
-        if best is not None:
-            adj = (best - 55) / 100 * 0.006
+    else:
+        # Growth
+        if growth is not None:
+            adj = (growth - 50) / 50 * 0.012
             rate += adj
             factors.append(
                 _factor(
-                    "strategy",
-                    "Best-use fit",
+                    "growth",
+                    "Local growth",
                     adj * 10000,
-                    f"Best use {strategy.replace('_', ' ').title()} scores {best:.0f}/100 on this file — "
-                    f"{'supports' if adj >= 0 else 'softens'} the hold case.",
+                    f"Growth signal {growth:.0f}/100 in {county} moves the yearly pace by {adj*100:+.1f} pts.",
                 )
             )
 
-    # Thin file → wider uncertainty, slightly more conservative base
+        # Soil / prime
+        if prime is not None and acres and acres >= 5:
+            adj = (prime - 40) / 100 * 0.008
+            rate += adj
+            factors.append(
+                _factor(
+                    "soil",
+                    "Soil quality",
+                    adj * 10000,
+                    f"About {prime:.0f}% prime farmland on the map — {'helps' if adj >= 0 else 'softens'} cash-rent and resale to ag buyers.",
+                )
+            )
+        elif acres is not None and acres < 2:
+            adj = -0.004
+            rate += adj
+            factors.append(
+                _factor(
+                    "lot_class",
+                    "Small-lot class",
+                    adj * 10000,
+                    "Under 2 acres: path is lumpier and less farm-index driven than big rural tracts.",
+                )
+            )
+        elif acres is not None and acres >= 80:
+            adj = 0.003
+            rate += adj
+            factors.append(
+                _factor(
+                    "scale",
+                    "Large-tract scale",
+                    adj * 10000,
+                    f"{acres:,.0f} acres: institutional-scale tracts often track farm/fringe indexes a bit more tightly.",
+                )
+            )
+
+        # Flood
+        if flood is not None:
+            adj = -min(0.018, (flood / 100) * 0.02)
+            rate += adj
+            factors.append(
+                _factor(
+                    "flood",
+                    "Flood exposure",
+                    adj * 10000,
+                    f"About {flood:.0f}% flood overlap — slows appreciation and adds carrying cost (insurance/fill reserve).",
+                )
+            )
+
+        # Wetlands
+        if wet is not None:
+            adj = -min(0.012, (wet / 100) * 0.015)
+            rate += adj
+            factors.append(
+                _factor(
+                    "wetlands",
+                    "Wetlands",
+                    adj * 10000,
+                    f"About {wet:.0f}% wetlands — usable acres may be ~{usable_frac*100:.0f}% of deeded size, which weighs on exit.",
+                )
+            )
+
+        # Access
+        if access is not None and access < 45:
+            adj = -0.005
+            rate += adj
+            factors.append(
+                _factor(
+                    "access",
+                    "Road access",
+                    adj * 10000,
+                    f"Access confidence looks soft ({access:.0f}/100) — fewer buyers, slower resale.",
+                )
+            )
+        elif access is not None and access >= 70:
+            adj = 0.002
+            rate += adj
+            factors.append(
+                _factor(
+                    "access",
+                    "Road access",
+                    adj * 10000,
+                    f"Access looks workable ({access:.0f}/100) — helps resale and any build/farm use.",
+                )
+            )
+
+        # Transmission / energy optionality
+        if tx_m is not None and tx_m < 8000 and (strategy == "ENERGY" or (acres or 0) >= 20):
+            adj = 0.0025
+            rate += adj
+            factors.append(
+                _factor(
+                    "power",
+                    "Nearby power line",
+                    adj * 10000,
+                    f"Mapped transmission ~{tx_m/1609:.1f} mi away — a small energy-optionality lift, not a grid connection right.",
+                )
+            )
+
+        # Liquidity / scarcity
+        if liq is not None:
+            adj = (liq - 50) / 50 * 0.004
+            rate += adj
+            factors.append(
+                _factor(
+                    "liquidity",
+                    "Ease of resale",
+                    adj * 10000,
+                    f"Resale ease {liq:.0f}/100 for this channel/size in {place}.",
+                )
+            )
+        if scar is not None and scar >= 60:
+            adj = 0.002
+            rate += adj
+            factors.append(
+                _factor(
+                    "scarcity",
+                    "How rare it is",
+                    adj * 10000,
+                    f"Scarcity screen {scar:.0f}/100 — fewer substitutes nearby can support exit price.",
+                )
+            )
+
+        # Risk cushion
+        if risk is not None and risk >= 55:
+            adj = -((risk - 50) / 100) * 0.01
+            rate += adj
+            factors.append(
+                _factor(
+                    "risk",
+                    "Map risk",
+                    adj * 10000,
+                    f"Risk {risk:.0f}/100 — we slow the path until flood/wetland/access homework is cleaner.",
+                )
+            )
+        elif risk is not None and risk <= 30:
+            adj = 0.0015
+            rate += adj
+            factors.append(
+                _factor(
+                    "risk",
+                    "Map risk",
+                    adj * 10000,
+                    f"Risk {risk:.0f}/100 — cleaner desktop map checks support a steadier path.",
+                )
+            )
+
+        # Strategy fit
+        if strategy and isinstance(strat_scores, dict):
+            best = _f(strat_scores.get(strategy))
+            if best is not None:
+                adj = (best - 55) / 100 * 0.006
+                rate += adj
+                factors.append(
+                    _factor(
+                        "strategy",
+                        "Best-use fit",
+                        adj * 10000,
+                        f"Best use {strategy.replace('_', ' ').title()} scores {best:.0f}/100 on this file — "
+                        f"{'supports' if adj >= 0 else 'softens'} the hold case.",
+                    )
+                )
+
+    # Thin file → wider uncertainty band (case spread), not a second pace haircut
+    # when we already synced to the land-value path.
     uncertainty = 0.35
     if conf is not None:
         uncertainty = max(0.18, min(0.55, 0.55 - (conf / 100) * 0.35))
-        if conf < 45:
+        if conf < 45 and not from_trajectory:
             adj = -0.002
             rate += adj
             factors.append(
@@ -436,8 +466,13 @@ def build_case_path(
     model: dict[str, Any],
     case: str,
     hold_years: int,
+    mark_usd: float | None = None,
 ) -> dict[str, Any]:
-    """Year-by-year land + rent path for one case and hold length."""
+    """Year-by-year land + rent path for one case and hold length.
+
+    Land mark starts at our value (when above buy), not at the distressed entry.
+    Cash IRR still uses purchase as the outflow — that is the opportunity edge.
+    """
     hold_years = max(1, min(100, int(hold_years)))
     scalars = _case_scalars(case, float(model["uncertainty"]))
     acres = float(model.get("acres") or 1.0)
@@ -447,35 +482,43 @@ def build_case_path(
     # Vacancy / opex / taxes / insurance as fractions of rent or value
     vacancy = 0.08 if case.upper() in ("BEAR", "DOWNSIDE", "STRESS") else 0.05
     opex_frac = 0.18 * scalars["carry_mult"]
-    tax_frac = 0.011 * scalars["carry_mult"]  # of land value / yr
+    # Property-tax screen — full 1.1% of mark on a 0.8ac vacant lot with tiny rent
+    # made every hold look like a CPI death spiral. Soften on small / non-income uses.
+    tax_frac = 0.009 * scalars["carry_mult"]
+    if acres < 2:
+        tax_frac *= 0.55
+    if (model.get("strategy") or "") in ("LAND_BANK", "DEVELOPMENT"):
+        tax_frac *= 0.7
     insure_frac = (0.002 + float(model.get("flood_carry_frac") or 0)) * scalars["carry_mult"]
     mgmt_frac = 0.06  # of EGI
 
     path: list[dict[str, Any]] = []
-    land = float(purchase)
+    # Day-one mark: what the dirt is worth vs what you pay. Growing from purchase
+    # at a suppressed rate made After inflation look like a permanent loss.
+    mark0 = float(mark_usd) if mark_usd and mark_usd > 0 else float(purchase)
+    if mark0 < purchase:
+        mark0 = float(purchase)
+    land = mark0
     cum_rent = 0.0
+    cum_noi = 0.0
     cum_carry = 0.0
     flows = [-purchase]
     rent_series = []
 
     case_u = case.upper()
     for y in range(1, hold_years + 1):
-        # Cycle bend — not a straight diagonal
-        shaper = _cycle_shaper(y)
-        amp = scalars["cycle_amp"]
-        shaped = 1.0 + (shaper - 1.0) * amp
-        # Long-hold fatigue: near-term can track the ledger; century marks fade hard
-        # so $30M+ “generational” terminals only appear when the file truly earns them.
+        # Mild cycle (dampened) — full ±3% swings made After inflation bounce.
+        raw_shaper = _cycle_shaper(y, forward=True)
+        amp = scalars["cycle_amp"] * 0.35
+        shaped = 1.0 + (raw_shaper - 1.0) * amp
+        # Long-hold fatigue mirrors land-value path fade — uncertainty, not a CPI hack.
         fatigue = 1.0
         if y > 15:
-            fatigue = max(0.70, 1.0 - (y - 15) * 0.006)
-        if y > 40:
-            fatigue = max(0.42, fatigue - (y - 40) * 0.0045)
-        if y > 70:
-            fatigue = max(0.28, fatigue - (y - 70) * 0.003)
-        # Bull cools on ultra-long holds (optimistic ≠ rocket forever)
-        if case_u in ("BULL", "UPSIDE") and y > 35:
-            fatigue *= max(0.75, 1.0 - (y - 35) * 0.004)
+            fatigue = max(0.88, 1.0 - (y - 15) * 0.006)
+        if y > 35:
+            fatigue = max(0.80, fatigue - (y - 35) * 0.003)
+        if y > 60:
+            fatigue = max(0.74, fatigue - (y - 60) * 0.0015)
         # Flood/wetland “realization” years — occasional step downs in bear/base
         shock = 1.0
         if y in (7, 14, 28, 42, 55) and case_u in ("BEAR", "BASE", "DOWNSIDE", "STRESS"):
@@ -488,9 +531,7 @@ def build_case_path(
             shock *= 0.994 if case_u == "BASE" else (0.99 if case_u in ("BEAR", "DOWNSIDE", "STRESS") else 0.997)
 
         year_appr = appr0 * fatigue
-        # Conservative forward vs history + soft structural drag on far years
-        drag = 0.988 if y <= 25 else 0.984 if y <= 50 else 0.980
-        land = land * (1.0 + year_appr * 0.88) * (drag + (1.0 - drag) * shaped) * shock
+        land = land * (1.0 + year_appr) * shaped * shock
 
         # Rent drifts with land quality + mild inflation, with usable-acre drag;
         # far years: rents don't compound as fast as a stock model
@@ -510,20 +551,23 @@ def build_case_path(
         if (model.get("strategy") or "") in ("LAND_BANK", "DEVELOPMENT") and noi < 0:
             noi = min(noi, -land * 0.004)
 
+        cum_noi += noi
         cum_rent += max(0.0, noi)
         cum_carry += max(0.0, taxes + insure)
         rent_series.append(noi)
 
         exit_haircut = scalars["exit_haircut"]
-        # Liquidity exit haircut rises for thin channels on short holds, fades on long holds
+        # Thin-channel exit friction — light on short holds, fades with time
         if model.get("provider") in ("public_tax_sale", "blm_lpad", "public_surplus"):
-            exit_haircut += max(0.0, 0.06 - y * 0.002)
+            exit_haircut += max(0.0, 0.035 - y * 0.0012)
         # Ultra-long exits: buyer pool / estate friction haircut
         if y >= 75:
-            exit_haircut += 0.04 if case_u in ("BEAR", "DOWNSIDE", "STRESS") else 0.02
+            exit_haircut += 0.025 if case_u in ("BEAR", "DOWNSIDE", "STRESS") else 0.012
 
         mark_exit = land * (1.0 - exit_haircut)
-        total_back = mark_exit + cum_rent
+        # Net cash back = exit + all NOI (including negative tax years). Old code
+        # only banked positive rent, so tiny lots looked profitable while IRR died.
+        total_back = mark_exit + cum_noi
         path.append(
             {
                 "year_offset": y,
@@ -531,11 +575,14 @@ def build_case_path(
                 "exit_usd": round(mark_exit, 0),
                 "noi_usd": round(noi, 0),
                 "cumulative_rent_usd": round(cum_rent, 0),
+                "cumulative_noi_usd": round(cum_noi, 0),
                 "cumulative_carry_usd": round(cum_carry, 0),
                 "total_back_usd": round(total_back, 0),
                 "gain_usd": round(total_back - purchase, 0),
                 "year_appreciation": year_appr,
                 "fatigue": round(fatigue, 3),
+                "starting_mark_usd": round(mark0, 0),
+                "purchase_usd": round(purchase, 0),
             }
         )
         flows.append(noi)
@@ -559,6 +606,7 @@ def build_case_path(
         }.get(case.upper(), case.title()),
         "hold_years": hold_years,
         "purchase_usd": round(purchase, 0),
+        "starting_mark_usd": round(mark0, 0),
         "irr": irr_v,
         "irr_display": f"{irr_v*100:.1f}%/yr" if irr_v is not None else "n/a",
         "exit_usd": last["exit_usd"] if last else None,
@@ -623,6 +671,118 @@ def _endpoint_from_path(
     }
 
 
+def _hold_toggle_factors(
+    *,
+    pace_factors: list[dict[str, Any]] | None,
+    model: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Full toggle ledger for hold return — pace + carry + exit + fade nuances."""
+    out: list[dict[str, Any]] = []
+    for f in pace_factors or []:
+        out.append({**f, "default_on": f.get("default_on", True)})
+
+    flood = model.get("flood_pct")
+    wet = model.get("wet_pct")
+    flood_carry = float(model.get("flood_carry_frac") or 0)
+    usable = float(model.get("usable_frac") or 1.0)
+    provider = model.get("provider")
+    acres = model.get("acres")
+
+    if flood is not None and (flood >= 10 or flood_carry > 0):
+        out.append(
+            {
+                "key": "flood_carry",
+                "label": "Flood carry / insurance",
+                "delta_annual": 0.0,
+                "bps": 0,
+                "plain": (
+                    f"About {flood:.0f}% flood overlap adds carrying cost "
+                    f"(~{flood_carry*100:.1f}% of land value/yr insurance-style reserve)."
+                ),
+                "affects": "carry",
+                "toggleable": True,
+                "default_on": True,
+                "direction": "down",
+                "kind": "carry",
+                "flood_carry_frac": flood_carry if flood_carry > 0 else (flood / 100) * 0.004,
+            }
+        )
+    if wet is not None and wet >= 8:
+        out.append(
+            {
+                "key": "wetland_usable",
+                "label": "Wetland usable acres",
+                "delta_annual": 0.0,
+                "bps": 0,
+                "plain": (
+                    f"About {wet:.0f}% wetlands — usable acres screened at ~{usable*100:.0f}% "
+                    f"of deeded size (cuts rent / income)."
+                ),
+                "affects": "carry",
+                "toggleable": True,
+                "default_on": True,
+                "direction": "down",
+                "kind": "carry",
+                "usable_frac": usable,
+            }
+        )
+    out.append(
+        {
+            "key": "property_tax",
+            "label": "Property tax / carry",
+            "delta_annual": 0.0,
+            "bps": 0,
+            "plain": (
+                "Annual tax + insurance drag on the mark — often overlooked on vacant lots "
+                "with thin rent. Toggle off to see a no-carry screen."
+            ),
+            "affects": "carry",
+            "toggleable": True,
+            "default_on": True,
+            "direction": "down",
+            "kind": "carry",
+            "tax_frac": 0.009 if (acres is None or acres >= 2) else 0.009 * 0.55,
+        }
+    )
+    if provider in ("public_tax_sale", "blm_lpad", "public_surplus"):
+        out.append(
+            {
+                "key": "exit_friction",
+                "label": "Thin-channel exit friction",
+                "delta_annual": 0.0,
+                "bps": 0,
+                "plain": (
+                    "Tax-sale / surplus / BLM exits often need an extra haircut vs retail "
+                    "(title, buyer pool). Toggle off to assume a cleaner resale."
+                ),
+                "affects": "exit",
+                "toggleable": True,
+                "default_on": True,
+                "direction": "down",
+                "kind": "exit",
+                "exit_haircut_add": 0.02,
+            }
+        )
+    out.append(
+        {
+            "key": "long_hold_fade",
+            "label": "Long-hold uncertainty fade",
+            "delta_annual": 0.0,
+            "bps": 0,
+            "plain": (
+                "Far years ease the pace slightly — uncertainty grows with horizon. "
+                "Toggle off for a pure constant-compound screen."
+            ),
+            "affects": "fade",
+            "toggleable": True,
+            "default_on": True,
+            "direction": "neutral",
+            "kind": "fade",
+        }
+    )
+    return out
+
+
 def build_return_intelligence(
     *,
     parcel,
@@ -633,6 +793,7 @@ def build_return_intelligence(
     mark_usd: float | None = None,
     hold_years: int = 10,
     trajectory_annual: float | None = None,
+    pace_factors: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Full interactive return package for the detail page."""
     model = build_factor_model(
@@ -641,34 +802,73 @@ def build_return_intelligence(
         score=score,
         enrichment=enrichment,
         base_annual=trajectory_annual,
+        channel_already_applied=trajectory_annual is not None,
     )
-    purchase = entry_usd or mark_usd
+    toggle_factors = _hold_toggle_factors(pace_factors=pace_factors, model=model)
+    from landsignal.services.purchase_credibility import (
+        detect_ask_role,
+        resolve_underwriting_entry,
+    )
+
+    ask_role = detect_ask_role(listing)
+    provider = getattr(listing, "provider_id", None) if listing else model.get("provider")
+    acres = model.get("acres")
+    published_ask = _f(getattr(listing, "asking_price_usd", None)) if listing else _f(entry_usd)
+    resolved = resolve_underwriting_entry(
+        ask_usd=published_ask if published_ask else _f(entry_usd),
+        mark_usd=_f(mark_usd),
+        acres=_f(acres),
+        ask_role=ask_role,
+        provider_id=provider,
+        auction_settle_usd=_f(entry_usd) if ask_role in ("minimum_bid", "opening_bid", "tax_lien") else None,
+    )
+    # Prefer caller settle/entry when already auction-resolved; else credibility gate.
+    if entry_usd is not None and ask_role in ("minimum_bid", "opening_bid", "tax_lien"):
+        purchase = float(entry_usd)
+        purchase_meta = {
+            "entry_basis": "auction_settle",
+            "purchase_label": "Expected settle",
+            "treat_as_purchase": True,
+        }
+    else:
+        purchase = resolved.get("entry_usd")
+        purchase_meta = {
+            "entry_basis": resolved.get("entry_basis"),
+            "purchase_label": resolved.get("purchase_label"),
+            "treat_as_purchase": bool(resolved.get("treat_as_purchase")),
+        }
     if purchase is None or purchase <= 0:
         return {
             "available": False,
             "reason": "Need a buy price or value estimate before a return path can be built.",
-            "factors": model["factors"],
-            "all_factors": model["factors"],
+            "factors": toggle_factors,
+            "all_factors": toggle_factors,
+            "toggle_factors": toggle_factors,
             "windows": HOLD_WINDOWS,
+            "inflation": inflation_meta(),
             "model": {
                 "effective_annual": model["effective_annual"],
                 "effective_annual_display": f"{model['effective_annual']*100:.1f}%/yr",
                 "uncertainty": model["uncertainty"],
                 "usable_frac": model["usable_frac"],
-                "factor_count": model["factor_count"],
+                "flood_carry_frac": model.get("flood_carry_frac"),
+                "factor_count": len(toggle_factors),
                 "place": model["place"],
                 "strategy": model.get("strategy"),
+                "acres": model.get("acres"),
+                "state": model.get("state"),
+                "provider": model.get("provider"),
+                "prime_pct": model.get("prime_pct"),
             },
             "method": (
-                "Year-by-year path bends with soil, flood, wetlands, growth, access, channel, "
-                "strategy, risk, liquidity, scarcity, power, cycles, and carry — not a flat line."
+                "Toggle screens below to recompute buy → rent → exit. Owned-land pace matches "
+                "the land-value path; channel cheapens the buy, not lifelong appreciation."
             ),
+            **purchase_meta,
         }
 
-    # Prefer underwriting entry; if only mark, assume process discount by channel
-    if entry_usd is None and mark_usd:
-        ch = model["channel_mult"]
-        purchase = mark_usd * (0.62 if ch <= 0.75 else 0.85 if ch < 1 else 1.0)
+    # Prefer underwriting entry; if only mark, resolve_underwriting_entry already discounted.
+    purchase = float(purchase)
 
     # One 100-year path per case, then exact window slices (keeps curves + IRR consistent)
     full_paths: dict[str, Any] = {}
@@ -678,12 +878,16 @@ def build_return_intelligence(
             model=model,
             case=case,
             hold_years=100,
+            mark_usd=float(mark_usd) if mark_usd else None,
         )
 
+    cpi = DEFAULT_CPI_ANNUAL
+    infl = inflation_meta(cpi)
     endpoints: dict[str, Any] = {}
     for w in HOLD_WINDOWS:
         endpoints[str(w)] = {
-            case: _endpoint_from_path(full_paths[case], w) for case in ("BEAR", "BASE", "BULL")
+            case: enrich_endpoint_inflation(_endpoint_from_path(full_paths[case], w), cpi=cpi)
+            for case in ("BEAR", "BASE", "BULL")
         }
 
     default_hold = hold_years if hold_years in HOLD_WINDOWS else 10
@@ -695,7 +899,7 @@ def build_return_intelligence(
         for case in ("BEAR", "BASE", "BULL")
     }
 
-    top_factors = model["factors"][:8]
+    top_factors = toggle_factors
     base_case = cases["BASE"]
     base_100 = endpoints["100"]["BASE"]
     bull_100 = endpoints["100"]["BULL"]
@@ -706,20 +910,35 @@ def build_return_intelligence(
         f"For {this_property(parcel, listing, with_place=True, with_acres=True)}: "
         f"{model['factor_count']} screens bend the path (not a flat line). "
         f"Typical {default_hold}-yr hold screens about "
-        f"{base_case['irr_display'] if base_case.get('irr') is not None else 'n/a'}, "
-        f"with exit near {_money(base_case.get('exit_usd'))} after rent and carry."
+        f"{base_case['irr_display'] if base_case.get('irr') is not None else 'n/a'} "
+        f"before inflation ({base_case.get('irr_real_display') or 'n/a'} in today’s $), "
+        f"with exit near {_money(base_case.get('exit_usd'))} "
+        f"(~{_money(base_case.get('exit_usd_today'))} in today’s $)."
     )
     horizon_notes = {
-        "10": "Decade holds mostly track this file’s near-term screens and cycle bends.",
-        "30": "By 30 years, fatigue and site realizations already slow the climb vs a flat compound.",
-        "50": "Half-century marks are faded on purpose — taxes, insurance, and buyer-pool friction stack up.",
-        "75": "75–100 year dollars are nominal screens with hard fade — not a promise of dynasty wealth.",
+        "10": (
+            f"Decade holds mostly track this file’s near-term screens. "
+            f"Compare After inflation vs Before inflation (~{infl['cpi_display']} CPI). "
+            f"Opportunity score is the buy edge — not this hold path."
+        ),
+        "30": (
+            "By 30 years, path fatigue slows the climb. After inflation shows purchasing power; "
+            "Before inflation shows the raw future sticker."
+        ),
+        "50": (
+            "Half-century: Before inflation can look large; After inflation is the CPI-honest read. "
+            "Judge the deal on entry discount + mid holds, not century marks alone."
+        ),
+        "75": (
+            "75–100 year screens are illustrative. After inflation applies the CPI haircut; "
+            "far-year fatigue still applies so terminals don’t rocket unrealistically."
+        ),
         "100": (
-            f"At 100 years, typical total-back is about {mult_100:.1f}× buy "
-            f"(~{_money(base_100.get('total_back_usd'))}); optimistic tops near "
-            f"{_money(bull_100.get('total_back_usd'))}. Far years fade hard — not a straight rocket."
+            f"At 100 years, typical total-back is about {mult_100:.1f}× buy before inflation "
+            f"(~{_money(base_100.get('total_back_usd'))} · ~{_money(base_100.get('total_back_usd_today'))} "
+            f"after inflation); optimistic tops near {_money(bull_100.get('total_back_usd'))}."
             if mult_100 is not None
-            else "Century marks fade hard toward a slow real-land pace — not generational lottery math."
+            else "Century marks are a screen — compare Before vs After inflation."
         ),
     }
 
@@ -727,19 +946,29 @@ def build_return_intelligence(
         "available": True,
         "purchase_usd": round(float(purchase), 0),
         "mark_usd": round(float(mark_usd), 0) if mark_usd else None,
+        "entry_basis": purchase_meta.get("entry_basis"),
+        "purchase_label": purchase_meta.get("purchase_label"),
+        "treat_as_purchase": purchase_meta.get("treat_as_purchase"),
         "hold_years": default_hold,
         "windows": HOLD_WINDOWS,
+        "inflation": infl,
         "model": {
             "effective_annual": model["effective_annual"],
             "effective_annual_display": f"{model['effective_annual']*100:.1f}%/yr",
             "uncertainty": model["uncertainty"],
             "usable_frac": model["usable_frac"],
-            "factor_count": model["factor_count"],
+            "flood_carry_frac": model.get("flood_carry_frac"),
+            "factor_count": len(toggle_factors),
             "place": model["place"],
             "strategy": model.get("strategy"),
+            "acres": model.get("acres"),
+            "state": model.get("state"),
+            "provider": model.get("provider"),
+            "prime_pct": model.get("prime_pct"),
         },
         "factors": top_factors,
-        "all_factors": model["factors"],
+        "all_factors": toggle_factors,
+        "toggle_factors": toggle_factors,
         "cases": cases,
         "paths_100": {
             case: {
@@ -755,9 +984,10 @@ def build_return_intelligence(
         "horizon_notes": horizon_notes,
         "summary": summary,
         "method": (
-            "Year-by-year path uses area land pace, then bends it with soil, flood, wetlands, "
-            "growth, access, channel, strategy fit, risk, liquidity, scarcity, power proximity, "
-            "cycle shape, carry costs, and an exit haircut. Cautious / typical / optimistic stress "
-            "rent, pace, and exit. Not an appraisal."
+            "Owned-land pace matches the land-value path (state prior + parcel screens once). "
+            "Auction/tax-sale channel cheapens the buy, not lifelong appreciation. Land mark "
+            "starts at our value; IRR still uses what you pay. Carry, exit haircut, and light "
+            "long-hold fade apply. Before inflation = raw future $; After inflation = ÷ "
+            f"(1+CPI)^years at {infl['cpi_display']}. Screen — not an appraisal."
         ),
     }

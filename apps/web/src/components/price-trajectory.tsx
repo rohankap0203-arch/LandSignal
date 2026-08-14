@@ -8,6 +8,9 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { cpiFromMeta, deflate, realRate, type InflationMeta, type MoneyMode } from "@/lib/inflation";
+import { MoneyModeControl, moneyModeShort } from "@/components/money-mode-control";
+import { BuyingPowerLogic } from "@/components/buying-power-logic";
 
 type Point = {
   year: number;
@@ -30,7 +33,7 @@ type Hitch = {
 type HitchHelp = {
   title?: string;
   body?: string;
-  items?: Array<{ id?: string; label?: string; plain?: string }>;
+  items?: Array<{ id?: string; label?: string; plain?: string; math?: string }>;
 };
 
 type Trajectory = {
@@ -41,6 +44,10 @@ type Trajectory = {
   knowledge_label?: string;
   annual_rate_display?: string;
   now_usd?: number;
+  forward_usd_today?: number | null;
+  cagr_forward_real?: number | null;
+  cagr_forward_real_display?: string | null;
+  inflation?: InflationMeta | null;
   points?: Point[];
   hitches?: Hitch[];
   hitch_help?: HitchHelp;
@@ -51,7 +58,12 @@ type Trajectory = {
 };
 
 /** Value-over-time presets (not 5-year hold steps — those live on return hold). */
-const TIMEFRAMES = [1, 3, 5, 10, 15, 30, 50, 75, 100] as const;
+const TIMEFRAMES = [1, 3, 5, 10, 15, 25, 40, 60, 80, 100] as const;
+
+function clampHorizonYears(n: number): number {
+  if (!Number.isFinite(n)) return 10;
+  return Math.max(1, Math.min(100, Math.round(n)));
+}
 
 function money(v: unknown): string {
   const n = Number(v);
@@ -76,19 +88,32 @@ function cagr(start: number, end: number, years: number): number | null {
 export function PriceTrajectory({
   trajectory,
   compact,
+  moneyMode: moneyModeProp,
+  onMoneyModeChange,
 }: {
   trajectory: Trajectory | null | undefined;
   compact?: boolean;
+  moneyMode?: MoneyMode;
+  onMoneyModeChange?: (m: MoneyMode) => void;
 }) {
   const hitches = trajectory?.hitches || [];
   const windows = (trajectory?.windows?.length ? trajectory.windows : [...TIMEFRAMES]).filter((w) =>
     TIMEFRAMES.includes(w as (typeof TIMEFRAMES)[number]),
   );
-  const [horizon, setHorizon] = useState(10);
+  const [horizonPreset, setHorizonPreset] = useState<number | "custom">(10);
+  const [customHorizon, setCustomHorizon] = useState("10");
+  const horizon =
+    horizonPreset === "custom" ? clampHorizonYears(Number(customHorizon) || 10) : horizonPreset;
   const [hitchId, setHitchId] = useState<string>("base");
   const [hitchHelpOpen, setHitchHelpOpen] = useState(false);
+  const [moneyModeLocal, setMoneyModeLocal] = useState<MoneyMode>("today");
+  const moneyMode = moneyModeProp ?? moneyModeLocal;
+  const setMoneyMode = onMoneyModeChange ?? setMoneyModeLocal;
   const [dragging, setDragging] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const cpi = cpiFromMeta(trajectory?.inflation);
+  const cpiDisplay = trajectory?.inflation?.cpi_display || `${(cpi * 100).toFixed(1)}%/yr`;
+  const showToday = moneyMode === "today";
 
   useEffect(() => {
     if (!hitchHelpOpen) return;
@@ -125,6 +150,8 @@ export function PriceTrajectory({
     if (!start || !today || !future) return null;
     const pastRate = cagr(Number(start.value_usd), Number(today.value_usd), horizon);
     const fwdRate = cagr(Number(today.value_usd), Number(future.value_usd), horizon);
+    const fwdReal = realRate(fwdRate, cpi);
+    const futureToday = deflate(Number(future.value_usd), horizon, cpi);
     const pastChange =
       Number(start.value_usd) > 0
         ? ((Number(today.value_usd) - Number(start.value_usd)) / Number(start.value_usd)) * 100
@@ -141,15 +168,22 @@ export function PriceTrajectory({
       todayUsd: Number(today.value_usd),
       endUsd: Number(today.value_usd),
       futureUsd: Number(future.value_usd),
+      futureUsdToday: futureToday,
       years: horizon,
       pastRate,
       fwdRate,
+      fwdReal,
       pastChange,
       fwdChange,
       cagrDisplay: pastRate != null ? `${pastRate >= 0 ? "+" : ""}${(pastRate * 100).toFixed(1)}%/yr` : "—",
-      forwardCagrDisplay: fwdRate != null ? `${fwdRate >= 0 ? "+" : ""}${(fwdRate * 100).toFixed(1)}%/yr` : "—",
+      forwardCagrDisplay:
+        fwdRate != null ? `${fwdRate >= 0 ? "+" : ""}${(fwdRate * 100).toFixed(1)}%/yr` : "—",
+      forwardCagrRealDisplay:
+        fwdReal != null
+          ? `${fwdReal >= 0 ? "+" : ""}${(fwdReal * 100).toFixed(1)}%/yr real`
+          : "—",
     };
-  }, [points, horizon]);
+  }, [points, horizon, cpi]);
 
   const todayIdx = useMemo(() => {
     const i = points.findIndex((p) => Number(p.offset) === 0);
@@ -161,27 +195,40 @@ export function PriceTrajectory({
     setActive(todayIdx);
   }, [todayIdx, horizon]);
 
+  const displayPoints = useMemo(() => {
+    // After inflation: future marks in today’s purchasing power. Past/today stay as recorded.
+    return points.map((p) => {
+      const off = Number(p.offset ?? 0);
+      const raw = Number(p.value_usd);
+      if (!showToday || !(off > 0) || !Number.isFinite(raw)) {
+        return { ...p, display_usd: raw };
+      }
+      return { ...p, display_usd: deflate(raw, off, cpi) ?? raw };
+    });
+  }, [points, showToday, cpi]);
+
   const layout = useMemo(() => {
-    if (points.length < 2) return null;
-    const years = points.map((p) => Number(p.year));
+    if (displayPoints.length < 2) return null;
+    const years = displayPoints.map((p) => Number(p.year));
     const minYear = Math.min(...years);
     const maxYear = Math.max(...years);
-    const ys = points.map((p) => Number(p.value_usd));
+    const ys = displayPoints.map((p) => Number(p.display_usd));
     const minY = Math.min(...ys) * 0.92;
     const maxY = Math.max(...ys) * 1.06;
     const padL = 52;
     const padR = 18;
     const padT = 22;
     const padB = 38;
-    const w = compact ? 300 : 520;
-    const h = compact ? 160 : 260;
+    const w = compact ? 300 : 480;
+    // Slightly shorter path chart; large screens also cap width in CSS.
+    const h = compact ? 150 : 210;
     const span = Math.max(1, maxYear - minYear);
     const xScale = (year: number) => padL + ((year - minYear) / span) * (w - padL - padR);
     const yScale = (y: number) => padT + (1 - (y - minY) / Math.max(1, maxY - minY)) * (h - padT - padB);
-    const mapped = points.map((p) => ({
+    const mapped = displayPoints.map((p) => ({
       ...p,
       cx: xScale(Number(p.year)),
-      cy: yScale(Number(p.value_usd)),
+      cy: yScale(Number(p.display_usd)),
     }));
     const hist = mapped.filter((p) => Number(p.offset ?? 0) <= 0);
     const fut = mapped.filter((p) => Number(p.offset ?? 0) >= 0);
@@ -212,7 +259,7 @@ export function PriceTrajectory({
       xScale,
       todayCx: today?.cx,
     };
-  }, [points, compact]);
+  }, [displayPoints, compact]);
 
   const indexFromClientX = useCallback(
     (clientX: number) => {
@@ -255,53 +302,22 @@ export function PriceTrajectory({
   if (!trajectory || !layout || !windowMath) {
     return (
       <div className="price-trajectory">
-        <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Value over time</div>
+        <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Land value path</div>
         <p className="mt-1 text-sm text-[var(--muted)]">Building the dollar path…</p>
       </div>
     );
   }
 
-  const selected = points[Math.min(Math.max(0, active), points.length - 1)];
+  const selected = displayPoints[Math.min(Math.max(0, active), displayPoints.length - 1)];
   const sel = layout.mapped[Math.min(Math.max(0, active), layout.mapped.length - 1)];
-  const knowledge = String(trajectory.knowledge_label || "Estimated from similar land nearby").replace(
-    /_/g,
-    " ",
-  );
-
+  const selectedDisplay =
+    selected && Number.isFinite(Number(selected.display_usd))
+      ? Number(selected.display_usd)
+      : Number(selected?.value_usd || 0);
   return (
     <div className={`price-trajectory ${compact ? "compact" : ""}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">Value over time</div>
-          <h3 className="display text-lg font-semibold leading-snug">
-            {horizon} yr back · {horizon} yr ahead
-          </h3>
-          <p className="mt-1 text-xs text-[var(--muted)] break-words">
-            {windowMath.startYear} → today → {windowMath.endYear} · {knowledge}
-          </p>
-          <p className="mt-1 text-[11px] text-[var(--muted)] leading-snug">
-            {horizon >= 50
-              ? "Far years fade hard — nominal screen, not generational wealth."
-              : "Far years fade on purpose — not a straight rocket."}{" "}
-            {trajectory?.annual_rate_display
-              ? `Near-term pace ~${trajectory.annual_rate_display}.`
-              : null}
-          </p>
-        </div>
-        <div className="traj-stats">
-          <div>
-            <span>Past {horizon} yr</span>
-            <strong>{windowMath.cagrDisplay}</strong>
-          </div>
-          <div>
-            <span>Next {horizon} yr</span>
-            <strong>{windowMath.forwardCagrDisplay}</strong>
-          </div>
-          <div>
-            <span>Today</span>
-            <strong>{money(windowMath.todayUsd)}</strong>
-          </div>
-        </div>
+      <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+        Land value path
       </div>
 
       <div className="traj-windows" role="tablist" aria-label="Chart time window">
@@ -310,14 +326,97 @@ export function PriceTrajectory({
             key={y}
             type="button"
             role="tab"
-            aria-selected={horizon === y}
-            className={`traj-window-btn ${horizon === y ? "active" : ""}`}
-            onClick={() => setHorizon(y)}
+            aria-selected={horizonPreset === y}
+            className={`traj-window-btn ${horizonPreset === y ? "active" : ""}`}
+            onClick={() => {
+              setHorizonPreset(y);
+              setCustomHorizon(String(y));
+            }}
           >
             {y} yr
           </button>
         ))}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={horizonPreset === "custom"}
+          className={`traj-window-btn ${horizonPreset === "custom" ? "active" : ""}`}
+          onClick={() => setHorizonPreset("custom")}
+        >
+          Custom
+        </button>
       </div>
+      {horizonPreset === "custom" ? (
+        <div className="hold-custom-row">
+          <label className="hold-custom-label">
+            Years
+            <input
+              type="number"
+              min={1}
+              max={100}
+              step={1}
+              value={customHorizon}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setCustomHorizon(raw);
+              }}
+              onBlur={() => {
+                const n = clampHorizonYears(Number(customHorizon) || horizon);
+                setCustomHorizon(String(n));
+              }}
+            />
+          </label>
+          <span className="hold-custom-hint">1–100 years · same span back and ahead</span>
+        </div>
+      ) : null}
+
+      <div className="traj-head-row">
+        <h3 className="display text-lg font-semibold leading-snug">
+          {horizon} yr back · {horizon} yr ahead
+        </h3>
+        <div className="traj-stats">
+          <div>
+            <span>Past {horizon} yr</span>
+            <strong className="tabular-nums">{windowMath.cagrDisplay}</strong>
+          </div>
+          <div>
+            <span>Next {horizon} yr</span>
+            <strong className="tabular-nums">
+              {showToday ? windowMath.forwardCagrRealDisplay : windowMath.forwardCagrDisplay}
+            </strong>
+          </div>
+          <div>
+            <span>Now</span>
+            <strong className="tabular-nums">{money(windowMath.todayUsd)}</strong>
+          </div>
+        </div>
+      </div>
+
+      <MoneyModeControl
+        mode={moneyMode}
+        onChange={setMoneyMode}
+        cpiDisplay={cpiDisplay}
+        compare={
+          horizon >= 1 && windowMath.futureUsdToday != null
+            ? {
+                label: `Land value · ${horizon} yr ahead`,
+                today: windowMath.futureUsdToday,
+                before: windowMath.futureUsd,
+                format: shortMoney,
+              }
+            : null
+        }
+      />
+
+      <BuyingPowerLogic
+        variant="land"
+        years={horizon}
+        cpi={cpi}
+        cpiDisplay={cpiDisplay}
+        markUsd={windowMath.todayUsd}
+        futureNominal={windowMath.futureUsd}
+        futureToday={windowMath.futureUsdToday}
+      />
 
       <div className="traj-chart-row">
       <div className="traj-chart-wrap">
@@ -449,7 +548,7 @@ export function PriceTrajectory({
                   title={h.plain || h.label}
                 >
                   <span className="traj-hitch-k">{h.short || h.label}</span>
-                  <span className="traj-hitch-v">{on ? "Future" : "Hitch"}</span>
+                  <span className="traj-hitch-v">{on ? "On" : "Off"}</span>
                 </button>
               );
             })}
@@ -465,7 +564,7 @@ export function PriceTrajectory({
           onClick={() => setHitchHelpOpen(false)}
         >
           <div
-            className="help-modal"
+            className="help-modal help-modal--compact"
             role="dialog"
             aria-modal="true"
             aria-label="What hitch buttons mean"
@@ -473,7 +572,7 @@ export function PriceTrajectory({
           >
             <div className="flex items-start justify-between gap-3">
               <h4 className="display text-base font-semibold">
-                {trajectory.hitch_help.title || "What these hitch buttons do"}
+                {trajectory.hitch_help.title || "What-if cases for the future"}
               </h4>
               <button
                 type="button"
@@ -484,19 +583,21 @@ export function PriceTrajectory({
                 ×
               </button>
             </div>
-            <p className="mt-2 text-sm text-[var(--muted)] leading-snug">
+            <p className="mt-1.5 text-xs text-[var(--muted)] leading-snug">
               {trajectory.hitch_help.body}
             </p>
-            <ul className="help-modal-list">
+            <ul className="help-modal-list hitch-math-list">
               {(trajectory.hitch_help.items || []).map((item) => (
                 <li key={item.id || item.label}>
                   <strong>{item.label}</strong>
-                  <span>{item.plain}</span>
+                  {item.plain ? <span>{item.plain}</span> : null}
+                  {item.math ? <code className="hitch-math">{item.math}</code> : null}
                 </li>
               ))}
             </ul>
-            <p className="mt-3 text-xs text-[var(--muted)] leading-snug">
-              Tap a button to bend only the years ahead. Tap again to clear. Past years never move.
+            <p className="mt-2.5 text-[11px] text-[var(--muted)] leading-snug">
+              Tap a button to change only the future. Tap again to turn it off. Past years never
+              change.
             </p>
           </div>
         </div>
@@ -506,7 +607,7 @@ export function PriceTrajectory({
         <p className="traj-hitch-note">{activeHitch.plain}</p>
       ) : !compact && hitches.length > 0 ? (
         <p className="traj-hitch-note">
-          Hitches bend the future only — tap Rates, Growth, or Site (or ? for plain English).
+          What-if: Higher rates · Stronger demand · Site issue · tap ? for math
         </p>
       ) : null}
 
@@ -521,23 +622,28 @@ export function PriceTrajectory({
                   ? ` · ${Math.abs(Number(selected.offset))} yr ago`
                   : ` · ${Number(selected.offset)} yr ahead`}
             </strong>
-            <span className="traj-readout-value">{money(selected.value_usd)}</span>
+            <span className="traj-readout-value">
+              {money(selectedDisplay)}
+              {showToday && Number(selected.offset) > 0 ? (
+                <em className="return-alt-line"> today’s dollars</em>
+              ) : null}
+            </span>
           </div>
         </div>
       )}
 
       <div className="traj-year-boxes">
         <div className="traj-year-box">
-          <span>
-            {horizon} year{horizon === 1 ? "" : "s"} back
-          </span>
-          <strong>{money(windowMath.startUsd)}</strong>
+          <span>{horizon} yr back</span>
+          <strong className="tabular-nums">{money(windowMath.startUsd)}</strong>
         </div>
         <div className="traj-year-box">
           <span>
-            {horizon} year{horizon === 1 ? "" : "s"} ahead
+            {horizon} yr ahead · {moneyModeShort(moneyMode)}
           </span>
-          <strong>{money(windowMath.futureUsd)}</strong>
+          <strong className="tabular-nums">
+            {money(showToday ? windowMath.futureUsdToday ?? windowMath.futureUsd : windowMath.futureUsd)}
+          </strong>
         </div>
       </div>
     </div>

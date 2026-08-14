@@ -160,16 +160,25 @@ def price_display(
     if ask is not None and ask > 0:
         if auction_path and auction_path.get("is_opening_bid"):
             settle = (auction_path or {}).get("expected_settle_usd")
+            lo = (auction_path or {}).get("settle_low_usd")
+            hi = (auction_path or {}).get("settle_high_usd")
             if settle:
+                # Prefer a finish band when available; still reads as start → likely finish.
+                if lo and hi and float(hi) > float(lo):
+                    display = (
+                        f"${ask:,.0f} start · ~${float(lo):,.0f} – ${float(hi):,.0f} likely finish"
+                    )
+                else:
+                    display = f"${ask:,.0f} start · ~${float(settle):,.0f} likely finish"
                 return {
                     "amount_usd": ask,
                     "label": "Starting bid → likely finish",
-                    "display": f"${ask:,.0f} start · ~${settle:,.0f} likely finish",
+                    "display": display,
                     "kind": "minimum_bid",
                     "opening_bid_usd": ask,
                     "expected_settle_usd": settle,
-                    "settle_low_usd": (auction_path or {}).get("settle_low_usd"),
-                    "settle_high_usd": (auction_path or {}).get("settle_high_usd"),
+                    "settle_low_usd": lo,
+                    "settle_high_usd": hi,
                     "note": (auction_path or {}).get("note"),
                     "estimate_source": None,
                 }
@@ -235,13 +244,17 @@ def value_display(estimated: float | None, knowledge: str | None) -> dict[str, A
             "label": "Our estimated value",
             "display": "Not enough data yet for a dollar estimate",
             "knowledge_state": knowledge or "UNKNOWN",
+            "basis": "today_dollars",
+            "basis_label": "in today’s $",
         }
     return {
         "amount_usd": estimated,
-            "label": "Our estimated value",
-            "display": f"${estimated:,.0f}",
-            "knowledge_state": knowledge or "ESTIMATED",
-        }
+        "label": "Our estimated value",
+        "display": f"${estimated:,.0f}",
+        "knowledge_state": knowledge or "ESTIMATED",
+        "basis": "today_dollars",
+        "basis_label": "in today’s $",
+    }
 
 
 def match_reasons(

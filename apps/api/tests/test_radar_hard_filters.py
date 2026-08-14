@@ -1,0 +1,322 @@
+"""Radar must hard-enforce stacked price/acre/state filters (never broaden them away)."""
+
+from __future__ import annotations
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from landsignal.main import app
+from landsignal.models import ListingRecord, ParcelRecord, ScoreRecord, Signal, Strategy
+from landsignal.store import MemoryStore
+
+
+def _seed_scored_parcel(
+    store: MemoryStore,
+    *,
+    state: str,
+    county: str,
+    acreage: float,
+    ask: float | None,
+    external_id: str,
+    assessed_land: float | None = None,
+    strategy: Strategy = Strategy.FARMLAND,
+    opportunity: float = 72.0,
+) -> None:
+    parcel = ParcelRecord(
+        parcel_id=external_id,
+        apn=external_id,
+        address=f"{county} County, {state}",
+        county=county,
+        state=state,
+        latitude=27.5,
+        longitude=-81.5,
+        acreage=acreage,
+        is_demo=False,
+    )
+    raw: dict = {"ask_role": "assessed_land"}
+    if assessed_land is not None:
+        raw["LND_VAL"] = assessed_land
+    listing = ListingRecord(
+        parcel_id=parcel.id,
+        provider_id="public_vacant_gis",
+        external_id=external_id,
+        title=f"{state} vacant · {acreage} ac · {county}",
+        asking_price_usd=ask,
+        price_per_acre_usd=(ask / acreage) if ask and acreage else None,
+        status="ACTIVE",
+        is_demo=False,
+        raw=raw,
+    )
+    store.parcels[parcel.id] = parcel
+    store.listings[listing.id] = listing
+    store.index_listing(listing)
+    store.scores[parcel.id] = [
+        ScoreRecord(
+            parcel_id=parcel.id,
+            listing_id=listing.id,
+            algorithm_version="test",
+            weight_version="test",
+            opportunity=float(opportunity),
+            risk=28.0,
+            confidence=80.0,
+            asymmetry=10.0,
+            signal=Signal.WATCH,
+            best_strategy=strategy,
+            secondary_strategy=Strategy.LAND_BANK,
+            estimated_value_usd=ask or assessed_land or 100_000,
+            asking_discount_pct=None,
+            deal_readiness=55.0,
+            input_hash=f"test-{external_id}",
+        )
+    ]
+
+
+@pytest.fixture
+def isolated_store(monkeypatch):
+    store = MemoryStore()
+    _seed_scored_parcel(
+        store, state="FL", county="Polk", acreage=0.4, ask=12_000, external_id="fl-tiny"
+    )
+    _seed_scored_parcel(
+        store, state="FL", county="Highlands", acreage=25.0, ask=180_000, external_id="fl-25"
+    )
+    _seed_scored_parcel(
+        store, state="FL", county="Okeechobee", acreage=80.0, ask=450_000, external_id="fl-80"
+    )
+    _seed_scored_parcel(
+        store, state="TX", county="Brewster", acreage=40.0, ask=90_000, external_id="tx-40"
+    )
+    monkeypatch.setattr("landsignal.routers.api.get_store", lambda _seed=False: store)
+    yield store
+
+
+@pytest.mark.asyncio
+async def test_fl_min_acres_excludes_subacre_even_when_broaden(isolated_store):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get(
+            "/v1/radar",
+            params={"state": "FL", "min_acres": 20, "broaden": True, "limit": 50},
+        )
+    assert r.status_code == 200
+    rows = r.json()
+    assert rows, "expected FL 20+ acre matches from seeded inventory"
+    assert all(row["state"] == "FL" for row in rows)
+    assert all((row.get("acres") or 0) >= 20 for row in rows)
+    assert not any((row.get("acres") or 0) < 1 for row in rows)
+
+
+@pytest.mark.asyncio
+async def test_stacked_state_acres_price_filters(isolated_store):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get(
+            "/v1/radar",
+            params={
+                "state": "FL",
+                "min_acres": 20,
+                "max_acres": 50,
+                "min_price": 100_000,
+                "max_price": 250_000,
+                "broaden": True,
+                "limit": 50,
+            },
+        )
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["state"] == "FL"
+    assert 20 <= row["acres"] <= 50
+    assert 100_000 <= row["ask"] <= 250_000
+
+
+@pytest.mark.asyncio
+async def test_no_matches_when_band_empty_strict_mode(isolated_store):
+    """broaden=false keeps empty bands empty (no state fallback)."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get(
+            "/v1/radar",
+            params={"state": "FL", "min_acres": 5000, "broaden": False, "limit": 50},
+        )
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+@pytest.mark.asyncio
+async def test_extreme_band_broadens_inside_state(isolated_store):
+    """broaden=true never invents parcels — it falls back to real land in-state."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get(
+            "/v1/radar",
+            params={"state": "FL", "min_acres": 5000, "broaden": True, "limit": 50},
+        )
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) >= 1
+    assert all(row.get("state") == "FL" for row in rows)
+    assert all((row.get("acres") or 0) < 5000 for row in rows)
+
+
+@pytest.mark.asyncio
+async def test_budget_uses_assessed_land_when_unpriced(isolated_store):
+    _seed_scored_parcel(
+        isolated_store,
+        state="FL",
+        county="Hardee",
+        acreage=30.0,
+        ask=None,
+        assessed_land=220_000,
+        external_id="fl-assessed-30",
+    )
+    _seed_scored_parcel(
+        isolated_store,
+        state="FL",
+        county="DeSoto",
+        acreage=35.0,
+        ask=None,
+        assessed_land=900_000,
+        external_id="fl-assessed-expensive",
+    )
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get(
+            "/v1/radar",
+            params={
+                "state": "FL",
+                "min_acres": 20,
+                "max_price": 250_000,
+                "broaden": True,
+                "limit": 50,
+            },
+        )
+    assert r.status_code == 200
+    rows = r.json()
+    assert rows
+    assert all((row.get("acres") or 0) >= 20 for row in rows)
+    assert all((row.get("ask") or 0) <= 250_000 for row in rows)
+    assert not any(row.get("acres") == 35.0 for row in rows)
+
+
+@pytest.mark.asyncio
+async def test_strategy_filter_ranks_not_hides(isolated_store):
+    """Strategy preference re-ranks opportunity — never shrinks the match set."""
+    _seed_scored_parcel(
+        isolated_store,
+        state="FL",
+        county="Levy",
+        acreage=50.0,
+        ask=200_000,
+        external_id="fl-energy",
+        strategy=Strategy.ENERGY,
+        opportunity=60.0,
+    )
+    _seed_scored_parcel(
+        isolated_store,
+        state="FL",
+        county="Levy",
+        acreage=55.0,
+        ask=210_000,
+        external_id="fl-farm",
+        strategy=Strategy.FARMLAND,
+        opportunity=70.0,
+    )
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get(
+            "/v1/radar",
+            params={
+                "state": "FL",
+                "min_acres": 20,
+                "strategy": "ENERGY",
+                "broaden": False,
+                "limit": 50,
+                "sort": "fit_desc",
+            },
+        )
+    assert r.status_code == 200
+    rows = r.json()
+    # Fixture seeds other FL 20+ ac parcels — strategy must not hide them.
+    assert len(rows) >= 2
+    assert any(row.get("best_strategy") == "ENERGY" for row in rows)
+    assert any(row.get("best_strategy") == "FARMLAND" for row in rows)
+    assert rows[0]["best_strategy"] == "ENERGY"
+    assert all((row.get("acres") or 0) >= 20 for row in rows)
+
+
+@pytest.mark.asyncio
+async def test_nested_landval_powers_budget_filter(isolated_store):
+    """Persisted TX GIS nests CAD props under raw['raw'] — budget must still apply."""
+    _seed_scored_parcel(
+        isolated_store,
+        state="TX",
+        county="Bexar",
+        acreage=90.0,
+        ask=None,
+        external_id="tx-nested-landval",
+    )
+    # Overwrite listing raw to the nested shape used by persisted inventory.
+    for listing in isolated_store.listings.values():
+        if listing.external_id == "tx-nested-landval":
+            listing.asking_price_usd = None
+            listing.raw = {
+                "provider_id": "public_vacant_gis",
+                "external_id": "tx-nested-landval",
+                "raw": {"LandVal": 420_000, "Acres": 90.0, "ask_role": "assessed_land"},
+            }
+            break
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get(
+            "/v1/radar",
+            params={"state": "TX", "min_acres": 20, "max_price": 1_000_000, "limit": 50},
+        )
+    assert r.status_code == 200
+    rows = r.json()
+    assert rows
+    assert all((row.get("ask") or 0) <= 1_000_000 for row in rows)
+    assert any((row.get("acres") or 0) == 90.0 for row in rows)
+
+
+@pytest.mark.asyncio
+async def test_model_estimate_never_bypasses_budget_filter(isolated_store, monkeypatch):
+    """Huge estimated_value must not make a cheap ask look like it fails ≤$250k — or pass wrongly."""
+    store = isolated_store
+    # Cheap ask, absurd model value (the UX bug users read as "filter failed")
+    _seed_scored_parcel(
+        store,
+        state="FL",
+        county="Osceola",
+        acreage=900.0,
+        ask=110_000,
+        external_id="fl-huge-model",
+    )
+    parcel_ids = [p.id for p in store.parcels.values() if p.apn == "fl-huge-model"]
+    assert parcel_ids
+    scores = store.scores[parcel_ids[0]]
+    scores[0].estimated_value_usd = 7_000_000
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get(
+            "/v1/radar",
+            params={
+                "state": "FL",
+                "min_acres": 20,
+                "max_price": 250_000,
+                "broaden": False,
+                "limit": 50,
+            },
+        )
+    assert r.status_code == 200
+    rows = r.json()
+    assert rows
+    hit = next(row for row in rows if row.get("acres") == 900.0)
+    assert hit["ask"] == 110_000
+    assert hit["ask"] <= 250_000
+    assert hit["estimated_value"] == 7_000_000
+    # Every returned row must still satisfy the hard budget on ask, not estimate.
+    assert all((row.get("ask") or 0) <= 250_000 for row in rows)
+    assert all((row.get("acres") or 0) >= 20 for row in rows)

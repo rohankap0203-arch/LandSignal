@@ -99,11 +99,18 @@ def build_intelligence_brief(
     why: list[dict[str, str]] = []
     if auction and ask is not None and est is not None:
         settle_v = settle or ask
+        lo = _n(auction.get("settle_low_usd"))
+        hi = _n(auction.get("settle_high_usd"))
         gap = est - settle_v
+        band = (
+            f"{_money(lo)}–{_money(hi)}"
+            if lo is not None and hi is not None and hi > lo
+            else _money(settle_v)
+        )
         why.append(
             {
                 "headline": (
-                    f"Starting bid {_money(ask)} · likely finish ~{_money(settle_v)} · "
+                    f"Starting bid {_money(ask)} · likely finish ~{band} · "
                     f"our value {_money(est)}"
                 ),
                 "detail": (
@@ -112,7 +119,7 @@ def build_intelligence_brief(
                     f"{auction.get('bid_inflation_mult_base', 0):.1f}× "
                     f"(rough range {auction.get('bid_inflation_mult_low', 0):.1f}×–"
                     f"{auction.get('bid_inflation_mult_high', 0):.1f}×), so a realistic finish is near "
-                    f"{_money(settle_v)}. Compared with our estimated value {_money(est)}, that is about "
+                    f"{band}. Compared with our estimated value {_money(est)}, that is about "
                     f"{_money(abs(gap))} "
                     f"({abs(disc):.0f}% {'cheaper' if (disc or 0) < 0 else 'more expensive'}). "
                     f"The opener looked {abs(auction.get('opener_discount_pct') or 0):.0f}% under our value — "
@@ -500,10 +507,21 @@ def build_intelligence_brief(
         }
 
     # ---- Institutional return case (acquisition desk style) ----
-    entry = settle if settle and settle > 0 else (ask if ask and ask > 0 else None)
-    if entry is None and est:
-        # Unpriced public inventory: underwrite a process entry below screening mark
-        entry = est * (0.62 if provider in ("public_tax_sale", "public_surplus") else 0.85)
+    from landsignal.services.purchase_credibility import (
+        detect_ask_role,
+        resolve_underwriting_entry,
+    )
+
+    ask_role = detect_ask_role(listing, provider)
+    resolved = resolve_underwriting_entry(
+        ask_usd=ask if ask and ask > 0 else None,
+        mark_usd=est,
+        acres=acres,
+        ask_role=ask_role,
+        provider_id=provider,
+        auction_settle_usd=settle if settle and settle > 0 else None,
+    )
+    entry = resolved.get("entry_usd")
     gap_usd = (est - entry) if est and entry else None
     gap_pct = ((gap_usd / entry) * 100.0) if gap_usd is not None and entry else None
     irr_best = None
@@ -529,9 +547,17 @@ def build_intelligence_brief(
             + "."
         )
     if auction and settle:
+        lo = _n(auction.get("settle_low_usd"))
+        hi = _n(auction.get("settle_high_usd"))
+        band = (
+            f"{_money(lo)}–{_money(hi)}"
+            if lo is not None and hi is not None and hi > lo
+            else _money(settle)
+        )
         thesis_bullets.append(
             f"Ignore the {_money(ask)} starting bid as the real price — auctions like this "
-            f"usually finish near {_money(settle)} (about {auction.get('bid_inflation_mult_base', 0):.1f}× the opener)."
+            f"usually finish near {band} "
+            f"(about {auction.get('bid_inflation_mult_base', 0):.1f}× the opener)."
         )
     if strategy != "UNDETERMINED":
         strat = strategy.replace("_", " ").title()
@@ -567,6 +593,9 @@ def build_intelligence_brief(
             )
         ),
         "entry_usd": entry,
+        "entry_basis": resolved.get("entry_basis"),
+        "purchase_label": resolved.get("purchase_label"),
+        "treat_as_purchase": resolved.get("treat_as_purchase"),
         "mark_usd": est,
         "equity_gap_usd": gap_usd,
         "equity_gap_pct": gap_pct,
@@ -641,7 +670,6 @@ def build_intelligence_brief(
         },
         "primary_cta": primary_cta,
         "watch_hint": (
-            "Track opportunity, risk, how-complete, price, and status here. "
-            "Set your email under My criteria → Watchlist email sync to get change notices."
+            "Track opportunity, risk, how-complete, price, and status here on your Watchlist."
         ),
     })

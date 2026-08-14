@@ -15,6 +15,8 @@ export type LandViewerProps = {
   longitude?: number | null;
   polygon?: number[][][] | null;
   reportHref?: string | null;
+  /** When set, Closest uses the parcel's stored coordinates (preferred for every listing). */
+  parcelId?: string | null;
 };
 
 type Basemap = "satellite" | "streets" | "hybrid";
@@ -43,161 +45,42 @@ type NearbyHit = {
 };
 
 const NEARBY_RESULT_LIMIT = 3;
+/** UI watchdog — Closest must never spin past this even if the API is slow. */
+const NEARBY_UI_DEADLINE_MS = 12_000;
 
 type NearbyChip = {
   kind: NearbyKind;
   label: string;
   color: string;
-  /** Overpass union body fragments (without around filter). */
-  overpassParts: string[];
-  radiiM: number[];
   maxMiles: number;
-  /** center = fast area/POI lookup; geom = needed for accurate linear features */
-  outMode: "center" | "geom";
 };
 
 const NEARBY_CHIPS: NearbyChip[] = [
-  {
-    kind: "flood",
-    label: "Flood zone",
-    color: "#3b82f6",
-    // Prefer explicit flood tags; waterways are a legitimate flood-adjacency proxy when flood polygons are unmapped.
-    overpassParts: [
-      'nwr["flood_prone"="yes"]',
-      'nwr["hazard"="flood"]',
-      'nwr["flood:zone"]',
-      'way["waterway"~"^(river|stream|canal)$"]',
-    ],
-    radiiM: [1200, 5000, 14000],
-    maxMiles: 12.4,
-    outMode: "geom",
-  },
-  {
-    kind: "wetland",
-    label: "Wetland",
-    color: "#14b8a6",
-    // Tight wetland tag only — broad ["wetland"] + full geom was stalling Overpass.
-    overpassParts: ['nwr["natural"="wetland"]'],
-    radiiM: [1500, 6000, 15000],
-    maxMiles: 10,
-    outMode: "center",
-  },
-  {
-    kind: "road",
-    label: "Paved road",
-    color: "#a16207",
-    overpassParts: [
-      'way["highway"~"^(motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link)$"]',
-      'way["highway"~"^(residential|unclassified)$"]["surface"~"^(paved|asphalt|concrete|chipseal|paving_stones)$"]',
-    ],
-    radiiM: [800, 3000, 10000],
-    maxMiles: 7.5,
-    outMode: "geom",
-  },
-  {
-    kind: "power",
-    label: "Power line",
-    color: "#ca8a04",
-    overpassParts: [
-      'way["power"~"^(line|minor_line|cable)$"]',
-      'nwr["power"~"^(substation|transformer|tower|pole)$"]',
-    ],
-    radiiM: [1200, 5000, 14000],
-    maxMiles: 11,
-    outMode: "geom",
-  },
-  {
-    kind: "town",
-    label: "Town / services",
-    color: "#b45309",
-    overpassParts: ['node["place"~"^(city|town|village)$"]'],
-    radiiM: [3000, 12000, 30000],
-    maxMiles: 25,
-    outMode: "center",
-  },
-  {
-    kind: "school",
-    label: "School",
-    color: "#7c3aed",
-    overpassParts: ['nwr["amenity"="school"]', 'nwr["amenity"="kindergarten"]'],
-    radiiM: [1500, 6000, 16000],
-    maxMiles: 12.4,
-    outMode: "center",
-  },
-  {
-    kind: "hospital",
-    label: "Hospital",
-    color: "#dc2626",
-    overpassParts: [
-      'nwr["amenity"="hospital"]',
-      'nwr["healthcare"="hospital"]',
-      'nwr["amenity"="clinic"]["emergency"="yes"]',
-    ],
-    radiiM: [3000, 12000, 32000],
-    maxMiles: 22,
-    outMode: "center",
-  },
-  {
-    kind: "water",
-    label: "Water body",
-    color: "#0ea5e9",
-    overpassParts: [
-      'nwr["natural"="water"]',
-      'nwr["water"~"^(lake|pond|reservoir|basin)$"]',
-      'nwr["landuse"="reservoir"]',
-    ],
-    radiiM: [1500, 6000, 15000],
-    maxMiles: 11,
-    outMode: "center",
-  },
+  { kind: "flood", label: "Flood zone", color: "#3b82f6", maxMiles: 12.4 },
+  { kind: "wetland", label: "Wetland", color: "#14b8a6", maxMiles: 14 },
+  { kind: "water", label: "Water body", color: "#0ea5e9", maxMiles: 14 },
+  { kind: "road", label: "Paved road", color: "#a16207", maxMiles: 10 },
+  { kind: "power", label: "Power line", color: "#ca8a04", maxMiles: 14 },
+  { kind: "town", label: "Town/services", color: "#b45309", maxMiles: 25 },
+  { kind: "school", label: "School", color: "#7c3aed", maxMiles: 20 },
+  { kind: "hospital", label: "Hospital", color: "#dc2626", maxMiles: 40 },
 ];
 
-const OVERPASS_ENDPOINTS = [
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
-];
+const NEARBY_ROW1 = NEARBY_CHIPS.filter((c) =>
+  ["flood", "wetland", "water", "road", "power"].includes(c.kind),
+);
+const NEARBY_ROW2 = NEARBY_CHIPS.filter((c) =>
+  ["town", "school", "hospital"].includes(c.kind),
+);
 
-const nearbyCache = new Map<string, NearbyHit[]>();
-/** In-flight Overpass aborts when the user switches Closest chips. */
-let nearbyOverpassAbort: AbortController | null = null;
+const nearbyCache = new Map<string, { hits: NearbyHit[]; message?: string }>();
+/** Cancel in-flight Closest API calls when the user switches chips. */
+let nearbyAbort: AbortController | null = null;
 
-function beginNearbyOverpass() {
-  nearbyOverpassAbort?.abort();
-  nearbyOverpassAbort = new AbortController();
-  return nearbyOverpassAbort;
-}
-
-function haversineMeters(a: [number, number], b: [number, number]) {
-  const R = 6371000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(b[0] - a[0]);
-  const dLon = toRad(b[1] - a[1]);
-  const lat1 = toRad(a[0]);
-  const lat2 = toRad(b[0]);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
-/** Closest point on segment A→B to point P, in lat/lon degrees (local ENU approx). */
-function closestPointOnSegment(
-  p: [number, number],
-  a: [number, number],
-  b: [number, number],
-): { lat: number; lon: number; meters: number } {
-  const lat0 = p[0];
-  const mPerDegLat = 111320;
-  const mPerDegLon = 111320 * Math.max(0.2, Math.cos((lat0 * Math.PI) / 180));
-  const px = (p[1] - a[1]) * mPerDegLon;
-  const py = (p[0] - a[0]) * mPerDegLat;
-  const bx = (b[1] - a[1]) * mPerDegLon;
-  const by = (b[0] - a[0]) * mPerDegLat;
-  const denom = bx * bx + by * by;
-  const t = denom <= 1e-9 ? 0 : Math.max(0, Math.min(1, (px * bx + py * by) / denom));
-  const lon = a[1] + (t * bx) / mPerDegLon;
-  const lat = a[0] + (t * by) / mPerDegLat;
-  return { lat, lon, meters: haversineMeters(p, [lat, lon]) };
+function beginNearbySearch() {
+  nearbyAbort?.abort();
+  nearbyAbort = new AbortController();
+  return nearbyAbort;
 }
 
 function formatDistance(meters: number) {
@@ -216,6 +99,10 @@ function isValidLatLon(lat: unknown, lon: unknown): lat is number {
     Math.abs(lat) <= 90 &&
     Math.abs(lon) <= 180
   );
+}
+
+function asLatLon(lat: unknown, lon: unknown): [number, number] | null {
+  return isValidLatLon(lat, lon) ? [lat, lon as number] : null;
 }
 
 /** High-precision display for live map coordinates (no padded fake zeros beyond source). */
@@ -240,208 +127,6 @@ function legitimatePriceDisplay(priceDisplay?: string | null): string | null {
   return raw;
 }
 
-function ringAreaAcres(ring: [number, number][]) {
-  if (ring.length < 3) return 0;
-  let lat0 = 0;
-  let lon0 = 0;
-  for (const [lat, lon] of ring) {
-    if (!isValidLatLon(lat, lon)) return 0;
-    lat0 += lat;
-    lon0 += lon;
-  }
-  lat0 /= ring.length;
-  lon0 /= ring.length;
-  const mPerDegLat = 111320;
-  const mPerDegLon = 111320 * Math.cos((lat0 * Math.PI) / 180);
-  if (!Number.isFinite(mPerDegLon) || mPerDegLon <= 0) return 0;
-  let area = 0;
-  for (let i = 0; i < ring.length; i++) {
-    const [lat1, lon1] = ring[i];
-    const [lat2, lon2] = ring[(i + 1) % ring.length];
-    const x1 = (lon1 - lon0) * mPerDegLon;
-    const y1 = (lat1 - lat0) * mPerDegLat;
-    const x2 = (lon2 - lon0) * mPerDegLon;
-    const y2 = (lat2 - lat0) * mPerDegLat;
-    area += x1 * y2 - x2 * y1;
-  }
-  const acres = Math.abs(area / 2) / 4046.8564224;
-  return Number.isFinite(acres) && acres > 0 ? acres : 0;
-}
-
-type OverpassElement = {
-  type?: string;
-  id?: number;
-  lat?: number;
-  lon?: number;
-  center?: { lat: number; lon: number };
-  geometry?: Array<{ lat: number; lon: number }>;
-  tags?: Record<string, string>;
-};
-
-function elementKey(el: OverpassElement): string {
-  if (el.type && el.id != null) return `${el.type}/${el.id}`;
-  const lat = el.lat ?? el.center?.lat ?? el.geometry?.[0]?.lat;
-  const lon = el.lon ?? el.center?.lon ?? el.geometry?.[0]?.lon;
-  if (lat == null || lon == null) return `anon:${Math.random()}`;
-  return `pt:${lat.toFixed(5)}:${lon.toFixed(5)}`;
-}
-
-function elementName(el: OverpassElement, fallback: string) {
-  const t = el.tags || {};
-  return (
-    t.name ||
-    t["name:en"] ||
-    t.brand ||
-    t.operator ||
-    t.waterway ||
-    t.water ||
-    t.highway ||
-    t.place ||
-    t.amenity ||
-    t.power ||
-    t.natural ||
-    t.wetland ||
-    t["flood:zone"] ||
-    fallback
-  );
-}
-
-function isFloodTagged(el: OverpassElement) {
-  const t = el.tags || {};
-  return Boolean(t.flood_prone === "yes" || t.hazard === "flood" || t["flood:zone"]);
-}
-
-function closestOnElement(
-  origin: [number, number],
-  el: OverpassElement,
-): { lat: number; lon: number; meters: number } | null {
-  const geom = el.geometry;
-  if (geom && geom.length >= 2) {
-    let best: { lat: number; lon: number; meters: number } | null = null;
-    for (let i = 0; i < geom.length - 1; i++) {
-      const a: [number, number] = [geom[i].lat, geom[i].lon];
-      const b: [number, number] = [geom[i + 1].lat, geom[i + 1].lon];
-      const hit = closestPointOnSegment(origin, a, b);
-      if (!best || hit.meters < best.meters) best = hit;
-    }
-    if (best) return best;
-  }
-  if (geom && geom.length === 1) {
-    const lat = geom[0].lat;
-    const lon = geom[0].lon;
-    return { lat, lon, meters: haversineMeters(origin, [lat, lon]) };
-  }
-  const lat = el.lat ?? el.center?.lat;
-  const lon = el.lon ?? el.center?.lon;
-  if (lat == null || lon == null) return null;
-  return { lat, lon, meters: haversineMeters(origin, [lat, lon]) };
-}
-
-async function overpassQuery(
-  query: string,
-  timeoutMs = 8000,
-  externalSignal?: AbortSignal,
-): Promise<OverpassElement[]> {
-  // Race public Overpass mirrors — first valid payload wins (wetland geom used to stall for 14s+).
-  const controllers = OVERPASS_ENDPOINTS.map(() => new AbortController());
-  const abortAll = () => controllers.forEach((c) => c.abort());
-  const timer = window.setTimeout(abortAll, timeoutMs);
-  const onExternalAbort = () => abortAll();
-  if (externalSignal) {
-    if (externalSignal.aborted) {
-      window.clearTimeout(timer);
-      throw new DOMException("Aborted", "AbortError");
-    }
-    externalSignal.addEventListener("abort", onExternalAbort, { once: true });
-  }
-  try {
-    const elements = await Promise.any(
-      OVERPASS_ENDPOINTS.map(async (endpoint, i) => {
-        const res = await fetch(endpoint, {
-          method: "POST",
-          body: query,
-          headers: { "Content-Type": "text/plain" },
-          signal: controllers[i].signal,
-        });
-        if (!res.ok) throw new Error(`Overpass ${res.status}`);
-        const data = (await res.json()) as { elements?: OverpassElement[] };
-        // Empty is a valid answer for this radius — still prefer a mirror that responded.
-        return data.elements || [];
-      }),
-    );
-    abortAll();
-    return elements;
-  } catch (e) {
-    if (externalSignal?.aborted) throw new DOMException("Aborted", "AbortError");
-    throw e instanceof Error ? e : new Error("Overpass unavailable");
-  } finally {
-    window.clearTimeout(timer);
-    externalSignal?.removeEventListener("abort", onExternalAbort);
-  }
-}
-
-function pickTopHits(
-  kind: NearbyKind,
-  label: string,
-  origin: [number, number],
-  elements: OverpassElement[],
-  limit = NEARBY_RESULT_LIMIT,
-): NearbyHit[] {
-  const byKey = new Map<string, NearbyHit & { floodTagged: boolean }>();
-
-  for (const el of elements) {
-    const pt = closestOnElement(origin, el);
-    if (!pt) continue;
-    const meters = haversineMeters(origin, [pt.lat, pt.lon]);
-    if (!Number.isFinite(meters) || meters < 0) continue;
-
-    const name = elementName(el, label);
-    const floodTagged = kind === "flood" && isFloodTagged(el);
-    const detail =
-      kind === "flood"
-        ? floodTagged
-          ? "Flood tag"
-          : "Nearest mapped waterway (flood-adjacency)"
-        : undefined;
-
-    const key = elementKey(el);
-    const hit = {
-      kind,
-      label,
-      name,
-      lat: pt.lat,
-      lon: pt.lon,
-      meters,
-      source: "live" as const,
-      detail,
-      osmKey: key,
-      floodTagged,
-    };
-    const prev = byKey.get(key);
-    if (!prev || meters < prev.meters) byKey.set(key, hit);
-  }
-
-  const all = [...byKey.values()];
-  const floodFirst = all.filter((h) => h.floodTagged).sort((a, b) => a.meters - b.meters);
-  const rest = all.filter((h) => !h.floodTagged).sort((a, b) => a.meters - b.meters);
-  // Prefer explicit flood tags when present (accuracy > nearest arbitrary waterway).
-  const ranked = floodFirst.length ? [...floodFirst, ...rest] : rest;
-
-  const out: NearbyHit[] = [];
-  for (const raw of ranked) {
-    const { floodTagged: _flood, ...hit } = raw;
-    const nearDup = out.some(
-      (o) =>
-        haversineMeters([o.lat, o.lon], [hit.lat, hit.lon]) < 55 &&
-        o.name.trim().toLowerCase() === hit.name.trim().toLowerCase(),
-    );
-    if (nearDup) continue;
-    out.push(hit);
-    if (out.length >= limit) break;
-  }
-  return out;
-}
-
 function ordinalClosest(index: number) {
   if (index <= 0) return "Closest";
   if (index === 1) return "2nd closest";
@@ -449,17 +134,9 @@ function ordinalClosest(index: number) {
   return `${index + 1}th closest`;
 }
 
-function verifyNearbyHits(origin: [number, number], hits: NearbyHit[]): NearbyHit[] {
-  return hits.slice(0, NEARBY_RESULT_LIMIT).map((hit) => {
-    const again = haversineMeters(origin, [hit.lat, hit.lon]);
-    if (Math.abs(again - hit.meters) > 25) return { ...hit, meters: again };
-    return hit;
-  });
-}
-
 /**
- * Progressive Overpass search. Calls onPartial as soon as #1 is known so the UI
- * can paint immediately, then keeps expanding radii in the background for #2/#3.
+ * Closest landmarks via LandSignal API for any listing pin nationwide.
+ * Prefers parcelId so every listing uses authoritative stored coordinates.
  */
 async function fetchNearby(
   kind: NearbyKind,
@@ -467,79 +144,92 @@ async function fetchNearby(
   lon: number,
   onPartial?: (hits: NearbyHit[]) => void,
   isCancelled?: () => boolean,
-): Promise<NearbyHit[]> {
+  parcelId?: string | null,
+): Promise<{ hits: NearbyHit[]; message: string | null }> {
   const meta = NEARBY_CHIPS.find((c) => c.kind === kind);
-  if (!meta) return [];
+  if (!meta) return { hits: [], message: "Unknown landmark type" };
 
-  const cacheKey = `${kind}:${lat.toFixed(4)}:${lon.toFixed(4)}`;
-  // Only reuse successful caches — never lock in an empty miss (Overpass blips used to
-  // make Hospital "permanently" fail after Water until reload).
+  const cacheKey = parcelId
+    ? `api:v2:parcel:${parcelId}:${kind}`
+    : `api:v2:${kind}:${lat.toFixed(3)}:${lon.toFixed(3)}`;
   if (nearbyCache.has(cacheKey)) {
-    const cached = nearbyCache.get(cacheKey) ?? [];
-    if (cached.length) {
-      onPartial?.(cached);
-      return cached;
-    }
-    nearbyCache.delete(cacheKey);
-  }
-
-  const origin: [number, number] = [lat, lon];
-  let best: NearbyHit[] = [];
-  let lastPartialSig = "";
-  const overpassCtl = beginNearbyOverpass();
-
-  const emit = (hits: NearbyHit[]) => {
-    if (!hits.length || !onPartial) return;
-    const verified = verifyNearbyHits(origin, hits);
-    const sig = verified.map((h) => `${h.osmKey ?? h.name}:${Math.round(h.meters)}`).join("|");
-    if (sig === lastPartialSig) return;
-    lastPartialSig = sig;
-    onPartial(verified);
-  };
-
-  const outClause = meta.outMode === "center" ? "out center;" : "out geom;";
-
-  // Progressive radii: surface the first hit ASAP, then keep going for up to 3.
-  for (let i = 0; i < meta.radiiM.length; i++) {
-    const radius = meta.radiiM[i];
-    if (isCancelled?.() || overpassCtl.signal.aborted) break;
-    const union = meta.overpassParts.map((part) => `  ${part}(around:${radius},${lat},${lon});`).join("\n");
-    const query = `
-[out:json][timeout:8];
-(
-${union}
-);
-${outClause}
-`.trim();
-    try {
-      // First radius: fail fast. Later radii get a bit more time.
-      const elements = await overpassQuery(query, i === 0 ? 8000 : 10000, overpassCtl.signal);
-      if (isCancelled?.() || overpassCtl.signal.aborted) break;
-      const hits = pickTopHits(kind, meta.label, origin, elements, NEARBY_RESULT_LIMIT).filter(
-        (h) => h.meters / 1609.344 <= meta.maxMiles,
-      );
-      if (hits.length) {
-        best = hits;
-        emit(best);
-        // Cache partial success so a remount doesn't wait again.
-        nearbyCache.set(cacheKey, verifyNearbyHits(origin, best));
-        const farthestKept = hits[hits.length - 1];
-        if (hits.length >= NEARBY_RESULT_LIMIT && farthestKept.meters <= radius * 1.05) break;
-      }
-    } catch (e) {
-      if (isCancelled?.() || overpassCtl.signal.aborted) break;
-      if (e instanceof DOMException && e.name === "AbortError") break;
-      // Try next radius / endpoint path; do not invent a fake location.
-      continue;
+    const cached = nearbyCache.get(cacheKey)!;
+    if (cached.hits.length) {
+      onPartial?.(cached.hits);
+      return { hits: cached.hits, message: null };
     }
   }
 
-  best = verifyNearbyHits(origin, best);
-  // Never cache empty misses — allow a real retry on the next click.
-  if (!isCancelled?.() && !overpassCtl.signal.aborted && best.length) {
-    nearbyCache.set(cacheKey, best);
+  const ctl = beginNearbySearch();
+  let timeoutId: number | undefined;
+  try {
+    const { landsignalApi } = await import("@/lib/api");
+    const data = await new Promise<Awaited<ReturnType<typeof landsignalApi.nearby>>>((resolve, reject) => {
+      timeoutId = window.setTimeout(() => {
+        ctl.abort();
+        reject(new Error("Closest search timed out"));
+      }, NEARBY_UI_DEADLINE_MS);
+      const onAbort = () => {
+        if (timeoutId) window.clearTimeout(timeoutId);
+        reject(new DOMException("Aborted", "AbortError"));
+      };
+      ctl.signal.addEventListener("abort", onAbort, { once: true });
+      const req = parcelId
+        ? landsignalApi.nearbyForParcel(parcelId, kind, { signal: ctl.signal })
+        : landsignalApi.nearby(lat, lon, kind, { signal: ctl.signal });
+      req
+        .then((value) => {
+          if (timeoutId) window.clearTimeout(timeoutId);
+          ctl.signal.removeEventListener("abort", onAbort);
+          resolve(value);
+        })
+        .catch((err) => {
+          if (timeoutId) window.clearTimeout(timeoutId);
+          ctl.signal.removeEventListener("abort", onAbort);
+          reject(err);
+        });
+    });
+
+    if (isCancelled?.() || ctl.signal.aborted) {
+      return { hits: [], message: null };
+    }
+
+    const hits: NearbyHit[] = (data.hits || [])
+      .filter((h) => isValidLatLon(h.lat, h.lon) && Number.isFinite(h.meters))
+      .slice(0, NEARBY_RESULT_LIMIT)
+      .map((h) => ({
+        kind,
+        label: h.label || meta.label,
+        name: h.name || meta.label,
+        lat: Number(h.lat),
+        lon: Number(h.lon),
+        meters: Number(h.meters),
+        source: "live" as const,
+        detail: h.detail || undefined,
+        osmKey: h.osm_key || undefined,
+      }));
+
+    if (hits.length) {
+      onPartial?.(hits);
+      nearbyCache.set(cacheKey, { hits });
+      return { hits, message: null };
+    }
+
+    const message =
+      data.message ||
+      (data.status === "unavailable"
+        ? `Map data temporarily unavailable for ${meta.label.toLowerCase()} — tap again to retry`
+        : `No mapped ${meta.label.toLowerCase()} within ~${meta.maxMiles} mi`);
+    return { hits: [], message };
+  } catch (e) {
+    if (isCancelled?.() || (e instanceof DOMException && e.name === "AbortError")) {
+      return { hits: [], message: null };
+    }
+    return {
+      hits: [],
+      message: `Couldn’t find ${meta.label.toLowerCase()} nearby — tap again to retry`,
+    };
   }
-  return best;
 }
 
 function MagnifierIcon({ className = "" }: { className?: string }) {
@@ -591,6 +281,7 @@ export function LandViewerModal({
   longitude,
   polygon,
   reportHref,
+  parcelId,
 }: LandViewerProps) {
   const titleId = useId();
   const mapEl = useRef<HTMLDivElement>(null);
@@ -639,6 +330,47 @@ export function LandViewerModal({
 
   useEffect(() => setMounted(true), []);
 
+  // Warm Closest cache for every chip as soon as Land Viewer opens — any listing.
+  useEffect(() => {
+    if (!open || !hasGeo) return;
+    let cancelled = false;
+    void (async () => {
+      const { landsignalApi } = await import("@/lib/api");
+      await Promise.allSettled(
+        NEARBY_CHIPS.map(async (chip) => {
+          if (cancelled) return;
+          try {
+            const data = parcelId
+              ? await landsignalApi.nearbyForParcel(parcelId, chip.kind)
+              : await landsignalApi.nearby(latitude!, longitude!, chip.kind);
+            if (cancelled || !data.hits?.length) return;
+            const key = parcelId
+              ? `api:v2:parcel:${parcelId}:${chip.kind}`
+              : `api:v2:${chip.kind}:${latitude!.toFixed(3)}:${longitude!.toFixed(3)}`;
+            nearbyCache.set(key, {
+              hits: data.hits.slice(0, NEARBY_RESULT_LIMIT).map((h) => ({
+                kind: chip.kind,
+                label: h.label || chip.label,
+                name: h.name || chip.label,
+                lat: Number(h.lat),
+                lon: Number(h.lon),
+                meters: Number(h.meters),
+                source: "live" as const,
+                detail: h.detail || undefined,
+                osmKey: h.osm_key || undefined,
+              })),
+            });
+          } catch {
+            /* prefetch is best-effort */
+          }
+        }),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, hasGeo, latitude, longitude, parcelId]);
+
   useEffect(() => {
     if (!open) return;
     setTool("pan");
@@ -656,9 +388,14 @@ export function LandViewerModal({
     setNearbyHitIndex(0);
     nearbyHitIndexRef.current = 0;
     nearbySearchGen.current += 1;
+    nearbyAbort?.abort();
+    setNearbyLoading(false);
     setElevationFt(null);
     setZoom(null);
-    setCoords(isValidLatLon(latitude, longitude) ? formatCoordPair(latitude, longitude, 5) : "—");
+    {
+      const pair = asLatLon(latitude, longitude);
+      setCoords(pair ? formatCoordPair(pair[0], pair[1], 5) : "—");
+    }
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
@@ -839,6 +576,7 @@ export function LandViewerModal({
         weight: 2.5,
         dashArray: "7 5",
       }).addTo(layer);
+      const detailHtml = hit.detail ? `<br/><em>${hit.detail}</em>` : "";
       L.circleMarker([hit.lat, hit.lon], {
         radius: 8,
         color: "#fff",
@@ -847,7 +585,7 @@ export function LandViewerModal({
         fillOpacity: 1,
       })
         .bindPopup(
-          `<strong>${rank} ${hit.label}</strong><br/>${hit.name}<br/>${formatDistance(hit.meters)} away`,
+          `<strong>${rank} ${hit.label}</strong><br/>${hit.name}<br/>${formatDistance(hit.meters)} away${detailHtml}`,
         )
         .addTo(layer)
         .openPopup();
@@ -855,7 +593,10 @@ export function LandViewerModal({
         padding: [60, 60],
         maxZoom: 14,
       });
-      setNearbyStatus(`${rank} ${hit.label}: ${formatDistance(hit.meters)} · ${hit.name}`);
+      const detailSuffix = hit.detail ? ` · ${hit.detail}` : "";
+      setNearbyStatus(
+        `${rank} ${hit.label}: ${formatDistance(hit.meters)} · ${hit.name}${detailSuffix}`,
+      );
     },
     [center],
   );
@@ -865,7 +606,7 @@ export function LandViewerModal({
       if (!hasGeo || !mapRef.current) return;
       if (nearbyActive === kind) {
         nearbySearchGen.current += 1;
-        nearbyOverpassAbort?.abort();
+        nearbyAbort?.abort();
         layersRef.current.nearby?.clearLayers();
         setNearbyActive(null);
         setNearbyHits([]);
@@ -876,27 +617,26 @@ export function LandViewerModal({
         return;
       }
       const chip = NEARBY_CHIPS.find((c) => c.kind === kind);
-      // Cancel any in-flight Water/#2/#3 Overpass work before starting Hospital/School/etc.
       nearbySearchGen.current += 1;
       const gen = nearbySearchGen.current;
-      nearbyOverpassAbort?.abort();
+      nearbyAbort?.abort();
       setNearbyLoading(true);
       setNearbyStatus(`Finding closest ${chip?.label ?? "feature"}…`);
       setNearbyActive(kind);
       setNearbyHits([]);
       setNearbyHitIndex(0);
       nearbyHitIndexRef.current = 0;
-      const group = layersRef.current.nearby;
-      group?.clearLayers();
+      layersRef.current.nearby?.clearLayers();
 
       let paintedKey: string | null = null;
+      let hits: NearbyHit[] = [];
+      let emptyMessage: string | null = null;
       const applyPartial = (partial: NearbyHit[]) => {
         if (gen !== nearbySearchGen.current || !partial.length) return;
         setNearbyLoading(false);
         setNearbyHits(partial);
         const first = partial[0];
         const key = first.osmKey ?? `${first.lat.toFixed(5)},${first.lon.toFixed(5)}`;
-        // Paint #1 immediately; only re-paint if still viewing #1 and it improved.
         if (paintedKey === null || (nearbyHitIndexRef.current === 0 && paintedKey !== key)) {
           paintedKey = key;
           setNearbyHitIndex(0);
@@ -905,41 +645,49 @@ export function LandViewerModal({
         }
       };
 
-      let hits: NearbyHit[] = [];
+      const watchdog = window.setTimeout(() => {
+        if (gen !== nearbySearchGen.current) return;
+        nearbyAbort?.abort();
+        setNearbyLoading(false);
+        if (!paintedKey) {
+          setNearbyStatus(
+            `Couldn’t find ${chip?.label?.toLowerCase() ?? "that"} nearby — tap again to retry`,
+          );
+        }
+      }, NEARBY_UI_DEADLINE_MS + 400);
+
       try {
-        hits = await fetchNearby(
+        const result = await fetchNearby(
           kind,
           latitude!,
           longitude!,
           applyPartial,
           () => gen !== nearbySearchGen.current,
+          parcelId,
         );
-        // One automatic retry on hard miss (Overpass often flakes right after another chip).
-        if (!hits.length && gen === nearbySearchGen.current) {
-          nearbyCache.delete(`${kind}:${latitude!.toFixed(4)}:${longitude!.toFixed(4)}`);
-          hits = await fetchNearby(
-            kind,
-            latitude!,
-            longitude!,
-            applyPartial,
-            () => gen !== nearbySearchGen.current,
-          );
-        }
+        hits = result.hits;
+        emptyMessage = result.message;
       } catch {
         hits = [];
+        emptyMessage = `Couldn’t find ${chip?.label?.toLowerCase() ?? "that"} nearby — tap again to retry`;
+      } finally {
+        window.clearTimeout(watchdog);
+        if (gen === nearbySearchGen.current) setNearbyLoading(false);
       }
-      if (gen !== nearbySearchGen.current) return;
-      setNearbyLoading(false);
 
+      if (gen !== nearbySearchGen.current) return;
       if (!mapRef.current || !layersRef.current.nearby) return;
 
       if (!hits.length) {
         setNearbyHits([]);
         setNearbyHitIndex(0);
         nearbyHitIndexRef.current = 0;
-        setNearbyStatus(
-          `No mapped ${chip?.label?.toLowerCase() ?? "feature"} within ~${chip?.maxMiles ?? 10} mi`,
-        );
+        if (!paintedKey) {
+          setNearbyStatus(
+            emptyMessage ||
+              `No mapped ${chip?.label?.toLowerCase() ?? "feature"} within ~${chip?.maxMiles ?? 10} mi`,
+          );
+        }
         return;
       }
 
@@ -950,7 +698,7 @@ export function LandViewerModal({
         await paintNearbyHit(hits[0], 0);
       }
     },
-    [hasGeo, latitude, longitude, nearbyActive, paintNearbyHit],
+    [hasGeo, latitude, longitude, nearbyActive, paintNearbyHit, parcelId],
   );
 
   const showPrevNearby = useCallback(() => {
@@ -1118,8 +866,9 @@ export function LandViewerModal({
   }, [radiusMiles, drawRadius]);
 
   async function copyCoords() {
-    if (!isValidLatLon(latitude, longitude)) return;
-    const text = formatCoordPair(latitude, longitude, 6);
+    const pair = asLatLon(latitude, longitude);
+    if (!pair) return;
+    const text = formatCoordPair(pair[0], pair[1], 6);
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -1288,58 +1037,86 @@ export function LandViewerModal({
 
         <div className="land-viewer-nearby" aria-label="Closest landmarks">
           <span className="land-viewer-nearby-label">Closest</span>
-          {NEARBY_CHIPS.map((chip) => (
-            <button
-              key={chip.kind}
-              type="button"
-              className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
-              style={{ ["--chip" as string]: chip.color }}
-              disabled={!hasGeo || nearbyLoading}
-              onClick={() => void showNearby(chip.kind)}
-            >
-              {chip.label}
-            </button>
-          ))}
-          {nearbyLoading ? (
-            <span className="land-viewer-nearby-loading" role="status" aria-live="polite">
-              <LiveMagnifier size={14} label="Finding closest landmark" />
-              <span>Working</span>
-            </span>
-          ) : nearbyHits.length > 1 ? (
-            <div
-              className="land-viewer-nearby-nav"
-              role="group"
-              aria-label={`Closest result ${nearbyHitIndex + 1} of ${nearbyHits.length}`}
-            >
+          <div className="land-viewer-nearby-chips">
+            {NEARBY_ROW1.map((chip) => (
               <button
+                key={chip.kind}
                 type="button"
-                className="land-viewer-nearby-nav-arrow is-back"
-                onClick={showPrevNearby}
-                disabled={!canPrevNearby}
-                aria-label="Previous closest"
-                title="Previous closest"
+                className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
+                style={{ ["--chip" as string]: chip.color }}
+                disabled={!hasGeo}
+                onClick={() => void showNearby(chip.kind)}
+                title={
+                  nearbyLoading && nearbyActive === chip.kind
+                    ? "Cancel search"
+                    : nearbyLoading
+                      ? `Switch to ${chip.label}`
+                      : chip.label
+                }
               >
-                <span className="land-viewer-nearby-next-arrow" aria-hidden>
-                  ←
-                </span>
+                {chip.label}
               </button>
-              <span className="land-viewer-nearby-next-count">
-                {nearbyHitIndex + 1}/{nearbyHits.length}
+            ))}
+            {NEARBY_ROW2.map((chip) => (
+              <button
+                key={chip.kind}
+                type="button"
+                className={`land-viewer-chip${chip.kind === "town" ? " land-viewer-chip--town" : ""}${nearbyActive === chip.kind ? " is-on" : ""}`}
+                style={{ ["--chip" as string]: chip.color }}
+                disabled={!hasGeo}
+                onClick={() => void showNearby(chip.kind)}
+                title={
+                  nearbyLoading && nearbyActive === chip.kind
+                    ? "Cancel search"
+                    : nearbyLoading
+                      ? `Switch to ${chip.label}`
+                      : chip.label
+                }
+              >
+                {chip.label}
+              </button>
+            ))}
+            {nearbyLoading ? (
+              <span className="land-viewer-nearby-loading" role="status" aria-live="polite">
+                <LiveMagnifier size={14} label="Finding closest landmark" />
+                <span>Working</span>
               </span>
-              <button
-                type="button"
-                className="land-viewer-nearby-nav-arrow is-forward"
-                onClick={showNextNearby}
-                disabled={!canNextNearby}
-                aria-label="Next closest"
-                title="Next closest"
+            ) : nearbyHits.length > 1 ? (
+              <div
+                className="land-viewer-nearby-nav"
+                role="group"
+                aria-label={`Closest result ${nearbyHitIndex + 1} of ${nearbyHits.length}`}
               >
-                <span className="land-viewer-nearby-next-arrow" aria-hidden>
-                  →
+                <button
+                  type="button"
+                  className="land-viewer-nearby-nav-arrow is-back"
+                  onClick={showPrevNearby}
+                  disabled={!canPrevNearby}
+                  aria-label="Previous closest"
+                  title="Previous closest"
+                >
+                  <span className="land-viewer-nearby-next-arrow" aria-hidden>
+                    ←
+                  </span>
+                </button>
+                <span className="land-viewer-nearby-next-count">
+                  {nearbyHitIndex + 1}/{nearbyHits.length}
                 </span>
-              </button>
-            </div>
-          ) : null}
+                <button
+                  type="button"
+                  className="land-viewer-nearby-nav-arrow is-forward"
+                  onClick={showNextNearby}
+                  disabled={!canNextNearby}
+                  aria-label="Next closest"
+                  title="Next closest"
+                >
+                  <span className="land-viewer-nearby-next-arrow" aria-hidden>
+                    →
+                  </span>
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
 
         <div className="land-viewer-stage">

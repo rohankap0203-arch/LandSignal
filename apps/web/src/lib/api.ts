@@ -1,17 +1,66 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/v1";
+const ENV_API_BASE = process.env.NEXT_PUBLIC_API_URL || "/v1";
+
+/**
+ * Prefer same-origin `/v1` (Next rewrite → API) in the browser when the env
+ * points at localhost — absolute http://127.0.0.1:8000 breaks phones/tunnels
+ * because that host is the user's device, not this server.
+ */
+function apiBase(): string {
+  const base = ENV_API_BASE || "/v1";
+  if (typeof window === "undefined") return base;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(base)) return "/v1";
+  return base;
+}
+
+function friendlyApiError(status: number, body: string): string {
+  const trimmed = (body || "").trim();
+  try {
+    const parsed = JSON.parse(trimmed) as { detail?: unknown; message?: unknown };
+    const detail = parsed.detail ?? parsed.message;
+    if (typeof detail === "string" && detail.trim()) return detail.trim();
+    if (Array.isArray(detail) && detail.length) {
+      const first = detail[0] as { msg?: string } | string;
+      if (typeof first === "string") return first;
+      if (first && typeof first.msg === "string") return first.msg;
+    }
+  } catch {
+    /* not JSON */
+  }
+  if (
+    !trimmed ||
+    /^Internal Server Error$/i.test(trimmed) ||
+    trimmed.startsWith("<!DOCTYPE") ||
+    trimmed.startsWith("<html")
+  ) {
+    if (status === 502 || status === 503 || status === 504) {
+      return "LandSignal API is not reachable. Start it with `npm run dev:api`, then try Show matches again.";
+    }
+    return "Search could not reach the LandSignal API. Start `npm run dev:api`, then try Show matches again.";
+  }
+  return trimmed.length > 280 ? `API ${status}` : trimmed;
+}
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
-      ...(init?.headers || {}),
-    },
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase()}${path}`, {
+      ...init,
+      headers: {
+        ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+        ...(init?.headers || {}),
+      },
+      cache: "no-store",
+    });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") throw e;
+    if (init?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    throw new Error(
+      "LandSignal API is not reachable. Start it with `npm run dev:api`, then try Show matches again.",
+    );
+  }
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `API ${res.status}`);
+    throw new Error(friendlyApiError(res.status, text));
   }
   return res.json() as Promise<T>;
 }
@@ -52,11 +101,11 @@ export type LandAlertMatchCard = {
   state?: string | null;
   county?: string | null;
   asking_price?: number | null;
-  asking_price_display: string;
+  asking_price_display?: string | null;
   acres?: number | null;
-  acres_display: string;
+  acres_display?: string | null;
   price_per_acre?: number | null;
-  price_per_acre_display: string;
+  price_per_acre_display?: string | null;
   land_type: string;
   signal?: string | null;
   best_strategy?: string | null;
@@ -206,6 +255,14 @@ export const landsignalApi = {
   providers: () =>
     api<Array<{ id: string; kind: string; name: string; status: string; detail?: string }>>("/providers"),
   parcel: (id: string) => api<Record<string, unknown>>(`/parcels/${id}`),
+  catalystSimulate: (
+    id: string,
+    body: { scenario_ids?: string[]; custom_text?: string; stress_case?: string },
+  ) =>
+    api<Record<string, unknown>>(`/parcels/${id}/catalyst-simulate`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   parcelGeometry: (id: string) =>
     api<{
       parcel_id: string;
@@ -216,6 +273,51 @@ export const landsignalApi = {
       state?: string | null;
       county?: string | null;
     }>(`/parcels/${id}/geometry`),
+  nearby: (lat: number, lon: number, kind: string, init?: RequestInit) =>
+    api<{
+      kind: string;
+      label: string;
+      hits: Array<{
+        kind: string;
+        label: string;
+        name: string;
+        lat: number;
+        lon: number;
+        meters: number;
+        detail?: string | null;
+        osm_key?: string | null;
+      }>;
+      status: string;
+      message?: string | null;
+      max_miles?: number | null;
+      searched_radius_m?: number | null;
+      cached?: boolean;
+      parcel_id?: string;
+    }>(
+      `/nearby?lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}&kind=${encodeURIComponent(kind)}`,
+      init,
+    ),
+  nearbyForParcel: (parcelId: string, kind: string, init?: RequestInit) =>
+    api<{
+      kind: string;
+      label: string;
+      hits: Array<{
+        kind: string;
+        label: string;
+        name: string;
+        lat: number;
+        lon: number;
+        meters: number;
+        detail?: string | null;
+        osm_key?: string | null;
+      }>;
+      status: string;
+      message?: string | null;
+      max_miles?: number | null;
+      searched_radius_m?: number | null;
+      cached?: boolean;
+      parcel_id?: string;
+    }>(`/parcels/${encodeURIComponent(parcelId)}/nearby?kind=${encodeURIComponent(kind)}`, init),
   memo: (id: string) =>
     api<{ markdown: string; verdict: string }>(`/parcels/${id}/memo`, { method: "POST" }),
   alerts: () => api<Record<string, unknown>[]>("/alerts"),
