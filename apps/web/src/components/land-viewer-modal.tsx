@@ -1061,7 +1061,7 @@ export function LandViewerModal({
               <button
                 key={chip.kind}
                 type="button"
-                className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
+                className={`land-viewer-chip${chip.kind === "town" ? " land-viewer-chip--town" : ""}${nearbyActive === chip.kind ? " is-on" : ""}`}
                 style={{ ["--chip" as string]: chip.color }}
                 disabled={!hasGeo}
                 onClick={() => void showNearby(chip.kind)}

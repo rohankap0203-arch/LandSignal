@@ -6364,17 +6364,19 @@ a.acquire-block:hover {
 
 .land-viewer-nearby-chips {
   display: grid;
-  /* 10 cols: top chips span 2 each; bottom Town/School/Hospital span 2
-     (Town back to normal chip width); Working / 1-of-N takes 3 cols filled
-     — the width Town used to occupy. */
-  grid-template-columns: repeat(10, minmax(0, 1fr));
+  /* 20 cols: top chips span 4; Town slightly wider (5); School/Hospital 4; Working/nav 7 */
+  grid-template-columns: repeat(20, minmax(0, 1fr));
   gap: 0.22rem var(--nearby-chip-gap);
   align-items: center;
   min-width: 0;
 }
 
 .land-viewer-nearby-chips > .land-viewer-chip {
-  grid-column: span 2;
+  grid-column: span 4;
+}
+
+.land-viewer-nearby-chips > .land-viewer-chip--town {
+  grid-column: span 5;
 }
 
 .land-viewer-chip {
@@ -6414,7 +6416,7 @@ a.acquire-block:hover {
 
 .land-viewer-nearby-loading,
 .land-viewer-nearby-nav {
-  grid-column: span 3;
+  grid-column: span 7;
   justify-self: stretch;
   width: 100%;
   max-width: 100%;
@@ -6424,12 +6426,13 @@ a.acquire-block:hover {
 .land-viewer-nearby-loading {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.16rem;
   box-sizing: border-box;
   flex: 0 0 auto;
   min-height: 1.48rem;
   margin: 0;
-  padding: 0.18rem 0.4rem 0.18rem 0.32rem;
+  padding: 0.18rem 0.4rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line));
   background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
@@ -6439,6 +6442,7 @@ a.acquire-block:hover {
   letter-spacing: 0.01em;
   line-height: 1;
   white-space: nowrap;
+  text-align: center;
 }
 
 .land-viewer-nearby-loading .live-magnifier {
