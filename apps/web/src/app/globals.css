@@ -7238,32 +7238,36 @@ a.acquire-block:hover {
   place-items: center;
 }
 
-.fse-scene-shovel {
-  left: 4%;
-  bottom: 0.06rem;
-  transform-origin: 35% 85%;
-  animation: fse-excavator-work 2.8s ease-in-out infinite;
+.fse-scene-nature {
+  left: 3%;
+  bottom: 0.04rem;
   filter: drop-shadow(0 1px 0 color-mix(in srgb, var(--bg-elevated) 70%, transparent));
 }
 
-.fse-scene-dirt {
-  opacity: 0.8;
-  animation: fse-dirt-puff 2.8s ease-in-out infinite;
-}
-
-.fse-ex-boom,
-.fse-ex-bucket {
+.fse-tree {
   transform-box: fill-box;
-  transform-origin: left center;
-  animation: fse-boom-dip 2.8s ease-in-out infinite;
+  transform-origin: bottom center;
+  animation: fse-tree-sway 3.6s ease-in-out infinite;
 }
 
-.fse-survey-stake {
-  animation: fse-stake-pulse 3.2s ease-in-out infinite;
+.fse-tree-b {
+  animation-delay: 0.45s;
+}
+
+.fse-hill {
+  animation: fse-hill-breathe 4.2s ease-in-out infinite;
+}
+
+.fse-leaf {
+  animation: fse-leaf-drift 3.8s ease-in-out infinite;
+}
+
+.fse-grass {
+  animation: fse-grass-wave 2.8s ease-in-out infinite;
 }
 
 .fse-scene-build {
-  left: 38%;
+  left: 36%;
   bottom: 0.06rem;
   filter: drop-shadow(0 1px 0 color-mix(in srgb, var(--bg-elevated) 70%, transparent));
 }
@@ -7301,18 +7305,28 @@ a.acquire-block:hover {
 }
 
 .fse-scene-crane {
-  right: 18%;
+  right: 14%;
   bottom: 0.04rem;
-  animation: fse-crane-sway 3.4s ease-in-out infinite;
-  transform-origin: 28% 92%;
   filter: drop-shadow(0 1px 0 color-mix(in srgb, var(--bg-elevated) 70%, transparent));
 }
 
-.fse-crane-cable,
-.fse-crane-hook {
+.fse-skyline {
   transform-box: fill-box;
-  transform-origin: top center;
-  animation: fse-crane-lift 3.8s ease-in-out infinite;
+  transform-origin: bottom center;
+  animation: fse-skyline-rise 3.6s ease-in-out infinite;
+}
+
+.fse-skyline-a {
+  animation-delay: 0s;
+}
+.fse-skyline-b {
+  animation-delay: 0.22s;
+}
+.fse-skyline-c {
+  animation-delay: 0.4s;
+}
+.fse-skyline-d {
+  animation-delay: 0.58s;
 }
 
 .fse-launch:hover .fse-launch-scene {
@@ -7374,6 +7388,67 @@ a.acquire-block:hover {
   }
 }
 
+@keyframes fse-tree-sway {
+  0%,
+  100% {
+    transform: rotate(-2deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
+}
+
+@keyframes fse-hill-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes fse-leaf-drift {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translateY(-2px);
+    opacity: 1;
+  }
+}
+
+@keyframes fse-grass-wave {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.65;
+  }
+  50% {
+    transform: translateX(2px);
+    opacity: 1;
+  }
+}
+
+@keyframes fse-skyline-rise {
+  0%,
+  18% {
+    opacity: 0.35;
+    transform: translateY(3px) scaleY(0.92);
+  }
+  40%,
+  70% {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+  100% {
+    opacity: 0.55;
+    transform: translateY(1px) scaleY(0.97);
+  }
+}
+
 @keyframes fse-excavator-work {
   0%,
   100% {
@@ -7384,29 +7459,6 @@ a.acquire-block:hover {
   }
   55% {
     transform: translateY(-1px);
-  }
-}
-
-@keyframes fse-boom-dip {
-  0%,
-  100% {
-    transform: rotate(-6deg);
-  }
-  45% {
-    transform: rotate(10deg);
-  }
-  60% {
-    transform: rotate(2deg);
-  }
-}
-
-@keyframes fse-stake-pulse {
-  0%,
-  100% {
-    opacity: 0.55;
-  }
-  50% {
-    opacity: 1;
   }
 }
 
@@ -7511,22 +7563,22 @@ a.acquire-block:hover {
 
 @media (prefers-reduced-motion: reduce) {
   .fse-launch-go svg,
-  .fse-scene-shovel,
-  .fse-scene-dirt,
-  .fse-ex-boom,
-  .fse-ex-bucket,
-  .fse-survey-stake,
+  .fse-scene-nature,
+  .fse-tree,
+  .fse-hill,
+  .fse-leaf,
+  .fse-grass,
+  .fse-skyline,
   .fse-build-floor,
   .fse-build-win,
   .fse-build-scaffold,
-  .fse-scene-crane,
-  .fse-crane-cable,
-  .fse-crane-hook {
+  .fse-scene-crane {
     animation: none;
   }
 
   .fse-build-floor,
-  .fse-build-win {
+  .fse-build-win,
+  .fse-skyline {
     opacity: 0.75;
   }
 }

@@ -6,16 +6,16 @@ from typing import Any
 
 from landsignal.scoring.financial import asking_discount_pct, clamp, margin_of_safety
 
-ALGORITHM_VERSION = "landsignal_score_v3_4_0"
-WEIGHT_VERSION = "weights_default_v3"
+ALGORITHM_VERSION = "landsignal_score_v3_5_0"
+WEIGHT_VERSION = "weights_opportunistic_v3_5"
 
 DEFAULT_WEIGHTS = {
-    "valuation_mispricing": 0.24,
+    "valuation_mispricing": 0.26,
     "intrinsic_land_quality": 0.10,
     "hbu_optionality": 0.14,
     "growth_appreciation": 0.13,
-    "infrastructure": 0.09,
-    "liquidity": 0.07,
+    "infrastructure": 0.08,
+    "liquidity": 0.06,
     "scarcity": 0.07,
     "catalysts": 0.06,
     "seller_dynamics": 0.05,
@@ -209,12 +209,12 @@ def deal_readiness(inp: dict) -> float:
 
 
 def _signal(opportunity: float, risk: float, confidence: float) -> str:
-    """Surface real asymmetric process buys — slightly more lenient so strong files can surface."""
-    if opportunity < 38 or (risk > 82 and opportunity < 62):
+    """Surface real asymmetric process buys — opportunistic so strong files can surface."""
+    if opportunity < 34 or (risk > 85 and opportunity < 58):
         return "REJECT"
-    if opportunity >= 78 and risk <= 52 and confidence >= 38:
+    if opportunity >= 74 and risk <= 55 and confidence >= 32:
         return "EXCEPTIONAL"
-    if opportunity >= 66 and risk <= 60:
+    if opportunity >= 60 and risk <= 65:
         return "STRONG"
     return "WATCH"
 
@@ -370,10 +370,10 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
             ],
         ),
         "growth_appreciation": (
-            growth_v if growth_v is not None else 50.0,
+            growth_v if growth_v is not None else 55.0,
             "UNKNOWN" if growth_v is None else "KNOWN",
             [
-                f"{tag}: path-of-growth not confirmed — held at 50/100"
+                f"{tag}: path-of-growth not confirmed — held at 55/100 (opportunistic prior)"
                 if growth_v is None
                 else f"{tag}: path-of-growth {growth_v:.0f} → growth rating {growth_v:.0f}/100"
             ],
@@ -390,37 +390,37 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
             ],
         ),
         "liquidity": (
-            liq if liq is not None else 50.0,
+            liq if liq is not None else 54.0,
             "UNKNOWN" if liq is None else "KNOWN",
             [
-                f"{tag}: liquidity proxy missing — held at 50/100"
+                f"{tag}: liquidity proxy missing — held at 54/100 (opportunistic prior)"
                 if liq is None
                 else f"{tag}: liquidity proxy {liq:.0f} → {liq:.0f}/100"
             ],
         ),
         "scarcity": (
-            _v(inp, "scarcity_score") if _v(inp, "scarcity_score") is not None else 50.0,
+            _v(inp, "scarcity_score") if _v(inp, "scarcity_score") is not None else 54.0,
             "UNKNOWN" if _v(inp, "scarcity_score") is None else "KNOWN",
             [
-                f"{tag}: scarcity proxy missing — held at 50/100"
+                f"{tag}: scarcity proxy missing — held at 54/100 (opportunistic prior)"
                 if _v(inp, "scarcity_score") is None
                 else f"{tag}: scarcity {_v(inp, 'scarcity_score'):.0f} on {float(acres):,.2f} ac → {_v(inp, 'scarcity_score'):.0f}/100"
             ],
         ),
         "catalysts": (
-            _v(inp, "catalyst_score") if _v(inp, "catalyst_score") is not None else 52.0,
+            _v(inp, "catalyst_score") if _v(inp, "catalyst_score") is not None else 56.0,
             "UNKNOWN" if _v(inp, "catalyst_score") is None else "KNOWN",
             [
-                f"{tag}: no structured catalyst on file — catalysts {(_v(inp, 'catalyst_score') or 52):.0f}/100"
+                f"{tag}: no structured catalyst on file — catalysts {(_v(inp, 'catalyst_score') or 56):.0f}/100"
                 if _v(inp, "catalyst_score") is None
                 else f"{tag}: catalyst score {_v(inp, 'catalyst_score'):.0f}/100"
             ],
         ),
         "seller_dynamics": (
-            _v(inp, "seller_pressure_score") if _v(inp, "seller_pressure_score") is not None else 52.0,
+            _v(inp, "seller_pressure_score") if _v(inp, "seller_pressure_score") is not None else 55.0,
             "UNKNOWN" if _v(inp, "seller_pressure_score") is None else "KNOWN",
             [
-                f"{tag}: seller-pressure proxy missing ({inp.get('provider_id') or 'listing'}) — held at 52/100"
+                f"{tag}: seller-pressure proxy missing ({inp.get('provider_id') or 'listing'}) — held at 55/100"
                 if _v(inp, "seller_pressure_score") is None
                 else f"{tag}: seller pressure {_v(inp, 'seller_pressure_score'):.0f} via {inp.get('provider_id') or 'listing'} → {_v(inp, 'seller_pressure_score'):.0f}/100"
             ],
@@ -473,7 +473,7 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
             if provider == "public_surplus"
             else 0.78
             if provider == "blm_lpad"
-            else 0.92  # vacant map screen — not a distressed bid assumption
+            else 0.88  # vacant map screen — mild approachable underwrite
         )
         eff_discount = asking_discount_pct(underwrite, base)
         lift_notes.append(
@@ -482,50 +482,74 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
         )
     if eff_discount is not None:
         if provider == "public_vacant_gis":
-            # Cap lifts — vacant GIS must not crowd out true tax-sale / surplus edges
-            if eff_discount <= -15:
-                lift += 5
-                lift_notes.append(f"Soft map-screen edge (+5) for {eff_discount:.0f}% vs model")
+            # Soft but real — vacant GIS can still surface as approachable map screens
+            if eff_discount <= -25:
+                lift += 9
+                lift_notes.append(f"Map-screen value gap (+9) for {eff_discount:.0f}% vs model")
+            elif eff_discount <= -12:
+                lift += 6
+                lift_notes.append(f"Soft map-screen edge (+6) for {eff_discount:.0f}% vs model")
+            elif eff_discount <= -5:
+                lift += 3
+                lift_notes.append(f"Mild map-screen edge (+3) for {eff_discount:.0f}% vs model")
         elif eff_discount <= -50:
-            lift += 18
-            lift_notes.append(f"Deep discount lift (+18) for {eff_discount:.0f}% vs model")
+            lift += 20
+            lift_notes.append(f"Deep discount lift (+20) for {eff_discount:.0f}% vs model")
         elif eff_discount <= -30:
-            lift += 13
-            lift_notes.append(f"Strong discount lift (+13) for {eff_discount:.0f}% vs model")
+            lift += 15
+            lift_notes.append(f"Strong discount lift (+15) for {eff_discount:.0f}% vs model")
         elif eff_discount <= -15:
-            lift += 8
-            lift_notes.append(f"Discount lift (+8) for {eff_discount:.0f}% vs model")
+            lift += 10
+            lift_notes.append(f"Discount lift (+10) for {eff_discount:.0f}% vs model")
+        elif eff_discount <= -8:
+            lift += 5
+            lift_notes.append(f"Mild discount lift (+5) for {eff_discount:.0f}% vs model")
     # Channel edge only when the file also shows a real price/use gap (not bare vacant GIS)
     if provider in ("public_tax_sale", "public_surplus", "blm_lpad") and (
-        (eff_discount is not None and eff_discount <= -15) or float(acres or 0) >= 40
+        (eff_discount is not None and eff_discount <= -12) or float(acres or 0) >= 30
     ):
-        lift += 5
-        lift_notes.append("Off-MLS / process channel scout edge (+5)")
+        lift += 6
+        lift_notes.append("Off-MLS / process channel scout edge (+6)")
     sp = _v(inp, "seller_pressure_score")
-    if sp is not None and sp >= 72 and provider != "public_vacant_gis":
+    if sp is not None and sp >= 68 and provider != "public_vacant_gis":
         lift += 6
         lift_notes.append("Distressed / high seller-pressure channel (+6)")
     if ask is None and acres >= 40 and provider in ("public_tax_sale", "public_surplus", "blm_lpad"):
-        lift += 7
-        lift_notes.append("Unpriced large-tract process edge (+7)")
-        if (_v(inp, "scarcity_score") or 0) >= 65:
+        lift += 8
+        lift_notes.append("Unpriced large-tract process edge (+8)")
+        if (_v(inp, "scarcity_score") or 0) >= 60:
             lift += 5
             lift_notes.append("Scarcity on large unpriced tract (+5)")
     elif ask is None and acres >= 40 and provider == "public_vacant_gis":
-        lift += 3
-        lift_notes.append("Large vacant map screen — still need an owner path (+3)")
+        lift += 4
+        lift_notes.append("Large vacant map screen — still need an owner path (+4)")
     # Usable-acre quality when soil is strong and flood/wetlands are contained
-    if (prime or 0) >= 50 and (wetland or 0) < 15 and (_v(inp, "flood_zone_pct") or 0) < 20:
-        lift += 5
-        lift_notes.append("Cleaner soil + contained flood/wetland screens (+5)")
-    if risk > 70:
-        lift *= 0.55
+    if (prime or 0) >= 45 and (wetland or 0) < 18 and (_v(inp, "flood_zone_pct") or 0) < 25:
+        lift += 6
+        lift_notes.append("Cleaner soil + contained flood/wetland screens (+6)")
+    if risk > 75:
+        lift *= 0.65
         lift_notes.append("Lift cut — elevated risk")
-    elif risk > 58:
-        lift *= 0.85
+    elif risk > 62:
+        lift *= 0.9
         lift_notes.append("Lift tempered — moderate-high risk")
     if lift:
         opportunity = _round1(clamp(opportunity + lift, 0, 100))
+
+    # Sitewide opportunistic nudge: lift middling scout files without
+    # collapsing the top of the board into a flat 95–100 cluster.
+    before_curve = opportunity
+    if opportunity < 70:
+        opportunity = _round1(clamp(opportunity + 6.0 + max(0.0, 55.0 - opportunity) * 0.12, 0, 100))
+    elif opportunity < 82:
+        opportunity = _round1(clamp(opportunity + 3.5, 0, 100))
+    else:
+        opportunity = _round1(clamp(opportunity + 1.5, 0, 100))
+    if opportunity > before_curve + 0.4:
+        lift_notes.append(
+            f"Opportunistic scout nudge (+{opportunity - before_curve:.1f}) — "
+            "favor finding the next look, not punishing thin files"
+        )
 
     confidence = compute_confidence(inp)
 

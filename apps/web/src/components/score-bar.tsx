@@ -176,14 +176,14 @@ function OpportunityLens({ score, standings }: { score: number; standings: Score
       : null;
   const compare = (standings.why_not_higher || [])[0] || standings.ceiling_plain;
   const band =
-    score >= 78
+    score >= 74
       ? "Strong buy"
-      : score >= 66
+      : score >= 60
         ? "Good buy"
-        : score >= 50
+        : score >= 46
           ? "Fair"
           : "Weak";
-  const tone = score >= 66 ? "calm" : score >= 50 ? "watch" : "elevated";
+  const tone = score >= 60 ? "calm" : score >= 46 ? "watch" : "elevated";
 
   return (
     <div className="score-lens score-lens--opp">

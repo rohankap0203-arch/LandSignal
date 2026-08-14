@@ -50,7 +50,7 @@ export function BuyingPowerLogic({
   treatAsPurchase,
   className = "",
 }: Props) {
-  const [open, setOpen] = useState(years >= 5);
+  const [open, setOpen] = useState(false);
   if (!(years >= 1) || futureNominal == null || futureToday == null) return null;
 
   const rawBuy =
