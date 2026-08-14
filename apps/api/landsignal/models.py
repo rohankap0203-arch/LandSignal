@@ -327,3 +327,5 @@ class RadarRow(BaseModel):
     trajectory_label: str | None = None
     trajectory_cagr_5y: str | None = None
     trajectory_sparkline: list[float] = Field(default_factory=list)
+    match_tier: str = "exact"  # "exact" | "near"
+    near_match_reason: str | None = None

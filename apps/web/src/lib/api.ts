@@ -141,6 +141,8 @@ export type RadarRow = {
   return_thesis?: string | null;
   conviction?: string | null;
   scout_note?: string | null;
+  match_tier?: "exact" | "near";
+  near_match_reason?: string | null;
   trajectory_regime?: string | null;
   trajectory_label?: string | null;
   trajectory_cagr_5y?: string | null;
@@ -165,7 +167,29 @@ export type SearchMeta = {
   tooltips?: Record<string, { title: string; body: string }>;
   inventory_states?: string[];
   inventory_count?: number;
+  data_mode?: string;
+  inventory_label?: string;
+  active_land_listings?: number;
+  cadastral_screens?: number;
+  states_covered?: number;
+  states_total?: number;
+  counties_covered?: number;
+  listings_added_24h?: number;
+  listings_updated_24h?: number;
+  inventory_warnings?: string[];
+  by_state_counts?: Record<string, number>;
   allows_custom?: string[];
+};
+
+export type SearchEstimate = {
+  exact_match_count: number;
+  filters: Record<string, unknown>;
+  facets: {
+    regions: Array<{ label: string; count: number }>;
+    price_ranges: Array<{ label: string; count: number }>;
+    acre_ranges: Array<{ label: string; count: number }>;
+    counties: Array<{ label: string; count: number }>;
+  };
 };
 
 export type SearchFilters = {
@@ -203,6 +227,9 @@ function toQuery(filters: SearchFilters): string {
 export const landsignalApi = {
   radar: (filters: SearchFilters = {}) => api<RadarRow[]>(`/radar${toQuery(filters)}`),
   searchMeta: () => api<SearchMeta>("/search/meta"),
+  searchEstimate: (filters: SearchFilters = {}) =>
+    api<SearchEstimate>(`/search/estimate${toQuery(filters)}`),
+  inventoryHealth: () => api<Record<string, unknown>>("/inventory/health"),
   providers: () =>
     api<Array<{ id: string; kind: string; name: string; status: string; detail?: string }>>("/providers"),
   parcel: (id: string) => api<Record<string, unknown>>(`/parcels/${id}`),

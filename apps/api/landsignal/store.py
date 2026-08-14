@@ -393,10 +393,13 @@ def persist_store(store: MemoryStore | None = None) -> None:
     import json
     from pathlib import Path
 
+    from landsignal.settings import get_settings
+
     store = store or _STORE
     if store is None:
         return
     payload = {
+        "schema_version": get_settings().inventory_schema_version,
         "parcels": [p.model_dump(mode="json") for p in store.parcels.values() if not p.is_demo],
         "listings": [L.model_dump(mode="json") for L in store.listings.values() if not L.is_demo],
         "scores": {
@@ -416,12 +419,31 @@ def load_persisted_store(store: MemoryStore) -> int:
     import json
     from pathlib import Path
 
+    from landsignal.settings import get_settings
+
     path = Path(_PERSIST_PATH)
     if not path.exists():
         return 0
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        return 0
+    expected = get_settings().inventory_schema_version
+    got = payload.get("schema_version")
+    if got != expected:
+        import structlog
+
+        structlog.get_logger().warning(
+            "store_snapshot_schema_mismatch",
+            expected=expected,
+            got=got,
+            path=str(path),
+        )
+        # Stale 8-state snapshots must not redefine nationwide inventory after source-set changes.
+        try:
+            path.unlink(missing_ok=True)
+        except Exception:
+            pass
         return 0
     n = 0
     for raw in payload.get("parcels") or []:
