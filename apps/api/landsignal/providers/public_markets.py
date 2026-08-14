@@ -2744,7 +2744,9 @@ class PublicTaxSaleProvider(ListingProvider):
             # More parallel state fetches so nationwide equal pulls finish sooner.
             state_sem = asyncio.Semaphore(12)
 
-            async with httpx.AsyncClient(timeout=timeout, headers=_ARCGIS_HEADERS) as client:
+            async with httpx.AsyncClient(
+                timeout=timeout, headers=_ARCGIS_HEADERS, verify=False
+            ) as client:
 
                 async def fetch_state(st: str) -> list[dict]:
                     async with state_sem:
@@ -2986,7 +2988,9 @@ class PublicSurplusProvider(ListingProvider):
             per_source = max(50, limit // max(1, len(surplus_sources)))
             out: list[dict] = []
             timeout = httpx.Timeout(connect=12.0, read=45.0, write=20.0, pool=20.0)
-            async with httpx.AsyncClient(timeout=timeout, headers=_ARCGIS_HEADERS) as client:
+            async with httpx.AsyncClient(
+                timeout=timeout, headers=_ARCGIS_HEADERS, verify=False
+            ) as client:
                 batches = await asyncio_gather_sources(
                     client, surplus_sources, per_source, errors
                 )

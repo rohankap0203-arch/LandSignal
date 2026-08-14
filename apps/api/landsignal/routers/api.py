@@ -1265,7 +1265,7 @@ async def search_meta() -> dict[str, Any]:
         by_state[st] = by_state.get(st, 0) + 1
     payload["inventory_by_state"] = dict(sorted(by_state.items()))
     payload["inventory_min_per_state_target"] = int(
-        getattr(get_settings(), "discover_min_per_state", 10000) or 10000
+        getattr(get_settings(), "discover_min_per_state", 15000) or 15000
     )
     payload["inventory_states_below_target"] = sorted(
         st
