@@ -6376,6 +6376,7 @@ a.acquire-block:hover {
   align-items: center;
   justify-content: center;
   min-height: 1.48rem;
+  min-width: 0;
   padding: 0.18rem 0.28rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--chip, var(--brand)) 45%, var(--line));
@@ -6387,6 +6388,13 @@ a.acquire-block:hover {
   white-space: nowrap;
   line-height: 1.2;
   text-align: center;
+  overflow: visible;
+}
+
+.land-viewer-chip--wide {
+  grid-column: 1 / span 2;
+  padding-left: 0.4rem;
+  padding-right: 0.4rem;
 }
 
 .land-viewer-chip:hover:not(:disabled) {
@@ -6405,9 +6413,9 @@ a.acquire-block:hover {
 
 .land-viewer-nearby-loading,
 .land-viewer-nearby-nav {
-  grid-column: 4 / span 2;
-  justify-self: start;
-  width: auto;
+  grid-column: 5 / span 1;
+  justify-self: stretch;
+  width: 100%;
   max-width: 100%;
 }
 
