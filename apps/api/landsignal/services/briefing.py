@@ -670,7 +670,6 @@ def build_intelligence_brief(
         },
         "primary_cta": primary_cta,
         "watch_hint": (
-            "Track opportunity, risk, how-complete, price, and status here. "
-            "Set your email under My criteria → Watchlist email sync to get change notices."
+            "Track opportunity, risk, how-complete, price, and status here on your Watchlist."
         ),
     })

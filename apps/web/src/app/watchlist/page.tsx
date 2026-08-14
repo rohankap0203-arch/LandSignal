@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ScoreBar } from "@/components/score-bar";
 import { landsignalApi } from "@/lib/api";
@@ -22,8 +21,6 @@ type WatchItem = {
 
 export default function WatchlistPage() {
   const [items, setItems] = useState<WatchItem[]>([]);
-  const [email, setEmail] = useState("");
-  const [emailOn, setEmailOn] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -33,8 +30,6 @@ export default function WatchlistPage() {
     try {
       const data = await landsignalApi.watchlist();
       setItems((data.items as WatchItem[]) || []);
-      setEmail(data.notify_email || "");
-      setEmailOn(Boolean(data.watchlist_email_updates));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load watchlist");
     } finally {
@@ -53,25 +48,13 @@ export default function WatchlistPage() {
           <h1 className="display text-3xl font-semibold">Watchlist</h1>
           <p className="mt-1 max-w-2xl text-sm text-[var(--muted)]">
             Properties you pinned. Opportunity score, risk, how complete the file is, price, and status
-            update here. Sync an email under My criteria to get change notices.
+            update here.
           </p>
         </div>
         <button type="button" className="btn btn-ghost" onClick={() => void load()}>
           Refresh metrics
         </button>
       </div>
-
-      <section className="panel p-4 text-sm">
-        <div className="font-semibold">Email sync</div>
-        <p className="mt-1 text-[var(--muted)]">
-          {emailOn && email
-            ? `Updates queued for ${email} when major metrics move (requires server SMTP).`
-            : "No notification email on yet — open My criteria → Watchlist email sync."}
-        </p>
-        <Link href="/profile" className="mt-2 inline-block text-[var(--brand)]">
-          Open My criteria →
-        </Link>
-      </section>
 
       {error && <div className="panel p-4 text-[var(--danger)]">{error}</div>}
       {loading && <div className="text-[var(--muted)]">Loading watchlist…</div>}

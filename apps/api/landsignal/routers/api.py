@@ -2126,7 +2126,7 @@ async def watch(parcel_id: UUID) -> dict[str, Any]:
         "note": (
             f"Watching. Metric changes will notify {email}."
             if email and email_on
-            else "Watching in-app. Add your email under My criteria to sync updates."
+            else "Watching in-app. Metric changes stay on your Watchlist."
         ),
     }
 
