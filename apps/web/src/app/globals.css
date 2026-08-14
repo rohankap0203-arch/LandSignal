@@ -6340,8 +6340,8 @@ a.acquire-block:hover {
 }
 
 .land-viewer-nearby {
-  /* Row 1: Flood / Wetland / Water / Road / Power
-     Row 2: Town / School / Hospital (+ Working / nav) */
+  /* Shared 5-col grid: top row fills all 5; bottom chips share those
+     same column widths (Town/School/Hospital) instead of stretching wider. */
   --nearby-chip-gap: 0.18rem;
   display: flex;
   flex-direction: column;
@@ -6363,51 +6363,20 @@ a.acquire-block:hover {
 }
 
 .land-viewer-nearby-chips {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.22rem;
-  min-width: 0;
-}
-
-.land-viewer-nearby-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.22rem var(--nearby-chip-gap);
+  align-items: center;
   min-width: 0;
-}
-
-.land-viewer-nearby-row--primary {
-  flex-wrap: nowrap;
-}
-
-.land-viewer-nearby-row--secondary {
-  flex-wrap: nowrap;
-}
-
-.land-viewer-nearby-row--primary .land-viewer-chip,
-.land-viewer-nearby-row--secondary .land-viewer-chip {
-  flex: 1 1 0;
-  min-width: 0;
-  justify-content: center;
-  text-align: center;
-  padding-left: 0.28rem;
-  padding-right: 0.28rem;
-}
-
-/* Keep Working / nav from stretching like a chip */
-.land-viewer-nearby-row--secondary .land-viewer-nearby-loading,
-.land-viewer-nearby-row--secondary .land-viewer-nearby-nav {
-  flex: 0 0 auto;
 }
 
 .land-viewer-chip {
-  flex: 0 0 auto;
+  width: 100%;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 1.48rem;
-  padding: 0.18rem 0.4rem;
+  padding: 0.18rem 0.28rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--chip, var(--brand)) 45%, var(--line));
   background: color-mix(in srgb, var(--chip, var(--brand)) 10%, var(--bg-elevated));
@@ -6417,6 +6386,7 @@ a.acquire-block:hover {
   cursor: pointer;
   white-space: nowrap;
   line-height: 1.2;
+  text-align: center;
 }
 
 .land-viewer-chip:hover:not(:disabled) {
@@ -6431,6 +6401,14 @@ a.acquire-block:hover {
 .land-viewer-chip:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.land-viewer-nearby-loading,
+.land-viewer-nearby-nav {
+  grid-column: 4 / span 2;
+  justify-self: start;
+  width: auto;
+  max-width: 100%;
 }
 
 .land-viewer-nearby-loading {

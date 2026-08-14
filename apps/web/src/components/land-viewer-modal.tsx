@@ -1038,88 +1038,84 @@ export function LandViewerModal({
         <div className="land-viewer-nearby" aria-label="Closest landmarks">
           <span className="land-viewer-nearby-label">Closest</span>
           <div className="land-viewer-nearby-chips">
-            <div className="land-viewer-nearby-row land-viewer-nearby-row--primary">
-              {NEARBY_ROW1.map((chip) => (
+            {NEARBY_ROW1.map((chip) => (
+              <button
+                key={chip.kind}
+                type="button"
+                className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
+                style={{ ["--chip" as string]: chip.color }}
+                disabled={!hasGeo}
+                onClick={() => void showNearby(chip.kind)}
+                title={
+                  nearbyLoading && nearbyActive === chip.kind
+                    ? "Cancel search"
+                    : nearbyLoading
+                      ? `Switch to ${chip.label}`
+                      : chip.label
+                }
+              >
+                {chip.label}
+              </button>
+            ))}
+            {NEARBY_ROW2.map((chip) => (
+              <button
+                key={chip.kind}
+                type="button"
+                className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
+                style={{ ["--chip" as string]: chip.color }}
+                disabled={!hasGeo}
+                onClick={() => void showNearby(chip.kind)}
+                title={
+                  nearbyLoading && nearbyActive === chip.kind
+                    ? "Cancel search"
+                    : nearbyLoading
+                      ? `Switch to ${chip.label}`
+                      : chip.label
+                }
+              >
+                {chip.label}
+              </button>
+            ))}
+            {nearbyLoading ? (
+              <span className="land-viewer-nearby-loading" role="status" aria-live="polite">
+                <LiveMagnifier size={14} label="Finding closest landmark" />
+                <span>Working</span>
+              </span>
+            ) : nearbyHits.length > 1 ? (
+              <div
+                className="land-viewer-nearby-nav"
+                role="group"
+                aria-label={`Closest result ${nearbyHitIndex + 1} of ${nearbyHits.length}`}
+              >
                 <button
-                  key={chip.kind}
                   type="button"
-                  className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
-                  style={{ ["--chip" as string]: chip.color }}
-                  disabled={!hasGeo}
-                  onClick={() => void showNearby(chip.kind)}
-                  title={
-                    nearbyLoading && nearbyActive === chip.kind
-                      ? "Cancel search"
-                      : nearbyLoading
-                        ? `Switch to ${chip.label}`
-                        : chip.label
-                  }
+                  className="land-viewer-nearby-nav-arrow is-back"
+                  onClick={showPrevNearby}
+                  disabled={!canPrevNearby}
+                  aria-label="Previous closest"
+                  title="Previous closest"
                 >
-                  {chip.label}
-                </button>
-              ))}
-            </div>
-            <div className="land-viewer-nearby-row land-viewer-nearby-row--secondary">
-              {NEARBY_ROW2.map((chip) => (
-                <button
-                  key={chip.kind}
-                  type="button"
-                  className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
-                  style={{ ["--chip" as string]: chip.color }}
-                  disabled={!hasGeo}
-                  onClick={() => void showNearby(chip.kind)}
-                  title={
-                    nearbyLoading && nearbyActive === chip.kind
-                      ? "Cancel search"
-                      : nearbyLoading
-                        ? `Switch to ${chip.label}`
-                        : chip.label
-                  }
-                >
-                  {chip.label}
-                </button>
-              ))}
-              {nearbyLoading ? (
-                <span className="land-viewer-nearby-loading" role="status" aria-live="polite">
-                  <LiveMagnifier size={14} label="Finding closest landmark" />
-                  <span>Working</span>
-                </span>
-              ) : nearbyHits.length > 1 ? (
-                <div
-                  className="land-viewer-nearby-nav"
-                  role="group"
-                  aria-label={`Closest result ${nearbyHitIndex + 1} of ${nearbyHits.length}`}
-                >
-                  <button
-                    type="button"
-                    className="land-viewer-nearby-nav-arrow is-back"
-                    onClick={showPrevNearby}
-                    disabled={!canPrevNearby}
-                    aria-label="Previous closest"
-                    title="Previous closest"
-                  >
-                    <span className="land-viewer-nearby-next-arrow" aria-hidden>
-                      ←
-                    </span>
-                  </button>
-                  <span className="land-viewer-nearby-next-count">
-                    {nearbyHitIndex + 1}/{nearbyHits.length}
+                  <span className="land-viewer-nearby-next-arrow" aria-hidden>
+                    ←
                   </span>
-                  <button
-                    type="button"
-                    className="land-viewer-nearby-nav-arrow is-forward"
-                    onClick={showNextNearby}
-                    disabled={!canNextNearby}
-                    aria-label="Next closest"
-                    title="Next closest"
-                  >
-                    <span className="land-viewer-nearby-next-arrow" aria-hidden>
-                      →
-                    </span>
-                  </button>
-                </div>
-              ) : null}
-            </div>
+                </button>
+                <span className="land-viewer-nearby-next-count">
+                  {nearbyHitIndex + 1}/{nearbyHits.length}
+                </span>
+                <button
+                  type="button"
+                  className="land-viewer-nearby-nav-arrow is-forward"
+                  onClick={showNextNearby}
+                  disabled={!canNextNearby}
+                  aria-label="Next closest"
+                  title="Next closest"
+                >
+                  <span className="land-viewer-nearby-next-arrow" aria-hidden>
+                    →
+                  </span>
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
 
