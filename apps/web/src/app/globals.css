@@ -7313,36 +7313,12 @@ a.acquire-block:hover {
   font-weight: 700;
   letter-spacing: 0.01em;
   line-height: 1.25;
-  color: transparent;
-  background-image: linear-gradient(
-    105deg,
-    var(--ink) 0%,
-    var(--ink) 38%,
-    color-mix(in srgb, #fff 78%, var(--ink)) 48%,
-    var(--ink) 58%,
-    var(--ink) 100%
-  );
-  background-size: 220% 100%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
   flex: 1;
-  animation: fse-label-glisten 5.5s ease-in-out infinite;
-}
-
-@keyframes fse-label-glisten {
-  0%,
-  62%,
-  100% {
-    background-position: 100% 50%;
-  }
-  78% {
-    background-position: 0% 50%;
-  }
 }
 
 .fse-launch-go {
@@ -7394,7 +7370,6 @@ a.acquire-block:hover {
 @media (prefers-reduced-motion: reduce) {
   .fse-launch::before,
   .fse-launch::after,
-  .fse-launch-label,
   .fse-launch-go svg {
     animation: none;
   }
@@ -7412,12 +7387,6 @@ a.acquire-block:hover {
 
   .fse-launch::after {
     opacity: 0.45;
-  }
-
-  .fse-launch-label {
-    color: var(--ink);
-    background: none;
-    -webkit-text-fill-color: currentColor;
   }
 }
 
