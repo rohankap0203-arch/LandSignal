@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { LiveMagnifier } from "@/components/live-magnifier";
+import { PARCEL_OUTLINE, resolveMapPolygon } from "@/lib/parcel-outline";
 
 export type LandViewerProps = {
   open: boolean;
@@ -14,6 +15,8 @@ export type LandViewerProps = {
   latitude?: number | null;
   longitude?: number | null;
   polygon?: number[][][] | null;
+  /** Numeric acres for approximate orange footprint when boundary is missing */
+  acres?: number | null;
   reportHref?: string | null;
   /** When set, Closest uses the parcel's stored coordinates (preferred for every listing). */
   parcelId?: string | null;
@@ -280,6 +283,7 @@ export function LandViewerModal({
   latitude,
   longitude,
   polygon,
+  acres,
   reportHref,
   parcelId,
 }: LandViewerProps) {
@@ -322,6 +326,12 @@ export function LandViewerModal({
   const hasGeo = isValidLatLon(latitude, longitude);
   const pinLabel = hasGeo ? formatCoordPair(latitude!, longitude!, 5) : null;
   const acresLabel = useMemo(() => legitimateAcresDisplay(acresDisplay), [acresDisplay]);
+  const acresNum = useMemo(() => {
+    if (acres != null && Number.isFinite(Number(acres)) && Number(acres) > 0) return Number(acres);
+    const raw = String(acresDisplay || "").replace(/,/g, "");
+    const m = raw.match(/(\d+(?:\.\d+)?)/);
+    return m ? Number(m[1]) : null;
+  }, [acres, acresDisplay]);
   const priceLabel = useMemo(() => legitimatePriceDisplay(priceDisplay), [priceDisplay]);
   const center = useMemo<[number, number]>(
     () => (hasGeo ? [latitude!, longitude!] : [39.5, -98.35]),
@@ -775,18 +785,28 @@ export function LandViewerModal({
       layersRef.current.radius = L.layerGroup().addTo(map);
       layersRef.current.grid = L.layerGroup().addTo(map);
 
-      if (polygon?.[0]?.length) {
-        const latlngs = polygon[0].map(([lon, lat]) => [lat, lon] as [number, number]);
+      const resolved = resolveMapPolygon(polygon, latitude, longitude, acresNum);
+      const drawPoly = resolved.polygon;
+      if (drawPoly?.[0]?.length) {
+        const latlngs = drawPoly[0].map(([lon, lat]) => [lat, lon] as [number, number]);
         const layer = L.polygon(latlngs, {
-          color: "#d6a243",
-          weight: 2.5,
-          fillColor: "#d6a243",
-          fillOpacity: 0.22,
+          ...PARCEL_OUTLINE,
+          weight: resolved.approximate ? 2.75 : 2.5,
+          dashArray: resolved.approximate ? "7 5" : undefined,
         }).addTo(map);
         layersRef.current.parcel = layer;
         map.fitBounds(layer.getBounds(), { padding: [48, 48], maxZoom: 17 });
+        if (resolved.approximate) {
+          layer.bindPopup(`${title || "Parcel"}<br/><span style="opacity:.8">Approx. footprint from acreage</span>`);
+        }
       } else if (hasGeo) {
-        layersRef.current.marker = L.marker(center).addTo(map).bindPopup(title || "Parcel");
+        const icon = L.divIcon({
+          className: "parcel-orange-pin",
+          html: `<span class="parcel-orange-pin-dot"></span>`,
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+        });
+        layersRef.current.marker = L.marker(center, { icon }).addTo(map).bindPopup(title || "Parcel");
       }
 
       if (hasGeo) setCoords(formatCoordPair(latitude!, longitude!, 5));
@@ -830,7 +850,7 @@ export function LandViewerModal({
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, latitude, longitude, polygon, title]);
+  }, [open, latitude, longitude, polygon, acresNum, title]);
 
   const showGridRef = useRef(showGrid);
   useEffect(() => {

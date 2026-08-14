@@ -15,12 +15,12 @@ function money(v: unknown): string {
 export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
   const chart = (cockpit.chart as AnyRec) || {};
   const points = ((chart.points as AnyRec[]) || []).filter(
-    (p) => Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)),
+    (p) => Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)) && Number(p.x) > 0,
   );
   const [active, setActive] = useState(0);
 
   const layout = useMemo(() => {
-    if (!points.length) return null;
+    if (points.length < 2) return null;
     const xs = points.map((p) => Number(p.x));
     const ys = points.map((p) => Number(p.y));
     const minX = Math.min(...xs);
@@ -46,6 +46,9 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
     return { w, h, padL, padT, padB, padR, minX, maxX, maxY, mapped, path, xScale, yScale };
   }, [points]);
 
+  // Genuinely unchartable — parent should usually hide us; belt-and-suspenders.
+  if (!layout) return null;
+
   const selected = points[Math.min(active, Math.max(0, points.length - 1))];
 
   return (
@@ -69,119 +72,113 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
         </p>
       </div>
 
-      {layout ? (
-        <>
-          <svg
-            className="clearing-chart"
-            viewBox={`0 0 ${layout.w} ${layout.h}`}
-            role="img"
-            preserveAspectRatio="xMidYMid meet"
+      <svg
+        className="clearing-chart"
+        viewBox={`0 0 ${layout.w} ${layout.h}`}
+        role="img"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <title>Buyers left at each price</title>
+        {[0, 25, 50, 75, 100].map((y) => {
+          const gy = layout.yScale(y);
+          return (
+            <g key={y}>
+              <line
+                x1={layout.padL}
+                x2={layout.w - layout.padR}
+                y1={gy}
+                y2={gy}
+                stroke="var(--line)"
+                strokeWidth="1"
+              />
+              <text x={layout.padL - 8} y={gy + 3} textAnchor="end" className="chart-tick">
+                {y}%
+              </text>
+            </g>
+          );
+        })}
+        <line
+          x1={layout.padL}
+          y1={layout.padT}
+          x2={layout.padL}
+          y2={layout.h - layout.padB}
+          stroke="var(--ink)"
+          strokeWidth="1.2"
+        />
+        <line
+          x1={layout.padL}
+          y1={layout.h - layout.padB}
+          x2={layout.w - layout.padR}
+          y2={layout.h - layout.padB}
+          stroke="var(--ink)"
+          strokeWidth="1.2"
+        />
+        <path d={layout.path} fill="none" stroke="var(--brand)" strokeWidth="2.2" />
+        {layout.mapped.map((p, i) => {
+          const nearTop = Number(p.y) >= 85;
+          const labelY = nearTop ? p.cy + 16 : p.cy - 12;
+          return (
+            <g
+              key={`${String(p.label)}-${i}`}
+              className="chart-point"
+              onClick={() => setActive(i)}
+              style={{ cursor: "pointer" }}
+            >
+              <circle
+                cx={p.cx}
+                cy={p.cy}
+                r={active === i ? 6 : 4.5}
+                fill={active === i ? "var(--accent)" : "var(--brand)"}
+                stroke="#fff"
+                strokeWidth="1.5"
+              />
+              <text x={p.cx} y={labelY} textAnchor="middle" className="chart-label">
+                {String(p.label)}
+              </text>
+            </g>
+          );
+        })}
+        <text
+          x={(layout.padL + layout.w - layout.padR) / 2}
+          y={layout.h - 12}
+          textAnchor="middle"
+          className="chart-axis"
+        >
+          Price
+        </text>
+        <text
+          x={14}
+          y={layout.h / 2}
+          textAnchor="middle"
+          className="chart-axis"
+          transform={`rotate(-90 14 ${layout.h / 2})`}
+        >
+          % buyers left
+        </text>
+      </svg>
+
+      <div className="chart-legend">
+        {points.map((p, i) => (
+          <button
+            key={`${String(p.label)}-leg-${i}`}
+            type="button"
+            className={`chart-legend-item ${active === i ? "active" : ""}`}
+            onClick={() => setActive(i)}
           >
-            <title>Buyers left at each price</title>
-            {[0, 25, 50, 75, 100].map((y) => {
-              const gy = layout.yScale(y);
-              return (
-                <g key={y}>
-                  <line
-                    x1={layout.padL}
-                    x2={layout.w - layout.padR}
-                    y1={gy}
-                    y2={gy}
-                    stroke="var(--line)"
-                    strokeWidth="1"
-                  />
-                  <text x={layout.padL - 8} y={gy + 3} textAnchor="end" className="chart-tick">
-                    {y}%
-                  </text>
-                </g>
-              );
-            })}
-            <line
-              x1={layout.padL}
-              y1={layout.padT}
-              x2={layout.padL}
-              y2={layout.h - layout.padB}
-              stroke="var(--ink)"
-              strokeWidth="1.2"
-            />
-            <line
-              x1={layout.padL}
-              y1={layout.h - layout.padB}
-              x2={layout.w - layout.padR}
-              y2={layout.h - layout.padB}
-              stroke="var(--ink)"
-              strokeWidth="1.2"
-            />
-            <path d={layout.path} fill="none" stroke="var(--brand)" strokeWidth="2.2" />
-            {layout.mapped.map((p, i) => {
-              const nearTop = Number(p.y) >= 85;
-              const labelY = nearTop ? p.cy + 16 : p.cy - 12;
-              return (
-                <g
-                  key={`${String(p.label)}-${i}`}
-                  className="chart-point"
-                  onClick={() => setActive(i)}
-                  style={{ cursor: "pointer" }}
-                >
-                  <circle
-                    cx={p.cx}
-                    cy={p.cy}
-                    r={active === i ? 6 : 4.5}
-                    fill={active === i ? "var(--accent)" : "var(--brand)"}
-                    stroke="#fff"
-                    strokeWidth="1.5"
-                  />
-                  <text x={p.cx} y={labelY} textAnchor="middle" className="chart-label">
-                    {String(p.label)}
-                  </text>
-                </g>
-              );
-            })}
-            <text
-              x={(layout.padL + layout.w - layout.padR) / 2}
-              y={layout.h - 12}
-              textAnchor="middle"
-              className="chart-axis"
-            >
-              Price
-            </text>
-            <text
-              x={14}
-              y={layout.h / 2}
-              textAnchor="middle"
-              className="chart-axis"
-              transform={`rotate(-90 14 ${layout.h / 2})`}
-            >
-              % buyers left
-            </text>
-          </svg>
+            <strong>{String(p.label)}</strong>
+            <span>{money(p.x)}</span>
+          </button>
+        ))}
+      </div>
 
-          <div className="chart-legend">
-            {points.map((p, i) => (
-              <button
-                key={`${String(p.label)}-leg-${i}`}
-                type="button"
-                className={`chart-legend-item ${active === i ? "active" : ""}`}
-                onClick={() => setActive(i)}
-              >
-                <strong>{String(p.label)}</strong>
-                <span>{money(p.x)}</span>
-              </button>
-            ))}
-          </div>
-
-          {selected && (
-            <div className="chart-readout">
-              <strong>{String(selected.label)}</strong>
-              <span>
-                {money(selected.x)} · about {Number(selected.y).toFixed(0)}% of buyers still bidding
-              </span>
-              <p>{String(selected.note || "")}</p>
-            </div>
-          )}
-        </>
-      ) : (
-        <p className="text-sm text-[var(--muted)]">Not enough price points to chart this parcel yet.</p>
+      {selected && (
+        <div className="chart-readout">
+          <strong>{String(selected.label)}</strong>
+          <span>
+            {money(selected.x)} · about {Number(selected.y).toFixed(0)}% of buyers still bidding
+          </span>
+          <p>{String(selected.note || "")}</p>
+        </div>
       )}
     </div>
   );

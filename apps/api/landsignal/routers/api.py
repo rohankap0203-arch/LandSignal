@@ -1563,19 +1563,45 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     settle_v = float((auction_path or {}).get("expected_settle_usd") or 0)
     settle_lo = float((auction_path or {}).get("settle_low_usd") or settle_v)
     settle_hi = float((auction_path or {}).get("settle_high_usd") or settle_v)
+    ask_v = float(ask or 0)
+    if model_v <= 0 and isinstance(price, dict):
+        for key in ("estimated_value_usd", "model_value_usd", "value_usd", "mark_usd"):
+            try:
+                cand = float(price.get(key) or 0)
+            except (TypeError, ValueError):
+                cand = 0.0
+            if cand > 0:
+                model_v = cand
+                break
+    if model_v <= 0 and ask_v > 0:
+        # Listing ask becomes the value anchor when comps haven't produced a model yet
+        model_v = ask_v
+
     if auction_path and opener_v > 0 and model_v > 0:
-            chart_points = [
+        chart_points = [
             {"x": opener_v, "y": 100, "label": "Start", "note": "Published starting bid — almost every bidder is still in"},
             {"x": settle_lo, "y": 72, "label": "Soft day", "note": "Quiet auction — finishes on the low side"},
             {"x": settle_v, "y": 48, "label": "Likely finish", "note": "Typical contested finish for this kind of sale"},
             {"x": settle_hi, "y": 28, "label": "Hot day", "note": "Busy auction — price climbs higher"},
             {"x": model_v, "y": 12, "label": "Our value", "note": "What we think the land is worth — few tax-sale buyers pay full retail"},
         ]
+    elif ask_v > 0 and model_v > 0 and abs(ask_v - model_v) / max(model_v, 1) > 0.04:
+        # Brokered / marketplace listing with both ask and a value read
+        lo = min(ask_v, model_v)
+        hi = max(ask_v, model_v)
+        chart_points = [
+            {"x": lo * 0.85, "y": 88, "label": "Aggressive", "note": "Deep bid — most shoppers still browsing"},
+            {"x": lo, "y": 62, "label": "Value side", "note": "Closer to our read of fair value"},
+            {"x": (lo + hi) / 2, "y": 40, "label": "Mid", "note": "Where negotiated deals often clear"},
+            {"x": ask_v, "y": 22, "label": "Ask", "note": "Published asking price"},
+            {"x": hi * 1.05 if hi == model_v else hi, "y": 10, "label": "Stretch", "note": "Few buyers remain at a premium to ask/value"},
+        ]
     elif model_v > 0:
         chart_points = [
             {"x": model_v * 0.55, "y": 80, "label": "Deep discount", "note": "Where distressed / process buyers often land"},
             {"x": model_v * 0.75, "y": 45, "label": "Negotiated", "note": "Common brokered or surplus outcome"},
-            {"x": model_v, "y": 18, "label": "Our value", "note": "Our estimated full value for this land"},
+            {"x": model_v, "y": 18, "label": "Our value" if ask_v <= 0 else "Ask / value", "note": "Anchor price for this file"},
+            {"x": model_v * 1.12, "y": 8, "label": "Retail+", "note": "Competition thins sharply above the anchor"},
         ]
     else:
         chart_points = []
@@ -1593,6 +1619,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
             "y_label": "Buyers still competing (%)",
             "points": chart_points,
         },
+        "has_chart": bool(chart_points),
         "opportunity": score.opportunity if score else None,
         "risk": score.risk if score else None,
         "confidence": score.confidence if score else None,
