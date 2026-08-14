@@ -6340,8 +6340,8 @@ a.acquire-block:hover {
 }
 
 .land-viewer-nearby {
-  /* Tight enough that Flood / Wetland / Water body / Paved road / Power line
-     barely share one row on phone-width Land Viewer; remaining 3 + Working wrap. */
+  /* Row 1: Flood / Wetland / Water / Road / Power
+     Row 2: Town / School / Hospital (+ Working / nav) */
   --nearby-chip-gap: 0.12rem;
   display: flex;
   flex-direction: column;
@@ -6363,6 +6363,14 @@ a.acquire-block:hover {
 }
 
 .land-viewer-nearby-chips {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.14rem;
+  min-width: 0;
+}
+
+.land-viewer-nearby-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
