@@ -6870,16 +6870,11 @@ a.acquire-block:hover {
 .account-signin {
   padding: 8px 14px;
   white-space: nowrap;
-  background: var(--bg-elevated);
-  color: #000;
-  border: 1px solid var(--line);
-  font-weight: 650;
 }
 
-[data-theme="dark"] .account-signin {
-  background: var(--brand);
-  color: #fff;
-  border-color: transparent;
+/* Dark mode brand is a light mint — white label washes out; use black. */
+[data-theme="dark"] .btn.btn-dark.account-signin {
+  color: #000;
 }
 
 .account-create {
