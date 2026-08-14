@@ -1150,21 +1150,29 @@ SOURCES: list[ArcgisMarketSource] = [
     ),
     _src(
         "la_brla_parcels",
-        "East Baton Rouge LA Parcels (1ac+)",
+        "East Baton Rouge LA Parcels (0.25ac+)",
         "https://maps.brla.gov/gis/rest/services/Cadastral/Tax_Parcel/MapServer/0/query",
         "LA",
         _norm_la_brla_parcels,
         # Layer has no usable OBJECTID windows — page by offset; skip placeholder 000-* rows in norm.
+        # outFields=* returns 0 features on this MapServer — must list fields.
         where="ASSESSMENT_NUM NOT LIKE '000-%'",
         page_size=500,
+        out_fields=(
+            "ID,ASSESSMENT_NUM,OWNER,PHYSICAL_ADDRESS,SUM_LAND_VALUE,SUM_LOT_VALUE,"
+            "SUM_IMPROVEMENT_VALUE,SUM_FAIR_MARKET_VALUE,STATUS"
+        ),
     ),
     _src(
         "la_orleans_parcels",
-        "Orleans Parish LA Parcels (1ac+)",
+        "Orleans Parish LA Parcels (0.25ac+)",
         "https://gis.nola.gov/arcgis/rest/services/apps/property3/MapServer/15/query",
         "LA",
         _norm_la_orleans_parcels,
         where="1=1",
         page_size=500,
+        out_fields=(
+            "OBJECTID,PARCELID,TAXBILLID,PARID,SITEADDRESS,OWNERNME1,UNIT,USECD,ASS_SQFT"
+        ),
     ),
 ]
