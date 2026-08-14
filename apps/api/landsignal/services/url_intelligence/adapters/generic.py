@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from landsignal.services.url_intelligence.provenance import provenanced
+from landsignal.services.url_intelligence.url_hints import extract_from_listing_url
 
 _PRICE_RE = re.compile(
     r"(?:\$|USD\s*)\s*([0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(K|M|k|m)?",
@@ -201,14 +202,32 @@ def extract_raw(html: str, *, url: str) -> dict[str, Any]:
     meta = _meta_map(html)
     title_m = _TITLE_RE.search(html)
     page_title = unescape(title_m.group(1)).strip() if title_m else None
+    # Reject bot-block page titles
+    blocked_titles = {"access denied", "forbidden", "attention required", "just a moment", "robot"}
+    if page_title and page_title.lower().strip() in blocked_titles:
+        page_title = None
+    og_title = meta.get("og:title") or meta.get("twitter:title")
+    if og_title and og_title.lower().strip() in blocked_titles:
+        og_title = None
+
     draft: dict[str, Any] = {
         "source_url": url,
         "source_host": host_label(url),
-        "title": meta.get("og:title") or meta.get("twitter:title") or page_title,
-        "description": meta.get("og:description")
-        or meta.get("description")
-        or meta.get("twitter:description"),
     }
+    if og_title or page_title:
+        draft["title"] = og_title or page_title
+    desc = (
+        meta.get("og:description")
+        or meta.get("description")
+        or meta.get("twitter:description")
+    )
+    if desc:
+        draft["description"] = desc
+    # URL slug hints first (fill gaps later) — critical when HTML is blocked
+    for k, v in extract_from_listing_url(url).items():
+        if draft.get(k) in (None, ""):
+            draft[k] = v
+
     draft.update({k: v for k, v in _from_jsonld(_jsonld_nodes(html)).items() if v})
 
     blob = " ".join(
@@ -262,6 +281,14 @@ def extract_raw(html: str, *, url: str) -> dict[str, Any]:
             break
     if imgs:
         draft["image_urls"] = imgs
+
+    # Re-apply URL hints for any still-missing fields
+    for k, v in extract_from_listing_url(url).items():
+        if draft.get(k) in (None, ""):
+            draft[k] = v
+
+    if not draft.get("title"):
+        draft["title"] = f"Listing from {host_label(url)}"
 
     for k in list(draft.keys()):
         if draft[k] in ("", None):

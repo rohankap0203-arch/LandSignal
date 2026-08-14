@@ -29,6 +29,12 @@ function isValidHttpUrl(raw: string): boolean {
   }
 }
 
+function draftStr(draft: Record<string, unknown> | undefined, key: string): string {
+  const v = draft?.[key];
+  if (v == null || v === "") return "";
+  return String(v);
+}
+
 export function AnalyzeListingPanel() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -46,7 +52,6 @@ export function AnalyzeListingPanel() {
     [stages],
   );
 
-  // Replay completed stages progressively for a premium feel (real stage list from API)
   useEffect(() => {
     if (phase !== "processing" && phase !== "confirm" && phase !== "done" && phase !== "fallback") {
       return;
@@ -61,6 +66,28 @@ export function AnalyzeListingPanel() {
     }, 280);
     return () => window.clearInterval(id);
   }, [phase, doneStages.length, result?.parcel_id]);
+
+  function seedCorrections(res: UrlAnalyzeResult) {
+    const draft = res.draft || {};
+    const seed: Record<string, string> = {
+      title: draftStr(draft, "title"),
+      state: draftStr(draft, "state"),
+      county: draftStr(draft, "county"),
+      acreage: draftStr(draft, "acreage"),
+      asking_price_usd: draftStr(draft, "asking_price_usd"),
+      address: draftStr(draft, "address"),
+      apn: draftStr(draft, "apn"),
+      coordinates:
+        draft.latitude != null && draft.longitude != null
+          ? `${draft.latitude}, ${draft.longitude}`
+          : "",
+    };
+    // Always expose material missing fields even if empty
+    for (const m of res.missing_material || []) {
+      if (!(m.field in seed)) seed[m.field] = "";
+    }
+    setCorrections(seed);
+  }
 
   async function runAnalyze(extra?: Record<string, string>) {
     const trimmed = url.trim();
@@ -79,32 +106,33 @@ export function AnalyzeListingPanel() {
       setResult(res);
       if (res.status === "complete" && res.parcel_id) {
         setPhase("done");
-        // Brief beat so stages finish animating, then open report
         window.setTimeout(() => {
           router.push(res.report_path || `/parcels/${res.parcel_id}`);
         }, Math.min(2200, 320 * Math.max(1, (res.stages || []).filter((s) => s.status === "done").length)));
-      } else if (res.fallback && (res.missing_material?.length ?? 0) >= 2 && !res.ok) {
-        setPhase("fallback");
       } else if (res.needs_confirmation || res.status === "needs_confirmation") {
+        seedCorrections(res);
         setPhase("confirm");
-        const seed: Record<string, string> = {};
-        for (const m of res.missing_material || []) {
-          if (m.field === "coordinates") seed.coordinates = "";
-          else seed[m.field] = "";
-        }
-        setCorrections((c) => ({ ...seed, ...c }));
       } else if (res.parcel_id) {
         setPhase("done");
         router.push(res.report_path || `/parcels/${res.parcel_id}`);
-      } else {
+      } else if (res.fallback && !res.ok) {
         setPhase("fallback");
+      } else {
+        seedCorrections(res);
+        setPhase("confirm");
       }
     } catch (e) {
+      const msg = e instanceof Error ? e.message : "Analyze failed";
+      const apiDown =
+        /not reachable|not found|404|503|8000|dev:api/i.test(msg) ||
+        msg.trim().toLowerCase() === "not found";
       setResult({
         ok: false,
-        error: e instanceof Error ? e.message : "Analyze failed",
+        error: msg,
         fallback: {
-          message: "We couldn't read enough information from this listing automatically.",
+          message: apiDown
+            ? "Land Signal could not reach the analyze service. Refresh the page and try again — if it keeps failing, the API needs a restart."
+            : "We couldn't read enough information from this listing automatically.",
           options: [
             { id: "paste", label: "Paste listing details", href: "/ingest" },
             { id: "manual", label: "Enter address / APN", href: "/ingest" },
@@ -132,7 +160,8 @@ export function AnalyzeListingPanel() {
   }
 
   const shownStages = doneStages.slice(0, Math.max(1, visibleStageIdx));
-  const facts = (result?.facts || []).slice(0, 5);
+  const facts = (result?.facts || []).slice(0, 6);
+  const missingKeys = new Set((result?.missing_material || []).map((m) => m.field));
 
   return (
     <div className="analyze-listing-wrap">
@@ -153,8 +182,11 @@ export function AnalyzeListingPanel() {
             intelligence report.
           </p>
 
-          {phase === "idle" || phase === "confirm" || phase === "fallback" ? (
-            <form className="analyze-listing-form" onSubmit={phase === "confirm" ? onConfirm : onSubmit}>
+          {(phase === "idle" || phase === "confirm" || phase === "fallback") && (
+            <form
+              className="analyze-listing-form"
+              onSubmit={phase === "confirm" ? onConfirm : onSubmit}
+            >
               {phase !== "confirm" ? (
                 <>
                   <label className="analyze-listing-label">
@@ -176,30 +208,75 @@ export function AnalyzeListingPanel() {
               {phase === "confirm" && result ? (
                 <div className="analyze-listing-confirm">
                   <p className="analyze-listing-note">
-                    {result.note || "A few critical fields need confirmation before analysis."}
+                    {result.note ||
+                      "Confirm a few details from the listing, then run the full intelligence report."}
                   </p>
-                  {(result.missing_material || []).map((m) => (
-                    <label key={m.field} className="analyze-listing-label">
-                      {m.prompt}
-                      <input
-                        className="field analyze-listing-input"
-                        value={corrections[m.field] || ""}
-                        onChange={(e) =>
-                          setCorrections((c) => ({ ...c, [m.field]: e.target.value }))
-                        }
-                        placeholder={
-                          m.field === "coordinates"
-                            ? "34.05, -118.24"
-                            : m.field === "acreage"
-                              ? "34.7"
-                              : m.unit || m.field
-                        }
-                        disabled={busy}
-                      />
-                    </label>
-                  ))}
+                  {result.fetch_status && result.fetch_status !== "ok" ? (
+                    <p className="analyze-listing-status">
+                      Page read: {result.fetch_status.replace(/_/g, " ")}
+                      {result.source_host ? ` · ${result.source_host}` : ""}
+                    </p>
+                  ) : null}
+
+                  <div className="analyze-listing-grid">
+                    {(
+                      [
+                        ["title", "Title"],
+                        ["acreage", "Acres"],
+                        ["asking_price_usd", "Asking price (USD)"],
+                        ["state", "State"],
+                        ["county", "County"],
+                        ["address", "Address"],
+                        ["apn", "APN"],
+                        ["coordinates", "Coordinates (lat, lon)"],
+                      ] as const
+                    ).map(([field, label]) => {
+                      const required = missingKeys.has(field) || (field === "coordinates" && missingKeys.has("coordinates"));
+                      // Hide optional empty non-missing fields to keep UI compact — always show required + filled
+                      const val = corrections[field] || "";
+                      if (!required && !val && !["title", "acreage", "state", "coordinates"].includes(field)) {
+                        return null;
+                      }
+                      return (
+                        <label key={field} className="analyze-listing-label">
+                          {label}
+                          {required ? " *" : ""}
+                          <input
+                            className={`field analyze-listing-input${required && !val ? " is-missing" : ""}`}
+                            value={val}
+                            onChange={(e) =>
+                              setCorrections((c) => ({ ...c, [field]: e.target.value }))
+                            }
+                            placeholder={
+                              field === "coordinates"
+                                ? "34.05, -118.24"
+                                : field === "acreage"
+                                  ? "34.7"
+                                  : field === "state"
+                                    ? "CA"
+                                    : ""
+                            }
+                            disabled={busy}
+                            required={required}
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+
                   <button type="submit" className="btn btn-primary analyze-listing-cta" disabled={busy}>
                     {busy ? "Analyzing…" : "Analyze Property →"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={busy}
+                    onClick={() => {
+                      setPhase("idle");
+                      setResult(null);
+                    }}
+                  >
+                    Try another URL
                   </button>
                 </div>
               ) : null}
@@ -207,6 +284,7 @@ export function AnalyzeListingPanel() {
               {phase === "fallback" && result?.fallback ? (
                 <div className="analyze-listing-fallback">
                   <p>{result.fallback.message}</p>
+                  {result.error ? <p className="analyze-listing-error">{result.error}</p> : null}
                   <div className="analyze-listing-fallback-actions">
                     {(result.fallback.options || []).map((o) => (
                       <Link key={o.id} href={o.href || "/ingest"} className="btn btn-secondary">
@@ -233,7 +311,7 @@ export function AnalyzeListingPanel() {
                 </button>
               ) : null}
             </form>
-          ) : null}
+          )}
 
           {(phase === "processing" || phase === "done" || phase === "confirm") && result ? (
             <div className="analyze-listing-process" aria-live="polite">
@@ -268,6 +346,19 @@ export function AnalyzeListingPanel() {
               {phase === "done" ? (
                 <p className="analyze-listing-note">Opening full intelligence report…</p>
               ) : null}
+            </div>
+          ) : null}
+
+          {phase === "processing" && !result ? (
+            <div className="analyze-listing-process" aria-live="polite">
+              <ul className="analyze-listing-stages">
+                <li className="stage stage-running">
+                  <span className="stage-mark stage-pulse" aria-hidden>
+                    ◌
+                  </span>
+                  <span>Reading listing…</span>
+                </li>
+              </ul>
             </div>
           ) : null}
         </div>

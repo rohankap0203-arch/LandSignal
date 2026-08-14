@@ -136,11 +136,20 @@ async def geocode_address(address: str, state: str | None = None) -> dict[str, f
 async def _fetch_html(url: str) -> tuple[str, str, str | None]:
     """Returns html, fetch_status, final_url."""
     headers = {
+        # Browser-like UA — marketplace CDNs often hard-block obvious bots.
         "User-Agent": (
-            "Mozilla/5.0 (compatible; LandSignalBot/1.0; +https://landsignal.app; "
-            "user-initiated single listing analyze)"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
     }
     fetch_status = "ok"
     html = ""
@@ -155,17 +164,16 @@ async def _fetch_html(url: str) -> tuple[str, str, str | None]:
             final_url = str(resp.url)
             ctype = (resp.headers.get("content-type") or "").lower()
             if "text/html" not in ctype and "application/xhtml" not in ctype and ctype and "text/" not in ctype:
-                # Reject non-HTML payloads
                 return "", "unsupported_mime", final_url
-            # Content-size limit ~2.5MB
             body = resp.content[: 2_500_000]
             html = body.decode(resp.encoding or "utf-8", errors="replace")
-            if resp.status_code in (401, 403, 429):
+            low = html.lower()
+            if resp.status_code in (401, 403, 429) or "access denied" in low[:2000] or "akamai" in low[:1500] and "denied" in low[:2000]:
                 fetch_status = "blocked"
             elif resp.status_code >= 400:
                 fetch_status = "http_error"
-            elif len(html) < 800 or ("__NEXT_DATA__" in html and "og:title" not in html.lower()):
-                if "og:title" not in html.lower() and "application/ld+json" not in html.lower():
+            elif len(html) < 800 or ("__NEXT_DATA__" in html and "og:title" not in low):
+                if "og:title" not in low and "application/ld+json" not in low:
                     fetch_status = "thin_or_app_shell"
     except Exception as exc:  # noqa: BLE001
         log.info("listing_url_fetch_failed", url=url[:180], error=str(exc)[:200])
@@ -237,12 +245,13 @@ async def extract_listing_intelligence(url: str) -> dict[str, Any]:
 
     ms_read = int((time.perf_counter() - t0) * 1000)
     adapter = select_adapter(canonical, domain or "")
-    raw = adapter.extract(html, url=canonical, domain=domain or "") if html else {
-        "source_url": canonical,
-        "source_host": host_label(canonical),
-        "title": f"Listing from {host_label(canonical)}",
-        "adapter_id": getattr(adapter, "id", "generic"),
-    }
+    # Always run extract — URL slug hints work even when HTML is empty/blocked
+    raw = adapter.extract(html or "", url=canonical, domain=domain or "")
+    if not raw.get("source_url"):
+        raw["source_url"] = canonical
+    if not raw.get("source_host"):
+        raw["source_host"] = host_label(canonical)
+    raw["adapter_id"] = getattr(adapter, "id", "generic")
     fields = adapter.normalize(raw, url=canonical, domain=domain or "")
     stages[0] = _stage("reading_listing", "done", f"via {getattr(adapter, 'name', 'adapter')}", ms_read)
 
@@ -278,6 +287,24 @@ async def extract_listing_intelligence(url: str) -> dict[str, Any]:
                 geo["longitude"], source="geospatial_calculation", confidence=0.7,
                 extraction_method="nominatim_geocode", source_url=canonical,
             )
+    elif (
+        (draft.get("latitude") is None or draft.get("longitude") is None)
+        and draft.get("county")
+        and draft.get("state")
+    ):
+        geo = await geocode_address(f"{draft['county']} County", draft.get("state"))
+        if geo:
+            draft.update(geo)
+            from landsignal.services.url_intelligence.provenance import provenanced
+
+            fields["latitude"] = provenanced(
+                geo["latitude"], source="geospatial_calculation", confidence=0.55,
+                extraction_method="nominatim_county_geocode", source_url=canonical,
+            )
+            fields["longitude"] = provenanced(
+                geo["longitude"], source="geospatial_calculation", confidence=0.55,
+                extraction_method="nominatim_county_geocode", source_url=canonical,
+            )
 
     stages[1] = _stage("identifying_property", "done", ms=int((time.perf_counter() - t1) * 1000))
 
@@ -310,12 +337,18 @@ async def extract_listing_intelligence(url: str) -> dict[str, Any]:
     for i in range(4, len(stages)):
         stages[i] = _stage(STAGE_DEFS[i][0], "pending")
 
-    thin = fetch_status in {"blocked", "thin_or_app_shell", "http_error", "network_error", "unsupported_mime"} or len(miss) >= 3
+    thin = fetch_status in {"blocked", "thin_or_app_shell", "http_error", "network_error", "unsupported_mime"}
     note = None
-    if thin:
+    if thin and not miss:
         note = (
-            f"{draft.get('source_host') or 'This site'} often hides listing details from bots. "
-            "Confirm or fill the missing fields — LandSignal will still run the full intelligence stack."
+            f"{draft.get('source_host') or 'This site'} blocked a full page read, but we recovered "
+            "enough from the listing URL to run intelligence. Review once, then continue."
+        )
+    elif thin:
+        note = (
+            f"{draft.get('source_host') or 'This site'} often blocks automated page reads. "
+            "We pulled what we could from the URL — confirm the fields below and LandSignal "
+            "will still run the full intelligence stack."
         )
     elif miss:
         note = "We pulled a draft from the page. Confirm the fields below, then run intelligence."
@@ -325,7 +358,8 @@ async def extract_listing_intelligence(url: str) -> dict[str, Any]:
     facts = _facts_from_draft(draft, identity)
     ok = True
     error = None
-    if fetch_status == "network_error" and not html:
+    # Only hard-fail when we have essentially nothing usable
+    if fetch_status == "network_error" and len(miss) >= 3 and not draft.get("acreage") and not draft.get("state"):
         ok = False
         error = "We couldn't read enough information from this listing automatically."
 
@@ -349,7 +383,9 @@ async def extract_listing_intelligence(url: str) -> dict[str, Any]:
         "adapter_id": getattr(adapter, "id", "generic"),
         "stages": stages,
         "facts": facts,
-        "fallback": _fallback_payload(canonical, domain, fetch_status) if thin and len(miss) >= 2 else None,
+        "fallback": _fallback_payload(canonical, domain, fetch_status)
+        if (not ok or (thin and len(miss) >= 3 and not draft.get("acreage") and not draft.get("state")))
+        else None,
         "imported_listing": {
             "label": "Imported Listing",
             "domain": domain,

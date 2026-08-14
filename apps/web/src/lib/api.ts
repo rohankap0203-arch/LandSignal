@@ -32,10 +32,16 @@ function friendlyApiError(status: number, body: string): string {
     trimmed.startsWith("<!DOCTYPE") ||
     trimmed.startsWith("<html")
   ) {
+    if (status === 404) {
+      return "Analyze service route not found. Refresh the page — if it keeps failing, restart the LandSignal API.";
+    }
     if (status === 502 || status === 503 || status === 504) {
       return "LandSignal API is not reachable. Start it with `npm run dev:api`, then try Show matches again.";
     }
     return "Search could not reach the LandSignal API. Start `npm run dev:api`, then try Show matches again.";
+  }
+  if (status === 404 && /^not found$/i.test(trimmed)) {
+    return "Analyze service route not found. Refresh the page — if it keeps failing, restart the LandSignal API.";
   }
   return trimmed.length > 280 ? `API ${status}` : trimmed;
 }

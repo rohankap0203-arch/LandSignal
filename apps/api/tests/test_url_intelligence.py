@@ -151,3 +151,27 @@ async def test_extract_pipeline_from_html(monkeypatch):
     assert any("acres" in f.lower() for f in result["facts"])
     # semantic nested under fields
     assert "utilities" in result["fields"] or "utilities" in (result.get("semantic") or {})
+
+
+def test_url_slug_hints():
+    from landsignal.services.url_intelligence.url_hints import extract_from_listing_url
+
+    land = extract_from_listing_url(
+        "https://www.land.com/property/40-acres-in-riverside-county-california/221012345/"
+    )
+    assert land["acreage"] == 40.0
+    assert land["state"] == "CA"
+    assert land["county"] == "Riverside"
+
+    watch = extract_from_listing_url(
+        "https://www.landwatch.com/kern-county-california-34-acres/pid/401234567"
+    )
+    assert watch["acreage"] == 34.0
+    assert watch["county"] == "Kern"
+    assert watch["state"] == "CA"
+
+    bernardino = extract_from_listing_url(
+        "https://www.land.com/property/118-acres-in-san-bernardino-county-california/x/"
+    )
+    assert bernardino["county"] == "San Bernardino"
+    assert bernardino["acreage"] == 118.0

@@ -916,6 +916,30 @@ select {
   gap: 10px;
 }
 
+.analyze-listing-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 640px) {
+  .analyze-listing-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.analyze-listing-input.is-missing {
+  border-color: color-mix(in srgb, var(--danger, #a33) 55%, var(--line));
+}
+
+.analyze-listing-status {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 @keyframes analyze-stage-in {
   from {
     opacity: 0;
