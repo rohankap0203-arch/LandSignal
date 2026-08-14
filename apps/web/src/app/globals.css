@@ -6872,11 +6872,6 @@ a.acquire-block:hover {
   white-space: nowrap;
 }
 
-/* Dark mode brand is a light mint — white label washes out; use black. */
-[data-theme="dark"] .btn.btn-dark.account-signin {
-  color: #000;
-}
-
 .account-create {
   padding: 8px 14px;
   white-space: nowrap;
