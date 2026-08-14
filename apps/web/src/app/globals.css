@@ -800,20 +800,20 @@ select {
 
 .analyze-listing-trigger-sheen {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -35%;
-  width: 35%;
+  top: -60%;
+  left: -45%;
+  width: 22%;
+  height: 220%;
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.04) 40%,
-    rgba(255, 255, 255, 0.12) 50%,
-    rgba(255, 255, 255, 0.04) 60%,
+    rgba(255, 255, 255, 0.025) 42%,
+    rgba(255, 255, 255, 0.07) 50%,
+    rgba(255, 255, 255, 0.025) 58%,
     transparent 100%
   );
-  transform: translate3d(0, 0, 0);
-  animation: analyze-sheen 5.5s linear infinite;
+  transform: translate3d(0, 0, 0) rotate(24deg);
+  animation: analyze-sheen 2.1s linear infinite;
   pointer-events: none;
   will-change: transform;
 }
@@ -839,10 +839,10 @@ select {
 
 @keyframes analyze-sheen {
   0% {
-    transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 0, 0) rotate(24deg);
   }
   100% {
-    transform: translate3d(385%, 0, 0);
+    transform: translate3d(520%, 0, 0) rotate(24deg);
   }
 }
 
