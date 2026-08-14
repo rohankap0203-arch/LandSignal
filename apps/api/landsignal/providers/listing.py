@@ -93,11 +93,16 @@ def build_listing_providers(settings: Settings) -> dict[str, ListingProvider]:
     providers["land_com"] = NotConfiguredListingProvider(
         "land_com",
         "Land.com Family (licensed)",
-        "LAND_COM_API_KEY — use blm_lpad + public_tax_sale free feeds until licensed",
+        "LAND_COM_API_KEY — best for active land-for-sale; use free vacant GIS until licensed",
+    )
+    providers["attom"] = NotConfiguredListingProvider(
+        "attom",
+        "ATTOM (licensed / trial)",
+        "ATTOM_API_KEY — nationwide property attributes; trial at api.developer.attomdata.com",
     )
     providers["crexi"] = NotConfiguredListingProvider(
         "crexi",
         "Crexi (licensed)",
-        "CREXI_API_KEY — use public_surplus free feeds until licensed",
+        "CREXI_API_KEY — commercial/development land; use public_surplus free feeds until licensed",
     )
     return providers

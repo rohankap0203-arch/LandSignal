@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     land_com_api_key: str | None = None
     crexi_api_key: str | None = None
     regrid_api_key: str | None = None
+    attom_api_key: str | None = None
     enable_live_gov_enrichment: bool = True
 
 
