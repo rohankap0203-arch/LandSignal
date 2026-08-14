@@ -370,7 +370,6 @@ export function ReturnVisual({
   const [scrubYear, setScrubYear] = useState(holdYears);
   const [dragging, setDragging] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [casesHelpOpen, setCasesHelpOpen] = useState(false);
   const [moneyModeLocal, setMoneyModeLocal] = useState<MoneyMode>("today");
   const moneyMode = moneyModeProp ?? moneyModeLocal;
   const setMoneyMode = onMoneyModeChange ?? setMoneyModeLocal;
@@ -425,14 +424,6 @@ export function ReturnVisual({
     setScrubYear((y) => Math.max(1, Math.min(holdYears, y)));
   }, [holdYears]);
 
-  useEffect(() => {
-    if (!casesHelpOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setCasesHelpOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [casesHelpOpen]);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
   const available = intel?.available !== false && Boolean(intel?.endpoints || intel?.paths_100 || toggleFactors.length);
@@ -1039,71 +1030,9 @@ export function ReturnVisual({
       ) : null}
 
       <div className="mt-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-            3 outcomes · {holdYears} yr
-          </div>
-          <button
-            type="button"
-            className={`help-q ${casesHelpOpen ? "on" : ""}`}
-            aria-label="What these cases mean"
-            aria-haspopup="dialog"
-            aria-expanded={casesHelpOpen}
-            title="What these cases mean"
-            onClick={() => setCasesHelpOpen(true)}
-          >
-            ?
-          </button>
+        <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
+          3 outcomes · {holdYears} yr
         </div>
-        {casesHelpOpen ? (
-          <div
-            className="help-modal-backdrop"
-            role="presentation"
-            onClick={() => setCasesHelpOpen(false)}
-          >
-            <div
-              className="help-modal help-modal--compact"
-              role="dialog"
-              aria-modal="true"
-              aria-label="What these cases mean"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <h4 className="display text-base font-semibold">3 cases · {holdYears} yr</h4>
-                <button
-                  type="button"
-                  className="help-q on"
-                  aria-label="Close"
-                  onClick={() => setCasesHelpOpen(false)}
-                >
-                  ×
-                </button>
-              </div>
-              <p className="mt-1.5 text-xs leading-snug text-[var(--muted)]">
-                Same buy
-                {intel?.purchase_usd ? ` (${money(intel.purchase_usd)})` : ""} · same hold · rent /
-                pace / exit friction shift.
-              </p>
-              <ul className="help-modal-list">
-                <li>
-                  <strong>Cautious</strong>
-                  <span>Softer rents, harder exit, more carry.</span>
-                </li>
-                <li>
-                  <strong>Typical</strong>
-                  <span>Base path from this property’s screens.</span>
-                </li>
-                <li>
-                  <strong>Optimistic</strong>
-                  <span>Stronger rents & exit — still not a forever rocket.</span>
-                </li>
-              </ul>
-              <p className="mt-2 text-[11px] text-[var(--muted)] leading-snug">
-                Total back = exit + rent along the way. Screen, not promise.
-              </p>
-            </div>
-          </div>
-        ) : null}
         <div className="case-outcome-grid mt-1.5" role="list">
           {CASE_ORDER.map((k) => {
             const ep = endpointsAtHold[k];
