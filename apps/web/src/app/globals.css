@@ -7388,6 +7388,20 @@ a.acquire-block:hover {
   .fse-launch::after {
     opacity: 0.45;
   }
+
+  .fse-backdrop,
+  .fse-modal,
+  .fse-modal-head,
+  .fse-modal > .fse-stress,
+  .fse-modal > .fse-work {
+    animation: none;
+  }
+
+  .fse-modal {
+    clip-path: none;
+    filter: none;
+    will-change: auto;
+  }
 }
 
 .fse-backdrop {
@@ -7398,11 +7412,56 @@ a.acquire-block:hover {
   place-items: center;
   padding: 1rem;
   background: color-mix(in srgb, var(--ink) 42%, transparent);
-  backdrop-filter: blur(3px);
-  animation: fse-fade 0.18s ease both;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: fse-open-backdrop 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
   overflow: auto;
 }
 
+@keyframes fse-open-backdrop {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0);
+    -webkit-backdrop-filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+}
+
+@keyframes fse-open-modal {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.94);
+    clip-path: inset(46% 18% 46% 18% round 18px);
+    filter: blur(4px);
+  }
+  55% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+    clip-path: inset(0 0 0 0 round 18px);
+    filter: blur(0);
+  }
+}
+
+@keyframes fse-open-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Keep legacy names for any leftover refs */
 @keyframes fse-fade {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -7429,12 +7488,27 @@ a.acquire-block:hover {
   color: var(--ink);
   /* Tighter right pad so the body scrollbar sits closer to the modal edge */
   padding: 1rem 0.45rem 1.15rem 1.1rem;
-  box-shadow: 0 24px 60px color-mix(in srgb, var(--ink) 28%, transparent);
-  animation: fse-pop 0.22s ease both;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 35%, transparent) inset,
+    0 28px 70px color-mix(in srgb, var(--ink) 30%, transparent);
+  animation: fse-open-modal 0.52s cubic-bezier(0.16, 1, 0.3, 1) both;
   display: flex;
   flex-direction: column;
   min-height: 0;
   position: relative;
+  will-change: transform, clip-path, filter, opacity;
+}
+
+.fse-modal > .fse-stress {
+  animation: fse-open-rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+}
+
+.fse-modal > .fse-work {
+  animation: fse-open-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.28s both;
+}
+
+.fse-launch.is-open {
+  transform: scale(0.985);
 }
 
 .fse-work {
@@ -7542,6 +7616,7 @@ a.acquire-block:hover {
   gap: 0.6rem;
   min-width: 0;
   padding-right: 0.55rem;
+  animation: fse-open-rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
 }
 
 .fse-modal-head-main {
