@@ -6364,10 +6364,15 @@ a.acquire-block:hover {
 
 .land-viewer-nearby-chips {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  /* 10 cols: top chips span 2 each; Town spans 3 (~1.5×) */
+  grid-template-columns: repeat(10, minmax(0, 1fr));
   gap: 0.22rem var(--nearby-chip-gap);
   align-items: center;
   min-width: 0;
+}
+
+.land-viewer-nearby-chips > .land-viewer-chip {
+  grid-column: span 2;
 }
 
 .land-viewer-chip {
@@ -6391,10 +6396,10 @@ a.acquire-block:hover {
   overflow: visible;
 }
 
-.land-viewer-chip--wide {
-  grid-column: 1 / span 2;
-  padding-left: 0.4rem;
-  padding-right: 0.4rem;
+.land-viewer-nearby-chips > .land-viewer-chip--wide {
+  grid-column: span 3;
+  padding-left: 0.34rem;
+  padding-right: 0.34rem;
 }
 
 .land-viewer-chip:hover:not(:disabled) {
@@ -6413,9 +6418,9 @@ a.acquire-block:hover {
 
 .land-viewer-nearby-loading,
 .land-viewer-nearby-nav {
-  grid-column: 5 / span 1;
-  justify-self: stretch;
-  width: 100%;
+  grid-column: span 3;
+  justify-self: start;
+  width: auto;
   max-width: 100%;
 }
 
