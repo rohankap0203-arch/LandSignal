@@ -748,7 +748,7 @@ def _norm_la_brla_parcels(raw: dict) -> dict | None:
     """East Baton Rouge tax parcels — unimproved when improvement $ is null/0."""
     props = _props(raw)
     assess = str(props.get("ASSESSMENT_NUM") or "").strip()
-    if not assess or assess.startswith("000-0000"):
+    if not assess or assess.startswith("000-"):
         return None
     impr = _fnum(props.get("SUM_IMPROVEMENT_VALUE"))
     if impr is not None and impr > 0:
@@ -756,7 +756,8 @@ def _norm_la_brla_parcels(raw: dict) -> dict | None:
     if _non_market_owner(str(props.get("OWNER") or "")):
         return None
     geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
-    acreage = _bounded_acres(None, geom_acres, min_ac=1.0)
+    # EBR city lots are often <1ac — keep 0.25ac+ so LA is not empty.
+    acreage = _bounded_acres(None, geom_acres, min_ac=0.25)
     if acreage is None:
         return None
     land_val = (
@@ -796,7 +797,7 @@ def _norm_la_orleans_parcels(raw: dict) -> dict | None:
     sqft = _fnum(props.get("ASS_SQFT"))
     preferred = (sqft / 43560.0) if sqft and sqft > 0 else None
     geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
-    acreage = _bounded_acres(preferred, geom_acres, min_ac=1.0)
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=0.25)
     if acreage is None:
         return None
     # Skip obvious condo/unit rows
@@ -1153,8 +1154,8 @@ SOURCES: list[ArcgisMarketSource] = [
         "https://maps.brla.gov/gis/rest/services/Cadastral/Tax_Parcel/MapServer/0/query",
         "LA",
         _norm_la_brla_parcels,
-        # Layer has no usable OBJECTID windows — page by offset; skip placeholder 000-0000 rows in norm.
-        where="ASSESSMENT_NUM NOT LIKE '000-0000%'",
+        # Layer has no usable OBJECTID windows — page by offset; skip placeholder 000-* rows in norm.
+        where="ASSESSMENT_NUM NOT LIKE '000-%'",
         page_size=500,
     ),
     _src(
