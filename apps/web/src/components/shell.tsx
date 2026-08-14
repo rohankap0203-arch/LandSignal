@@ -10,6 +10,7 @@ const NAV = [
   { href: "/", label: "Search" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/alerts", label: "Land Alerts" },
+  { href: "/inventory", label: "Inventory" },
   { href: "/profile", label: "My criteria" },
 ];
 

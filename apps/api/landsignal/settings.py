@@ -9,6 +9,8 @@ class Settings(BaseSettings):
 
     app_name: str = "LandSignal API"
     environment: Literal["development", "production", "test"] = "development"
+    # demo = fixtures only; development = public GIS screens; production = licensed feeds + public
+    data_mode: Literal["demo", "development", "production"] = "development"
     api_prefix: str = "/v1"
     database_url: str | None = None
     redis_url: str | None = None
@@ -16,14 +18,15 @@ class Settings(BaseSettings):
     demo_seed: bool = False
     force_live_on_demo: bool = False
     auto_discover_on_startup: bool = True
-    discover_limit: int = 10000
+    discover_limit: int = 1_000_000
+    discover_min_per_state: int = 15000
     discover_min_acres: float = 0.1
     # Always-on Land Alerts monitor (seconds between discovery cycles; respects source rate limits)
     land_alerts_monitor_enabled: bool = True
     land_alerts_poll_seconds: int = 900
     # Keep in step with discover_limit so the always-on monitor rebuilds full inventory
     # after restarts (memory store) instead of capping around ~2.5k parcels.
-    land_alerts_discover_limit: int = 10000
+    land_alerts_discover_limit: int = 1_000_000
     http_timeout_seconds: float = 20.0
     mapbox_token: str | None = None
     smtp_url: str | None = None
@@ -34,7 +37,12 @@ class Settings(BaseSettings):
     land_com_api_key: str | None = None
     crexi_api_key: str | None = None
     regrid_api_key: str | None = None
+    attom_api_key: str | None = None
+    batchdata_api_key: str | None = None
+    bridge_api_key: str | None = None
     enable_live_gov_enrichment: bool = True
+    # Bump when wired source set changes so stale /tmp snapshots are not restored as truth.
+    inventory_schema_version: str = "nationwide_v2"
 
 
 @lru_cache

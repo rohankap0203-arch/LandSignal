@@ -8,6 +8,7 @@ import { PropertyCard } from "@/components/property-card";
 import {
   landsignalApi,
   type RadarRow,
+  type SearchEstimate,
   type SearchFilters,
   type SearchMeta,
 } from "@/lib/api";
@@ -80,6 +81,7 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [estimate, setEstimate] = useState<SearchEstimate | null>(null);
 
   const regionOptions = useMemo(() => {
     const code = stateCode(form.state);
@@ -154,12 +156,22 @@ export default function SearchPage() {
         setRows(data);
         const metaNow = await landsignalApi.searchMeta().catch(() => null);
         if (metaNow) setMeta(metaNow);
-        const total = metaNow?.inventory_count ?? data.length;
-        setStatus(
-          data.length
-            ? `Showing top ${data.length.toLocaleString()} matches · ${total.toLocaleString()} live parcels indexed`
-            : "No matches for these filters. Try Reset to Any, then Show matches again.",
-        );
+        const exact = data.filter((r) => (r.match_tier || "exact") === "exact");
+        const near = data.filter((r) => r.match_tier === "near");
+        const label = metaNow?.inventory_label || "Development inventory";
+        const parcels = metaNow?.inventory_count ?? 0;
+        const statesN = metaNow?.states_covered ?? metaNow?.inventory_states?.length ?? 0;
+        if (exact.length) {
+          setStatus(
+            `Exact matches: ${exact.length.toLocaleString()} shown · ${label}: ${parcels.toLocaleString()} parcels analyzed across ${statesN}/50 states`,
+          );
+        } else if (near.length) {
+          setStatus(
+            `No exact properties currently meet all hard filters · showing ${near.length} closest matches · ${label}`,
+          );
+        } else {
+          setStatus("No active properties currently satisfy all selected hard filters.");
+        }
         // Re-align after results paint
         requestAnimationFrame(() => {
           document.getElementById("search-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -181,6 +193,24 @@ export default function SearchPage() {
       .catch(() => setMeta(null));
   }, []);
 
+  useEffect(() => {
+    const filters = filtersFromForm(form);
+    const handle = window.setTimeout(() => {
+      landsignalApi
+        .searchEstimate({
+          state: filters.state,
+          region: filters.region,
+          min_price: filters.min_price,
+          max_price: filters.max_price,
+          min_acres: filters.min_acres,
+          max_acres: filters.max_acres,
+        })
+        .then(setEstimate)
+        .catch(() => setEstimate(null));
+    }, 220);
+    return () => window.clearTimeout(handle);
+  }, [form, filtersFromForm]);
+
   async function scanFresh() {
     setScanning(true);
     setStatus("Inventory refresh started in the background. Click Show matches when you want results.");
@@ -189,7 +219,9 @@ export default function SearchPage() {
       const nextMeta = await landsignalApi.searchMeta();
       setMeta(nextMeta);
       setStatus(
-        `Inventory refresh running · ${nextMeta.inventory_count?.toLocaleString() ?? 0} parcels indexed so far. Click Show matches to search.`,
+        `Inventory refresh running · ${(nextMeta.inventory_label || "Development inventory")}: ${
+          nextMeta.inventory_count?.toLocaleString() ?? 0
+        } parcels analyzed · ${nextMeta.states_covered ?? 0}/50 states. Click Show matches to search.`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Scan failed");
@@ -224,7 +256,17 @@ export default function SearchPage() {
     return list;
   }, [rows, form.sort]);
 
+  const exactRows = useMemo(
+    () => sortedRows.filter((r) => (r.match_tier || "exact") === "exact"),
+    [sortedRows],
+  );
+  const nearRows = useMemo(
+    () => sortedRows.filter((r) => r.match_tier === "near"),
+    [sortedRows],
+  );
+
   const inventoryStates = meta?.inventory_states || [];
+  const inventoryLabel = meta?.inventory_label || "Development inventory";
 
   return (
     <div>
@@ -232,9 +274,9 @@ export default function SearchPage() {
         <div>
           <div className="hero-brand-row">
             <div className="hero-brand-mark">LandSignal</div>
-            <div className="hero-live" title="Live public inventory index">
+            <div className="hero-live" title={inventoryLabel}>
               <span className="hero-live-dot" aria-hidden />
-              <span>Live</span>
+              <span>{meta?.data_mode === "production" ? "Live" : "Dev inventory"}</span>
             </div>
           </div>
           <h1>Scout the best land buys in the country</h1>
@@ -480,10 +522,36 @@ export default function SearchPage() {
           </div>
           {meta?.inventory_count != null && (
             <div className="filter-inventory-note">
-              Live inventory: {meta.inventory_count} parcels
-              {inventoryStates.length ? ` across ${inventoryStates.length} states (${inventoryStates.join(", ")})` : ""}
+              <div>
+                {inventoryLabel}: {(meta.inventory_count || 0).toLocaleString()} parcels analyzed
+                {" · "}
+                {(meta.active_land_listings ?? 0).toLocaleString()} active land listings
+                {" · "}
+                {meta.states_covered ?? inventoryStates.length}/{meta.states_total ?? 50} states covered
+                {meta.counties_covered != null ? ` · ${meta.counties_covered.toLocaleString()} counties` : ""}
+              </div>
+              {estimate ? (
+                <div className="mt-1 font-medium text-[var(--ink)]">
+                  {estimate.exact_match_count.toLocaleString()} matching properties for current hard filters
+                </div>
+              ) : null}
+              {meta.inventory_warnings?.length ? (
+                <div className="mt-1 text-[var(--muted)]">
+                  {meta.inventory_warnings[0]}
+                </div>
+              ) : null}
             </div>
           )}
+          {estimate?.facets?.regions?.length ? (
+            <div className="filter-inventory-note mt-2">
+              <span className="text-[var(--muted)]">Regions in view: </span>
+              {estimate.facets.regions.slice(0, 6).map((r) => (
+                <span key={r.label} className="mr-2">
+                  {r.label} ({r.count.toLocaleString()})
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -545,19 +613,52 @@ export default function SearchPage() {
 
       {!loading && hasSearched && !rows.length && (
         <div className="panel empty-state">
-          <div className="display text-2xl text-[var(--ink)]">No matches for this search</div>
+          <div className="display text-2xl text-[var(--ink)]">No exact matches for this search</div>
           <p className="mx-auto mt-2 max-w-lg">
-            Try Reset to Any, widen price/acres, or pick another state — then click Show matches again.
+            No active properties currently satisfy all selected hard filters (state, region, price,
+            acreage). Try widening price or acres — strategy and hold period do not exclude inventory.
           </p>
         </div>
       )}
 
-      {!loading && (
-        <div className="results-grid">
-          {sortedRows.map((row, i) => (
-            <PropertyCard key={row.parcel_id} row={row} index={i} />
-          ))}
-        </div>
+      {!loading && exactRows.length > 0 && (
+        <>
+          <div className="results-head mt-2">
+            <h3 className="display text-xl font-semibold">Exact matches</h3>
+            <p className="text-sm text-[var(--muted)]">
+              Satisfy 100% of hard filters (state, region, price, acreage).
+            </p>
+          </div>
+          <div className="results-grid">
+            {exactRows.map((row, i) => (
+              <PropertyCard key={row.parcel_id} row={row} index={i} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {!loading && nearRows.length > 0 && (
+        <>
+          <div className="results-head mt-8">
+            <h3 className="display text-xl font-semibold">Closest matches</h3>
+            <p className="text-sm text-[var(--muted)]">
+              No exact properties currently meet all hard filters — these are ranked by minimum
+              filter deviation and are never mixed into Exact matches.
+            </p>
+          </div>
+          <div className="results-grid">
+            {nearRows.map((row, i) => (
+              <div key={row.parcel_id}>
+                {row.near_match_reason ? (
+                  <div className="mb-2 text-xs text-[var(--muted)]">
+                    {row.near_match_reason}
+                  </div>
+                ) : null}
+                <PropertyCard row={row} index={i} />
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
