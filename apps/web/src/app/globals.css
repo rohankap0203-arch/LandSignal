@@ -1399,6 +1399,8 @@ select {
   .analyze-listing-stages .stage,
   .stage-pulse,
   .analyze-listing-trigger-sheen,
+  .analyze-listing-trigger-wave,
+  .analyze-listing-trigger-bubbles,
   .analyze-land-visual.is-active .analyze-land-ridge-a,
   .analyze-land-visual.is-active .analyze-land-ridge-b,
   .analyze-land-visual.is-active .analyze-land-parcel,
