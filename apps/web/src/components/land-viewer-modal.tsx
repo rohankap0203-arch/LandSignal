@@ -1059,7 +1059,7 @@ export function LandViewerModal({
                 </button>
               ))}
             </div>
-            <div className="land-viewer-nearby-row">
+            <div className="land-viewer-nearby-row land-viewer-nearby-row--secondary">
               {NEARBY_ROW2.map((chip) => (
                 <button
                   key={chip.kind}

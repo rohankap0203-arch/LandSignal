@@ -6382,13 +6382,24 @@ a.acquire-block:hover {
   flex-wrap: nowrap;
 }
 
-.land-viewer-nearby-row--primary .land-viewer-chip {
+.land-viewer-nearby-row--secondary {
+  flex-wrap: nowrap;
+}
+
+.land-viewer-nearby-row--primary .land-viewer-chip,
+.land-viewer-nearby-row--secondary .land-viewer-chip {
   flex: 1 1 0;
   min-width: 0;
   justify-content: center;
   text-align: center;
   padding-left: 0.28rem;
   padding-right: 0.28rem;
+}
+
+/* Keep Working / nav from stretching like a chip */
+.land-viewer-nearby-row--secondary .land-viewer-nearby-loading,
+.land-viewer-nearby-row--secondary .land-viewer-nearby-nav {
+  flex: 0 0 auto;
 }
 
 .land-viewer-chip {
