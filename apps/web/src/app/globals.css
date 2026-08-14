@@ -7160,12 +7160,19 @@ a.acquire-block:hover {
 /* Auth & account UI */
 
 /* —— Future Scenario Engine / Catalyst Simulator —— */
+@property --fse-frame-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 210deg;
+}
+
 .fse-wrap {
   display: block;
 }
 
 .fse-launch {
-  --fse-frame: #121212;
+  --fse-frame: #101010;
+  --fse-frame-angle: 210deg;
   position: relative;
   isolation: isolate;
   display: flex;
@@ -7176,110 +7183,125 @@ a.acquire-block:hover {
   min-height: 3.35rem;
   text-align: left;
   padding: 0.95rem 1rem 0.95rem 1.15rem;
-  border-radius: 12px;
-  border: 2px solid transparent;
+  border-radius: 14px;
+  border: 0;
   background:
     linear-gradient(
-      105deg,
-      color-mix(in srgb, var(--brand) 14%, var(--bg-elevated)) 0%,
-      color-mix(in srgb, var(--brand) 7%, var(--bg-elevated)) 42%,
-      color-mix(in srgb, var(--brand-soft) 10%, var(--bg-elevated)) 100%
-    ) padding-box,
-    repeating-linear-gradient(
-      90deg,
-      var(--fse-frame) 0 11px,
-      transparent 11px 18px
-    ) border-box;
-  background-size: auto, 58px 100%;
+      112deg,
+      color-mix(in srgb, var(--brand) 16%, var(--bg-elevated)) 0%,
+      color-mix(in srgb, var(--brand) 7%, var(--bg-elevated)) 46%,
+      color-mix(in srgb, var(--brand-soft) 11%, var(--bg-elevated)) 100%
+    );
   color: var(--ink);
   cursor: pointer;
   box-shadow:
-    3px 3px 0 0 var(--fse-frame),
-    inset 0 0 0 1px color-mix(in srgb, #fff 14%, transparent);
+    0 1px 0 color-mix(in srgb, #fff 22%, transparent) inset,
+    0 -1px 0 color-mix(in srgb, var(--fse-frame) 12%, transparent) inset,
+    0 10px 28px -18px color-mix(in srgb, var(--fse-frame) 55%, transparent);
   overflow: visible;
   transition:
-    background 0.15s ease,
+    background 0.18s ease,
     box-shadow 0.18s ease,
     transform 0.18s ease;
-  animation: fse-frame-march 14s linear infinite;
 }
 
-.fse-launch::before,
+/* Continuous ink rim with traveling highlight — solid, no dashes */
+.fse-launch::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 16px;
+  z-index: 0;
+  pointer-events: none;
+  padding: 2.5px;
+  background: conic-gradient(
+    from var(--fse-frame-angle),
+    #0a0a0a 0%,
+    #171717 22%,
+    color-mix(in srgb, var(--brand) 70%, #0a0a0a) 34%,
+    #f3f3f3 40%,
+    color-mix(in srgb, var(--brand) 50%, #111) 46%,
+    #0a0a0a 62%,
+    #262626 82%,
+    #0a0a0a 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: fse-frame-sweep 3.6s linear infinite;
+}
+
+/* Soft outer halo */
 .fse-launch::after {
   content: "";
   position: absolute;
-  width: 0.72rem;
-  height: 0.72rem;
+  inset: -7px;
+  border-radius: 20px;
+  z-index: -1;
   pointer-events: none;
-  z-index: 2;
-  border: 2px solid var(--fse-frame);
-}
-
-.fse-launch::before {
-  top: -5px;
-  left: -5px;
-  border-right: 0;
-  border-bottom: 0;
-}
-
-.fse-launch::after {
-  right: -5px;
-  bottom: -5px;
-  border-left: 0;
-  border-top: 0;
+  background: radial-gradient(
+    120% 90% at 50% 50%,
+    color-mix(in srgb, var(--brand) 20%, transparent) 0%,
+    transparent 64%
+  );
+  opacity: 0.5;
+  filter: blur(12px);
+  animation: fse-frame-glow 3.6s ease-in-out infinite;
 }
 
 .fse-launch:hover {
   background:
     linear-gradient(
-      105deg,
-      color-mix(in srgb, var(--brand) 18%, var(--bg-elevated)) 0%,
-      color-mix(in srgb, var(--brand) 10%, var(--bg-elevated)) 42%,
-      color-mix(in srgb, var(--brand-soft) 14%, var(--bg-elevated)) 100%
-    ) padding-box,
-    repeating-linear-gradient(
-      90deg,
-      var(--fse-frame) 0 11px,
-      transparent 11px 18px
-    ) border-box;
-  background-size: auto, 58px 100%;
+      112deg,
+      color-mix(in srgb, var(--brand) 20%, var(--bg-elevated)) 0%,
+      color-mix(in srgb, var(--brand) 10%, var(--bg-elevated)) 46%,
+      color-mix(in srgb, var(--brand-soft) 15%, var(--bg-elevated)) 100%
+    );
   box-shadow:
-    4px 4px 0 0 var(--fse-frame),
-    inset 0 0 0 1px color-mix(in srgb, #fff 18%, transparent);
-  transform: translate(-1px, -1px);
-  animation-duration: 7s;
+    0 1px 0 color-mix(in srgb, #fff 28%, transparent) inset,
+    0 -1px 0 color-mix(in srgb, var(--fse-frame) 10%, transparent) inset,
+    0 14px 32px -16px color-mix(in srgb, var(--fse-frame) 50%, transparent);
+  transform: translateY(-1px);
+}
+
+.fse-launch:hover::before {
+  animation-duration: 2s;
+  padding: 3px;
+}
+
+.fse-launch:hover::after {
+  opacity: 0.8;
 }
 
 .fse-launch:active {
-  background:
-    linear-gradient(
-      105deg,
-      color-mix(in srgb, var(--brand) 22%, var(--bg-elevated)) 0%,
-      color-mix(in srgb, var(--brand) 12%, var(--bg-elevated)) 50%,
-      color-mix(in srgb, var(--brand-soft) 16%, var(--bg-elevated)) 100%
-    ) padding-box,
-    repeating-linear-gradient(
-      90deg,
-      var(--fse-frame) 0 11px,
-      transparent 11px 18px
-    ) border-box;
-  background-size: auto, 58px 100%;
+  transform: translateY(0);
   box-shadow:
-    2px 2px 0 0 var(--fse-frame),
-    inset 0 0 0 1px color-mix(in srgb, #fff 12%, transparent);
-  transform: translate(1px, 1px);
+    0 1px 0 color-mix(in srgb, #fff 16%, transparent) inset,
+    0 6px 18px -14px color-mix(in srgb, var(--fse-frame) 45%, transparent);
 }
 
-.fse-launch.is-open {
-  box-shadow:
-    3px 3px 0 0 var(--fse-frame),
-    inset 0 0 0 1px color-mix(in srgb, #fff 14%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--fse-frame) 35%, transparent);
+.fse-launch.is-open::before {
+  animation-duration: 2.4s;
 }
 
-@keyframes fse-frame-march {
+@keyframes fse-frame-sweep {
   to {
-    background-position: 0 0, 58px 0;
+    --fse-frame-angle: 570deg;
+  }
+}
+
+@keyframes fse-frame-glow {
+  0%,
+  100% {
+    opacity: 0.38;
+  }
+  50% {
+    opacity: 0.72;
   }
 }
 
@@ -7306,14 +7328,14 @@ a.acquire-block:hover {
   align-items: center;
   gap: 0.35rem;
   flex-shrink: 0;
-  margin: -0.15rem -0.15rem -0.15rem 0;
-  padding: 0.38rem 0.7rem;
+  margin: -0.1rem -0.1rem -0.1rem 0;
+  padding: 0.48rem 0.82rem;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line));
   background: var(--brand);
   color: #fff;
   font-family: var(--font-sans);
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 650;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -7346,12 +7368,18 @@ a.acquire-block:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fse-launch {
+  .fse-launch::before,
+  .fse-launch::after,
+  .fse-launch-go svg {
     animation: none;
   }
 
-  .fse-launch-go svg {
-    animation: none;
+  .fse-launch::before {
+    background: linear-gradient(135deg, #0a0a0a, #2a2a2a 45%, #0a0a0a);
+  }
+
+  .fse-launch::after {
+    opacity: 0.45;
   }
 }
 
