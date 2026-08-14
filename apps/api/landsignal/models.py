@@ -81,6 +81,12 @@ class ManualIngestRequest(BaseModel):
     description: str | None = None
 
 
+class ListingUrlIngestRequest(BaseModel):
+    """User-pasted marketplace URL — single listing analyze, not bulk scrape."""
+
+    url: str = Field(min_length=8, max_length=2000)
+
+
 class AlertRuleCreate(BaseModel):
     name: str
     predicate: dict[str, Any]
