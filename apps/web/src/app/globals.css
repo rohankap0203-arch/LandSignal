@@ -780,91 +780,42 @@ select {
 .analyze-listing-trigger {
   position: relative;
   overflow: hidden;
-  isolation: isolate;
   width: 100%;
   justify-content: center;
   border: 1px solid #0a0a0a;
-  background:
-    radial-gradient(120% 180% at 10% 120%, rgba(255, 255, 255, 0.08), transparent 42%),
-    radial-gradient(90% 140% at 90% -20%, rgba(255, 255, 255, 0.1), transparent 40%),
-    #0a0a0a;
+  background: #0a0a0a;
   color: #ffffff;
   font-weight: 600;
   letter-spacing: 0.01em;
   text-align: center;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
     0 1px 2px rgba(0, 0, 0, 0.18);
   transition:
     transform 160ms ease,
     box-shadow 220ms ease,
-    background 180ms ease,
-    border-color 180ms ease;
-}
-
-.analyze-listing-trigger-glow {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-  border-radius: inherit;
-}
-
-.analyze-listing-trigger-wave {
-  position: absolute;
-  left: -30%;
-  width: 160%;
-  height: 140%;
-  border-radius: 45% 55% 50% 50%;
-  filter: blur(10px);
-  opacity: 0.55;
-  mix-blend-mode: soft-light;
-}
-
-.analyze-listing-trigger-wave-a {
-  top: -55%;
-  background:
-    radial-gradient(closest-side at 30% 40%, rgba(255, 255, 255, 0.38), transparent 70%),
-    radial-gradient(closest-side at 70% 60%, rgba(255, 255, 255, 0.18), transparent 72%);
-  animation: analyze-wave-a 5.5s ease-in-out infinite;
-}
-
-.analyze-listing-trigger-wave-b {
-  top: -20%;
-  background:
-    radial-gradient(closest-side at 65% 35%, rgba(255, 255, 255, 0.28), transparent 68%),
-    radial-gradient(closest-side at 25% 70%, rgba(255, 255, 255, 0.14), transparent 74%);
-  animation: analyze-wave-b 7s ease-in-out infinite;
-}
-
-.analyze-listing-trigger-bubbles {
-  position: absolute;
-  inset: -20% -10%;
-  background-image:
-    radial-gradient(circle at 18% 70%, rgba(255, 255, 255, 0.22) 0 2px, transparent 3px),
-    radial-gradient(circle at 42% 38%, rgba(255, 255, 255, 0.16) 0 1.5px, transparent 2.5px),
-    radial-gradient(circle at 68% 62%, rgba(255, 255, 255, 0.2) 0 2.5px, transparent 3.5px),
-    radial-gradient(circle at 82% 28%, rgba(255, 255, 255, 0.14) 0 1.5px, transparent 2.5px),
-    radial-gradient(circle at 55% 78%, rgba(255, 255, 255, 0.12) 0 1px, transparent 2px);
-  background-repeat: no-repeat;
-  animation: analyze-bubbles 6.5s ease-in-out infinite;
-  opacity: 0.85;
-  mix-blend-mode: soft-light;
+    background 180ms ease;
+  will-change: transform;
 }
 
 .analyze-listing-trigger-sheen {
   position: absolute;
-  inset: -50% -70%;
+  top: 0;
+  bottom: 0;
+  left: -35%;
+  width: 35%;
   background: linear-gradient(
-    118deg,
-    transparent 34%,
-    rgba(255, 255, 255, 0.06) 42%,
-    rgba(255, 255, 255, 0.42) 49%,
-    rgba(255, 255, 255, 0.1) 56%,
-    transparent 64%
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.04) 40%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.04) 60%,
+    transparent 100%
   );
-  transform: translateX(-48%) rotate(10deg) skewX(-8deg);
-  animation: analyze-sheen 4.2s cubic-bezier(0.4, 0.05, 0.2, 1) infinite;
+  transform: translate3d(0, 0, 0);
+  animation: analyze-sheen 5.5s linear infinite;
+  pointer-events: none;
+  will-change: transform;
 }
 
 .analyze-listing-trigger-label {
@@ -873,25 +824,13 @@ select {
 }
 
 .analyze-listing-trigger:hover {
-  background:
-    radial-gradient(120% 180% at 10% 120%, rgba(255, 255, 255, 0.12), transparent 42%),
-    radial-gradient(90% 140% at 90% -20%, rgba(255, 255, 255, 0.14), transparent 40%),
-    #000000;
+  background: #000000;
   border-color: #000000;
   color: #ffffff;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 8px 22px rgba(0, 0, 0, 0.28);
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 6px 16px rgba(0, 0, 0, 0.22);
   transform: translateY(-1px);
-}
-
-.analyze-listing-trigger:hover .analyze-listing-trigger-wave-a {
-  animation-duration: 3.2s;
-}
-
-.analyze-listing-trigger:hover .analyze-listing-trigger-bubbles {
-  opacity: 1;
 }
 
 .analyze-listing-trigger:active {
@@ -899,71 +838,11 @@ select {
 }
 
 @keyframes analyze-sheen {
-  0%,
-  18% {
-    transform: translateX(-55%) rotate(10deg) skewX(-8deg);
-    opacity: 0;
-  }
-  32% {
-    opacity: 1;
-  }
-  52% {
-    transform: translateX(18%) rotate(10deg) skewX(-6deg);
-    opacity: 0.55;
-  }
-  68% {
-    transform: translateX(58%) rotate(10deg) skewX(-4deg);
-    opacity: 0;
+  0% {
+    transform: translate3d(0, 0, 0);
   }
   100% {
-    transform: translateX(58%) rotate(10deg) skewX(-4deg);
-    opacity: 0;
-  }
-}
-
-@keyframes analyze-wave-a {
-  0%,
-  100% {
-    transform: translate3d(-4%, 0, 0) scale(1) rotate(0deg);
-  }
-  35% {
-    transform: translate3d(6%, 8%, 0) scale(1.08) rotate(4deg);
-  }
-  70% {
-    transform: translate3d(2%, -4%, 0) scale(0.96) rotate(-3deg);
-  }
-}
-
-@keyframes analyze-wave-b {
-  0%,
-  100% {
-    transform: translate3d(3%, 2%, 0) scale(1.02) rotate(-2deg);
-  }
-  40% {
-    transform: translate3d(-7%, -6%, 0) scale(1.1) rotate(5deg);
-  }
-  75% {
-    transform: translate3d(4%, 5%, 0) scale(0.94) rotate(1deg);
-  }
-}
-
-@keyframes analyze-bubbles {
-  0%,
-  100% {
-    transform: translate3d(0, 6%, 0) scale(1);
-    opacity: 0.55;
-  }
-  25% {
-    transform: translate3d(2%, -2%, 0) scale(1.04);
-    opacity: 0.9;
-  }
-  55% {
-    transform: translate3d(-3%, -8%, 0) scale(1.08);
-    opacity: 0.7;
-  }
-  80% {
-    transform: translate3d(1%, -3%, 0) scale(1.02);
-    opacity: 0.85;
+    transform: translate3d(385%, 0, 0);
   }
 }
 
@@ -1403,8 +1282,6 @@ select {
   .analyze-listing-stages .stage,
   .stage-pulse,
   .analyze-listing-trigger-sheen,
-  .analyze-listing-trigger-wave,
-  .analyze-listing-trigger-bubbles,
   .analyze-land-visual.is-active .analyze-land-ridge-a,
   .analyze-land-visual.is-active .analyze-land-ridge-b,
   .analyze-land-visual.is-active .analyze-land-parcel,
