@@ -317,12 +317,21 @@ def build_opportunity_standings(
     median = stats["median"]
     top = stats["top"]
     beats_pct = stats["beats_pct"]
+    if beats_pct >= 100:
+        beats_pct = 99.0
     factors = build_factor_contributions(score)
     lifts = [f for f in factors if f["direction"] == "up"][:2]
     drags = sorted(factors, key=lambda r: r["gap"], reverse=True)[:2]
     shown = round(opp)
+    tie_share = float(stats.get("tie_share") or 0.0)
 
-    if top is not None and shown >= round(top) and beats_pct >= 90:
+    if n and tie_share >= 0.55:
+        rank_plain = (
+            f"Your {shown} sits in the common live-file band "
+            f"(~{tie_share * 100:.0f}% of {n:,} share this score; median ~{median:.0f})."
+        )
+        beats_pct = 50.0
+    elif top is not None and shown >= round(top) and beats_pct >= 90:
         rank_plain = (
             f"Your {shown} is as high as anything live right now "
             f"(beats ~{beats_pct:.0f}% of {n:,} files)."
@@ -377,6 +386,7 @@ def build_opportunity_standings(
         "score": round(opp, 1),
         "sample_n": n,
         "beats_pct": beats_pct,
+        "tie_share": round(tie_share, 4),
         "percentile": round(stats["percentile"], 1),
         "median": round(median, 1) if median is not None else None,
         "p75": round(stats["p75"], 1) if stats["p75"] is not None else None,
@@ -417,6 +427,9 @@ def build_risk_standings(
     low = stats["low"]
     # Safer than ≈ share with higher risk via midrank (ties → ~50%, not 100%).
     safer_pct = round(100.0 - stats["percentile"], 0) if n else 0.0
+    # Never claim a literal 100% — midrank of a unique low still rounds there.
+    if safer_pct >= 100:
+        safer_pct = 99.0
     tie_share = float(stats.get("tie_share") or 0.0)
     shown = round(risk)
     factors = build_risk_factors(enrichment=enrichment, listing=listing, risk=risk)
@@ -522,12 +535,21 @@ def build_confidence_standings(
     median = stats["median"]
     top = stats["top"]
     beats_pct = stats["beats_pct"]
+    if beats_pct >= 100:
+        beats_pct = 99.0
     shown = round(conf)
     factors = build_confidence_factors(enrichment=enrichment, score=score, conf=conf)
     missing = [f for f in factors if f["direction"] == "down"]
     have = [f for f in factors if f["direction"] == "up"]
+    tie_share = float(stats.get("tie_share") or 0.0)
 
-    if top is not None and shown >= round(top) and beats_pct >= 90:
+    if n and tie_share >= 0.55:
+        rank_plain = (
+            f"Your {shown} matches the usual completeness band "
+            f"(~{tie_share * 100:.0f}% of {n:,} sit here; median ~{median:.0f})."
+        )
+        beats_pct = 50.0
+    elif top is not None and shown >= round(top) and beats_pct >= 90:
         rank_plain = (
             f"Your {shown} is as filled-in as anything live "
             f"(ahead of ~{beats_pct:.0f}% of {n:,} files)."
@@ -574,6 +596,7 @@ def build_confidence_standings(
         "score": round(conf, 1),
         "sample_n": n,
         "beats_pct": beats_pct,
+        "tie_share": round(tie_share, 4),
         "percentile": round(stats["percentile"], 1),
         "median": round(median, 1) if median is not None else None,
         "p75": round(stats["p75"], 1) if stats["p75"] is not None else None,
