@@ -2313,7 +2313,7 @@ button.score-bar-click:disabled {
   flex-direction: column;
   justify-content: space-between;
   gap: 5px;
-  width: 76px;
+  width: 88px;
   flex: 1;
 }
 

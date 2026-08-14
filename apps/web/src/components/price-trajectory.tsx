@@ -607,7 +607,7 @@ export function PriceTrajectory({
         <p className="traj-hitch-note">{activeHitch.plain}</p>
       ) : !compact && hitches.length > 0 ? (
         <p className="traj-hitch-note">
-          What-if: Higher rates · Stronger demand · Site problem · tap ? for math
+          What-if: Higher rates · Stronger demand · Site issue · tap ? for math
         </p>
       ) : null}
 
