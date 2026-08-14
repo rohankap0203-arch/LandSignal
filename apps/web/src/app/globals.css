@@ -3256,9 +3256,19 @@ a.btn-intel:hover {
 
 /* Did this beat inflation? — sale price vs purchasing power */
 .buy-power {
+  --bp-bg: #14181c;
+  --bp-bg-elevated: #1c2228;
+  --bp-bg-soft: #101418;
+  --bp-ink: #f2f5f7;
+  --bp-ink-soft: #d4d9de;
+  --bp-muted: #9aa3ad;
+  --bp-line: rgba(255, 255, 255, 0.12);
+  --bp-pos: #6dcea0;
+  --bp-neg: #f0a19a;
   border-radius: 14px;
-  border: 1px solid var(--line);
-  background: var(--bg-soft);
+  border: 1px solid var(--bp-line);
+  background: var(--bp-bg);
+  color: var(--bp-ink);
   padding: 0.7rem 0.85rem 0.8rem;
   min-width: 0;
   overflow: visible;
@@ -3274,7 +3284,7 @@ a.btn-intel:hover {
   border: 0;
   padding: 0;
   cursor: pointer;
-  color: var(--ink);
+  color: var(--bp-ink);
   min-width: 0;
 }
 
@@ -3285,7 +3295,7 @@ a.btn-intel:hover {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--bp-muted);
   line-height: 1.3;
 }
 
@@ -3297,25 +3307,25 @@ a.btn-intel:hover {
   text-transform: uppercase;
   padding: 0.18rem 0.45rem;
   border-radius: 6px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--bp-line);
 }
 
 .buy-power-verdict.is-pos {
-  color: #145a38;
-  border-color: color-mix(in srgb, #1f7a4d 40%, var(--line));
-  background: color-mix(in srgb, #1f7a4d 12%, var(--bg));
+  color: var(--bp-pos);
+  border-color: color-mix(in srgb, var(--bp-pos) 45%, var(--bp-line));
+  background: color-mix(in srgb, var(--bp-pos) 16%, var(--bp-bg));
 }
 
 .buy-power-verdict.is-neg {
-  color: #8a1c14;
-  border-color: color-mix(in srgb, #b42318 40%, var(--line));
-  background: color-mix(in srgb, #b42318 12%, var(--bg));
+  color: var(--bp-neg);
+  border-color: color-mix(in srgb, var(--bp-neg) 45%, var(--bp-line));
+  background: color-mix(in srgb, var(--bp-neg) 16%, var(--bp-bg));
 }
 
 .buy-power-chev {
   flex: 0 0 auto;
   font-size: 0.75rem;
-  color: var(--muted);
+  color: var(--bp-muted);
 }
 
 .buy-power-teaser,
@@ -3324,7 +3334,7 @@ a.btn-intel:hover {
   font-size: 0.84rem;
   font-weight: 650;
   line-height: 1.4;
-  color: var(--ink);
+  color: var(--bp-ink);
 }
 
 .buy-power-body {
@@ -3337,10 +3347,10 @@ a.btn-intel:hover {
 .buy-power-table {
   display: grid;
   gap: 0;
-  border: 1px solid var(--line);
+  border: 1px solid var(--bp-line);
   border-radius: 12px;
   overflow: hidden;
-  background: var(--bg-elevated);
+  background: var(--bp-bg-elevated);
   min-width: 0;
 }
 
@@ -3350,7 +3360,7 @@ a.btn-intel:hover {
   gap: 0.75rem;
   align-items: center;
   padding: 0.55rem 0.7rem;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--bp-line);
   min-width: 0;
 }
 
@@ -3360,7 +3370,7 @@ a.btn-intel:hover {
 
 .buy-power-row span {
   font-size: 0.78rem;
-  color: var(--muted);
+  color: var(--bp-muted);
   line-height: 1.35;
   min-width: 0;
 }
@@ -3371,7 +3381,7 @@ a.btn-intel:hover {
   gap: 0.1rem;
   font-size: 0.88rem;
   text-align: right;
-  color: var(--ink);
+  color: var(--bp-ink);
   line-height: 1.25;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -3381,30 +3391,30 @@ a.btn-intel:hover {
   display: block;
   font-size: 0.68rem;
   font-weight: 550;
-  color: var(--muted);
+  color: var(--bp-muted);
   line-height: 1.25;
 }
 
 .buy-power-row strong.is-pos {
-  color: #1f7a4d;
+  color: var(--bp-pos);
 }
 
 .buy-power-row strong.is-neg {
-  color: #b42318;
+  color: var(--bp-neg);
 }
 
 .buy-power-row strong.is-pos small,
 .buy-power-row strong.is-neg small {
   color: inherit;
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .buy-power-row--focus {
-  background: color-mix(in srgb, var(--brand) 8%, var(--bg-elevated));
+  background: color-mix(in srgb, #2a9d68 18%, var(--bp-bg-elevated));
 }
 
 .buy-power-row--focus span {
-  color: var(--ink);
+  color: var(--bp-ink);
   font-weight: 650;
 }
 
@@ -3424,7 +3434,7 @@ a.btn-intel:hover {
   align-items: start;
   font-size: 0.78rem;
   line-height: 1.45;
-  color: var(--ink-soft);
+  color: var(--bp-ink-soft);
   min-width: 0;
 }
 
@@ -3432,8 +3442,8 @@ a.btn-intel:hover {
   width: 14px;
   height: 14px;
   margin-top: 0.18rem;
-  background-color: var(--brand);
-  opacity: 0.9;
+  background-color: #7dcea8;
+  opacity: 0.95;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='black' d='M8 1.5c-2.4 0-4.4 1.9-4.4 4.3 0 3.2 4.4 8.2 4.4 8.2s4.4-5 4.4-8.2C12.4 3.4 10.4 1.5 8 1.5zm0 6.1a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6z'/%3E%3C/svg%3E")
     center / contain no-repeat;
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='black' d='M8 1.5c-2.4 0-4.4 1.9-4.4 4.3 0 3.2 4.4 8.2 4.4 8.2s4.4-5 4.4-8.2C12.4 3.4 10.4 1.5 8 1.5zm0 6.1a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6z'/%3E%3C/svg%3E")
@@ -3441,7 +3451,7 @@ a.btn-intel:hover {
 }
 
 .buy-power-points strong {
-  color: var(--ink);
+  color: var(--bp-ink);
   font-weight: 700;
 }
 
