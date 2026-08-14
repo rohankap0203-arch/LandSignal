@@ -270,7 +270,9 @@ export default function SearchPage() {
             ? `Filters: ${filterLabel} · showing ${kept.length.toLocaleString()} matches` +
                 (dropped ? ` · ${dropped} out-of-band dropped` : "") +
                 ` · ${total.toLocaleString()} live parcels indexed`
-            : `No parcels match ${filterLabel}. Widen price/acres/state, or Reset to Any, then Show matches again.`,
+            : total === 0
+              ? "Live inventory is empty (0 parcels indexed). Click Refresh live inventory, then Show matches again — search filters were not changed."
+              : `No parcels match ${filterLabel}. Widen price/acres/state, or Reset to Any, then Show matches again.`,
         );
         // Re-align after results paint
         requestAnimationFrame(() => {
@@ -721,9 +723,20 @@ export default function SearchPage() {
 
       {!loading && hasSearched && !rows.length && (
         <div className="panel empty-state">
-          <div className="display text-2xl text-[var(--ink)]">No matches for this search</div>
+          <div className="display text-2xl text-[var(--ink)]">
+            {(meta?.inventory_count ?? 0) === 0 ? "Live inventory not loaded yet" : "No matches for this search"}
+          </div>
           <p className="mx-auto mt-2 max-w-lg">
             {(() => {
+              if ((meta?.inventory_count ?? 0) === 0) {
+                return (
+                  <>
+                    Search and filters are fine — this session started with an empty live index.
+                    Click <strong>Refresh live inventory</strong>, wait for the parcel count to climb,
+                    then hit <strong>Show matches</strong> again.
+                  </>
+                );
+              }
               const picked = selectedStates(form.states);
               const live = new Set(inventoryStates || []);
               const missing = picked.filter((c) => live.size > 0 && !live.has(c));
