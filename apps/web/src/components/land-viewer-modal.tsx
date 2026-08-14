@@ -61,7 +61,7 @@ const NEARBY_CHIPS: NearbyChip[] = [
   { kind: "water", label: "Water body", color: "#0ea5e9", maxMiles: 14 },
   { kind: "road", label: "Paved road", color: "#a16207", maxMiles: 10 },
   { kind: "power", label: "Power line", color: "#ca8a04", maxMiles: 14 },
-  { kind: "town", label: "Town / services", color: "#b45309", maxMiles: 25 },
+  { kind: "town", label: "Town/services", color: "#b45309", maxMiles: 25 },
   { kind: "school", label: "School", color: "#7c3aed", maxMiles: 20 },
   { kind: "hospital", label: "Hospital", color: "#dc2626", maxMiles: 40 },
 ];
@@ -1061,7 +1061,7 @@ export function LandViewerModal({
               <button
                 key={chip.kind}
                 type="button"
-                className={`land-viewer-chip${chip.kind === "town" ? " land-viewer-chip--wide" : ""}${nearbyActive === chip.kind ? " is-on" : ""}`}
+                className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
                 style={{ ["--chip" as string]: chip.color }}
                 disabled={!hasGeo}
                 onClick={() => void showNearby(chip.kind)}
