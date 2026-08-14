@@ -7390,25 +7390,13 @@ a.acquire-block:hover {
   }
 
   .fse-backdrop,
-  .fse-modal,
-  .fse-modal-sketch-ink,
-  .fse-modal-sketch-ghost,
-  .fse-modal-sketch-edge {
+  .fse-modal {
     animation: none;
   }
 
   .fse-modal {
     clip-path: none;
     will-change: auto;
-  }
-
-  .fse-modal-sketch-ink,
-  .fse-modal-sketch-ghost {
-    stroke-dashoffset: 0;
-  }
-
-  .fse-modal-sketch-edge {
-    display: none;
   }
 }
 
@@ -7437,36 +7425,13 @@ a.acquire-block:hover {
   }
 }
 
-/* Top → bottom unfurl */
+/* Top → bottom dropdown reveal */
 @keyframes fse-open-modal {
   from {
     clip-path: inset(0 0 100% 0 round 18px);
   }
   to {
     clip-path: inset(0 0 0 0 round 18px);
-  }
-}
-
-@keyframes fse-sketch-draw {
-  from {
-    stroke-dashoffset: 1;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-@keyframes fse-sketch-edge {
-  0% {
-    top: 0;
-    opacity: 0;
-  }
-  8% {
-    opacity: 1;
-  }
-  100% {
-    top: calc(100% - 2px);
-    opacity: 0.35;
   }
 }
 
@@ -7492,7 +7457,7 @@ a.acquire-block:hover {
   max-height: min(92vh, 860px);
   overflow: hidden;
   border-radius: 18px;
-  border: 1px solid color-mix(in srgb, var(--ink) 18%, var(--line));
+  border: 1px solid var(--line);
   background: var(--bg-elevated);
   color: var(--ink);
   /* Tighter right pad so the body scrollbar sits closer to the modal edge */
@@ -7501,70 +7466,13 @@ a.acquire-block:hover {
     0 1px 0 color-mix(in srgb, #fff 35%, transparent) inset,
     0 28px 70px color-mix(in srgb, var(--ink) 30%, transparent);
   transform-origin: 50% 0%;
-  animation: fse-open-modal 0.62s cubic-bezier(0.22, 0.82, 0.2, 1) both;
+  animation: fse-open-modal 0.55s cubic-bezier(0.22, 0.82, 0.2, 1) both;
   display: flex;
   flex-direction: column;
   min-height: 0;
   position: relative;
   will-change: clip-path;
   margin-top: 0.35rem;
-}
-
-.fse-modal-sketch {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 6;
-  overflow: visible;
-}
-
-.fse-modal-sketch-ink,
-.fse-modal-sketch-ghost {
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  vector-effect: non-scaling-stroke;
-}
-
-.fse-modal-sketch-ink {
-  stroke: #121212;
-  stroke-width: 2.35;
-  animation: fse-sketch-draw 0.72s cubic-bezier(0.4, 0.05, 0.2, 1) 0.02s both;
-}
-
-.fse-modal-sketch-ghost {
-  stroke: color-mix(in srgb, #121212 42%, transparent);
-  stroke-width: 1.15;
-  animation: fse-sketch-draw 0.78s cubic-bezier(0.35, 0.05, 0.2, 1) 0.06s both;
-}
-
-/* Pencil tip riding the reveal edge */
-.fse-modal-sketch-edge {
-  position: absolute;
-  left: 3%;
-  right: 3%;
-  top: 0;
-  height: 2px;
-  z-index: 7;
-  pointer-events: none;
-  border-radius: 2px;
-  background:
-    linear-gradient(
-      90deg,
-      transparent 0%,
-      #121212 8%,
-      #2a2a2a 35%,
-      #111 62%,
-      transparent 100%
-    );
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, #121212 18%, transparent),
-    0 1px 0 color-mix(in srgb, #121212 12%, transparent);
-  animation: fse-sketch-edge 0.62s cubic-bezier(0.22, 0.82, 0.2, 1) both;
 }
 
 .fse-launch.is-open {
