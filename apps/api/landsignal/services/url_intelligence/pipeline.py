@@ -93,23 +93,33 @@ def missing_required(draft: dict[str, Any]) -> list[str]:
 
 
 def material_missing(draft: dict[str, Any]) -> list[dict[str, str]]:
-    """Only fields that materially block analysis."""
+    """Only fields that truly block running the intelligence engine.
+
+    Acreage is preferred but no longer blocking — many listing URLs omit it and
+    the scoring engine already handles unknown acreage. Coordinates are only
+    blocking when we could not geocode any location signal from the URL.
+    """
     out = []
-    if draft.get("acreage") is None:
-        out.append({"field": "acreage", "label": "acreage", "prompt": "We couldn't confidently determine acreage.", "unit": "acres"})
     if not draft.get("state") or len(str(draft.get("state") or "")) != 2:
-        out.append({"field": "state", "label": "state", "prompt": "We need a 2-letter state code.", "unit": ""})
+        # State can be skipped if we already resolved coordinates
+        if draft.get("latitude") is None or draft.get("longitude") is None:
+            out.append(
+                {
+                    "field": "state",
+                    "label": "state",
+                    "prompt": "We need a 2-letter state (or coordinates) to place this property.",
+                    "unit": "",
+                }
+            )
     if draft.get("latitude") is None or draft.get("longitude") is None:
         out.append(
             {
                 "field": "coordinates",
                 "label": "coordinates",
-                "prompt": "We couldn't confidently determine map coordinates.",
+                "prompt": "Add map coordinates (lat, lon) — or a city/county/state we can geocode.",
                 "unit": "lat,lon",
             }
         )
-    if not draft.get("title"):
-        out.append({"field": "title", "label": "title", "prompt": "Add a short property title.", "unit": ""})
     return out
 
 
@@ -119,7 +129,7 @@ async def geocode_address(address: str, state: str | None = None) -> dict[str, f
         async with httpx.AsyncClient(timeout=12.0) as client:
             resp = await client.get(
                 "https://nominatim.openstreetmap.org/search",
-                params={"q": q, "format": "json", "limit": 1},
+                params={"q": q, "format": "json", "limit": 1, "countrycodes": "us"},
                 headers={"User-Agent": "LandSignal/1.0 (user-submitted listing analyze)"},
             )
             if resp.status_code >= 400:
@@ -131,6 +141,46 @@ async def geocode_address(address: str, state: str | None = None) -> dict[str, f
     except Exception as exc:  # noqa: BLE001
         log.info("geocode_failed", error=str(exc)[:160])
         return None
+
+
+async def resolve_coordinates(draft: dict[str, Any]) -> tuple[dict[str, float] | None, str | None]:
+    """Try multiple geocode strategies from anything found in the URL/draft."""
+    if draft.get("latitude") is not None and draft.get("longitude") is not None:
+        try:
+            return (
+                {"latitude": float(draft["latitude"]), "longitude": float(draft["longitude"])},
+                "listing_or_url",
+            )
+        except (TypeError, ValueError):
+            pass
+
+    state = draft.get("state")
+    queries: list[tuple[str, str]] = []
+    if draft.get("address"):
+        queries.append((str(draft["address"]), "address"))
+    if draft.get("geocode_query"):
+        queries.append((str(draft["geocode_query"]), "geocode_query"))
+    if draft.get("city") and state:
+        queries.append((f"{draft['city']}, {state}", "city_state"))
+    if draft.get("county") and state:
+        queries.append((f"{draft['county']} County, {state}", "county_state"))
+    if draft.get("zip"):
+        queries.append((str(draft["zip"]), "zip"))
+    if state and not queries:
+        # Last-resort: state centroid — better than blocking the user
+        queries.append((f"{state}, USA", "state"))
+
+    seen: set[str] = set()
+    for q, method in queries:
+        key = q.strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        # If query already includes state, don't double-append
+        geo = await geocode_address(q, None if (state and state in q) or method == "state" else state)
+        if geo:
+            return geo, method
+    return None, None
 
 
 async def _fetch_html(url: str) -> tuple[str, str, str | None]:
@@ -267,44 +317,52 @@ async def extract_listing_intelligence(url: str) -> dict[str, Any]:
     draft["source_host"] = host_label(canonical)
     draft["provider_id"] = "listing_url"
     draft["external_id"] = f"url:{domain}:{hash(canonical) & 0xFFFFFFFF:x}"
-    if raw.get("city") and not draft.get("county"):
-        # keep city separate in raw; county may still be unknown
-        draft.setdefault("address", draft.get("address"))
+    # Carry through URL-hint extras not in provenanced field map
+    for k in ("city", "zip", "geocode_query", "county", "apn", "acreage", "asking_price_usd", "address", "state", "title"):
+        if raw.get(k) is not None and draft.get(k) in (None, ""):
+            draft[k] = raw[k]
     if raw.get("zoning"):
         draft["zoning"] = raw["zoning"]
+    if not draft.get("title"):
+        bits = []
+        if draft.get("acreage") is not None:
+            bits.append(f"{float(draft['acreage']):g}-acre")
+        bits.append("listing")
+        place = draft.get("county") or draft.get("city") or draft.get("state") or host_label(canonical)
+        draft["title"] = f"{' '.join(bits)} in {place}".replace("  ", " ").title()
 
-    if (draft.get("latitude") is None or draft.get("longitude") is None) and draft.get("address"):
-        geo = await geocode_address(str(draft["address"]), draft.get("state"))
-        if geo:
-            draft.update(geo)
-            from landsignal.services.url_intelligence.provenance import provenanced
+    geo, geo_method = await resolve_coordinates(draft)
+    if geo:
+        draft["latitude"] = geo["latitude"]
+        draft["longitude"] = geo["longitude"]
+        from landsignal.services.url_intelligence.provenance import provenanced
 
-            fields["latitude"] = provenanced(
-                geo["latitude"], source="geospatial_calculation", confidence=0.7,
-                extraction_method="nominatim_geocode", source_url=canonical,
-            )
-            fields["longitude"] = provenanced(
-                geo["longitude"], source="geospatial_calculation", confidence=0.7,
-                extraction_method="nominatim_geocode", source_url=canonical,
-            )
-    elif (
-        (draft.get("latitude") is None or draft.get("longitude") is None)
-        and draft.get("county")
-        and draft.get("state")
-    ):
-        geo = await geocode_address(f"{draft['county']} County", draft.get("state"))
-        if geo:
-            draft.update(geo)
-            from landsignal.services.url_intelligence.provenance import provenanced
-
-            fields["latitude"] = provenanced(
-                geo["latitude"], source="geospatial_calculation", confidence=0.55,
-                extraction_method="nominatim_county_geocode", source_url=canonical,
-            )
-            fields["longitude"] = provenanced(
-                geo["longitude"], source="geospatial_calculation", confidence=0.55,
-                extraction_method="nominatim_county_geocode", source_url=canonical,
-            )
+        conf_map = {
+            "listing_or_url": 0.9,
+            "address": 0.75,
+            "geocode_query": 0.7,
+            "city_state": 0.65,
+            "county_state": 0.55,
+            "zip": 0.6,
+            "state": 0.35,
+        }
+        gconf = conf_map.get(geo_method or "", 0.5)
+        fields["latitude"] = provenanced(
+            geo["latitude"],
+            source="geospatial_calculation",
+            confidence=gconf,
+            extraction_method=f"nominatim_{geo_method or 'geocode'}",
+            source_url=canonical,
+        )
+        fields["longitude"] = provenanced(
+            geo["longitude"],
+            source="geospatial_calculation",
+            confidence=gconf,
+            extraction_method=f"nominatim_{geo_method or 'geocode'}",
+            source_url=canonical,
+        )
+        if geo_method and geo_method != "listing_or_url":
+            draft.setdefault("_coordinate_source", geo_method)
 
     stages[1] = _stage("identifying_property", "done", ms=int((time.perf_counter() - t1) * 1000))
 

@@ -209,7 +209,7 @@ export function AnalyzeListingPanel() {
                 <div className="analyze-listing-confirm">
                   <p className="analyze-listing-note">
                     {result.note ||
-                      "Confirm a few details from the listing, then run the full intelligence report."}
+                      "We screened the listing URL for acres, location, and price. Confirm anything still blank, then run the report."}
                   </p>
                   {result.fetch_status && result.fetch_status !== "ok" ? (
                     <p className="analyze-listing-status">

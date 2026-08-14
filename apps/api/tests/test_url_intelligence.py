@@ -175,3 +175,27 @@ def test_url_slug_hints():
     )
     assert bernardino["county"] == "San Bernardino"
     assert bernardino["acreage"] == 118.0
+
+    # Singular "40-acre", query params, embedded coords
+    singular = extract_from_listing_url(
+        "https://example.com/listings/40-acre-ranch-kern-ca?lat=35.1321&lng=-118.4482&price=118000"
+    )
+    assert singular["acreage"] == 40.0
+    assert singular["latitude"] == 35.1321
+    assert singular["longitude"] == -118.4482
+    assert singular["asking_price_usd"] == 118000
+
+    acres_param = extract_from_listing_url("https://broker.example/lot?acreage=12.5&state=TX&county=Travis")
+    assert acres_param["acreage"] == 12.5
+    assert acres_param["state"] == "TX"
+    assert acres_param["county"] == "Travis"
+
+
+def test_material_missing_does_not_block_on_acreage_alone():
+    from landsignal.services.url_intelligence.pipeline import material_missing
+
+    # Coords + state present → empty material list even without acreage
+    assert material_missing({"state": "CA", "latitude": 35.1, "longitude": -118.4, "title": "x"}) == []
+    # No location at all → asks for coordinates (and maybe state)
+    fields = {m["field"] for m in material_missing({"title": "x"})}
+    assert "coordinates" in fields

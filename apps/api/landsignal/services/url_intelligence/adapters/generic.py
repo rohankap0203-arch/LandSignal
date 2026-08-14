@@ -9,7 +9,13 @@ from typing import Any
 from urllib.parse import urlparse
 
 from landsignal.services.url_intelligence.provenance import provenanced
-from landsignal.services.url_intelligence.url_hints import extract_from_listing_url
+from landsignal.services.url_intelligence.url_hints import (
+    extract_from_listing_url,
+    _acres_from_text,
+    _apn_from_text,
+    _price_from_text,
+    _coords_from_text,
+)
 
 _PRICE_RE = re.compile(
     r"(?:\$|USD\s*)\s*([0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(K|M|k|m)?",
@@ -17,7 +23,8 @@ _PRICE_RE = re.compile(
 )
 _ACRES_RE = re.compile(r"([0-9]+(?:\.[0-9]+)?)\s*(?:\+)?\s*(?:acres?|ac\.?\b)", re.I)
 _APN_RE = re.compile(
-    r"\b(?:APN|PIN|Parcel\s*(?:#|No\.?|Number)?|Assessor(?:'s)?\s*Parcel)\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9.\-/]{3,})",
+    r"\b(?:APN|PIN|Parcel\s*(?:#|No\.?|Number)|Assessor(?:'s)?\s*Parcel(?:\s*(?:#|No\.?|Number))?)\s*[:#]?\s*"
+    r"([A-Za-z0-9][A-Za-z0-9.\-]{3,30})",
     re.I,
 )
 _COUNTY_RE = re.compile(r"\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s+County\b")
@@ -281,6 +288,27 @@ def extract_raw(html: str, *, url: str) -> dict[str, Any]:
             break
     if imgs:
         draft["image_urls"] = imgs
+
+    # Keyword-scan stripped page text (not just OG/JSON-LD) for acres/price/APN/coords
+    stripped = re.sub(r"<script[\s\S]*?</script>", " ", html or "", flags=re.I)
+    stripped = re.sub(r"<style[\s\S]*?</style>", " ", stripped, flags=re.I)
+    stripped = re.sub(r"<[^>]+>", " ", stripped)
+    stripped = unescape(re.sub(r"\s+", " ", stripped))[:50000]
+    if draft.get("acreage") is None:
+        a = _acres_from_text(stripped)
+        if a is not None:
+            draft["acreage"] = a
+    if draft.get("asking_price_usd") is None:
+        p = _price_from_text(stripped)
+        if p is not None:
+            draft["asking_price_usd"] = p
+    if not draft.get("apn"):
+        apn = _apn_from_text(stripped)
+        if apn:
+            draft["apn"] = apn
+    if draft.get("latitude") is None or draft.get("longitude") is None:
+        coords = _coords_from_text(stripped)
+        draft.update({k: v for k, v in coords.items() if draft.get(k) is None})
 
     # Re-apply URL hints for any still-missing fields
     for k, v in extract_from_listing_url(url).items():
