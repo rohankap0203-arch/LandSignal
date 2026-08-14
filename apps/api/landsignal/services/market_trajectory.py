@@ -702,14 +702,14 @@ def build_market_trajectory(
         },
         {
             "id": "site_hitch",
-            "label": "Loc. problem",
-            "short": "Loc. problem",
+            "label": "Site problem",
+            "short": "Site problem",
             "plain": (
                 (
                     f"If flood (~{flood:.0f}%), wetlands, or access turns out worse than expected, "
                     f"the value steps down, then climbs more slowly. Past years stay the same."
                     if (flood or 0) >= 15
-                    else "If a location, title, or access problem shows up, the value steps down, "
+                    else "If a site, title, or access problem shows up, the value steps down, "
                     "then climbs more slowly. Past years stay the same."
                 )
             ),
