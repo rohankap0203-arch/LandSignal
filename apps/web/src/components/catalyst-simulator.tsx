@@ -708,10 +708,7 @@ export function CatalystSimulator({
                     <strong>What this is</strong>
                     <span>
                       A what-if tester for this exact parcel. Turn on nearby changes and see how the
-                      land’s future price path could move.
-                    </span>
-                    <span>
-                      Numbers are built from this site’s access, growth, size, risks, and nuances.
+                      land’s future could change.
                     </span>
                   </Tip>
                 </div>
