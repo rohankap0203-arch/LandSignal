@@ -12,6 +12,7 @@ from landsignal.models import (
     InvestorProfileUpdate,
     LandAlertNotify,
     LandAlertProfileUpsert,
+    ListingUrlAnalyzeRequest,
     ListingUrlIngestRequest,
     ManualIngestRequest,
     ProviderInfo,
@@ -194,6 +195,25 @@ async def ingest_from_url(body: ListingUrlIngestRequest) -> dict[str, Any]:
     from landsignal.services.listing_url import fetch_listing_url
 
     return await fetch_listing_url(body.url)
+
+
+@router.post("/ingest/from-url/analyze")
+async def ingest_from_url_analyze(body: ListingUrlAnalyzeRequest) -> dict[str, Any]:
+    """Universal Listing URL Intelligence Engine.
+
+    URL → extract → identity → canonical parcel → existing analyze_parcel →
+    standard intelligence report. Never fabricates fields; may ask for material
+    corrections before writing.
+    """
+    from landsignal.services.url_intelligence import analyze_listing_url
+
+    store = get_store(get_settings().demo_seed)
+    return await analyze_listing_url(
+        store,
+        body.url,
+        corrections=body.corrections,
+        force_refresh=body.force_refresh,
+    )
 
 
 @router.post("/ingest/csv")
@@ -1715,6 +1735,31 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         market_trajectory=market_trajectory if isinstance(market_trajectory, dict) else None,
     )
 
+    imported_listing = None
+    conflicts_out: list[Any] = []
+    url_confidence = None
+    if listing and isinstance(listing.raw, dict):
+        ui = listing.raw.get("url_intelligence")
+        if isinstance(ui, dict):
+            imported_listing = ui.get("imported_listing") or {
+                "label": "Imported Listing",
+                "domain": (listing.source_url or "").split("/")[2] if listing.source_url else None,
+                "source_url": listing.source_url,
+                "view_original": listing.source_url,
+            }
+            conflicts_out = list(ui.get("conflicts") or [])
+            url_confidence = ui.get("confidence")
+        elif listing.provider_id == "listing_url" and listing.source_url:
+            from urllib.parse import urlparse
+
+            host = urlparse(listing.source_url).hostname or "listing site"
+            imported_listing = {
+                "label": "Imported Listing",
+                "domain": host,
+                "source_url": listing.source_url,
+                "view_original": listing.source_url,
+            }
+
     return {
         "parcel": parcel,
         "listing": listing,
@@ -1736,12 +1781,15 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         "outreach": outreach,
         "catalyst_engine": catalyst_engine,
         "rating_breakdown": rating_breakdown(score, parcel=parcel, listing=listing) if score else [],
-        "score_explained": brief.get("score_story")
+        "score_explained": (brief.get("score_story") if isinstance(brief, dict) else None)
         or {
             "landsignal": "Overall opportunity score from 0–100 after weighing price, land quality, future uses, and risk.",
             "risk": "Higher means more things that can go wrong on the map checks (flood, wetlands, missing data).",
             "confidence": "How complete the file is. Thin files score lower on purpose — this is not a quality grade.",
         },
+        "imported_listing": imported_listing,
+        "data_conflicts": conflicts_out,
+        "url_confidence": url_confidence,
         "watched": watched,
         "disclaimer": "Screening intelligence only — not an appraisal, legal opinion, or purchase authorization.",
         "mapbox_status": "CONFIGURED" if get_settings().mapbox_token else "NOT_CONFIGURED",

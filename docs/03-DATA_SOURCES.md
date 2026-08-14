@@ -34,6 +34,7 @@ interface EnrichmentProvider<T> {
 | Source | Phase 1 | Access | Notes |
 |---|---|---|---|
 | Manual parcel / URL entry | **Implemented** | Free | Always available |
+| Universal Listing URL Intelligence | **Implemented** | Free | User-pasted Zillow/Land.com/etc URL → extract → identity → existing `analyze_parcel` report (not bulk scrape) |
 | CSV import | **Implemented** | Free | Broker exports, internal sheets |
 | Demo fixtures | Dev-only | Free | Labeled `DEMO`; never shown as live feed |
 | BLM LPAD | **Implemented** | Free | Federal western disposal tracts |

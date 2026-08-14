@@ -79,6 +79,48 @@ export type ActionLink = {
   status_code?: number | null;
 };
 
+export type UrlAnalyzeStage = {
+  id: string;
+  label: string;
+  status: string;
+  detail?: string;
+  ms?: number;
+};
+
+export type UrlAnalyzeResult = {
+  ok: boolean;
+  error?: string | null;
+  status?: string;
+  draft?: Record<string, unknown>;
+  missing?: string[];
+  missing_material?: Array<{ field: string; label: string; prompt: string; unit?: string }>;
+  needs_confirmation?: boolean;
+  fetch_status?: string;
+  note?: string | null;
+  source_host?: string;
+  source_domain?: string;
+  facts?: string[];
+  stages?: UrlAnalyzeStage[];
+  identity?: Record<string, unknown>;
+  confidence?: { overall?: number; categories?: Record<string, number> };
+  conflicts?: Array<Record<string, unknown>>;
+  fallback?: {
+    message: string;
+    options?: Array<{ id: string; label: string; href?: string }>;
+  } | null;
+  imported_listing?: {
+    label?: string;
+    domain?: string;
+    source_url?: string;
+    view_original?: string;
+  };
+  parcel_id?: string | null;
+  listing_id?: string | null;
+  score_id?: string | null;
+  report_path?: string;
+  duplicate?: { parcel_id?: string; message?: string; reason?: string } | null;
+};
+
 export type LandAlertMatchCard = {
   id: string;
   profile_id: string;
@@ -388,6 +430,15 @@ export const landsignalApi = {
       note?: string | null;
       source_host?: string;
     }>("/ingest/from-url", { method: "POST", body: JSON.stringify({ url }) }),
+  analyzeListingUrl: (url: string, opts?: { corrections?: Record<string, unknown>; force_refresh?: boolean }) =>
+    api<UrlAnalyzeResult>("/ingest/from-url/analyze", {
+      method: "POST",
+      body: JSON.stringify({
+        url,
+        corrections: opts?.corrections || null,
+        force_refresh: Boolean(opts?.force_refresh),
+      }),
+    }),
   analyze: (id: string) => api(`/parcels/${id}/analyze`, { method: "POST" }),
   watch: (id: string) => api<Record<string, unknown>>(`/parcels/${id}/watch`, { method: "POST" }),
   unwatch: (id: string) => api<Record<string, unknown>>(`/parcels/${id}/watch`, { method: "DELETE" }),

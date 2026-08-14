@@ -177,6 +177,8 @@ export default function ParcelIntelligencePage() {
     links.find((l) => l.kind === "contact" && String(l.url).startsWith("tel:"))?.label ||
     null;
   const findLink = links.find((l) => l.kind === "lookup") || null;
+  const imported = (data.imported_listing as AnyRec | null) || null;
+  const dataConflicts = (data.data_conflicts as AnyRec[]) || [];
 
   async function toggleWatch() {
     try {
@@ -216,6 +218,35 @@ export default function ParcelIntelligencePage() {
               </span>
             </div>
           </div>
+          {imported ? (
+            <div className="imported-listing-banner mt-3">
+              <div className="imported-listing-meta">
+                <span className="imported-listing-label">Imported Listing</span>
+                {imported.domain ? (
+                  <span className="imported-listing-source">
+                    Source: {String(imported.domain)}
+                  </span>
+                ) : null}
+              </div>
+              {imported.view_original || imported.source_url ? (
+                <a
+                  href={String(imported.view_original || imported.source_url)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="imported-listing-link"
+                >
+                  View Original Listing
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+          {dataConflicts.length > 0 ? (
+            <div className="data-conflict-banner mt-3">
+              {dataConflicts.slice(0, 3).map((c, i) => (
+                <p key={i}>{String(c.message || "Data discrepancy detected.")}</p>
+              ))}
+            </div>
+          ) : null}
           <h1 className="display mt-3 text-3xl font-semibold leading-tight break-words">
             {pageTitle}
           </h1>

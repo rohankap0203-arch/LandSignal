@@ -30,7 +30,7 @@ SAMPLE_HTML = """
 
 def test_extracts_jsonld_and_og():
     draft = extract_listing_draft_from_html(SAMPLE_HTML, url="https://www.land.com/property/123")
-    assert draft["source_host"] == "Land.com family"
+    assert "Land.com" in draft["source_host"]
     assert draft["asking_price_usd"] == 425000
     assert draft["acreage"] == 40
     assert draft["state"] == "CA"

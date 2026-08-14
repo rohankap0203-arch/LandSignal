@@ -87,6 +87,14 @@ class ListingUrlIngestRequest(BaseModel):
     url: str = Field(min_length=8, max_length=2000)
 
 
+class ListingUrlAnalyzeRequest(BaseModel):
+    """Full URL → canonical property → existing intelligence engine."""
+
+    url: str = Field(min_length=8, max_length=2000)
+    corrections: dict[str, Any] | None = None
+    force_refresh: bool = False
+
+
 class AlertRuleCreate(BaseModel):
     name: str
     predicate: dict[str, Any]

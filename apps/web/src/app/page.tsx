@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AnalyzeListingPanel } from "@/components/analyze-listing/analyze-listing-panel";
 import { FilterField } from "@/components/filter-field";
 import { HeroSelect } from "@/components/hero-select";
 import { LandLoader } from "@/components/land-loader";
@@ -655,9 +656,7 @@ export default function SearchPage() {
                 {loading ? "Searching…" : "Show matches"}
               </button>
             </div>
-            <Link href="/ingest" className="btn btn-secondary filter-action-analyze-url">
-              Analyze a listing URL
-            </Link>
+            <AnalyzeListingPanel />
           </div>
           {meta?.inventory_count != null && (
             <div className="filter-inventory-note">
