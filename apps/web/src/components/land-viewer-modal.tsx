@@ -1038,7 +1038,7 @@ export function LandViewerModal({
         <div className="land-viewer-nearby" aria-label="Closest landmarks">
           <span className="land-viewer-nearby-label">Closest</span>
           <div className="land-viewer-nearby-chips">
-            <div className="land-viewer-nearby-row">
+            <div className="land-viewer-nearby-row land-viewer-nearby-row--primary">
               {NEARBY_ROW1.map((chip) => (
                 <button
                   key={chip.kind}
