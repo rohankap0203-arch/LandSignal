@@ -758,6 +758,14 @@ select {
   gap: 10px;
 }
 
+.filter-action-analyze-url {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  text-align: center;
+}
+
 .btn-search-primary {
   min-width: 0;
 }
@@ -802,7 +810,8 @@ select {
     gap: 8px;
   }
 
-  .filter-actions-secondary > .btn {
+  .filter-actions-secondary > .btn,
+  .filter-actions-secondary > a.btn {
     width: 100%;
     justify-content: center;
   }
