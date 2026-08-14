@@ -92,6 +92,7 @@ const STRATEGY_OPTS = [
   { id: "RECREATIONAL", label: "Recreational" },
   { id: "TIMBER", label: "Timber" },
   { id: "ENERGY", label: "Energy" },
+  { id: "IMPROVED_PROPERTY", label: "Improved Property" },
 ];
 
 const LAND_TYPE_OPTS = ["Vacant", "Raw land", "Farmland", "Timber", "Recreational", "Residential lot", "Commercial"];

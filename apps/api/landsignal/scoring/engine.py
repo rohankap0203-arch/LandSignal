@@ -29,6 +29,7 @@ STRATEGIES = [
     "RECREATIONAL",
     "ENERGY",
     "TIMBER",
+    "IMPROVED_PROPERTY",
 ]
 
 
@@ -122,6 +123,20 @@ def screen_strategies(inp: dict) -> dict[str, str]:
     else:
         land_bank = "PASS"
 
+    # Improved Property is a selectable strategy AND a soft characteristic —
+    # never auto-exclude parcels that happen to have a dwelling.
+    has_structure = bool(inp.get("has_structure") or inp.get("hasStructure"))
+    bldg = _v(inp, "building_sqft") or _v(inp, "buildingSqFt")
+    beds = _v(inp, "bedrooms")
+    if not has_structure and ((bldg is not None and bldg > 0) or (beds is not None and beds > 0)):
+        has_structure = True
+    if has_structure:
+        improved = "PASS"
+    elif landlocked == "FAIL":
+        improved = "FAIL"
+    else:
+        improved = "MANUAL_REVIEW"
+
     return {
         "FARMLAND": farmland,
         "DEVELOPMENT": development,
@@ -129,6 +144,7 @@ def screen_strategies(inp: dict) -> dict[str, str]:
         "RECREATIONAL": recreational,
         "ENERGY": energy,
         "TIMBER": timber,
+        "IMPROVED_PROPERTY": improved,
     }
 
 
@@ -320,6 +336,19 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
         if screens["ENERGY"] == "FAIL"
         else _round1(clamp(solar * 0.6 + (40 if _v(inp, "nearest_transmission_m") is not None else 20), 0, 100)),
         "TIMBER": 0.0 if screens["TIMBER"] == "FAIL" else _round1(clamp(timber, 0, 100)),
+        "IMPROVED_PROPERTY": 0.0
+        if screens.get("IMPROVED_PROPERTY") == "FAIL"
+        else _round1(
+            clamp(
+                (
+                    (70 if inp.get("has_structure") or inp.get("hasStructure") else 35)
+                    + (access * 0.2)
+                    + ((_v(inp, "building_sqft") or _v(inp, "buildingSqFt") or 0) / 40)
+                ),
+                0,
+                100,
+            )
+        ),
     }
     pass_scores = [v for k, v in strategy_scores.items() if screens[k] != "FAIL"]
     top = sorted(pass_scores, reverse=True)[:3]

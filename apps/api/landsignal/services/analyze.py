@@ -251,6 +251,72 @@ async def analyze_parcel(
                         parcel.county = str(gn["county_name"]).replace(" County", "")
                         store.parcels[parcel_id] = parcel
 
+    # ATTOM property intelligence (optional, circuit-broken). Never blocks analyze.
+    attom_patch: dict[str, Any] = {}
+    if (
+        getattr(settings, "attom_enrich_on_analyze", True)
+        and (not fast)
+        and getattr(settings, "attom_data_mode", "api") != "disabled"
+    ):
+        try:
+            from landsignal.services.property_providers.pipeline import (
+                attom_fields_to_enrichment_patch,
+                enrich_with_attom,
+            )
+
+            attom_res = await enrich_with_attom(
+                {
+                    "apn": parcel.apn,
+                    "address": parcel.address,
+                    "state": parcel.state,
+                    "county": parcel.county,
+                    "latitude": parcel.latitude,
+                    "longitude": parcel.longitude,
+                    "acreage": parcel.acreage,
+                    "attom_id": (existing.raw or {}).get("attom_id") if hasattr(existing, "raw") else None,
+                },
+                deep=True,
+                settings=settings,
+            )
+            if attom_res.get("ok"):
+                attom_patch = attom_fields_to_enrichment_patch(attom_res.get("fields") or {})
+                # Authoritative acreage from ATTOM lotSize1 when parcel acres missing
+                if (parcel.acreage is None or parcel.acreage <= 0) and attom_patch.get("attom_acreage"):
+                    parcel.acreage = float(attom_patch["attom_acreage"])
+                    store.parcels[parcel_id] = parcel
+                if not parcel.apn and (attom_res.get("fields") or {}).get("apn"):
+                    apn_v = (attom_res.get("fields") or {}).get("apn")
+                    # apn may be raw string in id search; detail uses licensed field sometimes
+                    parcel.apn = apn_v if isinstance(apn_v, str) else None
+                    store.parcels[parcel_id] = parcel
+                # Stash temporary licensed snapshot on enrichment.other (TTL metadata inside fields)
+                existing.other = Provenanced(
+                    value={
+                        "attom": {
+                            "ok": True,
+                            "state": attom_res.get("state"),
+                            "fields": attom_res.get("fields"),
+                            "data_confidence": attom_res.get("data_confidence"),
+                            "improved": attom_res.get("improved"),
+                            "persistencePolicy": "TEMPORARY_LICENSED",
+                        }
+                    },
+                    knowledge_state=KnowledgeState.KNOWN,
+                    confidence=0.85,
+                    source="ATTOM",
+                    retrieved_at=datetime.now(timezone.utc),
+                )
+            else:
+                existing.other = Provenanced(
+                    value={"attom": {"ok": False, "state": attom_res.get("state"), "error": attom_res.get("error")}},
+                    knowledge_state=KnowledgeState.TEMPORARILY_UNAVAILABLE,
+                    confidence=0.2,
+                    source="ATTOM",
+                    retrieved_at=datetime.now(timezone.utc),
+                )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("attom_analyze_hook_failed", error_type=type(exc).__name__)
+
     soil_n = (existing.soil.normalized or existing.soil.value or {}) if existing.soil else {}
     flood_n = (existing.flood.normalized or existing.flood.value or {}) if existing.flood else {}
     wet_n = (existing.wetlands.normalized or existing.wetlands.value or {}) if existing.wetlands else {}
@@ -402,6 +468,9 @@ async def analyze_parcel(
         "county": parcel.county,
         "state": parcel.state,
         "provider_id": listing.provider_id if listing else None,
+        "has_structure": bool(attom_patch.get("has_structure")),
+        "building_sqft": attom_patch.get("buildingSqFt"),
+        "bedrooms": attom_patch.get("bedrooms"),
         "estimated_value_low_usd": _wrap(comps_n.get("estimated_value_low_usd"), existing.comps),
         "estimated_value_base_usd": _wrap(comps_n.get("estimated_value_base_usd"), existing.comps),
         "estimated_value_high_usd": _wrap(comps_n.get("estimated_value_high_usd"), existing.comps),

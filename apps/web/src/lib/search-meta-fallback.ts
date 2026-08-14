@@ -69,6 +69,7 @@ export const SEARCH_META_FALLBACK: SearchMeta = {
     "RECREATIONAL",
     "ENERGY",
     "TIMBER",
+    "IMPROVED_PROPERTY",
     "CUSTOM",
   ],
   hold_years: ["Any", 1, 3, 5, 10, 15, 25, 40, 60, 80, 100],

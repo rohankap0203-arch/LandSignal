@@ -719,26 +719,35 @@ export default function SearchPage() {
 
       {!loading && hasSearched && !rows.length && (
         <div className="panel empty-state">
-          <div className="display text-2xl text-[var(--ink)]">No matches for this search</div>
+          <div className="display text-2xl text-[var(--ink)]">No exact matches found</div>
           <p className="mx-auto mt-2 max-w-lg">
             {(() => {
               const picked = selectedStates(form.states);
               const live = new Set(inventoryStates || []);
               const missing = picked.filter((c) => live.size > 0 && !live.has(c));
+              if ((meta?.inventory_count ?? 0) === 0) {
+                return (
+                  <>
+                    Live inventory is empty in this session. Click{" "}
+                    <strong>Refresh live inventory</strong>, wait for the parcel count to climb, then
+                    Show matches again. Hard filters were not changed.
+                  </>
+                );
+              }
               if (missing.length) {
                 return (
                   <>
                     No live inventory indexed for{" "}
-                    <strong>{missing.join(", ")}</strong> right now — results stay empty on purpose
-                    (we don’t fill with other states). Reset to Any, pick a state that shows in
-                    inventory, or run Inventory refresh, then Show matches again.
+                    <strong>{missing.join(", ")}</strong> — we never fill with other states. Reset to
+                    Any, pick a covered state, or refresh inventory.
                   </>
                 );
               }
               return (
                 <>
-                  Nothing in live inventory matches these exact filters. Widen price, acres, or
-                  price/acres — or Reset to Any — then click Show matches again.
+                  Nothing satisfies these hard filters (state, region, price, acres). Suggestions you
+                  can choose: expand acreage slightly, raise max price, or search a neighboring
+                  county/region. LandSignal will not silently weaken your filters.
                 </>
               );
             })()}

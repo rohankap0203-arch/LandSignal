@@ -352,11 +352,11 @@ def _hold_priority_boost(hold_years: int | None, strategy: str | None) -> float:
         return 0.0
     s = strategy.upper()
     boost = 0.0
-    if hold_years <= 5 and s in ("ENERGY", "FARMLAND", "RECREATIONAL"):
+    if hold_years <= 5 and s in ("ENERGY", "FARMLAND", "RECREATIONAL", "IMPROVED_PROPERTY", "DEVELOPMENT"):
         boost += 4.0
-    elif hold_years <= 15 and s in ("FARMLAND", "ENERGY", "RECREATIONAL"):
+    elif hold_years <= 15 and s in ("FARMLAND", "ENERGY", "RECREATIONAL", "IMPROVED_PROPERTY"):
         boost += 2.0
-    if hold_years >= 25 and s in ("LAND_BANK", "DEVELOPMENT", "TIMBER"):
+    if hold_years >= 25 and s in ("LAND_BANK", "DEVELOPMENT", "TIMBER", "FARMLAND"):
         boost += 5.0
     elif hold_years >= 10 and s in ("LAND_BANK", "DEVELOPMENT", "TIMBER"):
         boost += 3.0
@@ -399,15 +399,14 @@ async def radar(
     sort: str | None = "fit_desc",
     q: str | None = None,
     broaden: bool = False,
-    limit: int = 200,
+    limit: int = 500,
 ) -> list[RadarRow]:
     """Search results with investor filters. Pass nothing / omit for Any.
 
     Selected state / region / price / acres are hard filters.
     Strategy and hold period never shrink the match set — they only re-rank
     opportunity / fit so preferred strategies and hold lengths float higher.
-    broaden=True is opt-in only: if the exact set is empty it may loosen region
-    or market channel — never price, acres, or state.
+    broaden=True may loosen region or market channel only — never price, acres, or state.
     """
     from landsignal.geo_meta import region_matches
     from landsignal.scoring.engine import personalized_score
@@ -442,7 +441,15 @@ async def radar(
     if min_acres is not None:
         profile["min_acres"] = min_acres
     if strategy_prefs:
-        known = {"FARMLAND", "DEVELOPMENT", "LAND_BANK", "RECREATIONAL", "ENERGY", "TIMBER"}
+        known = {
+            "FARMLAND",
+            "DEVELOPMENT",
+            "LAND_BANK",
+            "RECREATIONAL",
+            "ENERGY",
+            "TIMBER",
+            "IMPROVED_PROPERTY",
+        }
         preferred: list[str] = []
         for s in strategy_prefs:
             key = s.upper().replace(" ", "_")
@@ -630,7 +637,15 @@ async def radar(
                 continue
             strategy_soft_miss = False
             if strategy_prefs:
-                known = {"FARMLAND", "DEVELOPMENT", "LAND_BANK", "RECREATIONAL", "ENERGY", "TIMBER"}
+                known = {
+            "FARMLAND",
+            "DEVELOPMENT",
+            "LAND_BANK",
+            "RECREATIONAL",
+            "ENERGY",
+            "TIMBER",
+            "IMPROVED_PROPERTY",
+        }
                 hit_any = False
                 blob = f"{listing.title} {listing.description or ''} {_strategy_label(score.best_strategy)}".lower()
                 for pref in strategy_prefs:
@@ -1110,89 +1125,34 @@ async def radar(
             trajectory_sparkline=list(traj.get("sparkline") or [])[-8:],
         )
 
-    # Phase 1: cheap filter + fit across full inventory (same match set as before)
+    # Phase 1: cheap filter + fit across full inventory
     cands = collect_cands(apply_region=True, apply_strict_channel=True)
     broaden_reason: str | None = None
-    # Effective hard bands for the final gate (may widen when exact set is empty).
+    # Hard bands stay absolute — never silently widen price/acres/state.
     gate_min_price, gate_max_price = min_price, max_price
     gate_min_acres, gate_max_acres = min_acres, max_acres
     gate_require_region = bool(region)
 
-    # Always try to return real land when inventory exists for the selected state.
-    # Cascade loosens soft knobs only — state stays hard. Client defaults broaden=true.
+    # Soft-only broaden: region / market channel. Never price, acres, or state.
     if broaden and not cands:
         cands = collect_cands(apply_region=False, apply_strict_channel=True)
         if cands:
             gate_require_region = False
             broaden_reason = (
-                "Loosened region a bit so you still get real matches for your other filters."
+                "Exact region had no hits — showing same state/price/acres outside that region. "
+                "Hard filters were not relaxed."
             )
     if broaden and not cands:
         cands = collect_cands(apply_region=False, apply_strict_channel=False)
         if cands:
             gate_require_region = False
             broaden_reason = (
-                "Loosened market channel a bit so you still get matches inside your other filters."
-            )
-    if broaden and not cands and (min_price is not None or max_price is not None):
-        lo = (min_price * 0.65) if min_price is not None else None
-        hi = (max_price * 1.35) if max_price is not None else None
-        cands = collect_cands(
-            apply_region=False,
-            apply_strict_channel=False,
-            price_lo=lo,
-            price_hi=hi,
-        )
-        if cands:
-            gate_min_price, gate_max_price = lo, hi
-            gate_require_region = False
-            broaden_reason = (
-                "Widened budget ~35% so you still get legitimate priced land near your range."
-            )
-    if broaden and not cands and (min_acres is not None or max_acres is not None):
-        lo = (min_acres * 0.7) if min_acres is not None else None
-        hi = (max_acres * 1.4) if max_acres is not None else None
-        cands = collect_cands(
-            apply_region=False,
-            apply_strict_channel=False,
-            price_lo=(min_price * 0.65) if min_price is not None else min_price,
-            price_hi=(max_price * 1.35) if max_price is not None else max_price,
-            ac_lo=lo,
-            ac_hi=hi,
-            allow_unknown_price=True,
-        )
-        if cands:
-            gate_min_acres, gate_max_acres = lo, hi
-            if min_price is not None:
-                gate_min_price = min_price * 0.65
-            if max_price is not None:
-                gate_max_price = max_price * 1.35
-            gate_require_region = False
-            broaden_reason = (
-                "Widened acreage a bit so you still get real parcels near your size screen."
-            )
-    if broaden and not cands and state_codes:
-        cands = collect_cands(
-            apply_region=False,
-            apply_strict_channel=False,
-            price_lo=0,
-            price_hi=10_000_000_000,
-            ac_lo=0.01,
-            ac_hi=100_000,
-            allow_unknown_price=True,
-            allow_unknown_acres=True,
-        )
-        if cands:
-            gate_min_price, gate_max_price = None, None
-            gate_min_acres, gate_max_acres = None, None
-            gate_require_region = False
-            broaden_reason = (
-                "Showing best available land in your selected state — "
-                "exact price/acre combo had no hits yet while inventory is still indexing."
+                "Loosened market channel only — state, price, and acres stay hard."
             )
 
     ranked = _sort_cands(cands, sort)
-    capped = ranked[: max(1, min(limit, 500))] if ranked else []
+    # Large useful result sets — paginate via limit rather than hardcoding 20.
+    capped = ranked[: max(1, min(limit, 2000))] if ranked else []
     if hold_years is not None and capped:
         for c in capped:
             strat = c.best_strategy.value if c.best_strategy else None
@@ -1202,29 +1162,78 @@ async def radar(
         if (sort or "fit_desc").lower() in ("fit_desc", ""):
             capped = _sort_cands(capped, "fit_desc")
 
-    # Final hard gate — state always. Region/acres/ask use the effective (possibly widened) bands.
+    # Final hard gate — centralized passes_hard_filters + legacy band checks
+    from landsignal.services.property_providers.hard_filters import passes_hard_filters
+    from landsignal.services.property_providers.diagnostics import DIAGNOSTICS
+
     def _row_passes_hard(row: RadarRow) -> bool:
-        if state_codes and (row.state or "").upper() not in state_codes:
-            return False
-        if not _in_band(row.acres, gate_min_acres, gate_max_acres, allow_unknown=False):
-            return False
-        if not _in_band(row.ask, gate_min_price, gate_max_price, allow_unknown=False):
-            return False
-        if gate_require_region and region and not region_matches(
-            region=region,
-            state=row.state,
-            county=row.county,
-            title=row.property_name,
+        blob = {
+            "state": row.state,
+            "county": row.county,
+            "region": row.region,
+            "asking_price_usd": row.ask,
+            "acreage": row.acres,
+            "property_name": row.property_name,
+        }
+        filt = {
+            "states": state_codes,
+            "region": region if gate_require_region else None,
+            "min_price": gate_min_price,
+            "max_price": gate_max_price,
+            "min_acres": gate_min_acres,
+            "max_acres": gate_max_acres,
+            "unpriced_mode": mode,
+        }
+
+        def _region_ok(prop, reg):
+            return region_matches(
+                region=reg,
+                state=prop.get("state"),
+                county=prop.get("county"),
+                title=prop.get("property_name"),
+            )
+
+        if not passes_hard_filters(
+            blob,
+            filt,
+            allow_unknown_price=(mode != "priced"),
+            allow_unknown_acres=False,
+            region_matcher=_region_ok if gate_require_region and region else None,
         ):
             return False
         return True
 
     # Phase 2: full presentation cards only for the capped result set
     rows: list[RadarRow] = []
+    dropped_hard = 0
     for c in capped:
         row = fat_row(c, broaden_reason=broaden_reason)
-        if row is not None and _row_passes_hard(row):
+        if row is None:
+            continue
+        if _row_passes_hard(row):
             rows.append(row)
+        else:
+            dropped_hard += 1
+
+    DIAGNOSTICS.record(
+        {
+            "filters": {
+                "states": state_codes,
+                "region": region,
+                "min_price": min_price,
+                "max_price": max_price,
+                "min_acres": min_acres,
+                "max_acres": max_acres,
+                "strategy": strategy_prefs,
+                "hold_years": hold_years,
+            },
+            "candidates_after_collect": len(cands),
+            "capped": len(capped),
+            "returned": len(rows),
+            "dropped_hard_gate": dropped_hard,
+            "broaden_reason": broaden_reason,
+        }
+    )
     return rows
 
 
@@ -1272,8 +1281,61 @@ async def search_meta() -> dict[str, Any]:
         for st, n in by_state.items()
         if n < payload["inventory_min_per_state_target"]
     )
+    # ATTOM / provider health (never includes API keys)
+    try:
+        from landsignal.services.property_providers.attom import AttomPropertyProvider
+
+        attom_health = AttomPropertyProvider().health_check()
+        payload["attom"] = {
+            "state": attom_health.state.value,
+            "configured": bool(attom_health.ok),
+            "active_listing_access": False,
+            "data_mode": getattr(get_settings(), "attom_data_mode", "api"),
+        }
+    except Exception:  # noqa: BLE001
+        payload["attom"] = {"state": "UNAVAILABLE", "configured": False}
     return payload
-    return payload
+
+
+@router.get("/diagnostics/search")
+async def search_diagnostics(limit: int = 20) -> dict[str, Any]:
+    """Dev observability for Show Matches pipeline — not a consumer-facing surface."""
+    from landsignal.services.property_providers.attom import get_attom_client
+    from landsignal.services.property_providers.diagnostics import DIAGNOSTICS
+
+    client = get_attom_client()
+    return {
+        "recent_searches": DIAGNOSTICS.recent(limit=max(1, min(limit, 50))),
+        "attom": client.stats(),
+    }
+
+
+@router.get("/diagnostics/attom")
+async def attom_diagnostics() -> dict[str, Any]:
+    from landsignal.services.property_providers.attom import AttomPropertyProvider, get_attom_client
+
+    health = AttomPropertyProvider().health_check()
+    return {
+        "health": {
+            "ok": health.ok,
+            "state": health.state.value,
+            "data": health.data,
+            "error": health.error,
+        },
+        "stats": get_attom_client().stats(),
+        "endpoints_used": [
+            "/propertyapi/v1.0.0/property/detail",
+            "/propertyapi/v1.0.0/property/detailowner",
+            "/propertyapi/v1.0.0/property/expandedprofile",
+            "/propertyapi/v1.0.0/assessment/detail",
+            "/propertyapi/v1.0.0/sale/detail",
+            "/propertyapi/v1.0.0/saleshistory/detail",
+            "/propertyapi/v1.0.0/avm/detail",
+            "/propertyapi/v1.0.0/property/id",
+        ],
+        "active_listing_access": False,
+        "note": "ATTOM enriches parcel intelligence; public GIS/BLM remain candidate discovery sources.",
+    }
 
 
 @router.get("/parcels/{parcel_id}")
