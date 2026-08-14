@@ -749,6 +749,10 @@ select {
   min-width: 0;
   width: auto;
   max-width: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .filter-actions-secondary {

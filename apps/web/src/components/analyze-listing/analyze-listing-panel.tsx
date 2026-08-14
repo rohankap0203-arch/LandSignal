@@ -440,12 +440,7 @@ export function AnalyzeListingPanel() {
           setPhase("idle");
         }}
       >
-        <span className="analyze-listing-trigger-glow" aria-hidden>
-          <span className="analyze-listing-trigger-wave analyze-listing-trigger-wave-a" />
-          <span className="analyze-listing-trigger-wave analyze-listing-trigger-wave-b" />
-          <span className="analyze-listing-trigger-bubbles" />
-          <span className="analyze-listing-trigger-sheen" />
-        </span>
+        <span className="analyze-listing-trigger-sheen" aria-hidden />
         <span className="analyze-listing-trigger-label">Analyze a Listing</span>
       </button>
       {modal}
