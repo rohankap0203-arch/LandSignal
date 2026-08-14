@@ -699,6 +699,40 @@ export function CatalystSimulator({
             aria-label="Future Scenario Engine"
             onClick={(e) => e.stopPropagation()}
           >
+            <svg className="fse-modal-sketch" viewBox="0 0 400 640" preserveAspectRatio="none" aria-hidden>
+              {/* Hand-ish outer ink path — draws as the panel unfurls */}
+              <path
+                className="fse-modal-sketch-ink"
+                pathLength="1"
+                d="M14 11
+                   C 95 6, 210 5, 312 8
+                   C 348 9, 382 12, 388 18
+                   C 394 48, 396 160, 395 310
+                   C 394 460, 393 560, 389 602
+                   C 386 618, 360 626, 300 629
+                   C 210 633, 120 632, 52 628
+                   C 28 626, 12 618, 9 602
+                   C 5 540, 4 380, 5 220
+                   C 6 90, 7 36, 10 20
+                   C 11 14, 12 12, 14 11 Z"
+              />
+              <path
+                className="fse-modal-sketch-ghost"
+                pathLength="1"
+                d="M18 16
+                   C 100 12, 220 11, 318 14
+                   C 350 15, 376 18, 381 24
+                   C 387 55, 388 170, 387 315
+                   C 386 460, 385 550, 382 592
+                   C 380 606, 355 614, 295 617
+                   C 205 621, 125 620, 58 616
+                   C 34 614, 18 606, 16 592
+                   C 12 530, 12 380, 13 230
+                   C 14 100, 14 42, 16 26
+                   C 17 20, 17 17, 18 16 Z"
+              />
+            </svg>
+            <span className="fse-modal-sketch-edge" aria-hidden />
             <DollarBurst burst={burst} />
             <header className="fse-modal-head">
               <div className="fse-modal-head-main">
