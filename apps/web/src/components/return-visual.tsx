@@ -74,6 +74,9 @@ type ReturnIntel = {
   reason?: string;
   purchase_usd?: number | null;
   mark_usd?: number | null;
+  purchase_label?: string | null;
+  treat_as_purchase?: boolean | null;
+  entry_basis?: string | null;
   hold_years?: number;
   windows?: number[];
   inflation?: InflationMeta | null;
@@ -847,6 +850,8 @@ export function ReturnVisual({
         cpiDisplay={cpiDisplay}
         purchaseUsd={intel?.purchase_usd}
         markUsd={intel?.mark_usd}
+        purchaseLabel={intel?.purchase_label}
+        treatAsPurchase={intel?.treat_as_purchase}
         futureNominal={endpoint?.exit_usd}
         futureToday={endpoint?.exit_usd_today}
         totalBackToday={endpoint?.total_back_usd_today}

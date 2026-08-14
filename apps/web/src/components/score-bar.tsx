@@ -9,6 +9,7 @@ export type ScoreStandings = {
   sample_n?: number;
   beats_pct?: number;
   percentile?: number;
+  tie_share?: number | null;
   median?: number | null;
   p75?: number | null;
   p90?: number | null;
@@ -222,17 +223,30 @@ function OpportunityLens({ score, standings }: { score: number; standings: Score
 /** Risk — spectrum + two chips. */
 function RiskLens({ score, standings }: { score: number; standings: ScoreStandings }) {
   const safer = Math.round(standings.beats_pct || 0);
+  const tieShare =
+    standings.tie_share != null && Number.isFinite(Number(standings.tie_share))
+      ? Number(standings.tie_share)
+      : 0;
   const worries = (standings.lifts || []).slice(0, 1);
   const calms = (standings.drags || []).slice(0, 1);
-  const why = (standings.why_not_higher || [])[0];
+  const why = (standings.why_not_higher || [])[0] || standings.rank_plain;
   const band = score <= 35 ? "Calm" : score <= 55 ? "Watch" : "Elevated";
+  const clustered = tieShare >= 0.55;
 
   return (
     <div className="score-lens score-lens--risk">
       <div className="score-lens-top">
         <span className={`score-lens-pill tone-${band.toLowerCase()}`}>{band}</span>
         <span className="score-lens-stat">
-          Safer than <strong>~{safer}%</strong> of live files
+          {clustered ? (
+            <>
+              Typical live-file band · ~{Math.round(tieShare * 100)}% share this score
+            </>
+          ) : (
+            <>
+              Safer than <strong>~{safer}%</strong> of live files
+            </>
+          )}
         </span>
       </div>
       <div className="risk-spectrum" aria-hidden>
@@ -261,9 +275,9 @@ function RiskLens({ score, standings }: { score: number; standings: ScoreStandin
 
 /** Completeness — checklist. */
 function CompletenessLens({ score, standings }: { score: number; standings: ScoreStandings }) {
-  const factors = (standings.factors || []).slice(0, 4);
+  const factors = (standings.factors || []).slice(0, 5);
   const have = factors.filter((f) => f.direction === "up").length;
-  const total = Math.max(factors.length, 1);
+  const total = Math.max(factors.length, 5);
   const band = score >= 65 ? "Full enough" : score >= 40 ? "Partly filled" : "Thin file";
   const why = (standings.why_not_higher || [])[0];
 

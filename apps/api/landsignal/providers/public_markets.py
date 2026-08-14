@@ -761,7 +761,9 @@ def _validate_inventory_row(row: dict | None) -> dict | None:
         out["is_demo"] = False
         if out.get("status") is None:
             out["status"] = "ACTIVE"
-        return out
+        from landsignal.services.purchase_credibility import sanitize_row_asking_price
+
+        return sanitize_row_asking_price(out)
     except Exception:  # noqa: BLE001
         return None
 
@@ -2626,10 +2628,10 @@ async def _fetch_arcgis_objectid_shards(
     if target <= 0:
         return []
     max_oid = int(getattr(src, "objectid_max", None) or 11_000_000)
-    shard_count = 40
-    shard_span = max(100_000, (max_oid // shard_count) + 1)
+    shard_count = 56
+    shard_span = max(80_000, (max_oid // shard_count) + 1)
     ranges = [(lo, min(lo + shard_span, max_oid + 1)) for lo in range(1, max_oid + 1, shard_span)]
-    per_shard = max(40, (target // max(1, len(ranges))) + 30)
+    per_shard = max(50, (target // max(1, len(ranges))) + 40)
     # Keep concurrency modest — this ArcGIS host 504s when hammered.
     sem = asyncio.Semaphore(10)
 

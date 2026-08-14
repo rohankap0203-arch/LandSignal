@@ -85,10 +85,36 @@ def backfill_listing_ask_from_assessed(listing: Any) -> bool:
 
 def backfill_store_assessed_asks(store: Any) -> dict[str, int]:
     """Apply assessed-land asks across the whole inventory (every state)."""
+    from landsignal.services.purchase_credibility import (
+        detect_ask_role,
+        is_displayable_ask,
+    )
+
     updated = 0
     scanned = 0
+    cleared = 0
     for listing in list(getattr(store, "listings", {}).values()):
         scanned += 1
         if backfill_listing_ask_from_assessed(listing):
             updated += 1
-    return {"scanned": scanned, "updated": updated}
+        ask = getattr(listing, "asking_price_usd", None)
+        if ask is None:
+            continue
+        parcel = getattr(store, "parcels", {}).get(getattr(listing, "parcel_id", None))
+        acres = getattr(parcel, "acreage", None) if parcel else None
+        role = detect_ask_role(listing)
+        if not is_displayable_ask(
+            ask,
+            acres=acres,
+            provider_id=getattr(listing, "provider_id", None),
+            ask_role=role,
+        ):
+            raw = getattr(listing, "raw", None)
+            if isinstance(raw, dict):
+                raw = dict(raw)
+                raw["ask_sanitized"] = "non_credible_display"
+                raw["ask_original_usd"] = float(ask)
+                listing.raw = raw
+            listing.asking_price_usd = None
+            cleared += 1
+    return {"scanned": scanned, "updated": updated, "cleared_junk_asks": cleared}

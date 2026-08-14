@@ -7239,16 +7239,27 @@ a.acquire-block:hover {
 }
 
 .fse-scene-shovel {
-  left: 5%;
-  bottom: 0.08rem;
-  transform-origin: 70% 90%;
-  animation: fse-shovel-dig 2.2s ease-in-out infinite;
+  left: 4%;
+  bottom: 0.06rem;
+  transform-origin: 35% 85%;
+  animation: fse-excavator-work 2.8s ease-in-out infinite;
   filter: drop-shadow(0 1px 0 color-mix(in srgb, var(--bg-elevated) 70%, transparent));
 }
 
 .fse-scene-dirt {
-  opacity: 0.75;
-  animation: fse-dirt-puff 2.2s ease-in-out infinite;
+  opacity: 0.8;
+  animation: fse-dirt-puff 2.8s ease-in-out infinite;
+}
+
+.fse-ex-boom,
+.fse-ex-bucket {
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: fse-boom-dip 2.8s ease-in-out infinite;
+}
+
+.fse-survey-stake {
+  animation: fse-stake-pulse 3.2s ease-in-out infinite;
 }
 
 .fse-scene-build {
@@ -7363,6 +7374,42 @@ a.acquire-block:hover {
   }
 }
 
+@keyframes fse-excavator-work {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(1px);
+  }
+  55% {
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes fse-boom-dip {
+  0%,
+  100% {
+    transform: rotate(-6deg);
+  }
+  45% {
+    transform: rotate(10deg);
+  }
+  60% {
+    transform: rotate(2deg);
+  }
+}
+
+@keyframes fse-stake-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 @keyframes fse-shovel-dig {
   0%,
   100% {
@@ -7466,6 +7513,9 @@ a.acquire-block:hover {
   .fse-launch-go svg,
   .fse-scene-shovel,
   .fse-scene-dirt,
+  .fse-ex-boom,
+  .fse-ex-bucket,
+  .fse-survey-stake,
   .fse-build-floor,
   .fse-build-win,
   .fse-build-scaffold,

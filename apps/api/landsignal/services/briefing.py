@@ -507,10 +507,21 @@ def build_intelligence_brief(
         }
 
     # ---- Institutional return case (acquisition desk style) ----
-    entry = settle if settle and settle > 0 else (ask if ask and ask > 0 else None)
-    if entry is None and est:
-        # Unpriced public inventory: underwrite a process entry below screening mark
-        entry = est * (0.62 if provider in ("public_tax_sale", "public_surplus") else 0.85)
+    from landsignal.services.purchase_credibility import (
+        detect_ask_role,
+        resolve_underwriting_entry,
+    )
+
+    ask_role = detect_ask_role(listing, provider)
+    resolved = resolve_underwriting_entry(
+        ask_usd=ask if ask and ask > 0 else None,
+        mark_usd=est,
+        acres=acres,
+        ask_role=ask_role,
+        provider_id=provider,
+        auction_settle_usd=settle if settle and settle > 0 else None,
+    )
+    entry = resolved.get("entry_usd")
     gap_usd = (est - entry) if est and entry else None
     gap_pct = ((gap_usd / entry) * 100.0) if gap_usd is not None and entry else None
     irr_best = None
@@ -582,6 +593,9 @@ def build_intelligence_brief(
             )
         ),
         "entry_usd": entry,
+        "entry_basis": resolved.get("entry_basis"),
+        "purchase_label": resolved.get("purchase_label"),
+        "treat_as_purchase": resolved.get("treat_as_purchase"),
         "mark_usd": est,
         "equity_gap_usd": gap_usd,
         "equity_gap_pct": gap_pct,

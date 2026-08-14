@@ -805,7 +805,38 @@ def build_return_intelligence(
         channel_already_applied=trajectory_annual is not None,
     )
     toggle_factors = _hold_toggle_factors(pace_factors=pace_factors, model=model)
-    purchase = entry_usd or mark_usd
+    from landsignal.services.purchase_credibility import (
+        detect_ask_role,
+        resolve_underwriting_entry,
+    )
+
+    ask_role = detect_ask_role(listing)
+    provider = getattr(listing, "provider_id", None) if listing else model.get("provider")
+    acres = model.get("acres")
+    published_ask = _f(getattr(listing, "asking_price_usd", None)) if listing else _f(entry_usd)
+    resolved = resolve_underwriting_entry(
+        ask_usd=published_ask if published_ask else _f(entry_usd),
+        mark_usd=_f(mark_usd),
+        acres=_f(acres),
+        ask_role=ask_role,
+        provider_id=provider,
+        auction_settle_usd=_f(entry_usd) if ask_role in ("minimum_bid", "opening_bid", "tax_lien") else None,
+    )
+    # Prefer caller settle/entry when already auction-resolved; else credibility gate.
+    if entry_usd is not None and ask_role in ("minimum_bid", "opening_bid", "tax_lien"):
+        purchase = float(entry_usd)
+        purchase_meta = {
+            "entry_basis": "auction_settle",
+            "purchase_label": "Expected settle",
+            "treat_as_purchase": True,
+        }
+    else:
+        purchase = resolved.get("entry_usd")
+        purchase_meta = {
+            "entry_basis": resolved.get("entry_basis"),
+            "purchase_label": resolved.get("purchase_label"),
+            "treat_as_purchase": bool(resolved.get("treat_as_purchase")),
+        }
     if purchase is None or purchase <= 0:
         return {
             "available": False,
@@ -833,12 +864,11 @@ def build_return_intelligence(
                 "Toggle screens below to recompute buy → rent → exit. Owned-land pace matches "
                 "the land-value path; channel cheapens the buy, not lifelong appreciation."
             ),
+            **purchase_meta,
         }
 
-    # Prefer underwriting entry; if only mark, assume process discount by channel
-    if entry_usd is None and mark_usd:
-        ch = model["channel_mult"]
-        purchase = mark_usd * (0.62 if ch <= 0.75 else 0.85 if ch < 1 else 1.0)
+    # Prefer underwriting entry; if only mark, resolve_underwriting_entry already discounted.
+    purchase = float(purchase)
 
     # One 100-year path per case, then exact window slices (keeps curves + IRR consistent)
     full_paths: dict[str, Any] = {}
@@ -916,6 +946,9 @@ def build_return_intelligence(
         "available": True,
         "purchase_usd": round(float(purchase), 0),
         "mark_usd": round(float(mark_usd), 0) if mark_usd else None,
+        "entry_basis": purchase_meta.get("entry_basis"),
+        "purchase_label": purchase_meta.get("purchase_label"),
+        "treat_as_purchase": purchase_meta.get("treat_as_purchase"),
         "hold_years": default_hold,
         "windows": HOLD_WINDOWS,
         "inflation": infl,

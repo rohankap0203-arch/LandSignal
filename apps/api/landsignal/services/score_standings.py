@@ -42,11 +42,28 @@ def collect_live_opportunity_scores(store) -> list[float]:
 
 
 def _percentile_rank(sorted_vals: list[float], value: float) -> float:
-    """% of scores strictly below this value (0–100)."""
+    """Average-rank / midrank percentile (0–100).
+
+    Strictly-below ranks blow up when inventory clusters on one score (e.g. almost
+    every fast-scored file at risk≈45 → “safer than 100%”). Midrank gives ties the
+    middle of their band so a typical file reads ~50%, not 100%.
+    """
     if not sorted_vals:
         return 0.0
+    n = len(sorted_vals)
     below = sum(1 for v in sorted_vals if v < value)
-    return 100.0 * below / len(sorted_vals)
+    equal = sum(1 for v in sorted_vals if v == value)
+    if equal <= 0:
+        # Value not in sample — still report share strictly below.
+        return 100.0 * below / n
+    return 100.0 * (below + 0.5 * equal) / n
+
+
+def _tie_share(sorted_vals: list[float], value: float) -> float:
+    """Fraction of the live sample tied at this exact score (0–1)."""
+    if not sorted_vals:
+        return 0.0
+    return sum(1 for v in sorted_vals if v == value) / len(sorted_vals)
 
 
 def _quantile(sorted_vals: list[float], q: float) -> float | None:
@@ -208,26 +225,39 @@ def build_risk_factors(*, enrichment=None, listing=None, risk: float) -> list[di
 
 
 def build_confidence_factors(*, enrichment=None, score=None, conf: float) -> list[dict[str, Any]]:
-    """Compact drivers for how complete the file is (higher = fuller)."""
-    soil_n, flood_n, wet_n, _access_n = _enrichment_maps(enrichment)
+    """Five drivers for how complete the file is (higher = fuller)."""
+    soil_n, flood_n, wet_n, access_n = _enrichment_maps(enrichment)
+    comps_n: dict = {}
+    growth_n: dict = {}
+    if enrichment:
+        if getattr(enrichment, "comps", None):
+            comps_n = enrichment.comps.normalized or enrichment.comps.value or {}
+        if getattr(enrichment, "growth", None):
+            growth_n = enrichment.growth.normalized or enrichment.growth.value or {}
     prime = _f(soil_n.get("prime_farmland_pct"))
     flood = _f(flood_n.get("flood_zone_pct"))
     wet = _f(wet_n.get("wetland_pct"))
+    access = _f(access_n.get("legal_access_confidence"))
+    growth = _f(growth_n.get("path_of_growth_score")) or _f(comps_n.get("path_of_growth_score"))
+    liquidity = _f(comps_n.get("liquidity_score"))
     est = _f(getattr(score, "estimated_value_usd", None)) if score else None
+    market_present = growth is not None or liquidity is not None
+    market_score = growth if growth is not None else liquidity
     rows: list[dict[str, Any]] = []
 
     def _row(key: str, label: str, present: bool, score_v: float | None = None) -> dict[str, Any]:
         s = 78.0 if present else 18.0
         if present and score_v is not None:
             s = max(55.0, min(92.0, 60.0 + score_v * 0.2))
+        w = 20.0
         return {
             "key": key,
             "label": label,
             "simple": "On file" if present else "Still missing",
             "score": round(s, 1),
-            "weight_pct": 22,
-            "contribution": round(s * 0.22, 1),
-            "gap": round(0.0 if present else 22.0, 1),
+            "weight_pct": 20,
+            "contribution": round(s * (w / 100.0), 1),
+            "gap": round(0.0 if present else w, 1),
             "direction": "up" if present else "down",
         }
 
@@ -235,12 +265,16 @@ def build_confidence_factors(*, enrichment=None, score=None, conf: float) -> lis
     rows.append(_row("flood", "Flood screen", flood is not None, flood))
     rows.append(_row("wetlands", "Wetland screen", wet is not None, wet))
     rows.append(_row("value", "Value mark", est is not None, None))
+    rows.append(_row("access", "Access screen", access is not None, access))
+    # Prefer access; if missing, still surface a fifth market-context factor.
+    if access is None:
+        rows[-1] = _row("market", "Market context", market_present, market_score)
     # Sort: missing first for "gap", then by contribution
     rows.sort(key=lambda r: (0 if r["direction"] == "down" else 1, -r["contribution"]))
     # Keep a sense of completeness level in the list order for display
     if conf >= 65:
         rows.sort(key=lambda r: r["contribution"], reverse=True)
-    return rows
+    return rows[:5]
 
 
 def _base_stats(live: list[float], value: float) -> dict[str, Any]:
@@ -264,6 +298,7 @@ def _base_stats(live: list[float], value: float) -> dict[str, Any]:
         "low": low,
         "percentile": percentile,
         "beats_pct": round(percentile, 0),
+        "tie_share": round(_tie_share(live_sorted, value), 4),
     }
 
 
@@ -380,14 +415,22 @@ def build_risk_standings(
     median = stats["median"]
     top = stats["top"]
     low = stats["low"]
-    # Safer than = share of files with higher risk
+    # Safer than ≈ share with higher risk via midrank (ties → ~50%, not 100%).
     safer_pct = round(100.0 - stats["percentile"], 0) if n else 0.0
+    tie_share = float(stats.get("tie_share") or 0.0)
     shown = round(risk)
     factors = build_risk_factors(enrichment=enrichment, listing=listing, risk=risk)
     lifts = [f for f in factors if f["direction"] == "up"][:2]
     calm = [f for f in factors if f["direction"] == "down"][:2]
 
-    if n and shown <= round(low or shown) and safer_pct >= 90:
+    # Degenerate cluster (most files share this score) — don't overclaim rank.
+    if n and tie_share >= 0.55:
+        rank_plain = (
+            f"Your {shown} matches the common live-file band "
+            f"(~{tie_share * 100:.0f}% of {n:,} sit here; median ~{median:.0f})."
+        )
+        safer_pct = 50.0
+    elif n and shown <= round(low or shown) and safer_pct >= 90 and tie_share < 0.25:
         rank_plain = (
             f"Your {shown} is among the calmest live files "
             f"(safer than ~{safer_pct:.0f}% of {n:,})."
@@ -423,7 +466,11 @@ def build_risk_standings(
             "not a title opinion."
         )
 
-    if safer_pct >= 75:
+    if tie_share >= 0.55:
+        meaning = (
+            f"In {place}, {shown} is the usual desktop risk band — not a standout calm file."
+        )
+    elif safer_pct >= 75:
         meaning = f"In {place}, {shown} means fewer yellow flags than most live files."
     elif safer_pct >= 45:
         meaning = f"In {place}, {shown} means ordinary scout risk — fixable with homework."
@@ -436,6 +483,7 @@ def build_risk_standings(
         "score": round(risk, 1),
         "sample_n": n,
         "beats_pct": safer_pct,
+        "tie_share": round(tie_share, 4),
         "percentile": round(stats["percentile"], 1),
         "median": round(median, 1) if median is not None else None,
         "p75": round(stats["p75"], 1) if stats["p75"] is not None else None,
@@ -517,8 +565,8 @@ def build_confidence_standings(
     else:
         meaning = f"In {place}, {shown} means a tip sheet, not a finished diligence pack."
 
-    # Show missing first when thin, otherwise strongest filled screens
-    shown_factors = (missing + have)[:3] if shown < 55 else (have + missing)[:3]
+    # Always surface all five completeness factors (missing first when thin).
+    shown_factors = (missing + have)[:5] if shown < 55 else (have + missing)[:5]
 
     return {
         "kind": "confidence",

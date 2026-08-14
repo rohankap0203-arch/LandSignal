@@ -674,6 +674,156 @@ def _norm_mi_oakland(raw: dict) -> dict | None:
     )
 
 
+def _norm_ri_tax_parcels(raw: dict) -> dict | None:
+    """RIGIS / RIDEM tax parcels — low improvement share, 1ac+ (no CAD $ on layer)."""
+    props = _props(raw)
+    pct_imp = _fnum(props.get("PctImp"))
+    if pct_imp is not None and pct_imp > 8:
+        return None
+    preferred = _fnum(props.get("Acres"))
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=1.0)
+    if acreage is None:
+        return None
+    pid = props.get("PlatLot") or props.get("OBJECTID")
+    town = str(props.get("TownCode") or "Rhode Island")
+    return _row(
+        source_key="ri_tax",
+        pid=pid,
+        title=f"Rhode Island parcel · {acreage:.1f} ac · town {town}",
+        description=(
+            f"RIGIS/RIDEM tax parcel screen. TownCode={town}. PctImp={pct_imp}. "
+            "Public GIS — not MLS/Zillow."
+        ),
+        state="RI",
+        county=f"Town {town}",
+        acreage=acreage,
+        lat=lat,
+        lon=lon,
+        polygon=polygon,
+        land_val=None,
+        apn=pid,
+        source_url="https://risegis.ri.gov/",
+        props=props if isinstance(props, dict) else None,
+    )
+
+
+def _norm_sc_horry_vacant(raw: dict) -> dict | None:
+    return _vacant_from_fields(
+        raw,
+        source_key="sc_horry",
+        state="SC",
+        default_county="Horry",
+        county_keys=("TaxDistrict",),
+        pid_keys=("TMS", "PIN", "PINtext", "OBJECTID"),
+        acre_keys=("Acreage",),
+        land_keys=("MarketLand", "AssessedLand", "TaxableLand"),
+        bldg_keys=("MarketImprv", "AssessedImprv"),
+        owner_keys=("OwnerName",),
+        min_ac=1.0,
+        label="vacant",
+        source_url="https://www.horrycounty.org/",
+    )
+
+
+def _norm_sc_berkeley_vacant(raw: dict) -> dict | None:
+    return _vacant_from_fields(
+        raw,
+        source_key="sc_berkeley",
+        state="SC",
+        default_county="Berkeley",
+        county_keys=("City",),
+        pid_keys=("ParcelID", "OBJECTID"),
+        acre_keys=("TotalAcres", "QRAcres", "AGAcres"),
+        land_keys=("LandMarket", "AgLandMarket", "QRLandValue"),
+        bldg_keys=("BuildingMarket", "AgBuildingMarket", "QRBuildingValue"),
+        owner_keys=("OwnerName",),
+        min_ac=1.0,
+        label="vacant",
+        source_url="https://www.berkeleycountysc.gov/",
+    )
+
+
+def _norm_la_brla_parcels(raw: dict) -> dict | None:
+    """East Baton Rouge tax parcels — unimproved when improvement $ is null/0."""
+    props = _props(raw)
+    impr = _fnum(props.get("SUM_IMPROVEMENT_VALUE"))
+    if impr is not None and impr > 0:
+        return None
+    if _non_market_owner(str(props.get("OWNER") or "")):
+        return None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(None, geom_acres, min_ac=1.0)
+    if acreage is None:
+        return None
+    land_val = (
+        _fnum(props.get("SUM_LAND_VALUE"))
+        or _fnum(props.get("SUM_LOT_VALUE"))
+        or _fnum(props.get("SUM_FAIR_MARKET_VALUE"))
+    )
+    pid = props.get("ASSESSMENT_NUM") or props.get("ID") or props.get("OBJECTID")
+    addr = (props.get("PHYSICAL_ADDRESS") or "").strip()
+    return _row(
+        source_key="la_brla",
+        pid=pid,
+        title=f"Louisiana parcel · {acreage:.1f} ac · East Baton Rouge",
+        description=(
+            f"East Baton Rouge Parish tax parcel screen. Owner={props.get('OWNER')}. "
+            f"Land mark=${land_val}. Public GIS — not MLS/Zillow."
+        ),
+        state="LA",
+        county="East Baton Rouge",
+        acreage=acreage,
+        lat=lat,
+        lon=lon,
+        polygon=polygon,
+        land_val=land_val if land_val and land_val >= 500 else None,
+        apn=pid,
+        address=addr or "East Baton Rouge Parish, LA",
+        source_url="https://maps.brla.gov/",
+        props=props if isinstance(props, dict) else None,
+    )
+
+
+def _norm_la_orleans_parcels(raw: dict) -> dict | None:
+    """Orleans Parish property parcels — large lots from assessor sqft."""
+    props = _props(raw)
+    if _non_market_owner(str(props.get("OWNERNME1") or "")):
+        return None
+    sqft = _fnum(props.get("ASS_SQFT"))
+    preferred = (sqft / 43560.0) if sqft and sqft > 0 else None
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=1.0)
+    if acreage is None:
+        return None
+    # Skip obvious condo/unit rows
+    if props.get("UNIT") and str(props.get("UNIT")).strip() not in ("", "0", "None"):
+        if acreage < 2.0:
+            return None
+    pid = props.get("PARCELID") or props.get("TAXBILLID") or props.get("PARID") or props.get("OBJECTID")
+    addr = (props.get("SITEADDRESS") or "").strip()
+    return _row(
+        source_key="la_orleans",
+        pid=pid,
+        title=f"Louisiana parcel · {acreage:.1f} ac · Orleans",
+        description=(
+            f"Orleans Parish property screen. Owner={props.get('OWNERNME1')}. "
+            f"USECD={props.get('USECD')}. Public GIS — not MLS/Zillow."
+        ),
+        state="LA",
+        county="Orleans",
+        acreage=acreage,
+        lat=lat,
+        lon=lon,
+        polygon=polygon,
+        land_val=None,
+        apn=pid,
+        address=addr or "Orleans Parish, LA",
+        source_url="https://gis.nola.gov/",
+        props=props if isinstance(props, dict) else None,
+    )
+
+
 SOURCES: list[ArcgisMarketSource] = [
     _src(
         "mt_dnrc_vacant",
@@ -959,6 +1109,61 @@ SOURCES: list[ArcgisMarketSource] = [
         where="1=1",
         shard=True,
         objectid_max=700_000,
+        page_size=1000,
+    ),
+    _src(
+        "ri_tax_parcels",
+        "Rhode Island Tax Parcels (1ac+ low-imp)",
+        "https://risegis.ri.gov/hosting/rest/services/RIDEM/Tax_Parcels/MapServer/0/query",
+        "RI",
+        _norm_ri_tax_parcels,
+        where="Acres>=1 AND Acres<=2500 AND (PctImp IS NULL OR PctImp<=8)",
+        shard=True,
+        objectid_max=400_000,
+        page_size=1000,
+    ),
+    _src(
+        "sc_horry_vacant",
+        "Horry County SC Vacant Land (1ac+)",
+        "https://www.horrycounty.org/gispublic/rest/services/Public/HorryCountyGIS_GS/MapServer/24/query",
+        "SC",
+        _norm_sc_horry_vacant,
+        where="(MarketImprv IS NULL OR MarketImprv=0) AND MarketLand>0 AND Acreage>=1 AND Acreage<=2500",
+        shard=True,
+        objectid_max=300_000,
+        page_size=1000,
+    ),
+    _src(
+        "sc_berkeley_vacant",
+        "Berkeley County SC Vacant Land (1ac+)",
+        "https://gis.berkeleycountysc.gov/arcgis/rest/services/custom/Addr_muni/MapServer/1/query",
+        "SC",
+        _norm_sc_berkeley_vacant,
+        where="(BuildingMarket IS NULL OR BuildingMarket=0) AND LandMarket>0 AND TotalAcres>=1 AND TotalAcres<=2500",
+        shard=True,
+        objectid_max=250_000,
+        page_size=1000,
+    ),
+    _src(
+        "la_brla_parcels",
+        "East Baton Rouge LA Parcels (1ac+)",
+        "https://maps.brla.gov/gis/rest/services/Cadastral/Tax_Parcel/MapServer/0/query",
+        "LA",
+        _norm_la_brla_parcels,
+        where="1=1",
+        shard=True,
+        objectid_max=250_000,
+        page_size=1000,
+    ),
+    _src(
+        "la_orleans_parcels",
+        "Orleans Parish LA Parcels (1ac+)",
+        "https://gis.nola.gov/arcgis/rest/services/apps/property3/MapServer/15/query",
+        "LA",
+        _norm_la_orleans_parcels,
+        where="1=1",
+        shard=True,
+        objectid_max=200_000,
         page_size=1000,
     ),
 ]

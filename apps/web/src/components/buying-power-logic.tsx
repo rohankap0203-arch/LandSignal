@@ -22,12 +22,18 @@ type Props = {
   futureToday?: number | null;
   totalBackToday?: number | null;
   totalBackNominal?: number | null;
+  /** When false / missing with a teaser ask, label as value — not a $100 “purchase”. */
+  purchaseLabel?: string | null;
+  treatAsPurchase?: boolean | null;
   className?: string;
 };
 
 /**
  * On-the-nose inflation explainer: sale price vs purchasing power.
  * Inflation does not lower the sale price — it changes what those dollars buy.
+ *
+ * Caps absurd %-gains when a teaser CAD ask was (incorrectly) treated as purchase.
+ * Prefer mark / value-today when purchase is a non-credible fraction of value.
  */
 export function BuyingPowerLogic({
   variant,
@@ -40,15 +46,26 @@ export function BuyingPowerLogic({
   futureToday,
   totalBackToday,
   totalBackNominal,
+  purchaseLabel,
+  treatAsPurchase,
   className = "",
 }: Props) {
   const [open, setOpen] = useState(years >= 5);
   if (!(years >= 1) || futureNominal == null || futureToday == null) return null;
 
-  const buy =
+  const rawBuy =
     purchaseUsd != null && Number.isFinite(Number(purchaseUsd)) ? Number(purchaseUsd) : null;
   const mark = markUsd != null && Number.isFinite(Number(markUsd)) ? Number(markUsd) : null;
-  const start = buy ?? mark;
+
+  // Guardrail: teaser entry vs mark would mint lottery %-gains (e.g. $100 → mark path).
+  const buyLooksTeaser =
+    rawBuy != null &&
+    mark != null &&
+    mark > 0 &&
+    (rawBuy / mark < 0.15 || rawBuy < 2500);
+  const usePurchase =
+    treatAsPurchase !== false && rawBuy != null && !buyLooksTeaser ? rawBuy : null;
+  const start = usePurchase ?? mark ?? rawBuy;
   if (start == null || !(start > 0)) return null;
 
   const saleFuture = Number(futureNominal);
@@ -65,15 +82,26 @@ export function BuyingPowerLogic({
   const nominalGain = endFuture - start;
   const nominalGainPct = (endFuture / start - 1) * 100;
   const realGain = endToday$ - start;
-  const realGainPct = (endToday$ / start - 1) * 100;
+  let realGainPct = (endToday$ / start - 1) * 100;
+  const GAIN_CAP = 500; // display cap — beyond this the entry was not market-comparable
+  const realCapped = Math.abs(realGainPct) > GAIN_CAP;
+  if (realCapped) {
+    realGainPct = Math.sign(realGainPct) * GAIN_CAP;
+  }
   const beatInflation = realGain >= 0;
   const cpiRisePct = (Math.pow(1 + cpi, years) - 1) * 100;
 
-  const headline = beatInflation
-    ? `Yes — purchasing power is up about ${pct(realGainPct, 0).replace("+", "")}.`
-    : `On paper you may gain dollars, but purchasing power is down about ${pct(Math.abs(realGainPct), 0).replace("+", "")}.`;
+  const headline = realCapped
+    ? beatInflation
+      ? `Yes — purchasing power is up (display capped at ${GAIN_CAP}% — entry not a clean market buy).`
+      : `Purchasing power is down (display capped at ${GAIN_CAP}%).`
+    : beatInflation
+      ? `Yes — purchasing power is up about ${pct(realGainPct, 0).replace("+", "")}.`
+      : `On paper you may gain dollars, but purchasing power is down about ${pct(Math.abs(realGainPct), 0).replace("+", "")}.`;
 
-  const startLabel = buy != null ? "Purchase today" : "Value today";
+  const startLabel =
+    purchaseLabel ||
+    (usePurchase != null ? "Purchase today" : "Value today");
   const endLabel = variant === "hold" ? `Money back · ${years} yr` : `Projected · ${years} yr`;
 
   return (
@@ -146,6 +174,7 @@ export function BuyingPowerLogic({
                 role="cell"
               >
                 {pct(realGainPct)}
+                {realCapped ? <small>capped</small> : null}
               </strong>
             </div>
           </div>
