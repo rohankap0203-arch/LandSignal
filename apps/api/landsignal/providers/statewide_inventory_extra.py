@@ -747,6 +747,9 @@ def _norm_sc_berkeley_vacant(raw: dict) -> dict | None:
 def _norm_la_brla_parcels(raw: dict) -> dict | None:
     """East Baton Rouge tax parcels — unimproved when improvement $ is null/0."""
     props = _props(raw)
+    assess = str(props.get("ASSESSMENT_NUM") or "").strip()
+    if not assess or assess.startswith("000-0000"):
+        return None
     impr = _fnum(props.get("SUM_IMPROVEMENT_VALUE"))
     if impr is not None and impr > 0:
         return None
@@ -761,7 +764,7 @@ def _norm_la_brla_parcels(raw: dict) -> dict | None:
         or _fnum(props.get("SUM_LOT_VALUE"))
         or _fnum(props.get("SUM_FAIR_MARKET_VALUE"))
     )
-    pid = props.get("ASSESSMENT_NUM") or props.get("ID") or props.get("OBJECTID")
+    pid = assess or props.get("ID") or props.get("OBJECTID")
     addr = (props.get("PHYSICAL_ADDRESS") or "").strip()
     return _row(
         source_key="la_brla",
@@ -1150,10 +1153,9 @@ SOURCES: list[ArcgisMarketSource] = [
         "https://maps.brla.gov/gis/rest/services/Cadastral/Tax_Parcel/MapServer/0/query",
         "LA",
         _norm_la_brla_parcels,
-        where="1=1",
-        shard=True,
-        objectid_max=250_000,
-        page_size=1000,
+        # Layer has no usable OBJECTID windows — page by offset; skip placeholder 000-0000 rows in norm.
+        where="ASSESSMENT_NUM NOT LIKE '000-0000%'",
+        page_size=500,
     ),
     _src(
         "la_orleans_parcels",
@@ -1162,8 +1164,6 @@ SOURCES: list[ArcgisMarketSource] = [
         "LA",
         _norm_la_orleans_parcels,
         where="1=1",
-        shard=True,
-        objectid_max=200_000,
-        page_size=1000,
+        page_size=500,
     ),
 ]
