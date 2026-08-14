@@ -702,14 +702,14 @@ def build_market_trajectory(
         },
         {
             "id": "site_hitch",
-            "label": "Site problem",
-            "short": "Site",
+            "label": "Loc. problem",
+            "short": "Loc. problem",
             "plain": (
                 (
                     f"If flood (~{flood:.0f}%), wetlands, or access turns out worse than expected, "
                     f"the value steps down, then climbs more slowly. Past years stay the same."
                     if (flood or 0) >= 15
-                    else "If a site, title, or access problem shows up, the value steps down, "
+                    else "If a location, title, or access problem shows up, the value steps down, "
                     "then climbs more slowly. Past years stay the same."
                 )
             ),
@@ -748,7 +748,7 @@ def build_market_trajectory(
             },
             {
                 "id": "site_hitch",
-                "label": "Site problem",
+                "label": "Loc. problem",
                 "plain": "A flood, wetlands, title, or access surprise hits after you buy.",
                 "math": (
                     f"Step-downs at years 3–4, 12–13, and 28–29: path × (1 − 5% × {site_sev:.2f}). "
@@ -884,7 +884,7 @@ def build_market_trajectory(
     if (flood or 0) >= 20 or (wet or 0) >= 15 or (access_score is not None and access_score < 45):
         summary_bullets.append(
             "Site screens (flood / wetlands / access) already slow this property’s base path — "
-            "use Site problem to test a sharper surprise."
+            "use Loc. problem to test a sharper surprise."
         )
 
     # Card sparkline stays short (last ~10 years)
