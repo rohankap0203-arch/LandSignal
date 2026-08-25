@@ -277,13 +277,17 @@ export default function SearchPage() {
         });
       } catch (e) {
         const raw = e instanceof Error ? e.message : "Search failed";
-        const friendly = /not reachable|could not reach|Internal Server Error/i.test(raw)
-          ? "LandSignal API is not reachable. Start it with `npm run dev:api`, then try Show matches again."
-          : /Failed to fetch|NetworkError|Load failed|timeout|abort/i.test(raw)
-            ? "Search failed to load results. Tap Show matches again — if it keeps failing, refresh the page."
-            : raw.length > 280
-              ? "Search failed. Tap Show matches again — if it keeps failing, try Reset to Any first."
-              : raw;
+        const friendly = /not reachable on port 8000|could not reach the LandSignal API|ECONNREFUSED|fetch failed/i.test(
+          raw,
+        )
+          ? "LandSignal API is not reachable. Open the Cursor web preview on port 3000 with the API on 8000, then try Show matches again."
+          : /Failed to fetch|NetworkError|Load failed/i.test(raw)
+            ? "Search failed to load results (network). Hard-refresh the port-3000 preview, then try Show matches again."
+            : /Internal Server Error/i.test(raw)
+              ? "Search hit a server error. Tap Show matches again — if it keeps failing, click Refresh live inventory first."
+              : raw.length > 280
+                ? "Search failed. Tap Show matches again — if it keeps failing, try Reset to Any first."
+                : raw;
         setError(friendly);
         setStatus(null);
       } finally {
@@ -320,7 +324,7 @@ export default function SearchPage() {
           /* keep SEARCH_META_FALLBACK — absolute localhost API bases fail on phones */
         });
     void refresh();
-    const timer = window.setInterval(refresh, 8000);
+    const timer = window.setInterval(refresh, 20000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);

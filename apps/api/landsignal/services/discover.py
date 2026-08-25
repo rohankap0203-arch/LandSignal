@@ -56,128 +56,23 @@ def _refresh_listing(store: MemoryStore, listing, raw: dict[str, Any]) -> bool:
     return price_moved
 
 
-async def discover_opportunities(
-    store: MemoryStore,
-    settings: Settings | None = None,
-    *,
-    limit: int = 10000,
-    min_acres: float = 0.1,
-    max_acres: float = 50000,
-    states: list[str] | None = None,
-    reset: bool = False,
-    fast: bool = True,
-) -> dict[str, Any]:
-    """Pull real public inventory from all free configured sources, enrich, score."""
-    settings = settings or get_settings()
-    if reset:
-        store.parcels.clear()
-        store.listings.clear()
-        store.enrichments.clear()
-        store.scores.clear()
-
-    blm = BlmLpadProvider()
-    tax = PublicTaxSaleProvider()
-    surplus = PublicSurplusProvider()
-
-    min_per_state = max(500, int(getattr(settings, "discover_min_per_state", 5000) or 5000))
+def _wired_states(states: list[str] | None) -> list[str]:
     if states:
-        wired_states = len({s.upper() for s in states if s})
-    else:
-        from landsignal.providers.public_markets import SOURCES
+        return sorted({s.upper() for s in states if s})
+    from landsignal.providers.public_markets import SOURCES
 
-        wired_states = len(
-            {
-                s.state.upper()
-                for s in SOURCES
-                if "surplus" not in s.source_id and "fairfax" not in s.source_id
-            }
-        )
-    # Budget must fit a large equal pull for every wired state (not just FL).
-    tax_limit = max(limit, min_per_state * max(1, wired_states))
-    tax_limit = min(1_000_000, max(500, tax_limit))
-
-    # Ask each source for a large page — tax/surplus GIS layers have tens of thousands of rows.
-    # Always start county layers at offset 0: a global offset skips brand-new sources that have
-    # fewer rows than already-indexed inventory. Dedup happens below via external_id.
-    blm_res, tax_res, surplus_res = await asyncio.gather(
-        blm.search_listings(
-            {
-                # Deep western BLM haul — helps AK/AZ/CA/CO/ID/MT/NM/NV/OR/UT/WY toward 10k.
-                "limit": min(30000, max(2000, min_per_state * 2)),
-                "min_acres": max(1.0, min_acres),
-                "max_acres": max_acres,
-                "states": states,
-            }
-        ),
-        tax.search_listings(
-            {
-                # Equal large statewide vacant/ag pulls across every wired state.
-                "limit": tax_limit,
-                "min_per_state": min_per_state,
-                "min_acres": min_acres,
-                "offset": 0,
-                "states": states,
-            }
-        ),
-        surplus.search_listings(
-            {
-                "limit": min(2000, max(100, min_per_state // 2)),
-                "states": states,
-            }
-        ),
+    return sorted(
+        {
+            s.state.upper()
+            for s in SOURCES
+            if s.state
+            and "surplus" not in s.source_id
+            and "fairfax" not in s.source_id
+        }
     )
 
-    listings: list[dict] = []
-    source_counts: dict[str, int] = {}
-    errors: list[str] = []
-    state_set = {s.upper() for s in states} if states else None
 
-    for res, label in (
-        (blm_res, "blm_lpad"),
-        (tax_res, "public_tax_sale"),
-        (surplus_res, "public_surplus"),
-    ):
-        if res.error:
-            errors.append(f"{label}: {res.error}")
-        for row in res.data or []:
-            if state_set and (row.get("state") or "").upper() not in state_set:
-                continue
-            acres = row.get("acreage")
-            if acres is not None and (acres < min_acres or acres > max_acres):
-                if row.get("provider_id") == "public_tax_sale" and row.get("asking_price_usd"):
-                    if acres < 0.05:
-                        continue
-                else:
-                    continue
-            # Slim only oversized rings (memory) — never drop real parcel boundaries for small lots.
-            poly = row.get("polygon")
-            if poly and isinstance(poly, list) and poly and isinstance(poly[0], list):
-                ring = poly[0]
-                if len(ring) > 2500:
-                    row = {**row, "polygon": [ring[:: max(1, len(ring) // 800)] + [ring[-1]]]}
-            listings.append(row)
-            pid = row.get("provider_id") or label
-            source_counts[pid] = source_counts.get(pid, 0) + 1
-
-    providers = build_listing_providers(settings)
-    for pid, provider in providers.items():
-        if pid in ("manual", "csv", "blm_lpad", "public_tax_sale", "public_surplus"):
-            continue
-        if provider.status().value == "NOT_CONFIGURED":
-            continue
-        search = await provider.search_listings({"limit": min(200, limit)})
-        if search.ok and search.data:
-            listings.extend(search.data)
-
-    listings.sort(
-        key=lambda r: (
-            0 if r.get("asking_price_usd") is not None else 1,
-            0 if (r.get("acreage") or 0) >= 1 else 1,
-            -(r.get("acreage") or 0),
-        )
-    )
-
-    # Fair nationwide mix: round-robin by state, then by provider inside each state.
+def _diversify(listings: list[dict], limit: int) -> list[dict]:
     by_state_provider: dict[str, dict[str, list[dict]]] = {}
     for row in listings:
         st = (row.get("state") or "??").upper()
@@ -201,6 +96,56 @@ async def discover_opportunities(
                 by_state_provider.pop(st, None)
             if len(diversified) >= limit:
                 break
+    return diversified
+
+
+def _filter_rows(
+    rows: list[dict],
+    *,
+    state_set: set[str] | None,
+    min_acres: float,
+    max_acres: float,
+    label: str,
+    source_counts: dict[str, int],
+) -> list[dict]:
+    out: list[dict] = []
+    for row in rows:
+        if state_set and (row.get("state") or "").upper() not in state_set:
+            continue
+        acres = row.get("acreage")
+        if acres is not None and (acres < min_acres or acres > max_acres):
+            if row.get("provider_id") == "public_tax_sale" and row.get("asking_price_usd"):
+                if acres < 0.05:
+                    continue
+            else:
+                continue
+        poly = row.get("polygon")
+        if poly and isinstance(poly, list) and poly and isinstance(poly[0], list):
+            ring = poly[0]
+            if len(ring) > 2500:
+                row = {**row, "polygon": [ring[:: max(1, len(ring) // 800)] + [ring[-1]]]}
+        out.append(row)
+        pid = row.get("provider_id") or label
+        source_counts[pid] = source_counts.get(pid, 0) + 1
+    return out
+
+
+async def _ingest_and_score(
+    store: MemoryStore,
+    settings: Settings,
+    listings: list[dict],
+    *,
+    limit: int,
+    fast: bool,
+) -> dict[str, Any]:
+    listings.sort(
+        key=lambda r: (
+            0 if r.get("asking_price_usd") is not None else 1,
+            0 if (r.get("acreage") or 0) >= 1 else 1,
+            -(r.get("acreage") or 0),
+        )
+    )
+    diversified = _diversify(listings, limit)
 
     parcel_ids: list[UUID] = []
     to_score: list[UUID] = []
@@ -234,7 +179,6 @@ async def discover_opportunities(
         to_score.append(parcel.id)
         new_parcel_ids.add(parcel.id)
 
-    # Cap concurrency by inventory size — 200k+ parcels + 24 scorers OOMs a 16GB box.
     inv_now = sum(1 for p in store.parcels.values() if not p.is_demo)
     if inv_now >= 200_000:
         score_conc = 6 if fast else 3
@@ -269,7 +213,6 @@ async def discover_opportunities(
                         store, pid, origin="price_update", update_kind="price_increase", settings=settings
                     )
                 else:
-                    # Re-score only — do not treat as a notify-worthy "price update".
                     match_parcel(
                         store, pid, origin="existing_inventory", update_kind="new_data", settings=settings
                     )
@@ -277,7 +220,6 @@ async def discover_opportunities(
             except Exception as exc:  # noqa: BLE001
                 log.warning("discover_analyze_failed", parcel_id=str(pid), error=str(exc))
 
-    # Score in chunks so radar can see inventory while the rest indexes
     for i in range(0, len(to_score), chunk):
         batch = to_score[i : i + chunk]
         await asyncio.gather(*[_score_one(pid) for pid in batch])
@@ -285,7 +227,7 @@ async def discover_opportunities(
             "discover_batch_scored",
             scored=scored,
             total=len(to_score),
-            inventory=inv_now,
+            inventory=sum(1 for p in store.parcels.values() if not p.is_demo),
             concurrency=score_conc,
         )
         if inv_now >= 50_000 and i > 0 and (i // chunk) % 8 == 0:
@@ -300,16 +242,201 @@ async def discover_opportunities(
         "imported": len(set(parcel_ids)),
         "refreshed": refreshed,
         "scored": scored,
+        "parcel_ids": [str(x) for x in list(set(parcel_ids))[:50]],
+    }
+
+
+async def _pull_state_listings(
+    *,
+    states: list[str],
+    limit: int,
+    min_acres: float,
+    max_acres: float,
+    min_per_state: int,
+    include_optional_providers: bool,
+    settings: Settings,
+) -> tuple[list[dict], dict[str, int], list[str]]:
+    blm = BlmLpadProvider()
+    tax = PublicTaxSaleProvider()
+    surplus = PublicSurplusProvider()
+    wired = max(1, len(states))
+    tax_limit = max(limit, min_per_state * wired)
+    tax_limit = min(1_000_000, max(500, tax_limit))
+
+    blm_res, tax_res, surplus_res = await asyncio.gather(
+        blm.search_listings(
+            {
+                "limit": min(30000, max(2000, min_per_state * 2)),
+                "min_acres": max(1.0, min_acres),
+                "max_acres": max_acres,
+                "states": states,
+            }
+        ),
+        tax.search_listings(
+            {
+                "limit": tax_limit,
+                "min_per_state": min_per_state,
+                "min_acres": min_acres,
+                "offset": 0,
+                "states": states,
+            }
+        ),
+        surplus.search_listings(
+            {
+                "limit": min(2000, max(100, min_per_state // 2)),
+                "states": states,
+            }
+        ),
+    )
+
+    listings: list[dict] = []
+    source_counts: dict[str, int] = {}
+    errors: list[str] = []
+    state_set = {s.upper() for s in states}
+
+    for res, label in (
+        (blm_res, "blm_lpad"),
+        (tax_res, "public_tax_sale"),
+        (surplus_res, "public_surplus"),
+    ):
+        if res.error:
+            errors.append(f"{label}: {res.error}")
+        listings.extend(
+            _filter_rows(
+                res.data or [],
+                state_set=state_set,
+                min_acres=min_acres,
+                max_acres=max_acres,
+                label=label,
+                source_counts=source_counts,
+            )
+        )
+
+    if include_optional_providers:
+        providers = build_listing_providers(settings)
+        for pid, provider in providers.items():
+            if pid in ("manual", "csv", "blm_lpad", "public_tax_sale", "public_surplus"):
+                continue
+            if provider.status().value == "NOT_CONFIGURED":
+                continue
+            search = await provider.search_listings({"limit": min(200, limit)})
+            if search.ok and search.data:
+                listings.extend(
+                    _filter_rows(
+                        search.data,
+                        state_set=state_set,
+                        min_acres=min_acres,
+                        max_acres=max_acres,
+                        label=pid,
+                        source_counts=source_counts,
+                    )
+                )
+
+    return listings, source_counts, errors
+
+
+async def discover_opportunities(
+    store: MemoryStore,
+    settings: Settings | None = None,
+    *,
+    limit: int = 10000,
+    min_acres: float = 0.1,
+    max_acres: float = 50000,
+    states: list[str] | None = None,
+    reset: bool = False,
+    fast: bool = True,
+) -> dict[str, Any]:
+    """Pull real public inventory from free sources, enrich, score.
+
+    Nationwide runs are progressive by state so Show Matches / live inventory
+    climb as each state finishes — instead of waiting on every GIS source first.
+    """
+    settings = settings or get_settings()
+    if reset:
+        store.parcels.clear()
+        store.listings.clear()
+        store.enrichments.clear()
+        store.scores.clear()
+
+    min_per_state = max(500, int(getattr(settings, "discover_min_per_state", 5000) or 5000))
+    state_queue = _wired_states(states)
+    per_state_limit = max(min_per_state, (limit + len(state_queue) - 1) // max(1, len(state_queue)))
+    per_state_limit = min(per_state_limit, max(limit, min_per_state))
+
+    source_counts: dict[str, int] = {}
+    errors: list[str] = []
+    imported = 0
+    refreshed = 0
+    scored = 0
+    sample_ids: list[str] = []
+
+    for idx, st in enumerate(state_queue):
+        log.info(
+            "discover_state_start",
+            state=st,
+            index=idx + 1,
+            of=len(state_queue),
+            per_state_limit=per_state_limit,
+            inventory=sum(1 for p in store.parcels.values() if not p.is_demo),
+        )
+        try:
+            listings, counts, state_errors = await _pull_state_listings(
+                states=[st],
+                limit=per_state_limit,
+                min_acres=min_acres,
+                max_acres=max_acres,
+                min_per_state=min_per_state,
+                include_optional_providers=(idx == 0),
+                settings=settings,
+            )
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{st}: {exc}")
+            log.warning("discover_state_failed", state=st, error=str(exc)[:200])
+            continue
+
+        for k, v in counts.items():
+            source_counts[k] = source_counts.get(k, 0) + v
+        errors.extend(state_errors)
+
+        batch = await _ingest_and_score(
+            store, settings, listings, limit=per_state_limit, fast=fast
+        )
+        imported += int(batch.get("imported") or 0)
+        refreshed += int(batch.get("refreshed") or 0)
+        scored += int(batch.get("scored") or 0)
+        sample_ids.extend(batch.get("parcel_ids") or [])
+
+        try:
+            from landsignal.store import persist_store
+
+            persist_store(store)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("discover_state_persist_failed", state=st, error=str(exc)[:200])
+
+        log.info(
+            "discover_state_done",
+            state=st,
+            imported_batch=batch.get("imported"),
+            scored_batch=batch.get("scored"),
+            inventory=sum(1 for p in store.parcels.values() if not p.is_demo),
+        )
+
+    return {
+        "imported": imported,
+        "refreshed": refreshed,
+        "scored": scored,
         "source_counts": source_counts,
         "providers_used": list(source_counts.keys()),
-        "parcel_ids": [str(x) for x in list(set(parcel_ids))[:50]],
+        "parcel_ids": sample_ids[:50],
         "errors": errors,
         "fast": fast,
+        "states_scanned": state_queue,
         "inventory_total": sum(1 for p in store.parcels.values() if not p.is_demo),
         "note": (
-            "Live free public feeds at scale: BLM LPAD + county tax-sale/surplus GIS "
+            "Progressive nationwide index: BLM LPAD + county tax-sale/surplus GIS "
             f"({sum(source_counts.values())} raw rows considered; {refreshed} existing rows refreshed). "
-            "Fast index scores first; open a parcel for full soils/flood enrichment. "
-            "Licensed MLS/Land.com/Crexi/Regrid remain unavailable without API keys."
+            "Parcels appear state-by-state — hit Show matches while the scan continues. "
+            "ATTOM enriches parcel intelligence on analyze; it does not invent for-sale listings. "
+            "Licensed MLS/Land.com/Crexi/Regrid remain unavailable without those API keys."
         ),
     }

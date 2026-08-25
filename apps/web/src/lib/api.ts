@@ -33,9 +33,9 @@ function friendlyApiError(status: number, body: string): string {
     trimmed.startsWith("<html")
   ) {
     if (status === 502 || status === 503 || status === 504) {
-      return "LandSignal API is not reachable. Start it with `npm run dev:api`, then try Show matches again.";
+      return "LandSignal API is not reachable on port 8000. Keep web on port 3000 with the API running, then try Show matches again.";
     }
-    return "Search could not reach the LandSignal API. Start `npm run dev:api`, then try Show matches again.";
+    return `Search failed (API ${status}). Tap Show matches again — if it keeps failing, click Refresh live inventory.`;
   }
   return trimmed.length > 280 ? `API ${status}` : trimmed;
 }
@@ -260,7 +260,7 @@ function toQuery(filters: SearchFilters): string {
 
 export const landsignalApi = {
   radar: (filters: SearchFilters = {}) =>
-    api<RadarRow[]>(`/radar${toQuery({ limit: 120, ...filters })}`),
+    api<RadarRow[]>(`/radar${toQuery({ limit: 60, ...filters })}`),
   searchMeta: () => api<SearchMeta>("/search/meta"),
   providers: () =>
     api<Array<{ id: string; kind: string; name: string; status: string; detail?: string }>>("/providers"),
