@@ -294,31 +294,36 @@ export default function SearchPage() {
   );
 
   useEffect(() => {
-    // Load live catalogs (inventory counts, regions) — keep fallback if this fails
+    // Load + poll live catalogs (inventory counts, regions) so the parcel total stays current.
     let cancelled = false;
-    landsignalApi
-      .searchMeta()
-      .then((live) => {
-        if (cancelled || !live) return;
-        setMeta({
-          ...SEARCH_META_FALLBACK,
-          ...live,
-          states: live.states?.length ? live.states : SEARCH_META_FALLBACK.states,
-          strategies: live.strategies?.length ? live.strategies : SEARCH_META_FALLBACK.strategies,
-          price_presets: live.price_presets?.length
-            ? live.price_presets
-            : SEARCH_META_FALLBACK.price_presets,
-          acre_presets: live.acre_presets?.length
-            ? live.acre_presets
-            : SEARCH_META_FALLBACK.acre_presets,
-          hold_years: live.hold_years?.length ? live.hold_years : SEARCH_META_FALLBACK.hold_years,
-        });
-      })
-      .catch(() => {
-        /* keep SEARCH_META_FALLBACK — absolute localhost API bases fail on phones */
+    const applyMeta = (live: SearchMeta) => {
+      if (cancelled || !live) return;
+      setMeta({
+        ...SEARCH_META_FALLBACK,
+        ...live,
+        states: live.states?.length ? live.states : SEARCH_META_FALLBACK.states,
+        strategies: live.strategies?.length ? live.strategies : SEARCH_META_FALLBACK.strategies,
+        price_presets: live.price_presets?.length
+          ? live.price_presets
+          : SEARCH_META_FALLBACK.price_presets,
+        acre_presets: live.acre_presets?.length
+          ? live.acre_presets
+          : SEARCH_META_FALLBACK.acre_presets,
+        hold_years: live.hold_years?.length ? live.hold_years : SEARCH_META_FALLBACK.hold_years,
       });
+    };
+    const refresh = () =>
+      landsignalApi
+        .searchMeta()
+        .then(applyMeta)
+        .catch(() => {
+          /* keep SEARCH_META_FALLBACK — absolute localhost API bases fail on phones */
+        });
+    void refresh();
+    const timer = window.setInterval(refresh, 8000);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
   }, []);
 
@@ -392,9 +397,16 @@ export default function SearchPage() {
         <div>
           <div className="hero-brand-row">
             <div className="hero-brand-mark">LandSignal</div>
-            <div className="hero-live" title="Live public inventory index">
+            <div
+              className="hero-live"
+              title="Live public GIS / BLM inventory indexed in this session (ATTOM enriches parcel intel — it does not invent for-sale listings)"
+            >
               <span className="hero-live-dot" aria-hidden />
-              <span>Live</span>
+              <span>
+                {meta?.inventory_count != null
+                  ? `Live · ${meta.inventory_count.toLocaleString()} parcels`
+                  : "Live"}
+              </span>
             </div>
           </div>
           <h1>Scout the best land buys in the country</h1>
@@ -656,12 +668,26 @@ export default function SearchPage() {
               </button>
             </div>
           </div>
-          {meta?.inventory_count != null && (
-            <div className="filter-inventory-note">
-              Live inventory: {meta.inventory_count} parcels
-              {inventoryStates.length ? ` across ${inventoryStates.length} states (${inventoryStates.join(", ")})` : ""}
-            </div>
-          )}
+          <div className="filter-inventory-note" aria-live="polite">
+            {meta?.inventory_count != null ? (
+              <>
+                Live inventory:{" "}
+                <strong>{meta.inventory_count.toLocaleString()}</strong> parcels
+                {inventoryStates.length
+                  ? ` across ${inventoryStates.length} states (${inventoryStates.join(", ")})`
+                  : ""}
+                {meta.attom?.configured ? (
+                  <>
+                    {" "}
+                    · ATTOM enrichment{" "}
+                    {(meta.attom.state || (meta.attom.ok ? "AVAILABLE" : "OFF")).toString()}
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <>Connecting to live inventory…</>
+            )}
+          </div>
         </div>
       </section>
 

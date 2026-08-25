@@ -1056,9 +1056,16 @@ select {
 }
 
 .filter-inventory-note {
-  font-size: 0.8125rem;
-  line-height: 1.3;
-  color: rgba(247, 250, 248, 0.7);
+  font-size: 0.875rem;
+  line-height: 1.35;
+  color: rgba(247, 250, 248, 0.82);
+  margin-top: 10px;
+}
+
+.filter-inventory-note strong {
+  color: #e8fff3;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .shell-brand {

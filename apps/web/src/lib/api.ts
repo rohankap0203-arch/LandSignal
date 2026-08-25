@@ -214,7 +214,14 @@ export type SearchMeta = {
   tooltips?: Record<string, { title: string; body: string }>;
   inventory_states?: string[];
   inventory_count?: number;
+  inventory_by_state?: Record<string, number>;
   allows_custom?: string[];
+  attom?: {
+    configured?: boolean;
+    state?: string;
+    ok?: boolean;
+    active_listing_access?: boolean;
+  };
 };
 
 export type SearchFilters = {
@@ -235,6 +242,8 @@ export type SearchFilters = {
   sort?: string;
   q?: string;
   broaden?: boolean;
+  /** Keep list payloads tunnel-friendly; detail pages fetch full parcel intel. */
+  limit?: number;
 };
 
 function toQuery(filters: SearchFilters): string {
@@ -250,7 +259,8 @@ function toQuery(filters: SearchFilters): string {
 }
 
 export const landsignalApi = {
-  radar: (filters: SearchFilters = {}) => api<RadarRow[]>(`/radar${toQuery(filters)}`),
+  radar: (filters: SearchFilters = {}) =>
+    api<RadarRow[]>(`/radar${toQuery({ limit: 120, ...filters })}`),
   searchMeta: () => api<SearchMeta>("/search/meta"),
   providers: () =>
     api<Array<{ id: string; kind: string; name: string; status: string; detail?: string }>>("/providers"),
