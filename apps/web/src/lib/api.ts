@@ -55,7 +55,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     if (e instanceof DOMException && e.name === "AbortError") throw e;
     if (init?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
     throw new Error(
-      "LandSignal API is not reachable. Start it with `npm run dev:api`, then try Show matches again.",
+      "LandSignal API on port 8000 is not responding. Hard-refresh the port-3000 preview, then try Show matches again.",
     );
   }
   if (!res.ok) {

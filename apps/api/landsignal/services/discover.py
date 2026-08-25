@@ -119,11 +119,10 @@ def _filter_rows(
                     continue
             else:
                 continue
-        poly = row.get("polygon")
-        if poly and isinstance(poly, list) and poly and isinstance(poly[0], list):
-            ring = poly[0]
-            if len(ring) > 2500:
-                row = {**row, "polygon": [ring[:: max(1, len(ring) // 800)] + [ring[-1]]]}
+        # Drop polygons during index — they OOM cloud VMs at nationwide scale.
+        # Detail pages / geometry endpoints can rehydrate boundaries later.
+        if row.get("polygon") is not None:
+            row = {**row, "polygon": None}
         out.append(row)
         pid = row.get("provider_id") or label
         source_counts[pid] = source_counts.get(pid, 0) + 1

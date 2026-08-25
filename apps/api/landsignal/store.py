@@ -406,15 +406,25 @@ _PERSIST_PATH = "/tmp/landsignal_inventory.json"
 
 
 def persist_store(store: MemoryStore | None = None) -> None:
-    """Best-effort disk snapshot so API reloads don't wipe live inventory."""
+    """Best-effort disk snapshot so API reloads don't wipe live inventory.
+
+    Polygons are omitted — they dominate memory/disk and are re-fetched on detail.
+    """
     import json
     from pathlib import Path
 
     store = store or _STORE
     if store is None:
         return
+    parcels_out = []
+    for p in store.parcels.values():
+        if p.is_demo:
+            continue
+        row = p.model_dump(mode="json")
+        row["polygon"] = None
+        parcels_out.append(row)
     payload = {
-        "parcels": [p.model_dump(mode="json") for p in store.parcels.values() if not p.is_demo],
+        "parcels": parcels_out,
         "listings": [L.model_dump(mode="json") for L in store.listings.values() if not L.is_demo],
         "scores": {
             str(pid): [s.model_dump(mode="json") for s in scores]
@@ -433,8 +443,28 @@ def load_persisted_store(store: MemoryStore) -> int:
     import json
     from pathlib import Path
 
+    import structlog
+
     path = Path(_PERSIST_PATH)
     if not path.exists():
+        return 0
+    # A polygon-heavy dump can be hundreds of MB and OOM the API on boot — which
+    # surfaces in the UI as "LandSignal API is not reachable".
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return 0
+    if size > 80_000_000:
+        structlog.get_logger().warning(
+            "persist_skip_too_large",
+            path=str(path),
+            bytes=size,
+            note="Delete or slim /tmp/landsignal_inventory.json; starting empty.",
+        )
+        try:
+            path.rename(str(path) + ".oom-bak")
+        except OSError:
+            pass
         return 0
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -443,7 +473,10 @@ def load_persisted_store(store: MemoryStore) -> int:
     n = 0
     for raw in payload.get("parcels") or []:
         try:
+            if isinstance(raw, dict):
+                raw = {**raw, "polygon": None}
             p = ParcelRecord.model_validate(raw)
+            p.polygon = None
             store.parcels[p.id] = p
             n += 1
         except Exception:
