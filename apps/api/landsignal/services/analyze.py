@@ -280,6 +280,22 @@ async def analyze_parcel(
             )
             if attom_res.get("ok"):
                 attom_patch = attom_fields_to_enrichment_patch(attom_res.get("fields") or {})
+                try:
+                    from landsignal.services.property_providers.pipeline import snapshot_attom_enrichment
+
+                    snapshot_attom_enrichment(
+                        parcel_key=str(parcel_id),
+                        fields=attom_res.get("fields") or {},
+                        meta={
+                            "state": attom_res.get("state"),
+                            "data_confidence": attom_res.get("data_confidence"),
+                            "apn": parcel.apn,
+                            "state_code": parcel.state,
+                            "county": parcel.county,
+                        },
+                    )
+                except Exception:
+                    pass
                 # Authoritative acreage from ATTOM lotSize1 when parcel acres missing
                 if (parcel.acreage is None or parcel.acreage <= 0) and attom_patch.get("attom_acreage"):
                     parcel.acreage = float(attom_patch["attom_acreage"])

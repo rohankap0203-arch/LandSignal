@@ -90,3 +90,66 @@ def attom_fields_to_enrichment_patch(fields: dict[str, Any]) -> dict[str, Any]:
     patch["market_status"] = fields.get("marketStatus") or "off_market"
     patch["availability_status"] = fields.get("availabilityStatus") or "OFF-MARKET PROPERTY"
     return patch
+
+
+_ATTOM_SNAPSHOT_PATH = "/tmp/landsignal_attom_enrichment.json"
+
+
+def snapshot_attom_enrichment(
+    *,
+    parcel_key: str,
+    fields: dict[str, Any],
+    meta: dict[str, Any] | None = None,
+) -> None:
+    """Persist ATTOM enrichment for test replay after key removal (local /tmp only)."""
+    import json
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    if not parcel_key or not fields:
+        return
+    path = Path(_ATTOM_SNAPSHOT_PATH)
+    try:
+        data: dict[str, Any] = {}
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+        entries = data.get("by_parcel") if isinstance(data.get("by_parcel"), dict) else {}
+        entries[str(parcel_key)] = {
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+            "fields": fields,
+            "meta": meta or {},
+        }
+        # Cap snapshot size for cloud VMs
+        if len(entries) > 5000:
+            # drop oldest by saved_at
+            ordered = sorted(entries.items(), key=lambda kv: str((kv[1] or {}).get("saved_at") or ""))
+            entries = dict(ordered[-4000:])
+        payload = {
+            "note": (
+                "ATTOM enrichment snapshot for tests — not for-sale inventory. "
+                "Public GIS/BLM remain the Show Matches candidate source."
+            ),
+            "count": len(entries),
+            "by_parcel": entries,
+        }
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("attom_snapshot_failed", error=str(exc)[:160])
+
+
+def load_attom_snapshot(parcel_key: str) -> dict[str, Any] | None:
+    """Load a previously snapshotted ATTOM enrichment (works even if API key is gone)."""
+    import json
+    from pathlib import Path
+
+    path = Path(_ATTOM_SNAPSHOT_PATH)
+    if not path.exists() or not parcel_key:
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        entry = (data.get("by_parcel") or {}).get(str(parcel_key))
+        if isinstance(entry, dict) and entry.get("fields"):
+            return entry
+    except Exception:
+        return None
+    return None

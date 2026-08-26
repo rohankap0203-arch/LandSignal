@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { AcquireRail, type OutreachPlaybook } from "@/components/acquire-rail";
 import { LandLoader } from "@/components/land-loader";
 import { LandViewerModal } from "@/components/land-viewer-modal";
+import { LocationImagesModal } from "@/components/location-images-modal";
 import { CatalystSimulator } from "@/components/catalyst-simulator";
 import { PriceTrajectory } from "@/components/price-trajectory";
 import { ReturnVisual } from "@/components/return-visual";
@@ -94,6 +95,7 @@ export default function ParcelIntelligencePage() {
   const [watchMsg, setWatchMsg] = useState("");
   const [openRating, setOpenRating] = useState<string | null>(null);
   const [landViewerOpen, setLandViewerOpen] = useState(false);
+  const [imagesOpen, setImagesOpen] = useState(false);
   const [moneyMode, setMoneyMode] = useState<MoneyMode>("today");
 
   useEffect(() => {
@@ -333,6 +335,21 @@ export default function ParcelIntelligencePage() {
             height={280}
             onExpand={() => setLandViewerOpen(true)}
           />
+          <div className="flex flex-wrap gap-2 px-4 py-3 border-t border-[var(--line)]">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setImagesOpen(true)}
+            >
+              View images
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setLandViewerOpen(true)}
+            >
+              Open land viewer
+            </button>
           </div>
           <LandViewerModal
             open={landViewerOpen}
@@ -354,6 +371,16 @@ export default function ParcelIntelligencePage() {
             polygon={parcel.polygon as number[][][]}
             parcelId={String(parcel.id || params.id)}
           />
+          <LocationImagesModal
+            open={imagesOpen}
+            onClose={() => setImagesOpen(false)}
+            title={String(listing?.title || parcel.apn || "Parcel")}
+            location={[parcel.county, parcel.state].filter(Boolean).join(", ") || null}
+            latitude={parcel.latitude as number}
+            longitude={parcel.longitude as number}
+            acres={parcel.acres != null ? Number(parcel.acres) : null}
+          />
+          </div>
         </div>
 
         <div className="border-t border-[var(--line)] p-6">

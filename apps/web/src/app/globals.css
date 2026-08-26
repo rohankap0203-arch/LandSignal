@@ -1373,14 +1373,14 @@ select {
 
 .metric-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-top: 12px;
 }
 
-@media (max-width: 720px) {
+@media (min-width: 721px) {
   .metric-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -1389,6 +1389,28 @@ select {
   border-radius: 12px;
   padding: 10px 12px;
   min-width: 0;
+}
+
+.metric-action {
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+
+.metric-action:hover {
+  background: color-mix(in srgb, var(--brand) 12%, var(--bg-soft));
+}
+
+.metric-action:active {
+  transform: scale(0.98);
+}
+
+.metric-action-v {
+  color: var(--brand);
 }
 
 .metric .k {
@@ -8257,4 +8279,75 @@ a.acquire-block:hover {
   .fse-opp-bar > p {
     grid-column: 1 / -1;
   }
+}
+
+/* Location images gallery (View Images) */
+.loc-images-backdrop {
+  z-index: 80;
+}
+.loc-images-modal {
+  width: min(920px, calc(100vw - 24px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  background: var(--bg-elevated);
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+  padding: 14px 14px 12px;
+}
+.loc-images-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.loc-images-stage {
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0b0f0d;
+}
+.loc-images-img {
+  display: block;
+  width: 100%;
+  height: min(58vh, 520px);
+  object-fit: cover;
+}
+.loc-images-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(0, 0, 0, 0.55);
+}
+.loc-images-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+.loc-images-dots {
+  display: flex;
+  gap: 6px;
+}
+.loc-images-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  border: none;
+  background: var(--line);
+  cursor: pointer;
+  padding: 0;
+}
+.loc-images-dot.on {
+  background: var(--brand);
+}
+.loc-images-note {
+  margin: 10px 2px 2px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--muted);
 }

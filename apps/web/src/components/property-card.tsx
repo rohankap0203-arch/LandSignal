@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type MouseEvent, type KeyboardEvent } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
 import { TrajectorySpark } from "@/components/price-trajectory";
+import { LocationImagesModal } from "@/components/location-images-modal";
 import { SignalBadge } from "@/components/signal-badge";
 import type { RadarRow } from "@/lib/api";
 
@@ -52,6 +53,7 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
   const router = useRouter();
   const [intelPending, setIntelPending] = useState(false);
   const [gapHelpOpen, setGapHelpOpen] = useState(false);
+  const [imagesOpen, setImagesOpen] = useState(false);
   const links = Array.isArray(row.links) ? row.links : [];
   const posting =
     links.find((l) => l.kind === "primary" && l.available !== false) ||
@@ -224,7 +226,7 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             <div className="k">Our estimate</div>
             <div className="v">{row.estimated_value_display}</div>
           </div>
-            <div className="metric">
+          <div className="metric">
             <div className="k">Opportunity</div>
             <div
               className="v"
@@ -237,6 +239,18 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             <div className="k">Risk</div>
             <div className="v">{Math.round(row.risk)}</div>
           </div>
+          <button
+            type="button"
+            className="metric metric-action"
+            title="Satellite images of this location"
+            onClick={(e) => {
+              e.stopPropagation();
+              setImagesOpen(true);
+            }}
+          >
+            <div className="k">View images</div>
+            <div className="v metric-action-v">Open</div>
+          </button>
         </div>
 
         <div className="card-chip-line mt-2">
@@ -333,6 +347,16 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           </div>
         </div>
       ) : null}
+
+      <LocationImagesModal
+        open={imagesOpen}
+        onClose={() => setImagesOpen(false)}
+        title={row.property_name}
+        location={row.location}
+        latitude={row.latitude}
+        longitude={row.longitude}
+        acres={row.acres}
+      />
     </article>
   );
 }
