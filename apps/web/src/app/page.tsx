@@ -298,13 +298,17 @@ export default function SearchPage() {
   );
 
   useEffect(() => {
-    // Load + poll live catalogs (inventory counts, regions) so the parcel total stays current.
+    // Stay naturally connected: poll meta hard at first, auto-start discover if empty.
     let cancelled = false;
+    let discoverKicked = false;
+    let tick: number | null = null;
+
     const applyMeta = (live: SearchMeta) => {
       if (cancelled || !live) return;
       setMeta({
         ...SEARCH_META_FALLBACK,
         ...live,
+        inventory_count: live.inventory_count ?? 0,
         states: live.states?.length ? live.states : SEARCH_META_FALLBACK.states,
         strategies: live.strategies?.length ? live.strategies : SEARCH_META_FALLBACK.strategies,
         price_presets: live.price_presets?.length
@@ -315,19 +319,38 @@ export default function SearchPage() {
           : SEARCH_META_FALLBACK.acre_presets,
         hold_years: live.hold_years?.length ? live.hold_years : SEARCH_META_FALLBACK.hold_years,
       });
+      const count = live.inventory_count ?? 0;
+      if (!discoverKicked && count < 50) {
+        discoverKicked = true;
+        void landsignalApi.discover(120000, 0.1, false, undefined, true).catch(() => {
+          discoverKicked = false;
+        });
+      }
     };
+
     const refresh = () =>
       landsignalApi
         .searchMeta()
         .then(applyMeta)
         .catch(() => {
-          /* keep SEARCH_META_FALLBACK — absolute localhost API bases fail on phones */
+          setMeta((prev) => ({
+            ...prev,
+            inventory_count: prev.inventory_count ?? 0,
+          }));
         });
+
     void refresh();
-    const timer = window.setInterval(refresh, 20000);
+    let n = 0;
+    tick = window.setInterval(() => {
+      if (cancelled) return;
+      n += 1;
+      // Fast for ~40s, then every 12s
+      if (n <= 25 || n % 8 === 0) void refresh();
+    }, 1500);
+
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (tick != null) window.clearInterval(tick);
     };
   }, []);
 
@@ -407,9 +430,8 @@ export default function SearchPage() {
             >
               <span className="hero-live-dot" aria-hidden />
               <span>
-                {meta?.inventory_count != null
-                  ? `Live · ${meta.inventory_count.toLocaleString()} parcels`
-                  : "Live"}
+                Live · {(meta?.inventory_count ?? 0).toLocaleString()} parcels
+                {(meta?.inventory_count ?? 0) === 0 ? " · indexing" : ""}
               </span>
             </div>
           </div>
@@ -673,24 +695,24 @@ export default function SearchPage() {
             </div>
           </div>
           <div className="filter-inventory-note" aria-live="polite">
-            {meta?.inventory_count != null ? (
-              <>
-                Live inventory:{" "}
-                <strong>{meta.inventory_count.toLocaleString()}</strong> parcels
-                {inventoryStates.length
-                  ? ` across ${inventoryStates.length} states (${inventoryStates.join(", ")})`
+            <>
+              Live inventory:{" "}
+              <strong>{(meta?.inventory_count ?? 0).toLocaleString()}</strong> parcels
+              {inventoryStates.length
+                ? ` across ${inventoryStates.length} states (${inventoryStates.join(", ")})`
+                : (meta?.inventory_count ?? 0) === 0
+                  ? " · indexing public GIS/BLM…"
                   : ""}
-                {meta.attom?.configured ? (
-                  <>
-                    {" "}
-                    · ATTOM enrichment{" "}
-                    {(meta.attom.state || (meta.attom.ok ? "AVAILABLE" : "OFF")).toString()}
-                  </>
-                ) : null}
-              </>
-            ) : (
-              <>Connecting to live inventory…</>
-            )}
+              {meta?.attom?.configured ? (
+                <>
+                  {" "}
+                  · ATTOM enrichment{" "}
+                  {(meta.attom.state || (meta.attom.ok ? "AVAILABLE" : "OFF")).toString()}
+                </>
+              ) : (
+                <> · ATTOM enrichment ready</>
+              )}
+            </>
           </div>
         </div>
       </section>

@@ -73,6 +73,10 @@ export const SEARCH_META_FALLBACK: SearchMeta = {
     "CUSTOM",
   ],
   hold_years: ["Any", 1, 3, 5, 10, 15, 25, 40, 60, 80, 100],
+  inventory_count: 0,
+  inventory_states: [],
+  inventory_by_state: {},
+  attom: { configured: false, state: "PENDING", ok: false },
   price_presets: [
     { label: "Any", min: null, max: null },
     { label: "Up to $10k", min: null, max: 10000 },
