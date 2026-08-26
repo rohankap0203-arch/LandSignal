@@ -4,7 +4,8 @@
   "start": "bash scripts/dev-servers.sh",
   "ports": [
     { "name": "web", "port": 3000 },
-    { "name": "api", "port": 8000 }
+    { "name": "api", "port": 8000 },
+    { "name": "web-alias", "port": 51866 }
   ],
   "terminals": [
     {
