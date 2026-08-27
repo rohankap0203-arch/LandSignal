@@ -328,7 +328,13 @@ def _sort_rows(rows: list[RadarRow], sort: str | None) -> list[RadarRow]:
 
     # Negated numerics + ascending parcel_id — deterministic, never shuffled on refresh.
     if key == "score_desc":
-        rows.sort(key=lambda r: (-r.opportunity, -(r.fit_score or 0), pid(r)))
+        # Top opportunities: opportunity first, then evidence (confidence), then lower risk,
+        # then deeper discount — so #1 of 100k+ is the best-supported buy, not a thin tie.
+        def score_desc_key(r: RadarRow):
+            disc = r.discount_pct if r.discount_pct is not None else 0.0
+            return (-r.opportunity, -r.confidence, r.risk, disc, -(r.fit_score or 0), pid(r))
+
+        rows.sort(key=score_desc_key)
     elif key == "risk_asc":
         rows.sort(key=lambda r: (r.risk, -(r.fit_score or 0), pid(r)))
     elif key == "confidence_desc":
@@ -505,7 +511,12 @@ async def radar(
             return str(r.parcel_id)
 
         if key == "score_desc":
-            cands.sort(key=lambda r: (-r.opportunity, -r.fit, pid(r)))
+            # Top opportunities integrity: score → confidence → risk → discount → fit → id
+            def score_desc_key(r: _Cand):
+                disc = r.discount_pct if r.discount_pct is not None else 0.0
+                return (-r.opportunity, -r.confidence, r.risk, disc, -r.fit, pid(r))
+
+            cands.sort(key=score_desc_key)
         elif key == "risk_asc":
             cands.sort(key=lambda r: (r.risk, -r.fit, pid(r)))
         elif key == "confidence_desc":

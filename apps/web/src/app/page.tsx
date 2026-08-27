@@ -430,7 +430,13 @@ export default function SearchPage() {
       let cmp = 0;
       switch (key) {
         case "score_desc":
-          cmp = num(b.opportunity) - num(a.opportunity) || num(b.fit_score) - num(a.fit_score);
+          // Align with API: opportunity → confidence → risk → discount → fit → id
+          cmp =
+            num(b.opportunity) - num(a.opportunity) ||
+            num(b.confidence) - num(a.confidence) ||
+            num(a.risk) - num(b.risk) ||
+            num(a.discount_pct ?? 0) - num(b.discount_pct ?? 0) ||
+            num(b.fit_score) - num(a.fit_score);
           break;
         case "risk_asc":
           cmp = num(a.risk) - num(b.risk) || num(b.fit_score) - num(a.fit_score);
