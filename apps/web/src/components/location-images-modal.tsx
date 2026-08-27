@@ -27,6 +27,23 @@ type Props = {
   images?: LocationImage[];
 };
 
+function streetViewEmbedUrl(lat: number, lon: number): string {
+  return `https://www.google.com/maps/embed?origin=mfe&pb=!6m6!1m5!2m2!1d${lat}!2d${lon}!4f0!5f1`;
+}
+
+function streetViewThumb(lat: number, lon: number, acres?: number | null): string {
+  const basePad =
+    acres != null && acres > 0
+      ? Math.max(0.0025, Math.min(0.04, Math.sqrt(acres) * 0.0011))
+      : 0.006;
+  const closePad = basePad * 0.55;
+  return (
+    "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export" +
+    `?bbox=${lon - closePad},${lat - closePad},${lon + closePad},${lat + closePad}` +
+    "&bboxSR=4326&imageSR=4326&size=320x240&format=jpg&f=image"
+  );
+}
+
 /** Client fallback — one clear USGS aerial (not identical Esri zoom clones). */
 export function buildAerialFallback(
   lat: number,
@@ -41,16 +58,11 @@ export function buildAerialFallback(
     { id: "usgs-parcel", label: "Aerial — parcel", mult: 0.85 },
     { id: "usgs-area", label: "Aerial — surrounding land", mult: 2.6 },
   ];
-  const closePad = basePad * 0.55;
-  const streetThumb =
-    "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export" +
-    `?bbox=${lon - closePad},${lat - closePad},${lon + closePad},${lat + closePad}` +
-    "&bboxSR=4326&imageSR=4326&size=320x240&format=jpg&f=image";
   const streetEmbed: LocationImage = {
     id: "google-street-view",
-    label: "Street View — look around",
-    url: `https://www.google.com/maps/embed?origin=mfe&pb=!6m6!1m5!2m2!1d${lat}!2d${lon}!4f0!5f1`,
-    thumb_url: streetThumb,
+    label: "Street View",
+    url: streetViewEmbedUrl(lat, lon),
+    thumb_url: streetViewThumb(lat, lon, acres),
     source: "Google Street View",
     kind: "streetview",
     embed: true,
@@ -65,6 +77,25 @@ export function buildAerialFallback(
         "&bboxSR=4326&imageSR=4326&size=1440,1080&format=jpg&f=image";
       return { id: f.id, label: f.label, url, source: "USGS The National Map", kind: "aerial" };
     }),
+  ];
+}
+
+/** Instant Street View shell so the modal is useful while extras load. */
+function buildInstantStreetView(
+  lat: number,
+  lon: number,
+  acres?: number | null,
+): LocationImage[] {
+  return [
+    {
+      id: "google-street-view",
+      label: "Street View",
+      url: streetViewEmbedUrl(lat, lon),
+      thumb_url: streetViewThumb(lat, lon, acres),
+      source: "Google Street View",
+      kind: "streetview",
+      embed: true,
+    },
   ];
 }
 
@@ -83,9 +114,10 @@ export function LocationImagesModal({
   images,
 }: Props) {
   const [idx, setIdx] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [loadingExtras, setLoadingExtras] = useState(false);
   const [fetched, setFetched] = useState<LocationImage[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [svResetKey, setSvResetKey] = useState(0);
   const thumbStripRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -93,6 +125,8 @@ export function LocationImagesModal({
     setIdx(0);
     setError(null);
     setFetched(null);
+    setSvResetKey(0);
+    setLoadingExtras(false);
 
     let cancelled = false;
     const run = async () => {
@@ -100,46 +134,52 @@ export function LocationImagesModal({
         setFetched(images);
         return;
       }
+
+      const hasCoords =
+        latitude != null &&
+        longitude != null &&
+        Number.isFinite(latitude) &&
+        Number.isFinite(longitude);
+
+      // Show Street View immediately — don't wait on Wikimedia/KartaView round-trips.
+      if (hasCoords) {
+        setFetched(buildInstantStreetView(latitude!, longitude!, acres));
+      }
+
       if (!parcelId) {
-        if (
-          latitude != null &&
-          longitude != null &&
-          Number.isFinite(latitude) &&
-          Number.isFinite(longitude)
-        ) {
-          setFetched(buildAerialFallback(latitude, longitude, acres));
+        if (hasCoords) {
+          setFetched(buildAerialFallback(latitude!, longitude!, acres));
         }
         return;
       }
-      setLoading(true);
+
+      setLoadingExtras(true);
       try {
         const payload = await landsignalApi.locationImages(parcelId);
         if (cancelled) return;
-        setFetched(
-          (payload.images || []).map((img) => ({
-            id: img.id,
-            label: img.label,
-            url: img.url,
-            thumb_url: img.thumb_url,
-            source: img.attribution || img.source,
-            kind: img.kind,
-            attribution: img.attribution,
-            embed: Boolean((img as { embed?: boolean }).embed) || img.kind === "streetview",
-          })),
-        );
+        const next = (payload.images || []).map((img) => ({
+          id: img.id,
+          label: img.label,
+          url: img.url,
+          thumb_url: img.thumb_url,
+          source: img.attribution || img.source,
+          kind: img.kind,
+          attribution: img.attribution,
+          embed: Boolean((img as { embed?: boolean }).embed) || img.kind === "streetview",
+        }));
+        if (next.length) {
+          setFetched(next);
+        } else if (hasCoords) {
+          setFetched(buildAerialFallback(latitude!, longitude!, acres));
+        }
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : "Could not load images");
-        if (
-          latitude != null &&
-          longitude != null &&
-          Number.isFinite(latitude) &&
-          Number.isFinite(longitude)
-        ) {
-          setFetched(buildAerialFallback(latitude, longitude, acres));
+        if (hasCoords) {
+          setFetched(buildAerialFallback(latitude!, longitude!, acres));
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoadingExtras(false);
       }
     };
     void run();
@@ -177,6 +217,11 @@ export function LocationImagesModal({
 
   const current = gallery[idx];
   const isEmbed = Boolean(current?.embed || current?.kind === "streetview");
+  const showReset = isEmbed;
+
+  const resetStreetView = () => {
+    setSvResetKey((k) => k + 1);
+  };
 
   return createPortal(
     <div className="help-modal-backdrop loc-images-backdrop" role="presentation" onClick={onClose}>
@@ -192,9 +237,10 @@ export function LocationImagesModal({
             <div className="display text-lg font-semibold leading-snug">{title}</div>
             <div className="loc-images-head-meta">
               {location ? <span className="loc-images-head-location">{location}</span> : null}
-              {!loading && gallery.length > 0 ? (
+              {gallery.length > 0 ? (
                 <span className="loc-images-head-count">
                   {idx + 1} / {gallery.length}
+                  {loadingExtras ? " · …" : ""}
                 </span>
               ) : null}
             </div>
@@ -204,7 +250,7 @@ export function LocationImagesModal({
           </button>
         </div>
 
-        {loading ? (
+        {!current && loadingExtras ? (
           <div className="loc-images-loading" role="status" aria-live="polite">
             <div className="images-scout" aria-hidden>
               <div className="images-scout-stage">
@@ -232,24 +278,39 @@ export function LocationImagesModal({
           </div>
         ) : current ? (
           <>
-            <div className="loc-images-stage">
+            <div className={`loc-images-stage ${isEmbed ? "is-embed" : ""}`}>
               {isEmbed ? (
                 <iframe
-                  key={current.id}
+                  key={`${current.id}-${svResetKey}`}
                   className="loc-images-embed"
                   src={current.url}
-                  title={current.label}
+                  title={current.label || "Street View"}
                   allow="accelerometer; gyroscope; fullscreen; geolocation"
-                  loading="lazy"
+                  loading="eager"
                   referrerPolicy="no-referrer-when-downgrade"
                 />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={current.url} alt={current.label} className="loc-images-img" />
               )}
-              <div className="loc-images-caption">
-                <span>{current.label}</span>
-              </div>
+              {showReset ? (
+                <button
+                  type="button"
+                  className="loc-images-reset"
+                  title="Reset Street View to start"
+                  aria-label="Reset Street View to starting point"
+                  onClick={resetStreetView}
+                >
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+                    <path
+                      fill="currentColor"
+                      d="M12 5V2L8 6l4 4V7c3.31 0 6 2.69 6 6a6 6 0 0 1-9.33 4.98l-1.32 1.48A8 8 0 0 0 20 13c0-4.42-3.58-8-8-8zm-6.93 5.18A7.95 7.95 0 0 0 4 13c0 1.85.63 3.55 1.69 4.9l1.42-1.42A5.96 5.96 0 0 1 6 13c0-.9.2-1.75.55-2.51l-1.48-1.31z"
+                    />
+                  </svg>
+                </button>
+              ) : null}
+              {/* Covers Google embed footer (keyboard shortcuts / terms / report). */}
+              {isEmbed ? <div className="loc-images-embed-mask" aria-hidden /> : null}
             </div>
 
             {gallery.length > 1 ? (

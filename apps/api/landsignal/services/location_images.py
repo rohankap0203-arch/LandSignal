@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -34,7 +35,7 @@ _SKIP_LABEL = re.compile(
 )
 
 
-def _http_json(url: str, timeout: float = 12.0) -> dict[str, Any] | None:
+def _http_json(url: str, timeout: float = 6.0) -> dict[str, Any] | None:
     try:
         req = Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
         with urlopen(req, timeout=timeout) as resp:
@@ -165,7 +166,7 @@ def _kartaview_street(lat: float, lon: float, *, limit: int = 6) -> list[dict[st
     for radius in (900, 2500, 6000):
         data = _http_json(
             f"https://api.openstreetcam.org/2.0/photo/?lat={lat}&lng={lon}&radius={radius}",
-            timeout=14.0,
+            timeout=5.0,
         )
         rows = ((data or {}).get("result") or {}).get("data") or []
         if rows:
@@ -387,9 +388,14 @@ def build_location_images(
     lat_f = float(lat)
     lon_f = float(lon)
 
-    street = _kartaview_street(lat_f, lon_f, limit=6)
-    ground = _wikimedia_ground(lat_f, lon_f, limit=4)
-    wiki_places = _wikipedia_nearby(lat_f, lon_f, limit=3)
+    # Parallelize external photo lookups — sequential calls were making View Images feel stuck.
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        fut_street = pool.submit(_kartaview_street, lat_f, lon_f, limit=6)
+        fut_ground = pool.submit(_wikimedia_ground, lat_f, lon_f, limit=4)
+        fut_wiki = pool.submit(_wikipedia_nearby, lat_f, lon_f, limit=3)
+        street = fut_street.result()
+        ground = fut_ground.result()
+        wiki_places = fut_wiki.result()
 
     images: list[dict[str, Any]] = []
     images.append(_street_view_embed(lat_f, lon_f, acres))

@@ -8426,9 +8426,13 @@ a.acquire-block:hover {
   text-align: right;
 }
 .loc-images-stage {
+  position: relative;
   border-radius: 12px;
   overflow: hidden;
   background: #0b0f0d;
+}
+.loc-images-stage.is-embed {
+  /* Clip Google's embedded footer chrome (terms / shortcuts / report). */
 }
 .loc-images-img,
 .loc-images-embed {
@@ -8440,14 +8444,45 @@ a.acquire-block:hover {
 .loc-images-img {
   object-fit: cover;
 }
-.loc-images-caption {
-  display: flex;
-  justify-content: flex-start;
-  gap: 10px;
-  padding: 8px 10px;
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.88);
-  background: rgba(0, 0, 0, 0.55);
+.loc-images-embed {
+  /* Taller than the visible stage so Google's footer is pushed under the mask. */
+  height: calc(min(52vh, 480px) + 56px);
+  margin-bottom: -56px;
+}
+.loc-images-embed-mask {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 52px;
+  background: linear-gradient(to top, #0b0f0d 35%, rgba(11, 15, 13, 0.85) 70%, transparent);
+  pointer-events: none;
+  z-index: 2;
+}
+.loc-images-reset {
+  position: absolute;
+  top: 52px;
+  right: 10px;
+  z-index: 3;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(12, 18, 15, 0.72);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+.loc-images-reset:hover {
+  background: rgba(20, 32, 26, 0.9);
+}
+.loc-images-reset:active {
+  transform: scale(0.96);
 }
 .loc-images-controls {
   margin-top: 10px;
