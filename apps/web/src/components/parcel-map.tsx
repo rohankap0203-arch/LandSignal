@@ -31,6 +31,8 @@ type Props = {
   layoutKey?: string | number;
   /** Opens the full-screen land viewer from the caption row */
   onExpand?: () => void;
+  /** Opens the location images gallery from the satellite scene */
+  onViewImages?: () => void;
 };
 
 export function ParcelMap({
@@ -44,6 +46,7 @@ export function ParcelMap({
   scrollWheelZoom = false,
   layoutKey = 0,
   onExpand,
+  onViewImages,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
@@ -175,6 +178,37 @@ export function ParcelMap({
           title="Full screen land view"
         >
           <FullscreenIcon />
+        </button>
+      ) : null}
+      {onViewImages && !compact ? (
+        <button
+          type="button"
+          className="parcel-map-view-images"
+          onClick={onViewImages}
+          aria-label="View images"
+          title="Street View + nearby photos"
+        >
+          <span className="parcel-map-view-images-art" aria-hidden>
+            <svg viewBox="0 0 120 72" preserveAspectRatio="xMidYMid slice">
+              <defs>
+                <linearGradient id="pmViSky" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#1a3d32" />
+                  <stop offset="55%" stopColor="#245844" />
+                  <stop offset="100%" stopColor="#2f6b52" />
+                </linearGradient>
+              </defs>
+              <rect width="120" height="72" fill="url(#pmViSky)" />
+              <circle className="metric-images-art-sun" cx="92" cy="20" r="10" />
+              <path
+                className="metric-images-art-land-far"
+                d="M0 40 C22 34 36 46 54 40 C72 34 90 44 120 36 L120 72 L0 72 Z"
+              />
+              <path
+                className="metric-images-art-land"
+                d="M0 50 C20 44 38 56 58 50 C78 44 98 54 120 48 L120 72 L0 72 Z"
+              />
+            </svg>
+          </span>
         </button>
       ) : null}
     </div>

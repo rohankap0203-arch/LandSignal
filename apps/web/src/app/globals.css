@@ -6698,6 +6698,52 @@ a.acquire-block:hover {
   transform: scale(0.96);
 }
 
+.parcel-map-view-images {
+  position: absolute;
+  bottom: 0.65rem;
+  right: 0.65rem;
+  z-index: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.05rem;
+  height: 2.05rem;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: #1a4a2e;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.parcel-map-view-images:hover {
+  transform: translateY(-1px) scale(1.04);
+  border-color: rgba(143, 208, 176, 0.55);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.34);
+}
+
+.parcel-map-view-images:active {
+  transform: scale(0.96);
+}
+
+.parcel-map-view-images-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.parcel-map-view-images-art svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .land-viewer-map {
   width: 100%;
   height: 100%;
