@@ -3393,9 +3393,35 @@ a.btn-intel:hover {
   border: 1px solid var(--bp-line);
   background: var(--bp-bg);
   color: var(--bp-ink);
-  padding: 0.7rem 0.85rem 0.8rem;
+  padding: 0;
   min-width: 0;
   overflow: visible;
+}
+
+.buy-power-hit {
+  display: block;
+  width: 100%;
+  padding: 0.7rem 0.85rem 0.8rem;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  min-width: 0;
+}
+
+.buy-power.is-open .buy-power-hit {
+  padding-bottom: 0.35rem;
+}
+
+.buy-power-hit:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--bp-pos) 55%, transparent);
+  outline-offset: -2px;
+  border-radius: 14px;
 }
 
 .buy-power-toggle {
@@ -3407,9 +3433,9 @@ a.btn-intel:hover {
   background: transparent;
   border: 0;
   padding: 0;
-  cursor: pointer;
   color: var(--bp-ink);
   min-width: 0;
+  pointer-events: none;
 }
 
 .buy-power-k {
@@ -3452,6 +3478,14 @@ a.btn-intel:hover {
   color: var(--bp-muted);
 }
 
+.buy-power-body {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0;
+  padding: 0 0.85rem 0.8rem;
+  min-width: 0;
+}
+
 .buy-power-teaser,
 .buy-power-head {
   margin: 0.4rem 0 0;
@@ -3459,13 +3493,7 @@ a.btn-intel:hover {
   font-weight: 650;
   line-height: 1.4;
   color: var(--bp-ink);
-}
-
-.buy-power-body {
-  display: grid;
-  gap: 0.7rem;
-  margin-top: 0.45rem;
-  min-width: 0;
+  pointer-events: none;
 }
 
 .buy-power-table {
@@ -6664,27 +6692,34 @@ a.acquire-block:hover {
   display: none !important;
 }
 
-.parcel-map-expand {
+.parcel-map-expand,
+.parcel-map-view-images {
   position: absolute;
-  top: 0.65rem;
   right: 0.65rem;
   z-index: 500;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   width: 2.05rem;
   height: 2.05rem;
+  padding: 0;
   border-radius: 11px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(12, 22, 18, 0.72);
-  color: #f4f1e8;
   cursor: pointer;
-  backdrop-filter: blur(8px);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
   transition:
     transform 160ms ease,
     background 160ms ease,
-    border-color 160ms ease;
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.parcel-map-expand {
+  top: 0.65rem;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  background: rgba(12, 22, 18, 0.72);
+  color: #f4f1e8;
+  backdrop-filter: blur(8px);
 }
 
 .parcel-map-expand:hover {
@@ -6699,26 +6734,10 @@ a.acquire-block:hover {
 }
 
 .parcel-map-view-images {
-  position: absolute;
   bottom: 0.65rem;
-  right: 0.65rem;
-  z-index: 500;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.05rem;
-  height: 2.05rem;
-  padding: 0;
   overflow: hidden;
-  border-radius: 11px;
   border: 1.5px solid #fff;
   background: #1a4a2e;
-  cursor: pointer;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
-  transition:
-    transform 160ms ease,
-    border-color 160ms ease,
-    box-shadow 160ms ease;
 }
 
 .parcel-map-view-images:hover {
@@ -6961,18 +6980,20 @@ a.acquire-block:hover {
     font-size: 0 !important;
   }
 
-  .parcel-map-expand {
+  .parcel-map-expand,
+  .parcel-map-view-images {
+    box-sizing: border-box;
     width: 1.9rem;
     height: 1.9rem;
-    top: 0.5rem;
     right: 0.5rem;
   }
 
+  .parcel-map-expand {
+    top: 0.5rem;
+  }
+
   .parcel-map-view-images {
-    width: 1.9rem;
-    height: 1.9rem;
     bottom: 0.5rem;
-    right: 0.5rem;
   }
 }
 

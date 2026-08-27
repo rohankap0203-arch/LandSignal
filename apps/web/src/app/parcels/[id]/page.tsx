@@ -241,7 +241,7 @@ export default function ParcelIntelligencePage() {
                 <div className="min-w-0">
                   <div className="font-semibold text-sm">Learn this land</div>
                     <p className="next-process-note">
-                      Skim value, return, why this land, score parts, land checks.
+                      Skim value, return, future scenarios, why this land, score parts, land checks.
                     </p>
                   <button
                     type="button"
