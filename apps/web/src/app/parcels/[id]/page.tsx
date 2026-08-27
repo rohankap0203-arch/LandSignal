@@ -12,6 +12,7 @@ import { CatalystSimulator } from "@/components/catalyst-simulator";
 import { PriceTrajectory } from "@/components/price-trajectory";
 import { ReturnVisual } from "@/components/return-visual";
 import { ScoreBar } from "@/components/score-bar";
+import { OpportunityRecipe, ScoutInsightPanel } from "@/components/score-story";
 import { SignalBadge } from "@/components/signal-badge";
 import { SignalCockpit } from "@/components/signal-cockpit";
 import { landsignalApi, type ActionLink } from "@/lib/api";
@@ -93,7 +94,6 @@ export default function ParcelIntelligencePage() {
   const [error, setError] = useState<string | null>(null);
   const [watched, setWatched] = useState(false);
   const [watchMsg, setWatchMsg] = useState("");
-  const [openRating, setOpenRating] = useState<string | null>(null);
   const [landViewerOpen, setLandViewerOpen] = useState(false);
   const [imagesOpen, setImagesOpen] = useState(false);
   const [moneyMode, setMoneyMode] = useState<MoneyMode>("today");
@@ -538,65 +538,27 @@ export default function ParcelIntelligencePage() {
       />
 
       <section id="sec-why" className="insight-pair scroll-mt-20">
-        <InsightList
+        <ScoutInsightPanel
+          tone="edge"
           eyebrow="Scout edge"
           title="What makes this one worth opening"
+          blurb="The specific buys we spotted on this file — tap a beat for the full read."
           items={whyOpp}
         />
-        <InsightList
+        <ScoutInsightPanel
+          tone="board"
           eyebrow="Still on the board"
           title="Why it hasn’t been scooped yet"
+          blurb="Friction that keeps casual buyers away — useful if you can work through it."
           items={whyStill}
         />
       </section>
 
-      <section id="sec-score" className="panel p-5 scroll-mt-20">
-        <h2 className="display text-xl font-semibold">What makes up the opportunity score</h2>
-        <p className="mt-0.5 text-sm text-[var(--muted)]">{identity}</p>
-        <div className="mt-3 grid gap-2 md:grid-cols-2">
-          {ratings.map((r) => {
-            const scoreN = Number(r.score || 0);
-            const key = String(r.key);
-            const open = openRating === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                className={`rounded-xl bg-[var(--bg-soft)] p-3 text-left transition hover:ring-1 hover:ring-[var(--brand-soft)] ${open ? "ring-1 ring-[var(--brand-soft)]" : ""}`}
-                onClick={() => setOpenRating(open ? null : key)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-semibold text-sm">{String(r.label)}</div>
-                  <div className="text-sm font-semibold whitespace-nowrap">
-                    {String(r.score_display || `${scoreN.toFixed(0)}/100`)}
-                  </div>
-                </div>
-                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${Math.max(4, Math.min(100, scoreN))}%`,
-                      background: `hsl(${scoreN * 1.2} 65% 42%)`,
-                    }}
-                  />
-                </div>
-                <p className="mt-1.5 text-xs leading-snug text-[var(--muted)]">
-                  {open
-                    ? String(r.why_this_number || r.plain_english || r.simple || "")
-                    : firstSentence(r.why_this_number || r.plain_english || r.simple || "", 110)}
-                </p>
-                {open && (
-                  <ul className="mt-1.5 space-y-0.5 text-xs text-[var(--muted)]">
-                    {((r.drivers as string[]) || (r.evidence as string[]) || []).slice(0, 3).map((e) => (
-                      <li key={e}>• {e}</li>
-                    ))}
-                  </ul>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </section>
+      <OpportunityRecipe
+        identity={identity}
+        opportunity={Number(score?.opportunity || 0)}
+        ratings={ratings}
+      />
 
       <section id="sec-land" className="scroll-mt-20">
         <div className="mb-2">
@@ -723,55 +685,3 @@ function PriceStat({ label, value, kind }: { label: string; value: string; kind?
   );
 }
 
-function InsightList({
-  title,
-  items,
-  eyebrow,
-}: {
-  title: string;
-  items: AnyRec[];
-  eyebrow?: string;
-}) {
-  const [open, setOpen] = useState<number>(-1);
-  const rows = (items || []).filter((item) => {
-    const headline = String(item?.headline || item || "").trim();
-    return Boolean(headline);
-  });
-  return (
-    <div className="panel insight-interactive">
-      <div className="insight-interactive-inner">
-        {eyebrow ? (
-          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">{eyebrow}</div>
-        ) : null}
-        <h2 className="display text-lg font-semibold leading-snug">{title}</h2>
-        <div className="insight-list">
-          {rows.map((item, i) => {
-            const active = open === i;
-            const detail = String(item.detail || "").trim();
-            return (
-              <button
-                key={`${String(item.headline || item)}-${i}`}
-                type="button"
-                className={`insight-item${active ? " is-open" : ""}`}
-                onClick={() => setOpen(active ? -1 : i)}
-              >
-                <div className="insight-item-head">
-                  <div className="font-semibold text-sm leading-snug">{String(item.headline || item)}</div>
-                  <span className="insight-item-toggle" aria-hidden>
-                    {active ? "−" : "+"}
-                  </span>
-                </div>
-                {active && detail ? (
-                  <p className="insight-item-detail">{detail}</p>
-                ) : null}
-              </button>
-            );
-          })}
-          {!rows.length ? (
-            <p className="text-sm text-[var(--muted)]">No parcel-specific narrative yet.</p>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
