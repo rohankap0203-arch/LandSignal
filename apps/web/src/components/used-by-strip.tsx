@@ -2,10 +2,10 @@ const LOGOS = [
   {
     name: "Land.com",
     href: "https://www.land.com",
-    src: "/brands/land-com.png",
-    // Exact Land.com network star mark (logo.dev / brand icon)
-    width: 160,
-    height: 160,
+    src: "/brands/land-com-lockup.svg",
+    // Exact Land.com star mark + brand wordmark lockup
+    width: 420,
+    height: 96,
   },
   {
     name: "Zillow",
