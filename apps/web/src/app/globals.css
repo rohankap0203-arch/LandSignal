@@ -8464,6 +8464,8 @@ a.acquire-block:hover {
   padding: 0 2px;
   font-size: 0.82rem;
   line-height: 1.45;
+  /* Reserve 2 lines so the modal height stays stable for 1-line captions. */
+  min-height: calc(0.82rem * 1.45 * 2);
   color: var(--muted);
   white-space: normal;
   overflow: visible;
