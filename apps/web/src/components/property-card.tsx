@@ -249,23 +249,28 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
               setImagesOpen(true);
             }}
           >
-            <div className="k metric-images-k">View images</div>
-            <div className="v metric-images-v" aria-hidden>
-              <span className="metric-images-art">
-                <svg viewBox="0 0 64 40" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
-                  <rect className="metric-images-art-bg" width="64" height="40" rx="6" />
-                  <path
-                    className="metric-images-art-land-far"
-                    d="M0 26 C12 22 20 28 30 25 C40 22 50 27 64 23 L64 40 L0 40 Z"
-                  />
-                  <path
-                    className="metric-images-art-land"
-                    d="M0 30 C10 27 18 33 28 30 C40 26 52 32 64 28 L64 40 L0 40 Z"
-                  />
-                  <circle className="metric-images-art-sun" cx="48" cy="12" r="5" />
-                </svg>
-              </span>
-            </div>
+            <span className="metric-images-art" aria-hidden>
+              <svg viewBox="0 0 120 72" preserveAspectRatio="xMidYMid slice">
+                <defs>
+                  <linearGradient id="viSky" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#1a3d32" />
+                    <stop offset="55%" stopColor="#245844" />
+                    <stop offset="100%" stopColor="#2f6b52" />
+                  </linearGradient>
+                </defs>
+                <rect width="120" height="72" fill="url(#viSky)" />
+                <circle className="metric-images-art-sun" cx="92" cy="20" r="10" />
+                <path
+                  className="metric-images-art-land-far"
+                  d="M0 40 C22 34 36 46 54 40 C72 34 90 44 120 36 L120 72 L0 72 Z"
+                />
+                <path
+                  className="metric-images-art-land"
+                  d="M0 50 C20 44 38 56 58 50 C78 44 98 54 120 48 L120 72 L0 72 Z"
+                />
+              </svg>
+            </span>
+            <span className="metric-images-label">View images</span>
           </button>
         </div>
 
