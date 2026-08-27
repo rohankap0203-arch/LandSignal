@@ -284,6 +284,8 @@ export const landsignalApi = {
         kind: string;
         attribution?: string;
         page_url?: string | null;
+        embed?: boolean;
+        heading?: number | null;
       }>;
       count: number;
       attom_photos: boolean;
@@ -293,6 +295,7 @@ export const landsignalApi = {
         google_street_view?: string;
         google_earth?: string;
         openstreetmap?: string;
+        kartaview?: string;
       };
     }>(`/parcels/${encodeURIComponent(id)}/location-images`),
   catalystSimulate: (

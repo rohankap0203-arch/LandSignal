@@ -338,10 +338,24 @@ export default function ParcelIntelligencePage() {
           <div className="flex flex-wrap gap-2 px-4 py-3 border-t border-[var(--line)]">
             <button
               type="button"
-              className="btn btn-secondary"
+              className="btn btn-secondary metric-images-btn"
+              title="Street View + nearby photos"
+              aria-label="View images"
               onClick={() => setImagesOpen(true)}
             >
-              View images
+              <span className="metric-images-film" aria-hidden>
+                <i />
+                <i />
+                <i />
+              </span>
+              <span className="metric-images-lens" aria-hidden>
+                <svg viewBox="0 0 24 24" width="18" height="18">
+                  <path
+                    fill="currentColor"
+                    d="M9 3 7.17 5H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.17L15 3H9zm3 15a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-2.2A2.8 2.8 0 1 0 12 10a2.8 2.8 0 0 0 0 5.8z"
+                  />
+                </svg>
+              </span>
             </button>
             <button
               type="button"

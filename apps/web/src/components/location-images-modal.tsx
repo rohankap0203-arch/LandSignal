@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { landsignalApi } from "@/lib/api";
 
@@ -8,9 +8,11 @@ export type LocationImage = {
   id: string;
   label: string;
   url: string;
+  thumb_url?: string;
   source: string;
   kind?: string;
   attribution?: string;
+  embed?: boolean;
 };
 
 type Props = {
@@ -25,7 +27,7 @@ type Props = {
   images?: LocationImage[];
 };
 
-/** Client fallback — USGS aerial frames (not identical Esri zoom clones). */
+/** Client fallback — one clear USGS aerial (not identical Esri zoom clones). */
 export function buildAerialFallback(
   lat: number,
   lon: number,
@@ -36,18 +38,34 @@ export function buildAerialFallback(
       ? Math.max(0.0025, Math.min(0.04, Math.sqrt(acres) * 0.0011))
       : 0.006;
   const frames: Array<{ id: string; label: string; mult: number }> = [
-    { id: "usgs-close", label: "USGS aerial — close-in", mult: 0.55 },
-    { id: "usgs-parcel", label: "USGS aerial — parcel frame", mult: 1 },
-    { id: "usgs-area", label: "USGS aerial — surrounding land", mult: 2.4 },
+    { id: "usgs-parcel", label: "Aerial — parcel", mult: 0.85 },
+    { id: "usgs-area", label: "Aerial — surrounding land", mult: 2.6 },
   ];
-  return frames.map((f) => {
-    const pad = basePad * f.mult;
-    const url =
-      "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export" +
-      `?bbox=${lon - pad},${lat - pad},${lon + pad},${lat + pad}` +
-      "&bboxSR=4326&imageSR=4326&size=1280,960&format=jpg&f=image";
-    return { id: f.id, label: f.label, url, source: "USGS The National Map", kind: "aerial" };
-  });
+  const closePad = basePad * 0.55;
+  const streetThumb =
+    "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export" +
+    `?bbox=${lon - closePad},${lat - closePad},${lon + closePad},${lat + closePad}` +
+    "&bboxSR=4326&imageSR=4326&size=320x240&format=jpg&f=image";
+  const streetEmbed: LocationImage = {
+    id: "google-street-view",
+    label: "Street View — look around",
+    url: `https://www.google.com/maps/embed?origin=mfe&pb=!6m6!1m5!2m2!1d${lat}!2d${lon}!4f0!5f1`,
+    thumb_url: streetThumb,
+    source: "Google Street View",
+    kind: "streetview",
+    embed: true,
+  };
+  return [
+    streetEmbed,
+    ...frames.map((f) => {
+      const pad = basePad * f.mult;
+      const url =
+        "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export" +
+        `?bbox=${lon - pad},${lat - pad},${lon + pad},${lat + pad}` +
+        "&bboxSR=4326&imageSR=4326&size=1440,1080&format=jpg&f=image";
+      return { id: f.id, label: f.label, url, source: "USGS The National Map", kind: "aerial" };
+    }),
+  ];
 }
 
 /** @deprecated use buildAerialFallback */
@@ -72,9 +90,11 @@ export function LocationImagesModal({
     google_street_view?: string;
     google_earth?: string;
     openstreetmap?: string;
+    kartaview?: string;
   } | null>(null);
   const [fetched, setFetched] = useState<LocationImage[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const thumbStripRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -98,7 +118,7 @@ export function LocationImagesModal({
           Number.isFinite(longitude)
         ) {
           setFetched(buildAerialFallback(latitude, longitude, acres));
-          setNote("Showing USGS aerial frames for these coordinates.");
+          setNote("Showing Street View + USGS aerial frames for these coordinates.");
         }
         return;
       }
@@ -111,9 +131,11 @@ export function LocationImagesModal({
             id: img.id,
             label: img.label,
             url: img.url,
+            thumb_url: img.thumb_url,
             source: img.attribution || img.source,
             kind: img.kind,
             attribution: img.attribution,
+            embed: Boolean((img as { embed?: boolean }).embed) || img.kind === "streetview",
           })),
         );
         setMaps(payload.maps || null);
@@ -140,8 +162,8 @@ export function LocationImagesModal({
   }, [open, parcelId, images, latitude, longitude, acres]);
 
   const gallery = useMemo(() => fetched || [], [fetched]);
-  const groundCount = useMemo(
-    () => gallery.filter((g) => g.kind === "ground").length,
+  const streetCount = useMemo(
+    () => gallery.filter((g) => g.kind === "street" || g.kind === "streetview").length,
     [gallery],
   );
 
@@ -161,9 +183,17 @@ export function LocationImagesModal({
     };
   }, [open, onClose, gallery.length]);
 
+  useEffect(() => {
+    const strip = thumbStripRef.current;
+    if (!strip) return;
+    const active = strip.querySelector<HTMLElement>(".loc-images-thumb.on");
+    active?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [idx, gallery.length]);
+
   if (!open || typeof document === "undefined") return null;
 
   const current = gallery[idx];
+  const isEmbed = Boolean(current?.embed || current?.kind === "streetview");
 
   return createPortal(
     <div className="help-modal-backdrop loc-images-backdrop" role="presentation" onClick={onClose}>
@@ -178,9 +208,9 @@ export function LocationImagesModal({
           <div>
             <div className="display text-lg font-semibold leading-snug">{title}</div>
             {location ? <div className="mt-0.5 text-sm text-[var(--muted)]">{location}</div> : null}
-            {groundCount > 0 ? (
+            {streetCount > 0 ? (
               <div className="mt-0.5 text-xs text-[var(--muted)]">
-                {groundCount} nearby ground/place photo{groundCount === 1 ? "" : "s"}
+                {streetCount} street-level view{streetCount === 1 ? "" : "s"}
               </div>
             ) : null}
           </div>
@@ -190,19 +220,96 @@ export function LocationImagesModal({
         </div>
 
         {loading ? (
-          <p className="p-4 text-sm text-[var(--muted)]">Loading aerial + nearby photos…</p>
+          <p className="p-4 text-sm text-[var(--muted)]">Loading street view + nearby photos…</p>
         ) : current ? (
-          <div className="loc-images-stage">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={current.url} alt={current.label} className="loc-images-img" />
-            <div className="loc-images-caption">
-              <span>{current.label}</span>
-              <span className="text-[var(--muted)]">
-                {idx + 1} / {gallery.length} · {current.source}
-                {current.kind === "ground" ? " · photo" : ""}
-              </span>
+          <>
+            <div className="loc-images-stage">
+              {isEmbed ? (
+                <iframe
+                  key={current.id}
+                  className="loc-images-embed"
+                  src={current.url}
+                  title={current.label}
+                  allow="accelerometer; gyroscope; fullscreen; geolocation"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={current.url} alt={current.label} className="loc-images-img" />
+              )}
+              <div className="loc-images-caption">
+                <span>{current.label}</span>
+                <span className="text-[var(--muted)]">
+                  {idx + 1} / {gallery.length} · {current.source}
+                  {current.kind === "street" || current.kind === "streetview"
+                    ? " · street"
+                    : current.kind === "ground"
+                      ? " · photo"
+                      : ""}
+                </span>
+              </div>
             </div>
-          </div>
+
+            {gallery.length > 1 ? (
+              <div className="loc-images-controls">
+                <div className="loc-images-arrows">
+                  <button
+                    type="button"
+                    className="loc-images-arrow"
+                    disabled={idx <= 0}
+                    aria-label="Previous image"
+                    onClick={() => setIdx((i) => Math.max(0, i - 1))}
+                  >
+                    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+                      <path
+                        fill="currentColor"
+                        d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="loc-images-arrow"
+                    disabled={idx >= gallery.length - 1}
+                    aria-label="Next image"
+                    onClick={() => setIdx((i) => Math.min(gallery.length - 1, i + 1))}
+                  >
+                    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+                      <path
+                        fill="currentColor"
+                        d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"
+                      />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="loc-images-thumbs" ref={thumbStripRef} role="listbox" aria-label="Image thumbnails">
+                  {gallery.map((g, i) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      role="option"
+                      aria-selected={i === idx}
+                      aria-label={g.label}
+                      className={`loc-images-thumb ${i === idx ? "on" : ""} ${
+                        g.kind === "streetview" || g.embed ? "is-street" : ""
+                      }`}
+                      onClick={() => setIdx(i)}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={g.thumb_url || g.url} alt="" loading="lazy" />
+                      {g.kind === "streetview" || g.embed ? (
+                        <span className="loc-images-thumb-badge" aria-hidden>
+                          360°
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </>
         ) : (
           <p className="p-4 text-sm text-[var(--muted)]">
             {error ||
@@ -210,50 +317,23 @@ export function LocationImagesModal({
           </p>
         )}
 
-        {gallery.length > 1 ? (
-          <div className="loc-images-nav">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={idx <= 0}
-              onClick={() => setIdx((i) => Math.max(0, i - 1))}
-            >
-              Previous
-            </button>
-            <div className="loc-images-dots" aria-hidden>
-              {gallery.map((g, i) => (
-                <button
-                  key={g.id}
-                  type="button"
-                  className={`loc-images-dot ${i === idx ? "on" : ""}`}
-                  onClick={() => setIdx(i)}
-                  aria-label={g.label}
-                />
-              ))}
-            </div>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={idx >= gallery.length - 1}
-              onClick={() => setIdx((i) => Math.min(gallery.length - 1, i + 1))}
-            >
-              Next
-            </button>
-          </div>
-        ) : null}
-
         {note ? <p className="loc-images-note">{note}</p> : null}
 
         {maps && (maps.google_maps || maps.google_street_view) ? (
           <div className="loc-images-links">
-            {maps.google_maps ? (
-              <a href={maps.google_maps} target="_blank" rel="noreferrer">
-                Google Maps
-              </a>
-            ) : null}
             {maps.google_street_view ? (
               <a href={maps.google_street_view} target="_blank" rel="noreferrer">
                 Street View
+              </a>
+            ) : null}
+            {maps.kartaview ? (
+              <a href={maps.kartaview} target="_blank" rel="noreferrer">
+                KartaView
+              </a>
+            ) : null}
+            {maps.google_maps ? (
+              <a href={maps.google_maps} target="_blank" rel="noreferrer">
+                Google Maps
               </a>
             ) : null}
             {maps.google_earth ? (

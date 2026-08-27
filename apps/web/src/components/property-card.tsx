@@ -241,15 +241,31 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           </div>
           <button
             type="button"
-            className="metric metric-action"
-            title="Real aerial + nearby photos of this location"
+            className="metric metric-action metric-images"
+            title="Street View + nearby photos"
+            aria-label="View images"
             onClick={(e) => {
               e.stopPropagation();
               setImagesOpen(true);
             }}
           >
-            <div className="k">View images</div>
-            <div className="v metric-action-v">Open</div>
+            <div className="k metric-images-k" aria-hidden>
+              <span className="metric-images-film">
+                <i />
+                <i />
+                <i />
+              </span>
+            </div>
+            <div className="v metric-action-v metric-images-v" aria-hidden>
+              <span className="metric-images-lens">
+                <svg viewBox="0 0 24 24" width="18" height="18">
+                  <path
+                    fill="currentColor"
+                    d="M9 3 7.17 5H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.17L15 3H9zm3 15a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-2.2A2.8 2.8 0 1 0 12 10a2.8 2.8 0 0 0 0 5.8z"
+                  />
+                </svg>
+              </span>
+            </div>
           </button>
         </div>
 
