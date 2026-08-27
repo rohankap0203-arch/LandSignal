@@ -51,7 +51,6 @@ function gapHelpTitle(headline: string | null | undefined, discountDisplay: stri
 
 export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
   const router = useRouter();
-  const [intelPending, setIntelPending] = useState(false);
   const [gapHelpOpen, setGapHelpOpen] = useState(false);
   const [imagesOpen, setImagesOpen] = useState(false);
   const links = Array.isArray(row.links) ? row.links : [];
@@ -130,13 +129,12 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
       const t = e.target as HTMLElement | null;
       if (t?.closest("a, button, input, select, textarea, label")) return;
     }
-    setIntelPending(true);
     router.push(href);
   }
 
   return (
     <article
-      className={`panel property-card card-clickable ${intelPending ? "pending" : ""}`}
+      className="panel property-card card-clickable"
       style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
       onClick={openIntel}
       onKeyDown={(e) => {
@@ -320,13 +318,12 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
         <div className="card-actions mt-3">
           <Link
             href={href}
-            className={`btn-intel ${intelPending ? "pending" : ""}`}
+            className="btn-intel"
             onClick={(e) => {
               e.stopPropagation();
-              setIntelPending(true);
             }}
           >
-            {intelPending ? "Opening…" : "Open Intelligence"}
+            Open Intelligence
           </Link>
         </div>
       </div>

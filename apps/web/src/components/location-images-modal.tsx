@@ -314,8 +314,12 @@ export function LocationImagesModal({
                 >
                   <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
                     <path
-                      fill="currentColor"
-                      d="M12 5V2L8 6l4 4V7c3.31 0 6 2.69 6 6a6 6 0 0 1-9.33 4.98l-1.32 1.48A8 8 0 0 0 20 13c0-4.42-3.58-8-8-8zm-6.93 5.18A7.95 7.95 0 0 0 4 13c0 1.85.63 3.55 1.69 4.9l1.42-1.42A5.96 5.96 0 0 1 6 13c0-.9.2-1.75.55-2.51l-1.48-1.31z"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.1"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M9.5 6.5 6 10l3.5 3.5M6 10h7.25a5.25 5.25 0 1 1 0 10.5H11"
                     />
                   </svg>
                 </button>

@@ -235,15 +235,30 @@ export default function SearchPage() {
     [meta],
   );
 
+  const scrollToResultsPastUsedBy = useCallback(() => {
+    const results = document.getElementById("search-results");
+    if (!results) return;
+    const usedBy = document.querySelector(".used-by-strip") as HTMLElement | null;
+    const stickyOffset = 72;
+    // Land results at the top of the viewport so the Used-by logos are fully off-screen.
+    let y = results.getBoundingClientRect().top + window.scrollY - stickyOffset;
+    if (usedBy) {
+      const usedBottom = usedBy.getBoundingClientRect().bottom + window.scrollY;
+      // Ensure we scroll at least past the bottom of the logo strip.
+      y = Math.max(y, usedBottom - stickyOffset + 12);
+    }
+    window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+  }, []);
+
   const runSearch = useCallback(
     async (override?: FormState) => {
       setLoading(true);
       setError(null);
       setHasSearched(true);
       setRows([]);
-      // Smooth-scroll to results as soon as search starts
+      // Smooth-scroll past Used-by logos as soon as search starts
       requestAnimationFrame(() => {
-        document.getElementById("search-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrollToResultsPastUsedBy();
       });
       try {
         const active = override ?? form;
@@ -272,9 +287,9 @@ export default function SearchPage() {
                 ` · ${total.toLocaleString()} live parcels indexed`
             : `No parcels match ${filterLabel}. Widen price/acres/state, or Reset to Any, then Show matches again.`,
         );
-        // Re-align after results paint
+        // Re-align after results paint — keep Used-by logos off-screen
         requestAnimationFrame(() => {
-          document.getElementById("search-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          scrollToResultsPastUsedBy();
         });
       } catch (e) {
         const raw = e instanceof Error ? e.message : "Search failed";
@@ -295,7 +310,7 @@ export default function SearchPage() {
         setLoading(false);
       }
     },
-    [filtersFromForm, form],
+    [filtersFromForm, form, scrollToResultsPastUsedBy],
   );
 
   useEffect(() => {
@@ -748,7 +763,7 @@ export default function SearchPage() {
 
       <UsedByStrip />
 
-      <div id="search-results" className="results-head scroll-mt-24">
+      <div id="search-results" className="results-head scroll-mt-20">
         <div>
           <h2 className="display text-2xl font-semibold">Scouted opportunities</h2>
           {status ? <p className="mt-1 text-[var(--muted)]">{status}</p> : null}
