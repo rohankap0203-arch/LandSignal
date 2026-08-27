@@ -1059,7 +1059,9 @@ SOURCES: list[ArcgisMarketSource] = [
         "https://gistech.countyofkane.org/arcgis/rest/services/KanePINList/MapServer/0/query",
         "IL",
         _norm_il_kane,
-        where="RecordedAcreage>=1 AND RecordedAcreage<=2500",
+        # RecordedAcreage is present on attributes but rejected in WHERE by this MapServer.
+        # Pull broadly and let normalize/filter drop sub-acre rows.
+        where="1=1",
         page_size=1000,
     ),
     _src(
