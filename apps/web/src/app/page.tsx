@@ -239,15 +239,13 @@ export default function SearchPage() {
     const results = document.getElementById("search-results");
     if (!results) return;
     const usedBy = document.querySelector(".used-by-strip") as HTMLElement | null;
-    const stickyOffset = 72;
-    // Land results at the top of the viewport so the Used-by logos are fully off-screen.
-    let y = results.getBoundingClientRect().top + window.scrollY - stickyOffset;
-    if (usedBy) {
-      const usedBottom = usedBy.getBoundingClientRect().bottom + window.scrollY;
-      // Ensure we scroll at least past the bottom of the logo strip.
-      y = Math.max(y, usedBottom - stickyOffset + 12);
-    }
-    window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+    const resultsTop = results.getBoundingClientRect().top + window.scrollY;
+    // Put the results at the top of the viewport so the Used-by logos are fully above
+    // (do not subtract a sticky offset — that was leaving the logo strip on-screen).
+    const pastUsedBy = usedBy
+      ? usedBy.getBoundingClientRect().bottom + window.scrollY + 8
+      : resultsTop;
+    window.scrollTo({ top: Math.max(0, Math.max(resultsTop, pastUsedBy)), behavior: "smooth" });
   }, []);
 
   const runSearch = useCallback(
@@ -312,6 +310,13 @@ export default function SearchPage() {
     },
     [filtersFromForm, form, scrollToResultsPastUsedBy],
   );
+
+  // After matches finish loading, snap past Used-by again (layout can shift).
+  useEffect(() => {
+    if (!hasSearched || loading) return;
+    const t = window.setTimeout(() => scrollToResultsPastUsedBy(), 50);
+    return () => window.clearTimeout(t);
+  }, [hasSearched, loading, scrollToResultsPastUsedBy]);
 
   useEffect(() => {
     // Stay naturally connected: poll meta hard at first, auto-start discover if empty.
