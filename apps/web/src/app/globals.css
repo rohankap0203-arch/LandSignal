@@ -1449,37 +1449,42 @@ select {
   min-height: 1.1rem;
   display: flex;
   align-items: center;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
 }
 .metric-images-film {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  height: 10px;
+  height: 11px;
 }
-.metric-images-film i {
+.metric-images-frame {
   display: block;
-  width: 14px;
-  height: 10px;
+  width: 15px;
+  height: 11px;
   border-radius: 2px;
-  background: linear-gradient(
-    120deg,
-    color-mix(in srgb, var(--brand) 55%, #1a1a1a),
-    color-mix(in srgb, var(--muted) 35%, var(--brand)),
-    color-mix(in srgb, var(--brand) 70%, #fff)
-  );
-  background-size: 200% 100%;
-  animation: metric-images-shimmer 2.4s linear infinite;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 35%, transparent);
-  opacity: 0.85;
+  background:
+    linear-gradient(
+      115deg,
+      color-mix(in srgb, var(--brand) 18%, #1c2420) 0%,
+      color-mix(in srgb, var(--brand) 55%, #7a9a86) 45%,
+      color-mix(in srgb, var(--brand) 30%, #d7e4dc) 100%
+    );
+  background-size: 220% 100%;
+  animation: metric-images-shimmer 2.2s linear infinite;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--brand) 40%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.12);
+  opacity: 0.88;
 }
-.metric-images-film i:nth-child(2) {
-  animation-delay: 0.35s;
+.metric-images-frame:nth-child(2) {
+  animation-delay: 0.28s;
   opacity: 1;
-  transform: scale(1.08);
+  transform: scale(1.1);
 }
-.metric-images-film i:nth-child(3) {
-  animation-delay: 0.7s;
-  opacity: 0.7;
+.metric-images-frame:nth-child(3) {
+  animation-delay: 0.56s;
+  opacity: 0.72;
 }
 .metric-images-v {
   display: flex;
@@ -1490,11 +1495,16 @@ select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
   color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
   animation: metric-images-pulse 2.2s ease-in-out infinite;
 }
 .metric-images:hover .metric-images-lens {
   animation-duration: 1.1s;
+  background: color-mix(in srgb, var(--brand) 20%, transparent);
   transform: scale(1.06);
 }
 .metric-images-btn {
@@ -1505,6 +1515,7 @@ select {
 }
 .metric-images-btn .metric-images-lens {
   color: inherit;
+  background: color-mix(in srgb, currentColor 10%, transparent);
 }
 @keyframes metric-images-shimmer {
   0% {
@@ -1517,12 +1528,12 @@ select {
 @keyframes metric-images-pulse {
   0%,
   100% {
-    opacity: 0.75;
+    opacity: 0.8;
     filter: drop-shadow(0 0 0 transparent);
   }
   50% {
     opacity: 1;
-    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--brand) 45%, transparent));
+    filter: drop-shadow(0 0 7px color-mix(in srgb, var(--brand) 50%, transparent));
   }
 }
 @keyframes metric-images-glow {

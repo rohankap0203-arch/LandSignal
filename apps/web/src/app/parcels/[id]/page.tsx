@@ -344,9 +344,9 @@ export default function ParcelIntelligencePage() {
               onClick={() => setImagesOpen(true)}
             >
               <span className="metric-images-film" aria-hidden>
-                <i />
-                <i />
-                <i />
+                <span className="metric-images-frame" />
+                <span className="metric-images-frame" />
+                <span className="metric-images-frame" />
               </span>
               <span className="metric-images-lens" aria-hidden>
                 <svg viewBox="0 0 24 24" width="18" height="18">

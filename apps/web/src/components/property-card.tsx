@@ -251,9 +251,9 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           >
             <div className="k metric-images-k" aria-hidden>
               <span className="metric-images-film">
-                <i />
-                <i />
-                <i />
+                <span className="metric-images-frame" />
+                <span className="metric-images-frame" />
+                <span className="metric-images-frame" />
               </span>
             </div>
             <div className="v metric-action-v metric-images-v" aria-hidden>
