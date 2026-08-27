@@ -257,6 +257,10 @@ class MemoryStore:
             is_demo=is_demo,
         )
         ask = payload.get("asking_price_usd")
+        from landsignal.services.memory_guard import slim_listing_raw
+
+        # Never stash full GIS attribute dumps — that alone OOMs ~15Gi VMs at 50k+.
+        raw_in = payload.get("raw") if isinstance(payload.get("raw"), dict) else payload
         listing = ListingRecord(
             parcel_id=parcel.id,
             provider_id=payload.get("provider_id") or "manual",
@@ -269,13 +273,14 @@ class MemoryStore:
             title=payload.get("title"),
             description=payload.get("description"),
             source_url=payload.get("source_url"),
-            raw={k: v for k, v in payload.items() if k != "polygon"},
+            raw=slim_listing_raw(raw_in if isinstance(raw_in, dict) else {}),
             is_demo=is_demo,
         )
         self.parcels[parcel.id] = parcel
         self.listings[listing.id] = listing
         self.index_listing(listing)
-        self.dd_items[parcel.id] = default_dd_checklist()
+        # DD checklist is detail-page only — creating it for every discover
+        # ingest multiplies RAM for zero search benefit.
         return parcel, listing
 
     def import_csv(self, text: str) -> list[tuple[ParcelRecord, ListingRecord]]:
@@ -408,14 +413,18 @@ _PERSIST_PATH = "/tmp/landsignal_inventory.json"
 def persist_store(store: MemoryStore | None = None) -> None:
     """Best-effort disk snapshot so API reloads don't wipe live inventory.
 
-    Polygons are omitted — they dominate memory/disk and are re-fetched on detail.
+    Polygons + fat GIS raw blobs are omitted — they dominate memory/disk and
+    previously produced 200MB+ dumps that OOM'd the API on boot.
     """
     import json
     from pathlib import Path
 
+    from landsignal.services.memory_guard import slim_listing_raw, trim_score_lists
+
     store = store or _STORE
     if store is None:
         return
+    trim_score_lists(store, keep=1)
     parcels_out = []
     for p in store.parcels.values():
         if p.is_demo:
@@ -423,20 +432,44 @@ def persist_store(store: MemoryStore | None = None) -> None:
         row = p.model_dump(mode="json")
         row["polygon"] = None
         parcels_out.append(row)
+    listings_out = []
+    for L in store.listings.values():
+        if L.is_demo:
+            continue
+        row = L.model_dump(mode="json")
+        row["raw"] = slim_listing_raw(row.get("raw") if isinstance(row.get("raw"), dict) else {})
+        # Descriptions already on the listing fields — don't also bloat raw.
+        listings_out.append(row)
+    scores_out: dict[str, list] = {}
+    for pid, scores in store.scores.items():
+        if not scores:
+            continue
+        # Persist latest score only, without giant input snapshots.
+        s = scores[-1].model_dump(mode="json")
+        s["input_snapshot"] = {}
+        s["components"] = (s.get("components") or [])[:8]
+        for key in (
+            "explanations",
+            "why_interesting",
+            "why_mispriced",
+            "what_could_kill",
+            "why_still_available",
+            "manual_verification",
+        ):
+            if isinstance(s.get(key), list):
+                s[key] = s[key][:6]
+        scores_out[str(pid)] = [s]
     payload = {
         "parcels": parcels_out,
-        "listings": [L.model_dump(mode="json") for L in store.listings.values() if not L.is_demo],
-        "scores": {
-            str(pid): [s.model_dump(mode="json") for s in scores]
-            for pid, scores in store.scores.items()
-        },
+        "listings": listings_out,
+        "scores": scores_out,
         "investor_profile": store.investor_profile,
         "land_alert_profiles": [p.model_dump(mode="json") for p in store.land_alert_profiles.values()],
         "land_alert_matches": [m.model_dump(mode="json") for m in store.land_alert_matches.values()],
         "alerts": [a.model_dump(mode="json") for a in store.alerts[:500]],
         "alert_rules": [r.model_dump(mode="json") for r in store.alert_rules.values()],
     }
-    Path(_PERSIST_PATH).write_text(json.dumps(payload), encoding="utf-8")
+    Path(_PERSIST_PATH).write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
 
 
 def load_persisted_store(store: MemoryStore) -> int:
@@ -454,12 +487,13 @@ def load_persisted_store(store: MemoryStore) -> int:
         size = path.stat().st_size
     except OSError:
         return 0
-    if size > 80_000_000:
+    # 50MB soft ceiling — larger dumps historically OOM'd boot on 15Gi VMs.
+    if size > 50_000_000:
         structlog.get_logger().warning(
             "persist_skip_too_large",
             path=str(path),
             bytes=size,
-            note="Delete or slim /tmp/landsignal_inventory.json; starting empty.",
+            note="Quarantined fat inventory dump; starting empty so API stays reachable.",
         )
         try:
             path.rename(str(path) + ".oom-bak")
@@ -470,6 +504,8 @@ def load_persisted_store(store: MemoryStore) -> int:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return 0
+    from landsignal.services.memory_guard import slim_listing_raw
+
     n = 0
     for raw in payload.get("parcels") or []:
         try:
@@ -483,10 +519,13 @@ def load_persisted_store(store: MemoryStore) -> int:
             continue
     for raw in payload.get("listings") or []:
         try:
+            if isinstance(raw, dict) and isinstance(raw.get("raw"), dict):
+                raw = {**raw, "raw": slim_listing_raw(raw["raw"])}
             L = ListingRecord.model_validate(raw)
             # $0 bids are missing prices — never treat as free land
             if L.asking_price_usd is not None and L.asking_price_usd <= 0:
                 L.asking_price_usd = None
+            L.raw = slim_listing_raw(L.raw if isinstance(L.raw, dict) else {})
             # Every state: promote nested CAD land values into ask so budget filters work.
             from landsignal.services.assessed_price import backfill_listing_ask_from_assessed
 

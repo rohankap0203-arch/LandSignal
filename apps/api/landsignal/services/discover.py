@@ -24,6 +24,8 @@ def _utcnow() -> datetime:
 
 def _refresh_listing(store: MemoryStore, listing, raw: dict[str, Any]) -> bool:
     """Push live feed fields onto an existing listing. Returns True if price moved."""
+    from landsignal.services.memory_guard import slim_listing_raw
+
     price_moved = False
     new_ask = raw.get("asking_price_usd")
     if new_ask is not None and new_ask != listing.asking_price_usd:
@@ -39,7 +41,8 @@ def _refresh_listing(store: MemoryStore, listing, raw: dict[str, Any]) -> bool:
     if raw.get("description"):
         listing.description = raw["description"]
     listing.last_seen_at = _utcnow()
-    listing.raw = {**(listing.raw or {}), **{k: v for k, v in raw.items() if k != "polygon"}}
+    merged = {**(listing.raw or {}), **{k: v for k, v in raw.items() if k != "polygon"}}
+    listing.raw = slim_listing_raw(merged)
     store.listings[listing.id] = listing
     store.index_listing(listing)
     parcel = store.parcels.get(listing.parcel_id)
@@ -50,8 +53,8 @@ def _refresh_listing(store: MemoryStore, listing, raw: dict[str, Any]) -> bool:
             parcel.longitude = raw["longitude"]
         if raw.get("acreage") is not None:
             parcel.acreage = raw["acreage"]
-        if raw.get("polygon"):
-            parcel.polygon = raw["polygon"]
+        # Never keep polygons on the hot index path.
+        parcel.polygon = None
         store.parcels[parcel.id] = parcel
     return price_moved
 
@@ -137,6 +140,13 @@ async def _ingest_and_score(
     limit: int,
     fast: bool,
 ) -> dict[str, Any]:
+    from landsignal.services.memory_guard import (
+        should_stop_heavy_work,
+        should_throttle,
+        snapshot,
+        trim_score_lists,
+    )
+
     listings.sort(
         key=lambda r: (
             0 if r.get("asking_price_usd") is not None else 1,
@@ -170,8 +180,7 @@ async def _ingest_and_score(
         parcel, listing = store.upsert_manual({**raw, "provider_id": raw.get("provider_id") or "manual"})
         parcel.is_demo = False
         listing.is_demo = False
-        if parcel.polygon:
-            parcel.geometry_confidence = max(parcel.geometry_confidence or 0, 75.0)
+        parcel.polygon = None
         store.parcels[parcel.id] = parcel
         store.listings[listing.id] = listing
         parcel_ids.append(parcel.id)
@@ -179,17 +188,20 @@ async def _ingest_and_score(
         new_parcel_ids.add(parcel.id)
 
     inv_now = sum(1 for p in store.parcels.values() if not p.is_demo)
-    if inv_now >= 200_000:
-        score_conc = 6 if fast else 3
+    # Concurrency collapses under memory pressure — never 24-wide on a 15Gi VM.
+    if should_throttle() or inv_now >= 60_000:
+        score_conc = 4 if fast else 2
+        chunk = 40
+    elif inv_now >= 25_000:
+        score_conc = 8 if fast else 3
         chunk = 80
-    elif inv_now >= 80_000:
+    else:
         score_conc = 12 if fast else 4
         chunk = 120
-    else:
-        score_conc = 24 if fast else 6
-        chunk = 200
     sem = asyncio.Semaphore(score_conc)
     scored = 0
+    stopped_early = False
+    stop_reason = ""
 
     async def _score_one(pid: UUID) -> None:
         nonlocal scored
@@ -220,16 +232,30 @@ async def _ingest_and_score(
                 log.warning("discover_analyze_failed", parcel_id=str(pid), error=str(exc))
 
     for i in range(0, len(to_score), chunk):
+        stop, reason = should_stop_heavy_work()
+        if stop:
+            stopped_early = True
+            stop_reason = reason
+            log.warning(
+                "discover_score_paused_memory",
+                reason=reason,
+                scored=scored,
+                remaining=len(to_score) - i,
+                **snapshot(),
+            )
+            break
         batch = to_score[i : i + chunk]
         await asyncio.gather(*[_score_one(pid) for pid in batch])
+        trim_score_lists(store, keep=1)
         log.info(
             "discover_batch_scored",
             scored=scored,
             total=len(to_score),
             inventory=sum(1 for p in store.parcels.values() if not p.is_demo),
             concurrency=score_conc,
+            **snapshot(),
         )
-        if inv_now >= 50_000 and i > 0 and (i // chunk) % 8 == 0:
+        if inv_now >= 20_000 and i > 0 and (i // chunk) % 6 == 0:
             try:
                 from landsignal.store import persist_store
 
@@ -242,6 +268,8 @@ async def _ingest_and_score(
         "refreshed": refreshed,
         "scored": scored,
         "parcel_ids": [str(x) for x in list(set(parcel_ids))[:50]],
+        "stopped_early": stopped_early,
+        "stop_reason": stop_reason,
     }
 
 
@@ -357,7 +385,7 @@ async def discover_opportunities(
         store.enrichments.clear()
         store.scores.clear()
 
-    min_per_state = max(500, int(getattr(settings, "discover_min_per_state", 5000) or 5000))
+    min_per_state = max(500, int(getattr(settings, "discover_min_per_state", 2500) or 2500))
     state_queue = _wired_states(states)
     per_state_limit = max(min_per_state, (limit + len(state_queue) - 1) // max(1, len(state_queue)))
     per_state_limit = min(per_state_limit, max(limit, min_per_state))
@@ -368,8 +396,19 @@ async def discover_opportunities(
     refreshed = 0
     scored = 0
     sample_ids: list[str] = []
+    stopped_early = False
+    stop_reason = ""
+
+    from landsignal.services.memory_guard import should_stop_heavy_work, snapshot
 
     for idx, st in enumerate(state_queue):
+        stop, reason = should_stop_heavy_work()
+        if stop:
+            stopped_early = True
+            stop_reason = reason
+            errors.append(f"memory_guard: paused before {st} ({reason})")
+            log.warning("discover_paused_memory", state=st, reason=reason, **snapshot())
+            break
         log.info(
             "discover_state_start",
             state=st,
@@ -377,6 +416,7 @@ async def discover_opportunities(
             of=len(state_queue),
             per_state_limit=per_state_limit,
             inventory=sum(1 for p in store.parcels.values() if not p.is_demo),
+            **snapshot(),
         )
         try:
             listings, counts, state_errors = await _pull_state_listings(
@@ -404,6 +444,18 @@ async def discover_opportunities(
         refreshed += int(batch.get("refreshed") or 0)
         scored += int(batch.get("scored") or 0)
         sample_ids.extend(batch.get("parcel_ids") or [])
+        if batch.get("stopped_early"):
+            stopped_early = True
+            stop_reason = str(batch.get("stop_reason") or stop_reason)
+            errors.append(f"memory_guard: paused during {st} scoring ({stop_reason})")
+            # Still persist what we have, then stop the nationwide walk.
+            try:
+                from landsignal.store import persist_store
+
+                persist_store(store)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("discover_state_persist_failed", state=st, error=str(exc)[:200])
+            break
 
         try:
             from landsignal.store import persist_store
@@ -418,6 +470,7 @@ async def discover_opportunities(
             imported_batch=batch.get("imported"),
             scored_batch=batch.get("scored"),
             inventory=sum(1 for p in store.parcels.values() if not p.is_demo),
+            **snapshot(),
         )
 
     return {
@@ -431,11 +484,15 @@ async def discover_opportunities(
         "fast": fast,
         "states_scanned": state_queue,
         "inventory_total": sum(1 for p in store.parcels.values() if not p.is_demo),
+        "stopped_early": stopped_early,
+        "stop_reason": stop_reason,
+        "memory": snapshot(),
         "note": (
             "Progressive nationwide index: BLM LPAD + county tax-sale/surplus GIS "
             f"({sum(source_counts.values())} raw rows considered; {refreshed} existing rows refreshed). "
             "Parcels appear state-by-state — hit Show matches while the scan continues. "
             "ATTOM enriches parcel intelligence on analyze; it does not invent for-sale listings. "
             "Licensed MLS/Land.com/Crexi/Regrid remain unavailable without those API keys."
+            + (f" Paused early to protect VM memory: {stop_reason}." if stopped_early else "")
         ),
     }

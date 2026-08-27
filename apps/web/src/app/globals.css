@@ -8351,3 +8351,15 @@ a.acquire-block:hover {
   line-height: 1.35;
   color: var(--muted);
 }
+.loc-images-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin: 10px 2px 2px;
+  font-size: 0.78rem;
+}
+.loc-images-links a {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

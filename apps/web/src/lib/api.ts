@@ -265,6 +265,29 @@ export const landsignalApi = {
   providers: () =>
     api<Array<{ id: string; kind: string; name: string; status: string; detail?: string }>>("/providers"),
   parcel: (id: string) => api<Record<string, unknown>>(`/parcels/${id}`),
+  locationImages: (id: string) =>
+    api<{
+      ok: boolean;
+      images: Array<{
+        id: string;
+        label: string;
+        url: string;
+        thumb_url?: string;
+        source: string;
+        kind: string;
+        attribution?: string;
+        page_url?: string | null;
+      }>;
+      count: number;
+      attom_photos: boolean;
+      note?: string;
+      maps?: {
+        google_maps?: string;
+        google_street_view?: string;
+        google_earth?: string;
+        openstreetmap?: string;
+      };
+    }>(`/parcels/${encodeURIComponent(id)}/location-images`),
   catalystSimulate: (
     id: string,
     body: { scenario_ids?: string[]; custom_text?: string; stress_case?: string },

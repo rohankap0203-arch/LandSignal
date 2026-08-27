@@ -1338,6 +1338,48 @@ async def attom_diagnostics() -> dict[str, Any]:
     }
 
 
+@router.get("/diagnostics/memory")
+async def memory_diagnostics() -> dict[str, Any]:
+    """Why the cloud VM used to die: inventory discover without RSS ceilings."""
+    from landsignal.services.memory_guard import snapshot
+
+    store = get_store(get_settings().demo_seed)
+    snap = snapshot()
+    return {
+        **snap,
+        "inventory_count": sum(1 for p in store.parcels.values() if not p.is_demo),
+        "listings": len(store.listings),
+        "scored_parcels": len(store.scores),
+        "enrichments": len(store.enrichments),
+        "dd_items": len(store.dd_items),
+        "auto_discover_on_startup": bool(get_settings().auto_discover_on_startup),
+        "land_alerts_monitor_enabled": bool(get_settings().land_alerts_monitor_enabled),
+        "note": (
+            "Discover pauses when RSS hits the hard ceiling so the 15Gi cloud VM "
+            "stays reachable. Fat GIS raw blobs, polygons, and multi-score history "
+            "are stripped on ingest/persist."
+        ),
+    }
+
+
+@router.get("/parcels/{parcel_id}/location-images")
+async def parcel_location_images(parcel_id: UUID) -> dict[str, Any]:
+    """USGS aerial + nearby Wikimedia/Wikipedia photos for View Images."""
+    from landsignal.services.location_images import build_location_images
+
+    store = get_store(get_settings().demo_seed)
+    parcel = store.parcels.get(parcel_id)
+    if not parcel:
+        raise HTTPException(404, "Parcel not found")
+    listing = store.listing_for_parcel(parcel_id)
+    return build_location_images(
+        lat=parcel.latitude,
+        lon=parcel.longitude,
+        acres=parcel.acreage,
+        title=(listing.title if listing else None) or parcel.apn or "Parcel",
+    )
+
+
 @router.get("/parcels/{parcel_id}")
 async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     from landsignal.services.humanize import (
@@ -1479,7 +1521,12 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     if isinstance(source, dict):
         source = {**source, "website": primary_url}
 
-    dd_raw = store.dd_items.get(parcel_id, [])
+    dd_raw = store.dd_items.get(parcel_id)
+    if not dd_raw:
+        from landsignal.store import default_dd_checklist
+
+        dd_raw = default_dd_checklist()
+        store.dd_items[parcel_id] = dd_raw
     dd_guided = human_dd_items(
         [d if isinstance(d, dict) else d.model_dump() for d in dd_raw],
         score,

@@ -23,6 +23,10 @@ PY
 ensure_api_venv() {
   local api="$ROOT/apps/api"
   if [[ ! -x "$api/.venv/bin/uvicorn" ]]; then
+    if ! python3 -m venv --help >/dev/null 2>&1 || ! python3 -c "import ensurepip" 2>/dev/null; then
+      sudo apt-get update -qq >/dev/null 2>&1 || true
+      sudo apt-get install -y -qq python3.12-venv python3-venv >/dev/null 2>&1 || true
+    fi
     python3 -m venv "$api/.venv"
     "$api/.venv/bin/pip" install -U pip -q
     "$api/.venv/bin/pip" install -e "$api[dev]" -q

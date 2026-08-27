@@ -599,9 +599,6 @@ async def analyze_parcel(
         "estimated_value_usd": result.get("estimated_value_usd"),
         "best_strategy": result.get("best_strategy"),
     }
-    unsold = why_still_unsold(narrative_ctx)
-    hidden = hidden_value_score(narrative_ctx)
-
     from landsignal.services.market_trajectory import build_market_trajectory
 
     # Lightweight score stand-in so trajectory can use mark/discount before ScoreRecord exists
@@ -610,72 +607,84 @@ async def analyze_parcel(
         asking_discount_pct = result.get("asking_discount_pct")
         risk = result.get("risk")
 
-    trajectory = build_market_trajectory(
-        parcel=parcel,
-        listing=listing,
-        score=_ScoreProxy(),
-        enrichment=existing,
-    )
-    existing.narratives = {
-        "why_unsold": unsold,
-        "hidden_value": hidden,
-        "market_trajectory": trajectory,
-    }
+    # Fast/bulk discover: skip heavy narrative + multi-year scenario trees.
+    # Detail pages (fast=False) still build the full enrichment package.
+    if fast:
+        existing.narratives = {}
+        existing.scenarios = []
+        store.enrichments[parcel_id] = existing
+        why_still = list(result["why_still_available"])
+        unsold = {}
+        hidden = {"evidence": [], "hidden_value_score": 0}
+    else:
+        unsold = why_still_unsold(narrative_ctx)
+        hidden = hidden_value_score(narrative_ctx)
+        trajectory = build_market_trajectory(
+            parcel=parcel,
+            listing=listing,
+            score=_ScoreProxy(),
+            enrichment=existing,
+        )
+        existing.narratives = {
+            "why_unsold": unsold,
+            "hidden_value": hidden,
+            "market_trajectory": trajectory,
+        }
 
-    # Farmland scenarios when acreage + ask or estimated value exist —
-    # BASE appreciation follows this parcel's trajectory rate when available.
-    purchase = ask or comps_n.get("estimated_value_base_usd")
-    traj_rate = float(trajectory.get("annual_rate") or 0.03)
-    scenarios = []
-    if purchase and parcel.acreage:
-        hold_options = [1, 3, 5, 10, 15, 25, 40, 60, 80, 100]
-        for case, rent, appr in (
-            ("BEAR", 140, max(0.0, traj_rate - 0.02)),
-            ("BASE", 200, traj_rate),
-            ("BULL", 280, min(0.08, traj_rate + 0.02)),
-        ):
-            sc = farmland_scenario(
-                cash_rent_per_acre=rent,
-                acres=float(parcel.acreage),
-                vacancy_rate=0.05,
-                opex_per_acre=25,
-                taxes=purchase * 0.01,
-                insurance=1200,
-                management=purchase * 0.005,
-                purchase_price=float(purchase),
-                hold_years=10,
-                exit_cap_rate=0.05,
-                annual_appreciation=appr,
-                discount_rate=0.1,
-            )
-            exits = {
-                str(y): round(float(purchase) * ((1 + appr) ** y), 0) for y in hold_options
-            }
-            rent_stack = {
-                str(y): round(float(sc.get("noi") or 0) * y, 0) for y in hold_options
-            }
-            scenarios.append(
-                {
-                    "strategy": "FARMLAND",
-                    "case_type": case,
-                    **sc,
-                    "knowledge_state": "ESTIMATED",
-                    "annual_appreciation": appr,
-                    "annual_appreciation_display": f"{appr*100:.1f}%/yr",
-                    "cash_rent_per_acre": rent,
-                    "purchase_price": float(purchase),
-                    "hold_years_options": hold_options,
-                    "exit_value_by_year": exits,
-                    "rent_stack_by_year": rent_stack,
+        # Farmland scenarios when acreage + ask or estimated value exist —
+        # BASE appreciation follows this parcel's trajectory rate when available.
+        purchase = ask or comps_n.get("estimated_value_base_usd")
+        traj_rate = float(trajectory.get("annual_rate") or 0.03)
+        scenarios = []
+        if purchase and parcel.acreage:
+            hold_options = [1, 3, 5, 10, 15, 25, 40, 60, 80, 100]
+            for case, rent, appr in (
+                ("BEAR", 140, max(0.0, traj_rate - 0.02)),
+                ("BASE", 200, traj_rate),
+                ("BULL", 280, min(0.08, traj_rate + 0.02)),
+            ):
+                sc = farmland_scenario(
+                    cash_rent_per_acre=rent,
+                    acres=float(parcel.acreage),
+                    vacancy_rate=0.05,
+                    opex_per_acre=25,
+                    taxes=purchase * 0.01,
+                    insurance=1200,
+                    management=purchase * 0.005,
+                    purchase_price=float(purchase),
+                    hold_years=10,
+                    exit_cap_rate=0.05,
+                    annual_appreciation=appr,
+                    discount_rate=0.1,
+                )
+                exits = {
+                    str(y): round(float(purchase) * ((1 + appr) ** y), 0) for y in hold_options
                 }
-            )
-    existing.scenarios = scenarios
-    store.enrichments[parcel_id] = existing
+                rent_stack = {
+                    str(y): round(float(sc.get("noi") or 0) * y, 0) for y in hold_options
+                }
+                scenarios.append(
+                    {
+                        "strategy": "FARMLAND",
+                        "case_type": case,
+                        **sc,
+                        "knowledge_state": "ESTIMATED",
+                        "annual_appreciation": appr,
+                        "annual_appreciation_display": f"{appr*100:.1f}%/yr",
+                        "cash_rent_per_acre": rent,
+                        "purchase_price": float(purchase),
+                        "hold_years_options": hold_options,
+                        "exit_value_by_year": exits,
+                        "rent_stack_by_year": rent_stack,
+                    }
+                )
+        existing.scenarios = scenarios
+        store.enrichments[parcel_id] = existing
 
-    # Augment explanations with narratives
-    why_still = list(result["why_still_available"])
-    if unsold.get("most_likely"):
-        why_still.insert(0, f"Most likely: {unsold['most_likely']['reason']}")
+        # Augment explanations with narratives
+        why_still = list(result["why_still_available"])
+        if unsold.get("most_likely"):
+            why_still.insert(0, f"Most likely: {unsold['most_likely']['reason']}")
 
     record = ScoreRecord(
         parcel_id=parcel_id,
@@ -697,19 +706,29 @@ async def analyze_parcel(
         deal_readiness=result["deal_readiness"],
         strategy_scores=result["strategy_scores"],
         strategy_screens=result["strategy_screens"],
-        components=result["components"],
-        explanations=result["explanations"]
-        + [f"[hidden_value] {e}" for e in hidden.get("evidence", [])],
-        why_interesting=result["why_interesting"]
-        + ([f"Hidden value score {hidden['hidden_value_score']}"] if hidden else []),
-        why_mispriced=result["why_mispriced"],
-        what_could_kill=result["what_could_kill"],
-        why_still_available=why_still,
-        manual_verification=result["manual_verification"],
+        components=(result["components"] or [])[:12] if fast else result["components"],
+        explanations=(
+            (result["explanations"] or [])[:8]
+            if fast
+            else result["explanations"] + [f"[hidden_value] {e}" for e in hidden.get("evidence", [])]
+        ),
+        why_interesting=(
+            (result["why_interesting"] or [])[:6]
+            if fast
+            else result["why_interesting"]
+            + ([f"Hidden value score {hidden['hidden_value_score']}"] if hidden else [])
+        ),
+        why_mispriced=(result["why_mispriced"] or [])[:6] if fast else result["why_mispriced"],
+        what_could_kill=(result["what_could_kill"] or [])[:6] if fast else result["what_could_kill"],
+        why_still_available=why_still[:8] if fast else why_still,
+        manual_verification=(result["manual_verification"] or [])[:6]
+        if fast
+        else result["manual_verification"],
         input_hash=result["input_hash"],
-        input_snapshot=score_input,
+        input_snapshot={} if fast else score_input,
     )
-    store.scores.setdefault(parcel_id, []).append(record)
+    # Keep only the latest score — history was a silent RAM tax at nationwide scale.
+    store.scores[parcel_id] = [record]
     log.info(
         "score_computed",
         parcel_id=str(parcel_id),
@@ -718,5 +737,6 @@ async def analyze_parcel(
         confidence=record.confidence,
         signal=record.signal.value,
         input_hash=record.input_hash,
+        fast=fast,
     )
     return record

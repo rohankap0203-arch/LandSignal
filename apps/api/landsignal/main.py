@@ -32,6 +32,13 @@ app.include_router(router, prefix=settings.api_prefix)
 async def startup() -> None:
     import asyncio
 
+    import structlog
+
+    from landsignal.services.memory_guard import snapshot
+
+    log = structlog.get_logger()
+    log.info("startup_memory", **snapshot())
+
     store = get_store(settings.demo_seed)
     store.rebuild_listing_index()
     # Promote assessor land marks → ask for every state (NJ/NY/MA/AR/WI/VT/TN/…).

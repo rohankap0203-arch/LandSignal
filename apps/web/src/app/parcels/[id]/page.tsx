@@ -379,6 +379,7 @@ export default function ParcelIntelligencePage() {
             latitude={parcel.latitude as number}
             longitude={parcel.longitude as number}
             acres={parcel.acres != null ? Number(parcel.acres) : null}
+            parcelId={String(parcel.id || params.id)}
           />
           </div>
         </div>

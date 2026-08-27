@@ -242,7 +242,7 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           <button
             type="button"
             className="metric metric-action"
-            title="Satellite images of this location"
+            title="Real aerial + nearby photos of this location"
             onClick={(e) => {
               e.stopPropagation();
               setImagesOpen(true);
@@ -356,6 +356,7 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
         latitude={row.latitude}
         longitude={row.longitude}
         acres={row.acres}
+        parcelId={row.parcel_id}
       />
     </article>
   );
