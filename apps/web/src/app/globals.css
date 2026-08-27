@@ -444,23 +444,23 @@ select {
   }
 
   .used-by-logo {
-    height: 1.95rem;
+    height: 2.15rem;
   }
 
   .used-by-logo--landcom,
   .used-by-logo--landwatch,
   .used-by-logo--usagov {
-    height: 2.35rem;
+    height: 2.65rem;
   }
 
   .used-by-logo--landcom img,
   .used-by-logo--landwatch img,
   .used-by-logo--usagov img {
-    max-width: 2.35rem;
+    max-width: 2.65rem;
   }
 
   .used-by-logo img {
-    max-width: 7.5rem;
+    max-width: 8.5rem;
   }
 }
 
