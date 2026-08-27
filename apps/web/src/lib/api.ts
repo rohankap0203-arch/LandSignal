@@ -215,6 +215,13 @@ export type SearchMeta = {
   inventory_states?: string[];
   inventory_count?: number;
   inventory_by_state?: Record<string, number>;
+  inventory_states_wired?: number;
+  inventory_states_missing?: string[];
+  inventory_coverage_pct?: number;
+  inventory_states_target?: number;
+  inventory_states_live?: number;
+  filters_offer_all_states?: boolean;
+  filters_note?: string;
   allows_custom?: string[];
   attom?: {
     configured?: boolean;

@@ -1248,8 +1248,9 @@ async def rescore(limit: int = 8000) -> dict[str, Any]:
 
 @router.get("/search/meta")
 async def search_meta() -> dict[str, Any]:
-    """Nationwide filter catalog + live inventory hints."""
-    from landsignal.geo_meta import search_meta_payload
+    """Full US filter catalog + honest live coverage (inventory must fill all 50)."""
+    from landsignal.geo_meta import US_STATES, search_meta_payload
+    from landsignal.services.discover import _wired_states
 
     store = get_store(get_settings().demo_seed)
     inventory_regions = sorted(
@@ -1259,36 +1260,38 @@ async def search_meta() -> dict[str, Any]:
             if p.county and p.state and not p.is_demo
         }
     )
-    inventory_states = sorted(
-        {(p.state or "").upper() for p in store.parcels.values() if p.state and not p.is_demo}
-    )
-    payload = search_meta_payload(inventory_regions)
-    payload["inventory_states"] = inventory_states
-    payload["inventory_count"] = sum(1 for p in store.parcels.values() if not p.is_demo)
-    # Per-state coverage vs the 10k floor — drives the "ultimate land finder" inventory HUD.
     by_state: dict[str, int] = {}
     for p in store.parcels.values():
         if p.is_demo or not p.state:
             continue
         st = p.state.upper()
         by_state[st] = by_state.get(st, 0) + 1
+    inventory_states = sorted(by_state.keys())
+
+    # Filters always offer the full 50-state (+DC) catalog — inventory is responsible
+    # for catching up, not the dropdown for shrinking.
+    payload = search_meta_payload(inventory_regions)
+    payload["inventory_states"] = inventory_states
+    payload["inventory_count"] = sum(1 for p in store.parcels.values() if not p.is_demo)
     payload["inventory_by_state"] = dict(sorted(by_state.items()))
     payload["inventory_min_per_state_target"] = int(
-        getattr(get_settings(), "discover_min_per_state", 15000) or 15000
+        getattr(get_settings(), "discover_min_per_state", 2500) or 2500
     )
     payload["inventory_states_below_target"] = sorted(
-        st
-        for st, n in by_state.items()
-        if n < payload["inventory_min_per_state_target"]
+        st for st, n in by_state.items() if n < payload["inventory_min_per_state_target"]
     )
-    # Full US map target — wired GIS coverage is 50 states + DC.
-    from landsignal.services.discover import _wired_states
-
     wired = _wired_states(None)
     payload["inventory_states_wired"] = len(wired)
     payload["inventory_states_missing"] = sorted(st for st in wired if st not in by_state)
     payload["inventory_coverage_pct"] = round(100.0 * len(by_state) / max(1, len(wired)), 1)
-    # ATTOM / provider health (never includes API keys)
+    # Explicit target for HUD copy — never imply 50 until live inventory has 50.
+    payload["inventory_states_target"] = len(wired)
+    payload["inventory_states_live"] = len(by_state)
+    payload["filters_offer_all_states"] = True
+    payload["filters_note"] = (
+        f"Filters offer all {len(US_STATES)} states. Live inventory currently covers "
+        f"{len(by_state)} of {len(wired)} wired jurisdictions — nationwide discover fills the rest."
+    )
     try:
         from landsignal.services.property_providers.attom import AttomPropertyProvider
 

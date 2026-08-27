@@ -698,11 +698,39 @@ export default function SearchPage() {
             <>
               Live inventory:{" "}
               <strong>{(meta?.inventory_count ?? 0).toLocaleString()}</strong> parcels
-              {inventoryStates.length
-                ? ` across ${inventoryStates.length} states (${inventoryStates.join(", ")})`
-                : (meta?.inventory_count ?? 0) === 0
-                  ? " · indexing public GIS/BLM…"
-                  : ""}
+              {(() => {
+                const live = meta?.inventory_states_live ?? inventoryStates.length;
+                const target =
+                  meta?.inventory_states_target ??
+                  meta?.inventory_states_wired ??
+                  51;
+                if (!live) {
+                  return (meta?.inventory_count ?? 0) === 0
+                    ? " · indexing public GIS/BLM for all 50 states…"
+                    : "";
+                }
+                if (live < target) {
+                  const missing = (meta?.inventory_states_missing || []).slice(0, 8);
+                  return (
+                    <>
+                      {" "}
+                      across <strong>{live}</strong> of <strong>{target}</strong> states
+                      {missing.length
+                        ? ` · still indexing ${missing.join(", ")}${
+                            (meta?.inventory_states_missing || []).length > 8 ? "…" : ""
+                          }`
+                        : " · nationwide index running"}
+                    </>
+                  );
+                }
+                return (
+                  <>
+                    {" "}
+                    across all <strong>{target}</strong> states (
+                    {inventoryStates.join(", ")})
+                  </>
+                );
+              })()}
               {meta?.attom?.configured ? (
                 <>
                   {" "}

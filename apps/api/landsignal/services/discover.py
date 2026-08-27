@@ -442,9 +442,9 @@ async def discover_opportunities(
 
     # Pull a couple gap states at once (GIS I/O bound), then ingest/score one-by-one
     # so we paint the 50-state map fast without exploding RSS or waiting on one hung feed.
-    wave_size = 2
+    wave_size = 3
     # Hard cap per state so a dead ArcGIS endpoint cannot stall the nationwide walk.
-    state_wall_clock_s = 110.0
+    state_wall_clock_s = 75.0
     log.info(
         "discover_coverage_queue",
         states=len(state_queue),
@@ -504,6 +504,7 @@ async def discover_opportunities(
             break
 
         wave = state_queue[wave_start : wave_start + wave_size]
+        live_counts = _inventory_by_state(store)
         log.info(
             "discover_wave_start",
             states=wave,
@@ -537,8 +538,14 @@ async def discover_opportunities(
                 states_done.append(st)
                 continue
 
+            # First-pass paint for brand-new states: small batch so all 50 appear
+            # quickly; later gap-fill deepens toward min_per_state.
+            state_limit = per_state_limit
+            if live_counts.get(st, 0) <= 0:
+                state_limit = min(per_state_limit, 500)
+
             batch = await _ingest_and_score(
-                store, settings, listings, limit=per_state_limit, fast=fast
+                store, settings, listings, limit=state_limit, fast=fast
             )
             imported += int(batch.get("imported") or 0)
             refreshed += int(batch.get("refreshed") or 0)
