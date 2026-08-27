@@ -2729,14 +2729,15 @@ class PublicTaxSaleProvider(ListingProvider):
             state_keys = sorted(by_state_sources.keys())
             n_states = max(1, len(state_keys))
             # Every state gets a large floor — FL is not special-cased for nationwide pulls.
-            min_per_state = max(1500, int(query.get("min_per_state") or 5000))
+            # Every state gets a floor — but honor small paint budgets from discover.
+            min_per_state = max(100, int(query.get("min_per_state") or 5000))
             per_state = max(min_per_state, (limit + n_states - 1) // n_states)
             if prefer and n_states <= 3:
-                # Targeted few-state discovers may still consume nearly the full budget.
-                per_state = max(
-                    per_state,
-                    min(limit, max(8000, (limit * 95) // 100 // n_states)),
-                )
+                # Targeted few-state discovers may consume the full requested budget,
+                # but never inflate past `limit` — the old 8000 floor made single-state
+                # "paint" pulls hang for minutes and left half the US map empty.
+                per_state = max(per_state, min(limit, max(min_per_state, (limit + n_states - 1) // n_states)))
+                per_state = min(per_state, max(1, limit))
             start_offset = max(0, int(query.get("offset") or 0))
             out: list[dict] = []
             timeout = httpx.Timeout(connect=12.0, read=55.0, write=30.0, pool=30.0)

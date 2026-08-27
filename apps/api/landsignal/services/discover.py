@@ -320,18 +320,29 @@ async def _pull_state_listings(
     min_per_state: int,
     include_optional_providers: bool,
     settings: Settings,
+    paint: bool = False,
 ) -> tuple[list[dict], dict[str, int], list[str]]:
     blm = BlmLpadProvider()
     tax = PublicTaxSaleProvider()
     surplus = PublicSurplusProvider()
     wired = max(1, len(states))
-    tax_limit = max(limit, min_per_state * wired)
-    tax_limit = min(1_000_000, max(500, tax_limit))
+    # Paint mode: small budget so every missing state can join the map quickly.
+    if paint:
+        tax_limit = max(100, min(limit, 600))
+        tax_min = max(100, min(min_per_state, tax_limit))
+        blm_limit = min(800, max(100, tax_limit))
+        surplus_limit = min(200, max(50, tax_limit // 3))
+    else:
+        tax_limit = max(limit, min_per_state * wired)
+        tax_limit = min(1_000_000, max(500, tax_limit))
+        tax_min = min_per_state
+        blm_limit = min(30000, max(2000, min_per_state * 2))
+        surplus_limit = min(2000, max(100, min_per_state // 2))
 
     blm_res, tax_res, surplus_res = await asyncio.gather(
         blm.search_listings(
             {
-                "limit": min(30000, max(2000, min_per_state * 2)),
+                "limit": blm_limit,
                 "min_acres": max(1.0, min_acres),
                 "max_acres": max_acres,
                 "states": states,
@@ -340,7 +351,7 @@ async def _pull_state_listings(
         tax.search_listings(
             {
                 "limit": tax_limit,
-                "min_per_state": min_per_state,
+                "min_per_state": tax_min,
                 "min_acres": min_acres,
                 "offset": 0,
                 "states": states,
@@ -348,7 +359,7 @@ async def _pull_state_listings(
         ),
         surplus.search_listings(
             {
-                "limit": min(2000, max(100, min_per_state // 2)),
+                "limit": surplus_limit,
                 "states": states,
             }
         ),
@@ -442,9 +453,9 @@ async def discover_opportunities(
 
     # Pull a couple gap states at once (GIS I/O bound), then ingest/score one-by-one
     # so we paint the 50-state map fast without exploding RSS or waiting on one hung feed.
-    wave_size = 3
+    wave_size = 4
     # Hard cap per state so a dead ArcGIS endpoint cannot stall the nationwide walk.
-    state_wall_clock_s = 75.0
+    state_wall_clock_s = 55.0
     log.info(
         "discover_coverage_queue",
         states=len(state_queue),
@@ -454,17 +465,20 @@ async def discover_opportunities(
         **snapshot(),
     )
 
-    async def _run_one_state(st: str, *, include_optional: bool) -> dict[str, Any]:
+    async def _run_one_state(st: str, *, include_optional: bool, paint: bool) -> dict[str, Any]:
+        pull_limit = min(per_state_limit, 500) if paint else per_state_limit
+        pull_min = min(min_per_state, pull_limit) if paint else min_per_state
         try:
             listings, counts, state_errors = await asyncio.wait_for(
                 _pull_state_listings(
                     states=[st],
-                    limit=per_state_limit,
+                    limit=pull_limit,
                     min_acres=min_acres,
                     max_acres=max_acres,
-                    min_per_state=min_per_state,
+                    min_per_state=pull_min,
                     include_optional_providers=include_optional,
                     settings=settings,
+                    paint=paint,
                 ),
                 timeout=state_wall_clock_s,
             )
@@ -515,7 +529,11 @@ async def discover_opportunities(
         )
         pulled = await asyncio.gather(
             *[
-                _run_one_state(st, include_optional=(wave_start == 0 and i == 0))
+                _run_one_state(
+                    st,
+                    include_optional=(wave_start == 0 and i == 0),
+                    paint=live_counts.get(st, 0) <= 0,
+                )
                 for i, st in enumerate(wave)
             ]
         )
