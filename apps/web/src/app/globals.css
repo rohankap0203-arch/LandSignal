@@ -1702,6 +1702,13 @@ select {
   font-size: 0.92rem;
 }
 
+.metric-denom {
+  margin-left: 1px;
+  font-size: 0.72em;
+  font-weight: 550;
+  color: var(--muted);
+}
+
 .property-card .reasons {
   margin-top: 0.35rem;
 }
