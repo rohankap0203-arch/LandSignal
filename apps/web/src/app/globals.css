@@ -8503,7 +8503,7 @@ a.acquire-block:hover {
   animation: images-scout-snap 2.4s ease-in-out infinite;
   z-index: 2;
 }
-.images-scout-shot i {
+.images-scout-shot .images-scout-frame {
   display: block;
   width: 100%;
   height: 100%;
@@ -8516,6 +8516,7 @@ a.acquire-block:hover {
   left: 14%;
   top: 28%;
   animation-delay: 0s;
+  --shot-rot: -6deg;
 }
 .images-scout-shot.s2 {
   left: 42%;
@@ -8523,9 +8524,9 @@ a.acquire-block:hover {
   width: 84px;
   height: 62px;
   animation-delay: 0.55s;
-  transform: scale(0.72) rotate(4deg);
+  --shot-rot: 5deg;
 }
-.images-scout-shot.s2 i {
+.images-scout-shot.s2 .images-scout-frame {
   background:
     linear-gradient(145deg, #2f4a3d, transparent 50%),
     linear-gradient(35deg, color-mix(in srgb, var(--accent) 80%, #e0a060), #1f6b4f);
@@ -8534,9 +8535,9 @@ a.acquire-block:hover {
   left: 68%;
   top: 34%;
   animation-delay: 1.1s;
-  transform: scale(0.72) rotate(-2deg);
+  --shot-rot: -2deg;
 }
-.images-scout-shot.s3 i {
+.images-scout-shot.s3 .images-scout-frame {
   background:
     linear-gradient(120deg, #20362c, transparent 48%),
     linear-gradient(200deg, #d4894a, #3d6b55 75%);
@@ -8611,15 +8612,6 @@ a.acquire-block:hover {
     opacity: 0;
     transform: scale(1.05) translateY(-8px) rotate(var(--shot-rot, -6deg));
   }
-}
-.images-scout-shot.s1 {
-  --shot-rot: -6deg;
-}
-.images-scout-shot.s2 {
-  --shot-rot: 5deg;
-}
-.images-scout-shot.s3 {
-  --shot-rot: -2deg;
 }
 @keyframes images-scout-shutter {
   0%,
