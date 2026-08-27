@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 
 function FullscreenIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
         d="M8 3H4v4M16 3h4v4M8 21H4v-4M16 21h4v-4"
         stroke="currentColor"

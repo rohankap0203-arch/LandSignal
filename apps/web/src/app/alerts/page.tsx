@@ -1356,8 +1356,8 @@ export default function LandAlertsPage() {
               <span>Infrastructure</span>
               <HelpTip
                 tone="panel"
-                title="Infrastructure prefs"
-                body="Road access: frontage or easement. Utilities: power/water/sewer nearby. Power: grid close enough for service or energy. Water: surface, irrigation, or well potential. Any = no preference."
+                title="Infrastructure"
+                body="Road, utilities, power, or water nearby. Any = no preference."
               />
             </div>
             <div className="land-alert-chips acq-chips-tight">

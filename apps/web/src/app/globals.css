@@ -3954,7 +3954,8 @@ a.btn-intel:hover {
   color: var(--brand);
 }
 
-.return-help-q {
+.return-help-q,
+.signal-help-q {
   flex: 0 0 auto;
   width: 22px;
   height: 22px;
@@ -6701,8 +6702,10 @@ a.acquire-block:hover {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: 2.05rem;
-  height: 2.05rem;
+  width: 2.4rem;
+  height: 2.4rem;
+  min-width: 2.4rem;
+  min-height: 2.4rem;
   padding: 0;
   border-radius: 11px;
   cursor: pointer;
@@ -6716,10 +6719,16 @@ a.acquire-block:hover {
 
 .parcel-map-expand {
   top: 0.65rem;
-  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  border: 1.5px solid #fff;
   background: rgba(12, 22, 18, 0.72);
   color: #f4f1e8;
   backdrop-filter: blur(8px);
+}
+
+.parcel-map-expand svg {
+  display: block;
+  width: 1.15rem;
+  height: 1.15rem;
 }
 
 .parcel-map-expand:hover {
@@ -6983,8 +6992,10 @@ a.acquire-block:hover {
   .parcel-map-expand,
   .parcel-map-view-images {
     box-sizing: border-box;
-    width: 1.9rem;
-    height: 1.9rem;
+    width: 2.2rem;
+    height: 2.2rem;
+    min-width: 2.2rem;
+    min-height: 2.2rem;
     right: 0.5rem;
   }
 
@@ -6994,6 +7005,11 @@ a.acquire-block:hover {
 
   .parcel-map-view-images {
     bottom: 0.5rem;
+  }
+
+  .parcel-map-expand svg {
+    width: 1.05rem;
+    height: 1.05rem;
   }
 }
 

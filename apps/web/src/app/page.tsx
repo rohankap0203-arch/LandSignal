@@ -577,7 +577,7 @@ export default function SearchPage() {
             label="Strategy"
             tip={{
               title: "Strategy",
-              body: "Boosts matching uses (farm, develop, timber…). Other results stay — they just rank lower.",
+              body: "Ranks matching uses higher (farm, develop, timber…). Other land still shows.",
             }}
           >
             <HeroSelect
