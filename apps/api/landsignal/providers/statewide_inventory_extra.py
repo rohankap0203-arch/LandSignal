@@ -1165,16 +1165,6 @@ SOURCES: list[ArcgisMarketSource] = [
             "SUM_IMPROVEMENT_VALUE,SUM_FAIR_MARKET_VALUE,STATUS"
         ),
     ),
-    _src(
-        "la_orleans_parcels",
-        "Orleans Parish LA Parcels (0.25ac+)",
-        "https://gis.nola.gov/arcgis/rest/services/apps/property3/MapServer/15/query",
-        "LA",
-        _norm_la_orleans_parcels,
-        where="1=1",
-        page_size=500,
-        out_fields=(
-            "OBJECTID,PARCELID,TAXBILLID,PARID,SITEADDRESS,OWNERNME1,UNIT,USECD,ASS_SQFT"
-        ),
-    ),
+    # Orleans Parish GIS (gis.nola.gov) hangs / fails transport and previously
+    # ate the whole LA state wall-clock — leave it out so BRLA can paint LA.
 ]
