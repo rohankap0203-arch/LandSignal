@@ -236,12 +236,12 @@ export default function SearchPage() {
   );
 
   const scrollToScoutedOpportunities = useCallback((behavior: ScrollBehavior = "smooth") => {
-    const heading =
-      (document.querySelector("#search-results h2") as HTMLElement | null) ||
-      document.getElementById("search-results");
+    const heading = document.querySelector("#search-results h2") as HTMLElement | null;
     if (!heading) return;
-    // Pin "Scouted opportunities" to the top of the viewport (Used-by logos off-screen above).
-    const top = heading.getBoundingClientRect().top + window.scrollY;
+    const header = document.querySelector(".shell-header") as HTMLElement | null;
+    const headerH = header?.getBoundingClientRect().height ?? 0;
+    // Sit just under the sticky header so "Scouted opportunities" is the first thing seen.
+    const top = heading.getBoundingClientRect().top + window.scrollY - headerH - 4;
     const scroller = document.scrollingElement || document.documentElement;
     scroller.scrollTo({ top: Math.max(0, top), behavior });
   }, []);
@@ -305,9 +305,24 @@ export default function SearchPage() {
   // The instant results paint, scroll so Scouted opportunities is at the top (Used-by off-screen).
   useEffect(() => {
     if (!hasSearched || loading) return;
-    const t1 = window.setTimeout(() => scrollToScoutedOpportunities("smooth"), 40);
-    const t2 = window.setTimeout(() => scrollToScoutedOpportunities("auto"), 280);
+    let cancelled = false;
+    const t1 = window.setTimeout(() => {
+      if (!cancelled) scrollToScoutedOpportunities("smooth");
+    }, 50);
+    const t2 = window.setTimeout(() => {
+      if (cancelled) return;
+      const heading = document.querySelector("#search-results h2") as HTMLElement | null;
+      const header = document.querySelector(".shell-header") as HTMLElement | null;
+      if (!heading) return;
+      const headerH = header?.getBoundingClientRect().height ?? 0;
+      const delta = heading.getBoundingClientRect().top - headerH - 4;
+      if (Math.abs(delta) > 10) {
+        const scroller = document.scrollingElement || document.documentElement;
+        scroller.scrollTo({ top: Math.max(0, window.scrollY + delta), behavior: "auto" });
+      }
+    }, 420);
     return () => {
+      cancelled = true;
       window.clearTimeout(t1);
       window.clearTimeout(t2);
     };
