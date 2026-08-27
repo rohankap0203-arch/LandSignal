@@ -155,11 +155,18 @@ def _filter_rows(
             continue
         acres = row.get("acreage")
         if acres is not None and (acres < min_acres or acres > max_acres):
-            if row.get("provider_id") == "public_tax_sale" and row.get("asking_price_usd"):
-                if acres < 0.05:
-                    continue
-            else:
-                continue
+            continue
+        from landsignal.services.land_gate import is_land_inventory
+
+        if not is_land_inventory(
+            provider_id=row.get("provider_id"),
+            title=str(row.get("title") or ""),
+            description=str(row.get("description") or ""),
+            address=str(row.get("address") or ""),
+            acreage=acres if isinstance(acres, (int, float)) else None,
+            raw=row.get("raw") if isinstance(row.get("raw"), dict) else row,
+        ):
+            continue
         # Drop polygons during index — they OOM cloud VMs at nationwide scale.
         # Detail pages / geometry endpoints can rehydrate boundaries later.
         if row.get("polygon") is not None:

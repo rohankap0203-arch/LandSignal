@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { LandLoader } from "@/components/land-loader";
 import { landsignalApi } from "@/lib/api";
 
 export type LocationImage = {
@@ -84,14 +85,6 @@ export function LocationImagesModal({
 }: Props) {
   const [idx, setIdx] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [note, setNote] = useState<string>("");
-  const [maps, setMaps] = useState<{
-    google_maps?: string;
-    google_street_view?: string;
-    google_earth?: string;
-    openstreetmap?: string;
-    kartaview?: string;
-  } | null>(null);
   const [fetched, setFetched] = useState<LocationImage[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const thumbStripRef = useRef<HTMLDivElement | null>(null);
@@ -101,8 +94,6 @@ export function LocationImagesModal({
     setIdx(0);
     setError(null);
     setFetched(null);
-    setMaps(null);
-    setNote("");
 
     let cancelled = false;
     const run = async () => {
@@ -118,7 +109,6 @@ export function LocationImagesModal({
           Number.isFinite(longitude)
         ) {
           setFetched(buildAerialFallback(latitude, longitude, acres));
-          setNote("Showing Street View + USGS aerial frames for these coordinates.");
         }
         return;
       }
@@ -138,8 +128,6 @@ export function LocationImagesModal({
             embed: Boolean((img as { embed?: boolean }).embed) || img.kind === "streetview",
           })),
         );
-        setMaps(payload.maps || null);
-        setNote(payload.note || "");
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : "Could not load images");
@@ -162,10 +150,6 @@ export function LocationImagesModal({
   }, [open, parcelId, images, latitude, longitude, acres]);
 
   const gallery = useMemo(() => fetched || [], [fetched]);
-  const streetCount = useMemo(
-    () => gallery.filter((g) => g.kind === "street" || g.kind === "streetview").length,
-    [gallery],
-  );
 
   useEffect(() => {
     if (!open) return;
@@ -208,11 +192,6 @@ export function LocationImagesModal({
           <div>
             <div className="display text-lg font-semibold leading-snug">{title}</div>
             {location ? <div className="mt-0.5 text-sm text-[var(--muted)]">{location}</div> : null}
-            {streetCount > 0 ? (
-              <div className="mt-0.5 text-xs text-[var(--muted)]">
-                {streetCount} street-level view{streetCount === 1 ? "" : "s"}
-              </div>
-            ) : null}
           </div>
           <button type="button" className="help-q on" aria-label="Close images" onClick={onClose}>
             ×
@@ -220,7 +199,13 @@ export function LocationImagesModal({
         </div>
 
         {loading ? (
-          <p className="p-4 text-sm text-[var(--muted)]">Loading street view + nearby photos…</p>
+          <div className="loc-images-loading">
+            <LandLoader
+              compact
+              label="Scouting the view…"
+              detail="Pulling Street View and nearby land photos"
+            />
+          </div>
         ) : current ? (
           <>
             <div className="loc-images-stage">
@@ -241,12 +226,7 @@ export function LocationImagesModal({
               <div className="loc-images-caption">
                 <span>{current.label}</span>
                 <span className="text-[var(--muted)]">
-                  {idx + 1} / {gallery.length} · {current.source}
-                  {current.kind === "street" || current.kind === "streetview"
-                    ? " · street"
-                    : current.kind === "ground"
-                      ? " · photo"
-                      : ""}
+                  {idx + 1} / {gallery.length}
                 </span>
               </div>
             </div>
@@ -284,7 +264,12 @@ export function LocationImagesModal({
                   </button>
                 </div>
 
-                <div className="loc-images-thumbs" ref={thumbStripRef} role="listbox" aria-label="Image thumbnails">
+                <div
+                  className="loc-images-thumbs"
+                  ref={thumbStripRef}
+                  role="listbox"
+                  aria-label="Image thumbnails"
+                >
                   {gallery.map((g, i) => (
                     <button
                       key={g.id}
@@ -316,38 +301,6 @@ export function LocationImagesModal({
               "No coordinates on this file yet — open Intelligence after the parcel is geocoded to view imagery."}
           </p>
         )}
-
-        {note ? <p className="loc-images-note">{note}</p> : null}
-
-        {maps && (maps.google_maps || maps.google_street_view) ? (
-          <div className="loc-images-links">
-            {maps.google_street_view ? (
-              <a href={maps.google_street_view} target="_blank" rel="noreferrer">
-                Street View
-              </a>
-            ) : null}
-            {maps.kartaview ? (
-              <a href={maps.kartaview} target="_blank" rel="noreferrer">
-                KartaView
-              </a>
-            ) : null}
-            {maps.google_maps ? (
-              <a href={maps.google_maps} target="_blank" rel="noreferrer">
-                Google Maps
-              </a>
-            ) : null}
-            {maps.google_earth ? (
-              <a href={maps.google_earth} target="_blank" rel="noreferrer">
-                Google Earth
-              </a>
-            ) : null}
-            {maps.openstreetmap ? (
-              <a href={maps.openstreetmap} target="_blank" rel="noreferrer">
-                OpenStreetMap
-              </a>
-            ) : null}
-          </div>
-        ) : null}
       </div>
     </div>,
     document.body,

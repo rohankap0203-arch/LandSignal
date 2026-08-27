@@ -338,21 +338,30 @@ export default function ParcelIntelligencePage() {
           <div className="flex flex-wrap gap-2 px-4 py-3 border-t border-[var(--line)]">
             <button
               type="button"
-              className="btn btn-secondary metric-images-btn"
+              className="btn metric-images-btn"
               title="Street View + nearby photos"
               aria-label="View images"
               onClick={() => setImagesOpen(true)}
             >
-              <span className="metric-images-film" aria-hidden>
-                <span className="metric-images-frame" />
-                <span className="metric-images-frame" />
-                <span className="metric-images-frame" />
-              </span>
-              <span className="metric-images-lens" aria-hidden>
-                <svg viewBox="0 0 24 24" width="18" height="18">
+              <span className="metric-images-art" aria-hidden>
+                <svg viewBox="0 0 64 48" width="44" height="32" preserveAspectRatio="xMidYMid meet">
+                  <rect width="64" height="48" rx="8" fill="currentColor" className="metric-images-art-bg" />
                   <path
-                    fill="currentColor"
-                    d="M9 3 7.17 5H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.17L15 3H9zm3 15a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-2.2A2.8 2.8 0 1 0 12 10a2.8 2.8 0 0 0 0 5.8z"
+                    className="metric-images-art-land"
+                    d="M0 30 C10 26 16 34 24 31 C32 28 38 22 46 26 C54 30 60 28 64 25 L64 48 L0 48 Z"
+                  />
+                  <path
+                    className="metric-images-art-land-far"
+                    d="M0 34 C12 30 20 36 30 33 C40 30 50 35 64 31 L64 48 L0 48 Z"
+                  />
+                  <circle className="metric-images-art-sun" cx="48" cy="14" r="6" />
+                  <path
+                    className="metric-images-art-ridge"
+                    d="M8 36 L18 24 L28 34 L38 20 L50 32 L58 26 L64 30"
+                    fill="none"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   />
                 </svg>
               </span>

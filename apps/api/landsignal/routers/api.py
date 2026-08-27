@@ -549,6 +549,10 @@ async def radar(
             listing = store.listing_for_parcel(parcel.id)
             if not score or not listing or parcel.is_demo:
                 continue
+            from landsignal.services.land_gate import listing_is_land
+
+            if not listing_is_land(listing, parcel):
+                continue
             _maybe_retag_vacant_gis(listing)
 
             if state_codes and (parcel.state or "").upper() not in state_codes:

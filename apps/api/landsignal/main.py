@@ -41,6 +41,17 @@ async def startup() -> None:
 
     store = get_store(settings.demo_seed)
     store.rebuild_listing_index()
+    try:
+        from landsignal.services.land_gate import purge_non_land_from_store
+        from landsignal.store import persist_store
+
+        removed = purge_non_land_from_store(store)
+        if removed:
+            log.info("startup_purged_non_land", removed=removed)
+            persist_store(store)
+            log.info("startup_persisted_land_only_inventory")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("startup_purge_non_land_failed", error=str(exc))
     # Promote assessor land marks → ask for every state (NJ/NY/MA/AR/WI/VT/TN/…).
     try:
         import structlog

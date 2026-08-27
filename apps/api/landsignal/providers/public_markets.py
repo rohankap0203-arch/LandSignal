@@ -426,6 +426,12 @@ def _norm_hartford_surplus(raw: dict) -> dict | None:
 
 def _norm_baltimore_taxsale(raw: dict) -> dict | None:
     props = raw.get("properties") or {}
+    # bldg_no holds the house number for improved lots; vacant lots are null.
+    if props.get("bldg_no") not in (None, "", 0, "0"):
+        return None
+    addr = str(props.get("Address") or "").strip()
+    if addr and addr[:1].isdigit():
+        return None
     geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
     # Shape__Area often web-mercator m²; prefer geometry acres after outSR=4326
     acreage = geom_acres
@@ -433,13 +439,12 @@ def _norm_baltimore_taxsale(raw: dict) -> dict | None:
         return None  # skip tiny urban stubs; keep larger tax-sale tracts
     pid = props.get("Blocklot") or props.get("ObjectID")
     lien = _fnum(props.get("LIEN_AMOUNT"))
-    addr = props.get("Address") or ""
     return {
         "provider_id": "public_tax_sale",
         "external_id": f"balt:{pid}",
-        "title": f"Baltimore MD tax sale · {addr or pid}",
+        "title": f"Baltimore MD tax sale · vacant · {addr or pid}",
         "description": (
-            f"Baltimore City, MD tax-sale inventory (public GIS). "
+            f"Baltimore City, MD tax-sale vacant / unimproved lot (public GIS). "
             f"Owner mark={props.get('Owner') or 'n/a'}. Lien mark=${lien}. "
             "Public tax-sale channel — not MLS."
         ),
@@ -448,7 +453,7 @@ def _norm_baltimore_taxsale(raw: dict) -> dict | None:
         "state": "MD",
         "county": "Baltimore City",
         "apn": str(pid),
-        "address": f"{addr}, Baltimore, MD".strip(", "),
+        "address": f"{addr}, Baltimore, MD".strip(", ") if addr else "Baltimore, MD",
         "latitude": lat,
         "longitude": lon,
         "polygon": polygon,
@@ -749,6 +754,17 @@ def _validate_inventory_row(row: dict | None) -> dict | None:
                 return None
         title = str(row.get("title") or "").strip()
         if not title:
+            return None
+        from landsignal.services.land_gate import is_land_inventory
+
+        if not is_land_inventory(
+            provider_id=provider,
+            title=title,
+            description=str(row.get("description") or ""),
+            address=str(row.get("address") or ""),
+            acreage=acres,
+            raw=row.get("raw") if isinstance(row.get("raw"), dict) else row,
+        ):
             return None
         out = dict(row)
         out["state"] = state
@@ -2140,6 +2156,7 @@ SOURCES: list[ArcgisMarketSource] = [
         "MD",
         "Baltimore City",
         _norm_baltimore_taxsale,
+        where="bldg_no IS NULL",
     ),
     ArcgisMarketSource(
         "ramsey_mn_forfeit",

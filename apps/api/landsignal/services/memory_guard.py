@@ -131,6 +131,7 @@ _RAW_KEEP = {
     "owner_name",
     "zoning",
     "land_use",
+    "bldg_no",
     "parcel_id",
     "blm_serial",
     "case_id",
