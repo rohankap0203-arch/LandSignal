@@ -8460,16 +8460,17 @@ a.acquire-block:hover {
   z-index: 2;
 }
 .loc-images-relation {
-  margin: 8px 2px 0;
+  margin: 8px 2px 2px;
   padding: 0 2px;
   font-size: 0.82rem;
-  line-height: 1.4;
+  line-height: 1.45;
   color: var(--muted);
   white-space: normal;
   overflow: visible;
-  text-overflow: unset;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  text-overflow: clip;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
 }
 .loc-images-reset {
   position: absolute;
