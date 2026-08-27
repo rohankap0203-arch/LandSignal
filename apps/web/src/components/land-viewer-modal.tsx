@@ -136,8 +136,29 @@ function ordinalClosest(index: number) {
 
 /**
  * Closest landmarks via LandSignal API for any listing pin nationwide.
- * Prefers parcelId so every listing uses authoritative stored coordinates.
+ * Always queries by lat/lon (map pin coords). If a parcelId lookup is available
+ * and lat/lon fails, falls back to the parcel endpoint — never depends on store
+ * presence alone, so Closest stays functional after API restarts.
  */
+async function requestNearbyPayload(
+  kind: NearbyKind,
+  lat: number,
+  lon: number,
+  parcelId: string | null | undefined,
+  signal: AbortSignal,
+) {
+  const { landsignalApi } = await import("@/lib/api");
+  try {
+    return await landsignalApi.nearby(lat, lon, kind, { signal });
+  } catch (err) {
+    if (signal.aborted || (err instanceof DOMException && err.name === "AbortError")) {
+      throw err;
+    }
+    if (!parcelId) throw err;
+    return landsignalApi.nearbyForParcel(parcelId, kind, { signal });
+  }
+}
+
 async function fetchNearby(
   kind: NearbyKind,
   lat: number,
@@ -149,9 +170,7 @@ async function fetchNearby(
   const meta = NEARBY_CHIPS.find((c) => c.kind === kind);
   if (!meta) return { hits: [], message: "Unknown landmark type" };
 
-  const cacheKey = parcelId
-    ? `api:v2:parcel:${parcelId}:${kind}`
-    : `api:v2:${kind}:${lat.toFixed(3)}:${lon.toFixed(3)}`;
+  const cacheKey = `api:v3:${kind}:${lat.toFixed(3)}:${lon.toFixed(3)}`;
   if (nearbyCache.has(cacheKey)) {
     const cached = nearbyCache.get(cacheKey)!;
     if (cached.hits.length) {
@@ -163,8 +182,7 @@ async function fetchNearby(
   const ctl = beginNearbySearch();
   let timeoutId: number | undefined;
   try {
-    const { landsignalApi } = await import("@/lib/api");
-    const data = await new Promise<Awaited<ReturnType<typeof landsignalApi.nearby>>>((resolve, reject) => {
+    const data = await new Promise<Awaited<ReturnType<typeof requestNearbyPayload>>>((resolve, reject) => {
       timeoutId = window.setTimeout(() => {
         ctl.abort();
         reject(new Error("Closest search timed out"));
@@ -174,10 +192,7 @@ async function fetchNearby(
         reject(new DOMException("Aborted", "AbortError"));
       };
       ctl.signal.addEventListener("abort", onAbort, { once: true });
-      const req = parcelId
-        ? landsignalApi.nearbyForParcel(parcelId, kind, { signal: ctl.signal })
-        : landsignalApi.nearby(lat, lon, kind, { signal: ctl.signal });
-      req
+      requestNearbyPayload(kind, lat, lon, parcelId, ctl.signal)
         .then((value) => {
           if (timeoutId) window.clearTimeout(timeoutId);
           ctl.signal.removeEventListener("abort", onAbort);
@@ -330,46 +345,8 @@ export function LandViewerModal({
 
   useEffect(() => setMounted(true), []);
 
-  // Warm Closest cache for every chip as soon as Land Viewer opens — any listing.
-  useEffect(() => {
-    if (!open || !hasGeo) return;
-    let cancelled = false;
-    void (async () => {
-      const { landsignalApi } = await import("@/lib/api");
-      await Promise.allSettled(
-        NEARBY_CHIPS.map(async (chip) => {
-          if (cancelled) return;
-          try {
-            const data = parcelId
-              ? await landsignalApi.nearbyForParcel(parcelId, chip.kind)
-              : await landsignalApi.nearby(latitude!, longitude!, chip.kind);
-            if (cancelled || !data.hits?.length) return;
-            const key = parcelId
-              ? `api:v2:parcel:${parcelId}:${chip.kind}`
-              : `api:v2:${chip.kind}:${latitude!.toFixed(3)}:${longitude!.toFixed(3)}`;
-            nearbyCache.set(key, {
-              hits: data.hits.slice(0, NEARBY_RESULT_LIMIT).map((h) => ({
-                kind: chip.kind,
-                label: h.label || chip.label,
-                name: h.name || chip.label,
-                lat: Number(h.lat),
-                lon: Number(h.lon),
-                meters: Number(h.meters),
-                source: "live" as const,
-                detail: h.detail || undefined,
-                osmKey: h.osm_key || undefined,
-              })),
-            });
-          } catch {
-            /* prefetch is best-effort */
-          }
-        }),
-      );
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [open, hasGeo, latitude, longitude, parcelId]);
+  // Do not prefetch all Closest chips on open — parallel Overpass/Photon storms
+  // make the chip the user actually taps time out on "Working". Fetch on demand.
 
   useEffect(() => {
     if (!open) return;

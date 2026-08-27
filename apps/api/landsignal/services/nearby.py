@@ -87,14 +87,6 @@ KIND_META: dict[str, dict[str, Any]] = {
             {"q": "pond", "osm_tag": "water:pond"},
         ],
     },
-    "road": {
-        "label": "Paved road",
-        "max_miles": 10.0,
-        "radii_m": [12000],
-        "out": "center",
-        "parts": ['way["highway"~"^(primary|secondary|tertiary)$"]'],
-        "photon": [],
-    },
     "power": {
         "label": "Power line",
         "max_miles": 14.0,
@@ -106,7 +98,22 @@ KIND_META: dict[str, dict[str, Any]] = {
             'node["power"="pole"]',
             'way["power"="line"]',
         ],
-        "photon": [],
+        "photon": [
+            {"q": "power tower", "osm_tag": "power:tower"},
+            {"q": "power pole", "osm_tag": "power:pole"},
+            {"q": "substation", "osm_tag": "power:substation"},
+        ],
+    },
+    "road": {
+        "label": "Paved road",
+        "max_miles": 10.0,
+        "radii_m": [12000],
+        "out": "center",
+        "parts": ['way["highway"~"^(primary|secondary|tertiary)$"]'],
+        "photon": [
+            {"q": "road", "osm_tag": "highway:primary"},
+            {"q": "road", "osm_tag": "highway:secondary"},
+        ],
     },
     "town": {
         "label": "Town / services",
@@ -259,7 +266,7 @@ def _matches(kind: str, el: dict[str, Any]) -> bool:
             "unclassified",
         }
     if kind == "power":
-        return tags.get("power") in {"line", "minor_line", "tower", "pole"}
+        return tags.get("power") in {"line", "minor_line", "tower", "pole", "substation"}
     if kind == "town":
         return tags.get("place") in {"city", "town", "village"}
     if kind == "school":

@@ -41,6 +41,7 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
     headers,
     cache: "no-store",
     redirect: "manual",
+    signal: req.signal,
   };
 
   if (req.method !== "GET" && req.method !== "HEAD") {
