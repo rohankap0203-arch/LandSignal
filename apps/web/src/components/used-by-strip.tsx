@@ -4,8 +4,8 @@ const LOGOS = [
     href: "https://www.land.com",
     // Official Land.com Network lockup (green star + serif Land.com™ wordmark)
     src: "/brands/land-com-lockup.png",
-    width: 277,
-    height: 106,
+    width: 270,
+    height: 61,
   },
   {
     name: "Zillow",
