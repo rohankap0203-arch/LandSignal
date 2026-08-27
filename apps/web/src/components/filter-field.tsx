@@ -29,14 +29,16 @@ export function HelpTip({
     };
     // Defer so the opening click/tap does not immediately close.
     const t = window.setTimeout(() => {
-      document.addEventListener("mousedown", onDoc);
-      document.addEventListener("touchstart", onDoc, { passive: true });
+      document.addEventListener("pointerdown", onDoc, true);
+      document.addEventListener("mousedown", onDoc, true);
+      document.addEventListener("touchstart", onDoc, { capture: true, passive: true });
     }, 0);
     window.addEventListener("keydown", onKey);
     return () => {
       window.clearTimeout(t);
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("touchstart", onDoc);
+      document.removeEventListener("pointerdown", onDoc, true);
+      document.removeEventListener("mousedown", onDoc, true);
+      document.removeEventListener("touchstart", onDoc, true);
       window.removeEventListener("keydown", onKey);
     };
   }, [open]);
@@ -59,7 +61,21 @@ export function HelpTip({
       </button>
       {open ? (
         <span id={id} role="tooltip" className="help-tip-pop">
-          <strong>{title}</strong>
+          <span className="help-tip-pop-head">
+            <strong>{title}</strong>
+            <button
+              type="button"
+              className="help-tip-close"
+              aria-label="Close"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setOpen(false);
+              }}
+            >
+              ×
+            </button>
+          </span>
           <span>{body}</span>
         </span>
       ) : null}

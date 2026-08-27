@@ -606,6 +606,33 @@ select {
   white-space: normal;
 }
 
+.help-tip-pop-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.help-tip-close {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: -2px -4px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(244, 250, 246, 0.88);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.help-tip-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
 .help-tip-pop strong {
   display: block;
   font-size: 11px;

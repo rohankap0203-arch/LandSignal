@@ -193,7 +193,6 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             className="hover:text-[var(--brand-soft)]"
             onClick={(e) => {
               e.stopPropagation();
-              setIntelPending(true);
             }}
           >
             {row.property_name}

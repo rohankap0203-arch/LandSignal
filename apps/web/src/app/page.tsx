@@ -256,10 +256,7 @@ export default function SearchPage() {
       setError(null);
       setHasSearched(true);
       setRows([]);
-      // Smooth-scroll toward results as soon as search starts
-      requestAnimationFrame(() => {
-        scrollToResultsPastUsedBy("smooth");
-      });
+      // Do not scroll yet — keep Used-by logos visible while Surveying matches loads.
       try {
         const active = override ?? form;
         const filters = filtersFromForm(active);
@@ -306,15 +303,15 @@ export default function SearchPage() {
         setLoading(false);
       }
     },
-    [filtersFromForm, form, scrollToResultsPastUsedBy],
+    [filtersFromForm, form],
   );
 
-  // After matches finish loading the page is tall enough to clear Used-by — snap past it.
+  // The instant results paint, scroll so Scouted opportunities is at the top (Used-by off-screen).
   useEffect(() => {
     if (!hasSearched || loading) return;
-    const snap = () => scrollToResultsPastUsedBy("auto");
+    const snap = () => scrollToResultsPastUsedBy("smooth");
     const t1 = window.setTimeout(snap, 32);
-    const t2 = window.setTimeout(snap, 180);
+    const t2 = window.setTimeout(() => scrollToResultsPastUsedBy("auto"), 220);
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);

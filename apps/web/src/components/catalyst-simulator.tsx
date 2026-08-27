@@ -288,19 +288,29 @@ function Tip({ label, children }: { label: string; children: ReactNode }) {
 
   useEffect(() => {
     if (!on) return;
-    const close = () => setOn(false);
+    const onDoc = (e: MouseEvent | TouchEvent) => {
+      const t = e.target;
+      if (!(t instanceof Node)) return;
+      if (btnRef.current?.contains(t)) return;
+      if (t instanceof Element && t.closest(".fse-tip-portal")) return;
+      setOn(false);
+    };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") setOn(false);
     };
     // delay so the opening click doesn't immediately close
     const t = window.setTimeout(() => {
-      window.addEventListener("click", close);
+      document.addEventListener("pointerdown", onDoc, true);
+      document.addEventListener("mousedown", onDoc, true);
+      document.addEventListener("touchstart", onDoc, { capture: true, passive: true });
     }, 0);
     window.addEventListener("keydown", onKey);
     return () => {
       window.clearTimeout(t);
+      document.removeEventListener("pointerdown", onDoc, true);
+      document.removeEventListener("mousedown", onDoc, true);
+      document.removeEventListener("touchstart", onDoc, true);
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener("click", close);
     };
   }, [on]);
 
@@ -328,6 +338,20 @@ function Tip({ label, children }: { label: string; children: ReactNode }) {
               style={{ top: pos.top, left: pos.left, width: pos.width }}
               onClick={(e) => e.stopPropagation()}
             >
+              <span className="help-tip-pop-head">
+                <strong>{label}</strong>
+                <button
+                  type="button"
+                  className="help-tip-close"
+                  aria-label="Close"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOn(false);
+                  }}
+                >
+                  ×
+                </button>
+              </span>
               {children}
             </span>,
             document.body,
