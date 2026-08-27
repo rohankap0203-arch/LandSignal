@@ -83,61 +83,41 @@ export function buildAerialFallback(
 /** @deprecated use buildAerialFallback */
 export const buildSatelliteGallery = buildAerialFallback;
 
-/** One-line explanation of what this frame shows relative to the land. */
+/** Always-visible explanation of what this frame shows relative to the land. */
 function landRelationLine(img: LocationImage): string {
   const kind = img.kind || "";
   const label = (img.label || "").trim();
-  const MAX = 88; // fits one wrapped line on phone + desktop without clipping
-
-  const fit = (s: string): string => {
-    const clean = s.replace(/\s+/g, " ").trim();
-    if (clean.length <= MAX) return clean;
-    const cut = clean.slice(0, MAX - 1);
-    const at = Math.max(cut.lastIndexOf(" "), cut.lastIndexOf("—"), cut.lastIndexOf("-"));
-    const base = (at > MAX * 0.55 ? cut.slice(0, at) : cut).trimEnd().replace(/[.,;:]+$/, "");
-    return `${base}…`;
-  };
 
   if (kind === "streetview" || img.embed) {
-    return fit("Street-level view of the land from the nearest road — look around the parcel.");
+    return "Street-level view of the land from the nearest road.";
   }
   if (kind === "street") {
     const facing = label.match(/facing\s+([A-Z]{1,2})\b/i)?.[1];
-    if (facing) {
-      return fit(`Street-level photo near the land, looking ${facing} along the approach.`);
-    }
+    if (facing) return `Street-level photo near the land, looking ${facing}.`;
     const dist = label.match(/([\d.]+)\s*(m|km)\b/i);
-    if (dist) {
-      return fit(`Street-level photo of the approach about ${dist[1]} ${dist[2]} from the land.`);
-    }
-    return fit("Street-level photo of the road approach near this land.");
+    if (dist) return `Street-level photo about ${dist[1]} ${dist[2]} from the land.`;
+    return "Street-level photo of the road approach near this land.";
   }
   if (kind === "aerial") {
-    if (/surround/i.test(label)) {
-      return fit("Wider aerial of the land and the ground around it.");
-    }
-    return fit("Overhead aerial centered on this land.");
+    if (/surround/i.test(label)) return "Wider aerial of the land and surrounding ground.";
+    return "Overhead aerial centered on this land.";
   }
   if (kind === "ground") {
     if (/^Nearby\s*[—–-]/i.test(label)) {
       const place = label.replace(/^Nearby\s*[—–-]\s*/i, "").trim();
-      return fit(
-        place
-          ? `Nearby place context for this land — ${place}.`
-          : "Nearby place photo for context around this land.",
-      );
+      return place
+        ? `Nearby place context for this land: ${place}.`
+        : "Nearby place photo for context around this land.";
     }
     const cleaned = label
       .replace(/\.(jpe?g|png|webp|gif)\b.*/i, "")
       .replace(/\s*[·•]\s*\d+\s*m\b.*/i, "")
       .replace(/\s+/g, " ")
       .trim();
-    if (cleaned) {
-      return fit(`Ground photo near this land — ${cleaned}.`);
-    }
-    return fit("Ground-level photo from near this land for local context.");
+    if (cleaned) return `Ground photo near this land: ${cleaned}.`;
+    return "Ground-level photo from near this land.";
   }
-  return fit(label || "View of this land and its surroundings.");
+  return label || "View of this land and its surroundings.";
 }
 
 export function LocationImagesModal({
