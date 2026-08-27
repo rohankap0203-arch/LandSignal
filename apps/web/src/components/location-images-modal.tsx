@@ -80,25 +80,6 @@ export function buildAerialFallback(
   ];
 }
 
-/** Instant Street View shell so the modal is useful while extras load. */
-function buildInstantStreetView(
-  lat: number,
-  lon: number,
-  acres?: number | null,
-): LocationImage[] {
-  return [
-    {
-      id: "google-street-view",
-      label: "Street View",
-      url: streetViewEmbedUrl(lat, lon),
-      thumb_url: streetViewThumb(lat, lon, acres),
-      source: "Google Street View",
-      kind: "streetview",
-      embed: true,
-    },
-  ];
-}
-
 /** @deprecated use buildAerialFallback */
 export const buildSatelliteGallery = buildAerialFallback;
 
@@ -114,7 +95,7 @@ export function LocationImagesModal({
   images,
 }: Props) {
   const [idx, setIdx] = useState(0);
-  const [loadingExtras, setLoadingExtras] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState<LocationImage[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [svResetKey, setSvResetKey] = useState(0);
@@ -126,7 +107,6 @@ export function LocationImagesModal({
     setError(null);
     setFetched(null);
     setSvResetKey(0);
-    setLoadingExtras(false);
 
     let cancelled = false;
     const run = async () => {
@@ -141,11 +121,6 @@ export function LocationImagesModal({
         Number.isFinite(latitude) &&
         Number.isFinite(longitude);
 
-      // Show Street View immediately — don't wait on Wikimedia/KartaView round-trips.
-      if (hasCoords) {
-        setFetched(buildInstantStreetView(latitude!, longitude!, acres));
-      }
-
       if (!parcelId) {
         if (hasCoords) {
           setFetched(buildAerialFallback(latitude!, longitude!, acres));
@@ -153,7 +128,7 @@ export function LocationImagesModal({
         return;
       }
 
-      setLoadingExtras(true);
+      setLoading(true);
       try {
         const payload = await landsignalApi.locationImages(parcelId);
         if (cancelled) return;
@@ -179,7 +154,7 @@ export function LocationImagesModal({
           setFetched(buildAerialFallback(latitude!, longitude!, acres));
         }
       } finally {
-        if (!cancelled) setLoadingExtras(false);
+        if (!cancelled) setLoading(false);
       }
     };
     void run();
@@ -237,10 +212,9 @@ export function LocationImagesModal({
             <div className="display text-lg font-semibold leading-snug">{title}</div>
             <div className="loc-images-head-meta">
               {location ? <span className="loc-images-head-location">{location}</span> : null}
-              {gallery.length > 0 ? (
+              {!loading && gallery.length > 0 ? (
                 <span className="loc-images-head-count">
                   {idx + 1} / {gallery.length}
-                  {loadingExtras ? " · …" : ""}
                 </span>
               ) : null}
             </div>
@@ -250,7 +224,7 @@ export function LocationImagesModal({
           </button>
         </div>
 
-        {!current && loadingExtras ? (
+        {loading ? (
           <div className="loc-images-loading" role="status" aria-live="polite">
             <div className="images-scout" aria-hidden>
               <div className="images-scout-stage">
