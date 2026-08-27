@@ -105,10 +105,10 @@ def is_land_inventory(
         or (addr_s[:1].isdigit() and re.search(r"\d+\s+[A-Za-z]", addr_s))
     )
 
-    # Tax sale / surplus / manual: numbered street addresses under 1 acre are buildings.
-    # Do not trust description boilerplate ("tax-forfeited land") to override that.
+    # Tax sale / surplus / manual: numbered street addresses are usually buildings.
+    # Allow only large rural acreage, or an explicit land cue in the title/address.
     if provider in {"public_tax_sale", "public_surplus", "manual", ""}:
-        if numbered and (acres is None or acres < 1.0):
+        if numbered and not landish and (acres is None or acres < 5.0):
             return False
         # Sub-acre tax-sale rows need an explicit land cue in the title/address.
         if acres is not None and acres < 1.0 and not landish:
