@@ -2299,8 +2299,8 @@ SOURCES: list[ArcgisMarketSource] = [
         "Statewide",
         _norm_nj_mod4_vacant,
         where="PROP_CLASS='1' AND CALC_ACRE>=1 AND IMPRVT_VAL=0",
-        page_size=1000,
-        shard_by_objectid=True,
+        page_size=500,
+        shard_by_objectid=False,
         objectid_max=4_000_000,
     ),
     ArcgisMarketSource(
@@ -2311,8 +2311,8 @@ SOURCES: list[ArcgisMarketSource] = [
         "Statewide",
         _norm_nj_mod4_farm,
         where="PROP_CLASS='3B' AND CALC_ACRE>=10",
-        page_size=1000,
-        shard_by_objectid=True,
+        page_size=500,
+        shard_by_objectid=False,
         objectid_max=4_000_000,
     ),
     # Statewide cadastral screens — FL/NJ/NY/MA/AR here; NC/NE/WA/WI/UT/IN/VT/CT appended
@@ -2325,12 +2325,11 @@ SOURCES: list[ArcgisMarketSource] = [
         "NY",
         "Statewide",
         _norm_ny_orpts_vacant,
-        where=(
-            "PROP_CLASS >= 300 AND PROP_CLASS < 400 AND PROP_CLASS <> 315 "
-            "AND CALC_ACRES >= 1 AND CALC_ACRES <= 2500 AND OWNER_TYPE='8'"
-        ),
-        page_size=1000,
-        shard_by_objectid=True,
+        # CALC_ACRES / OWNER_TYPE filters 400 on this MapServer — class band only,
+        # acre floor enforced in normalize.
+        where="PROP_CLASS >= 300 AND PROP_CLASS < 400 AND PROP_CLASS <> 315",
+        page_size=500,
+        shard_by_objectid=False,
         objectid_max=5_000_000,
     ),
     ArcgisMarketSource(
@@ -2340,12 +2339,9 @@ SOURCES: list[ArcgisMarketSource] = [
         "NY",
         "Statewide",
         _norm_ny_orpts_ag,
-        where=(
-            "PROP_CLASS >= 100 AND PROP_CLASS < 200 "
-            "AND CALC_ACRES >= 10 AND CALC_ACRES <= 2500 AND OWNER_TYPE='8'"
-        ),
-        page_size=1000,
-        shard_by_objectid=True,
+        where="PROP_CLASS >= 100 AND PROP_CLASS < 200",
+        page_size=500,
+        shard_by_objectid=False,
         objectid_max=5_000_000,
     ),
     ArcgisMarketSource(
@@ -2923,6 +2919,12 @@ async def asyncio_gather_sources(
             target = max(per_source, statewide_target)
 
         async def _pull() -> list[dict]:
+            # Small paint budgets must not enter OID/value shard loops — those
+            # were hanging NJ/NY/TX and leaving the 50-state map incomplete.
+            if target <= 800:
+                return await _fetch_arcgis_pages(
+                    client, src, target=target, start_offset=start_offset
+                )
             if getattr(src, "shard_field", None) and getattr(src, "shard_values", None):
                 return await _fetch_arcgis_value_shards(
                     client, src, target=target, start_offset=start_offset

@@ -1091,9 +1091,9 @@ SOURCES: list[ArcgisMarketSource] = [
         "PA",
         _norm_pa_pasda,
         where="1=1",
-        shard=True,
+        shard=False,
         objectid_max=5_000_000,
-        page_size=1000,
+        page_size=500,
     ),
     _src(
         "al_jefferson_parcels",

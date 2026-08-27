@@ -455,7 +455,7 @@ async def discover_opportunities(
     # so we paint the 50-state map fast without exploding RSS or waiting on one hung feed.
     wave_size = 4
     # Hard cap per state so a dead ArcGIS endpoint cannot stall the nationwide walk.
-    state_wall_clock_s = 55.0
+    state_wall_clock_s = 70.0
     log.info(
         "discover_coverage_queue",
         states=len(state_queue),
