@@ -6967,6 +6967,13 @@ a.acquire-block:hover {
     top: 0.5rem;
     right: 0.5rem;
   }
+
+  .parcel-map-view-images {
+    width: 1.9rem;
+    height: 1.9rem;
+    bottom: 0.5rem;
+    right: 0.5rem;
+  }
 }
 
 .land-alert-card-title {
