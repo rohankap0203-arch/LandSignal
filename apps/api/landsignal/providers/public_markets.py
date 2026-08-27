@@ -2320,27 +2320,29 @@ SOURCES: list[ArcgisMarketSource] = [
     # a clean public vacant class filter exists (DE/HI/IA/KY/LA/ME/MS/ND/NH/OK/RI/SC/SD/WV/…).
     ArcgisMarketSource(
         "ny_orpts_vacant",
-        "New York ORPTS Vacant Land (1ac+)",
-        "https://gisservices.its.ny.gov/arcgis/rest/services/NYS_Tax_Parcels_Public/MapServer/1/query",
+        "New York ORPTS Vacant Land centroids (1ac+)",
+        # Polygon MapServer on gisservices.its.ny.gov times out; centroid points are fast.
+        "https://nysgeohub.ny.gov/arcgis/rest/services/Parcels/NYS_Tax_Parcel_Centroid_Points/FeatureServer/0/query",
         "NY",
         "Statewide",
         _norm_ny_orpts_vacant,
-        # CALC_ACRES / OWNER_TYPE filters 400 on this MapServer — class band only,
-        # acre floor enforced in normalize.
-        where="PROP_CLASS >= 300 AND PROP_CLASS < 400 AND PROP_CLASS <> 315",
-        page_size=500,
+        where=(
+            "PROP_CLASS LIKE '3%' AND PROP_CLASS <> '315' "
+            "AND OWNER_TYPE='8' AND CALC_ACRES >= 1"
+        ),
+        page_size=200,
         shard_by_objectid=False,
         objectid_max=5_000_000,
     ),
     ArcgisMarketSource(
         "ny_orpts_agriculture",
-        "New York ORPTS Agriculture (10ac+)",
-        "https://gisservices.its.ny.gov/arcgis/rest/services/NYS_Tax_Parcels_Public/MapServer/1/query",
+        "New York ORPTS Agriculture (disabled — vacant centroids cover NY)",
+        "https://nysgeohub.ny.gov/arcgis/rest/services/Parcels/NYS_Tax_Parcel_Centroid_Points/FeatureServer/0/query",
         "NY",
         "Statewide",
         _norm_ny_orpts_ag,
-        where="PROP_CLASS >= 100 AND PROP_CLASS < 200",
-        page_size=500,
+        where="1=0",
+        page_size=100,
         shard_by_objectid=False,
         objectid_max=5_000_000,
     ),
@@ -2473,8 +2475,8 @@ async def _fetch_arcgis_pages(
     page_size = max(1, int(page_size or src.page_size or 200))
     where_clause = where or src.where
     out_fields = (getattr(src, "out_fields", None) or "*").strip() or "*"
-    # Over-page: statewide vacant rows often fail normalize, so raw ≫ normalized.
-    max_pages = max(2, min(40, (max(1, target) // page_size) * 5 + 3))
+    # Keep page count tight — over-paging statewide hosts (NY/NJ) blew paint budgets.
+    max_pages = max(2, min(12, (max(1, target) + page_size - 1) // page_size + 2))
     consecutive_failures = 0
     for _ in range(max_pages):
         if len(out) >= target:
