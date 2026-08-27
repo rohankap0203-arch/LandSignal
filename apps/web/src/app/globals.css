@@ -415,11 +415,11 @@ select {
 }
 
 .used-by-logo--landcom {
-  height: 2.45rem;
+  height: 2.85rem;
 }
 
 .used-by-logo--landcom img {
-  max-width: 11.5rem;
+  max-width: 13.5rem;
 }
 
 .used-by-logo--zillow {
@@ -464,11 +464,11 @@ select {
   }
 
   .used-by-logo--landcom {
-    height: 2.05rem;
+    height: 2.4rem;
   }
 
   .used-by-logo--landcom img {
-    max-width: 9.5rem;
+    max-width: 11.25rem;
   }
 
   .used-by-logo img {

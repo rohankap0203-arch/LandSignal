@@ -2,10 +2,10 @@ const LOGOS = [
   {
     name: "Land.com",
     href: "https://www.land.com",
-    src: "/brands/land-com-lockup.svg",
-    // Exact Land.com star mark + brand wordmark lockup
-    width: 420,
-    height: 96,
+    // Official Land.com Network lockup (green star + serif Land.com™ wordmark)
+    src: "/brands/land-com-lockup.png",
+    width: 277,
+    height: 106,
   },
   {
     name: "Zillow",
@@ -43,8 +43,8 @@ const LOGOS = [
 
 export function UsedByStrip() {
   return (
-    <section className="used-by-strip" aria-label="Used by users of">
-      <p className="used-by-label">Used by users of</p>
+    <section className="used-by-strip" aria-label="Used by buyers on">
+      <p className="used-by-label">Used by buyers on</p>
       <ul className="used-by-logos">
         {LOGOS.map((logo) => (
           <li key={logo.name}>
