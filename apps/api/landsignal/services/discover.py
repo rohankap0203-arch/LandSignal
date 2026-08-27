@@ -440,9 +440,11 @@ async def discover_opportunities(
 
     from landsignal.services.memory_guard import should_stop_heavy_work, snapshot
 
-    # Pull several gap states at once (GIS I/O bound), then ingest/score one-by-one
-    # so we paint the 50-state map fast without exploding RSS.
-    wave_size = 4
+    # Pull a couple gap states at once (GIS I/O bound), then ingest/score one-by-one
+    # so we paint the 50-state map fast without exploding RSS or waiting on one hung feed.
+    wave_size = 2
+    # Hard cap per state so a dead ArcGIS endpoint cannot stall the nationwide walk.
+    state_wall_clock_s = 110.0
     log.info(
         "discover_coverage_queue",
         states=len(state_queue),
@@ -454,15 +456,27 @@ async def discover_opportunities(
 
     async def _run_one_state(st: str, *, include_optional: bool) -> dict[str, Any]:
         try:
-            listings, counts, state_errors = await _pull_state_listings(
-                states=[st],
-                limit=per_state_limit,
-                min_acres=min_acres,
-                max_acres=max_acres,
-                min_per_state=min_per_state,
-                include_optional_providers=include_optional,
-                settings=settings,
+            listings, counts, state_errors = await asyncio.wait_for(
+                _pull_state_listings(
+                    states=[st],
+                    limit=per_state_limit,
+                    min_acres=min_acres,
+                    max_acres=max_acres,
+                    min_per_state=min_per_state,
+                    include_optional_providers=include_optional,
+                    settings=settings,
+                ),
+                timeout=state_wall_clock_s,
             )
+        except asyncio.TimeoutError:
+            log.warning("discover_state_wall_timeout", state=st, timeout_s=state_wall_clock_s)
+            return {
+                "state": st,
+                "listings": [],
+                "counts": {},
+                "errors": [f"{st}: wall-clock timeout ({state_wall_clock_s:.0f}s)"],
+                "batch": None,
+            }
         except Exception as exc:  # noqa: BLE001
             log.warning("discover_state_failed", state=st, error=str(exc)[:200])
             return {

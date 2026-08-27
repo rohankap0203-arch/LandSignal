@@ -44,10 +44,9 @@ _US_STATE_CODES = frozenset(
     }
 )
 
-# Per-source wall clock so one hung ArcGIS host cannot stall nationwide discover.
-# Statewide OID-shard pulls need more than 2 minutes to return real volume.
-_SOURCE_FETCH_TIMEOUT_S = 240.0
-_STATE_FETCH_TIMEOUT_S = 480.0
+# Per-source / per-state wall clocks so one hung ArcGIS host cannot stall the 50-state map.
+_SOURCE_FETCH_TIMEOUT_S = 55.0
+_STATE_FETCH_TIMEOUT_S = 90.0
 _HTTP_RETRY_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 
@@ -2935,10 +2934,11 @@ async def asyncio_gather_sources(
                 client, src, target=target, start_offset=start_offset
             )
 
-        # OID / value shards need a longer wall clock than single-page county feeds.
+        # OID / value shards need a longer wall clock than single-page county feeds,
+        # but never approach multi-minute hangs — that stalled the 50-state map.
         pull_timeout = _SOURCE_FETCH_TIMEOUT_S
         if getattr(src, "shard_by_objectid", False) or getattr(src, "shard_field", None):
-            pull_timeout = max(pull_timeout, 360.0)
+            pull_timeout = max(pull_timeout, 75.0)
         try:
             return await asyncio.wait_for(_pull(), timeout=pull_timeout)
         except asyncio.TimeoutError:
