@@ -235,19 +235,15 @@ export default function SearchPage() {
     [meta],
   );
 
-  const scrollToResultsPastUsedBy = useCallback((behavior: ScrollBehavior = "smooth") => {
-    const results = document.getElementById("search-results");
-    if (!results) return;
-    const usedBy = document.querySelector(".used-by-strip") as HTMLElement | null;
-    const resultsTop = results.getBoundingClientRect().top + window.scrollY;
-    // Put results at the top of the viewport so Used-by logos are fully above.
-    const pastUsedBy = usedBy
-      ? usedBy.getBoundingClientRect().bottom + window.scrollY + 8
-      : resultsTop;
-    const top = Math.max(0, Math.max(resultsTop, pastUsedBy));
-    // Prefer documentElement.scrollTo — more reliable than window.scrollTo in some WebViews.
+  const scrollToScoutedOpportunities = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const heading =
+      (document.querySelector("#search-results h2") as HTMLElement | null) ||
+      document.getElementById("search-results");
+    if (!heading) return;
+    // Pin "Scouted opportunities" to the top of the viewport (Used-by logos off-screen above).
+    const top = heading.getBoundingClientRect().top + window.scrollY;
     const scroller = document.scrollingElement || document.documentElement;
-    scroller.scrollTo({ top, behavior });
+    scroller.scrollTo({ top: Math.max(0, top), behavior });
   }, []);
 
   const runSearch = useCallback(
@@ -309,14 +305,13 @@ export default function SearchPage() {
   // The instant results paint, scroll so Scouted opportunities is at the top (Used-by off-screen).
   useEffect(() => {
     if (!hasSearched || loading) return;
-    const snap = () => scrollToResultsPastUsedBy("smooth");
-    const t1 = window.setTimeout(snap, 32);
-    const t2 = window.setTimeout(() => scrollToResultsPastUsedBy("auto"), 220);
+    const t1 = window.setTimeout(() => scrollToScoutedOpportunities("smooth"), 40);
+    const t2 = window.setTimeout(() => scrollToScoutedOpportunities("auto"), 280);
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
     };
-  }, [hasSearched, loading, rows.length, scrollToResultsPastUsedBy]);
+  }, [hasSearched, loading, rows.length, scrollToScoutedOpportunities]);
 
   useEffect(() => {
     // Stay naturally connected: poll meta hard at first, auto-start discover if empty.
@@ -768,7 +763,7 @@ export default function SearchPage() {
 
       <UsedByStrip />
 
-      <div id="search-results" className="results-head scroll-mt-20">
+      <div id="search-results" className="results-head scroll-mt-0">
         <div>
           <h2 className="display text-2xl font-semibold">Scouted opportunities</h2>
           {status ? <p className="mt-1 text-[var(--muted)]">{status}</p> : null}
