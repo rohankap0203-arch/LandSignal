@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FilterField } from "@/components/filter-field";
 import { HeroSelect } from "@/components/hero-select";
+import { UsedByStrip } from "@/components/used-by-strip";
 import { LandLoader } from "@/components/land-loader";
 import { PropertyCard } from "@/components/property-card";
 import {
@@ -744,6 +745,8 @@ export default function SearchPage() {
           </div>
         </div>
       </section>
+
+      <UsedByStrip />
 
       <div id="search-results" className="results-head scroll-mt-24">
         <div>
