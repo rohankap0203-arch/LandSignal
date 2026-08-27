@@ -344,27 +344,20 @@ export default function ParcelIntelligencePage() {
               onClick={() => setImagesOpen(true)}
             >
               <span className="metric-images-art" aria-hidden>
-                <svg viewBox="0 0 64 48" width="44" height="32" preserveAspectRatio="xMidYMid meet">
-                  <rect width="64" height="48" rx="8" fill="currentColor" className="metric-images-art-bg" />
-                  <path
-                    className="metric-images-art-land"
-                    d="M0 30 C10 26 16 34 24 31 C32 28 38 22 46 26 C54 30 60 28 64 25 L64 48 L0 48 Z"
-                  />
+                <svg viewBox="0 0 64 40" width="36" height="22" preserveAspectRatio="xMidYMid meet">
+                  <rect className="metric-images-art-bg" width="64" height="40" rx="6" />
                   <path
                     className="metric-images-art-land-far"
-                    d="M0 34 C12 30 20 36 30 33 C40 30 50 35 64 31 L64 48 L0 48 Z"
+                    d="M0 26 C12 22 20 28 30 25 C40 22 50 27 64 23 L64 40 L0 40 Z"
                   />
-                  <circle className="metric-images-art-sun" cx="48" cy="14" r="6" />
                   <path
-                    className="metric-images-art-ridge"
-                    d="M8 36 L18 24 L28 34 L38 20 L50 32 L58 26 L64 30"
-                    fill="none"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                    className="metric-images-art-land"
+                    d="M0 30 C10 27 18 33 28 30 C40 26 52 32 64 28 L64 40 L0 40 Z"
                   />
+                  <circle className="metric-images-art-sun" cx="48" cy="12" r="5" />
                 </svg>
               </span>
+              <span className="metric-images-label">View images</span>
             </button>
             <button
               type="button"

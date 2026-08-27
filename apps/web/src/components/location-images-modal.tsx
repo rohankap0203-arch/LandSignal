@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { LandLoader } from "@/components/land-loader";
 import { landsignalApi } from "@/lib/api";
 
 export type LocationImage = {
@@ -199,12 +198,41 @@ export function LocationImagesModal({
         </div>
 
         {loading ? (
-          <div className="loc-images-loading">
-            <LandLoader
-              compact
-              label="Scouting the view…"
-              detail="Pulling Street View and nearby land photos"
-            />
+          <div className="loc-images-loading" role="status" aria-live="polite">
+            <div className="images-scout" aria-hidden>
+              <div className="images-scout-stage">
+                <span className="images-scout-flash" />
+                <span className="images-scout-shot s1">
+                  <span className="images-scout-frame" />
+                </span>
+                <span className="images-scout-shot s2">
+                  <span className="images-scout-frame" />
+                </span>
+                <span className="images-scout-shot s3">
+                  <span className="images-scout-frame" />
+                </span>
+                <span className="images-scout-shutter">
+                  <svg viewBox="0 0 48 48" width="36" height="36">
+                    <circle cx="24" cy="24" r="18" fill="none" stroke="currentColor" strokeWidth="2.5" />
+                    <circle cx="24" cy="24" r="7" fill="currentColor" opacity="0.35" />
+                    <path
+                      d="M24 6 L28 18 L40 18 L30 26 L34 38 L24 30 L14 38 L18 26 L8 18 L20 18 Z"
+                      fill="currentColor"
+                      opacity="0.55"
+                    />
+                  </svg>
+                </span>
+              </div>
+              <div className="images-scout-copy">
+                <div className="display text-xl font-semibold text-[var(--ink)]">Scouting the view…</div>
+                <p className="mt-1 text-sm text-[var(--muted)]">Capturing Street View and nearby land shots</p>
+                <div className="images-scout-dots">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </div>
+            </div>
           </div>
         ) : current ? (
           <>
