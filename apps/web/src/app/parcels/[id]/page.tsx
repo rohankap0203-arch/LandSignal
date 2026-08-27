@@ -247,10 +247,16 @@ export default function ParcelIntelligencePage() {
                     type="button"
                     className="next-process-action"
                     onClick={() => {
-                      const el = document.getElementById("sec-read-start");
-                      if (!el) return;
-                      // Land below the sticky header + scroll-to chips (slightly lower than before).
-                      const top = el.getBoundingClientRect().top + window.scrollY - 56;
+                      const nav = document.getElementById("sec-scroll-to");
+                      const read = document.getElementById("sec-read-start");
+                      if (!read) return;
+                      // Sticky header clearance + a thin peek of Scroll-to still visible.
+                      const headerOffset = 52;
+                      const peek = 16;
+                      const anchor = nav
+                        ? nav.getBoundingClientRect().bottom + window.scrollY
+                        : read.getBoundingClientRect().top + window.scrollY;
+                      const top = Math.max(0, anchor - headerOffset - peek);
                       window.scrollTo({ top, behavior: "smooth" });
                     }}
                   >
