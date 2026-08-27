@@ -188,9 +188,16 @@ export function LocationImagesModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="loc-images-head">
-          <div>
+          <div className="loc-images-head-main">
             <div className="display text-lg font-semibold leading-snug">{title}</div>
-            {location ? <div className="mt-0.5 text-sm text-[var(--muted)]">{location}</div> : null}
+            <div className="loc-images-head-meta">
+              {location ? <span className="loc-images-head-location">{location}</span> : null}
+              {!loading && gallery.length > 0 ? (
+                <span className="loc-images-head-count">
+                  {idx + 1} / {gallery.length}
+                </span>
+              ) : null}
+            </div>
           </div>
           <button type="button" className="help-q on" aria-label="Close images" onClick={onClose}>
             ×
@@ -210,17 +217,6 @@ export function LocationImagesModal({
                 </span>
                 <span className="images-scout-shot s3">
                   <span className="images-scout-frame" />
-                </span>
-                <span className="images-scout-shutter">
-                  <svg viewBox="0 0 48 48" width="36" height="36">
-                    <circle cx="24" cy="24" r="18" fill="none" stroke="currentColor" strokeWidth="2.5" />
-                    <circle cx="24" cy="24" r="7" fill="currentColor" opacity="0.35" />
-                    <path
-                      d="M24 6 L28 18 L40 18 L30 26 L34 38 L24 30 L14 38 L18 26 L8 18 L20 18 Z"
-                      fill="currentColor"
-                      opacity="0.55"
-                    />
-                  </svg>
                 </span>
               </div>
               <div className="images-scout-copy">
@@ -253,9 +249,6 @@ export function LocationImagesModal({
               )}
               <div className="loc-images-caption">
                 <span>{current.label}</span>
-                <span className="text-[var(--muted)]">
-                  {idx + 1} / {gallery.length}
-                </span>
               </div>
             </div>
 
