@@ -8459,6 +8459,16 @@ a.acquire-block:hover {
   pointer-events: none;
   z-index: 2;
 }
+.loc-images-relation {
+  margin: 8px 2px 0;
+  padding: 0 2px;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .loc-images-reset {
   position: absolute;
   top: 52px;
