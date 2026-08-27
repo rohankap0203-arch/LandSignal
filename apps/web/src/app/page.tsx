@@ -235,6 +235,17 @@ export default function SearchPage() {
     [meta],
   );
 
+  const scrollToUsedByStrip = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const usedBy = document.querySelector(".used-by-strip") as HTMLElement | null;
+    if (!usedBy) return;
+    const header = document.querySelector(".shell-header") as HTMLElement | null;
+    const headerH = header?.getBoundingClientRect().height ?? 0;
+    // Bring "Used by buyers on" into view under the sticky header while matches load.
+    const top = usedBy.getBoundingClientRect().top + window.scrollY - headerH - 8;
+    const scroller = document.scrollingElement || document.documentElement;
+    scroller.scrollTo({ top: Math.max(0, top), behavior });
+  }, []);
+
   const scrollToScoutedOpportunities = useCallback((behavior: ScrollBehavior = "smooth") => {
     const heading = document.querySelector("#search-results h2") as HTMLElement | null;
     if (!heading) return;
@@ -252,7 +263,10 @@ export default function SearchPage() {
       setError(null);
       setHasSearched(true);
       setRows([]);
-      // Do not scroll yet — keep Used-by logos visible while Surveying matches loads.
+      // Step 1: on click, scroll so Used-by logos are on screen while Surveying matches loads.
+      requestAnimationFrame(() => {
+        scrollToUsedByStrip("smooth");
+      });
       try {
         const active = override ?? form;
         const filters = filtersFromForm(active);
@@ -299,10 +313,10 @@ export default function SearchPage() {
         setLoading(false);
       }
     },
-    [filtersFromForm, form],
+    [filtersFromForm, form, scrollToUsedByStrip],
   );
 
-  // The instant results paint, scroll so Scouted opportunities is at the top (Used-by off-screen).
+  // Step 2: the instant results paint, scroll again so Used-by is off-screen and Scouted opportunities is on top.
   useEffect(() => {
     if (!hasSearched || loading) return;
     let cancelled = false;
