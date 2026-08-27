@@ -460,7 +460,6 @@ export default function SearchPage() {
     return list;
   }, [rows, form.sort]);
 
-  const inventoryStates = meta?.inventory_states || [];
   const strategyHasCustom = form.strategies.includes("CUSTOM");
 
   return (
@@ -471,13 +470,10 @@ export default function SearchPage() {
             <div className="hero-brand-mark">LandSignal</div>
             <div
               className="hero-live"
-              title="Live public GIS / BLM inventory indexed in this session (ATTOM enriches parcel intel — it does not invent for-sale listings)"
+              title="Live public GIS / BLM inventory indexed in this session"
             >
               <span className="hero-live-dot" aria-hidden />
-              <span>
-                Live · {(meta?.inventory_count ?? 0).toLocaleString()} parcels
-                {(meta?.inventory_count ?? 0) === 0 ? " · indexing" : ""}
-              </span>
+              <span>Live</span>
             </div>
           </div>
           <h1>Scout the best land buys in the country</h1>
@@ -738,54 +734,6 @@ export default function SearchPage() {
                 {loading ? "Searching…" : "Show matches"}
               </button>
             </div>
-          </div>
-          <div className="filter-inventory-note" aria-live="polite">
-            <>
-              Live inventory:{" "}
-              <strong>{(meta?.inventory_count ?? 0).toLocaleString()}</strong> parcels
-              {(() => {
-                const live = meta?.inventory_states_live ?? inventoryStates.length;
-                const target =
-                  meta?.inventory_states_target ??
-                  meta?.inventory_states_wired ??
-                  51;
-                if (!live) {
-                  return (meta?.inventory_count ?? 0) === 0
-                    ? " · indexing public GIS/BLM for all 50 states…"
-                    : "";
-                }
-                if (live < target) {
-                  const missing = (meta?.inventory_states_missing || []).slice(0, 8);
-                  return (
-                    <>
-                      {" "}
-                      across <strong>{live}</strong> of <strong>{target}</strong> states
-                      {missing.length
-                        ? ` · still indexing ${missing.join(", ")}${
-                            (meta?.inventory_states_missing || []).length > 8 ? "…" : ""
-                          }`
-                        : " · nationwide index running"}
-                    </>
-                  );
-                }
-                return (
-                  <>
-                    {" "}
-                    across all <strong>{target}</strong> states (
-                    {inventoryStates.join(", ")})
-                  </>
-                );
-              })()}
-              {meta?.attom?.configured ? (
-                <>
-                  {" "}
-                  · ATTOM enrichment{" "}
-                  {(meta.attom.state || (meta.attom.ok ? "AVAILABLE" : "OFF")).toString()}
-                </>
-              ) : (
-                <> · ATTOM enrichment ready</>
-              )}
-            </>
           </div>
         </div>
       </section>
