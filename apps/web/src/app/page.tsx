@@ -460,6 +460,7 @@ export default function SearchPage() {
     return list;
   }, [rows, form.sort]);
 
+  const inventoryStates = meta?.inventory_states || [];
   const strategyHasCustom = form.strategies.includes("CUSTOM");
 
   return (
