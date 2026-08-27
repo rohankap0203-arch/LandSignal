@@ -309,7 +309,7 @@ async def _ingest_and_score(
                 log.warning("discover_mid_persist_failed", error=str(exc)[:200])
 
     return {
-        "imported": len(set(parcel_ids)),
+        "imported": len(new_parcel_ids),
         "refreshed": refreshed,
         "scored": scored,
         "parcel_ids": [str(x) for x in list(set(parcel_ids))[:50]],
@@ -328,6 +328,7 @@ async def _pull_state_listings(
     include_optional_providers: bool,
     settings: Settings,
     paint: bool = False,
+    page_offset: int = 0,
 ) -> tuple[list[dict], dict[str, int], list[str]]:
     blm = BlmLpadProvider()
     tax = PublicTaxSaleProvider()
@@ -339,12 +340,15 @@ async def _pull_state_listings(
         tax_min = max(100, min(min_per_state, tax_limit))
         blm_limit = min(800, max(100, tax_limit))
         surplus_limit = min(200, max(50, tax_limit // 3))
+        tax_offset = 0
     else:
         tax_limit = max(limit, min_per_state * wired)
         tax_limit = min(1_000_000, max(500, tax_limit))
         tax_min = min_per_state
         blm_limit = min(30000, max(2000, min_per_state * 2))
         surplus_limit = min(2000, max(100, min_per_state // 2))
+        # Skip the already-painted head window so deepen ingests new parcels.
+        tax_offset = max(0, int(page_offset or 0))
 
     blm_res, tax_res, surplus_res = await asyncio.gather(
         blm.search_listings(
@@ -360,7 +364,7 @@ async def _pull_state_listings(
                 "limit": tax_limit,
                 "min_per_state": tax_min,
                 "min_acres": min_acres,
-                "offset": 0,
+                "offset": tax_offset,
                 "states": states,
             }
         ),
@@ -473,9 +477,13 @@ async def discover_opportunities(
         **snapshot(),
     )
 
-    async def _run_one_state(st: str, *, include_optional: bool, paint: bool) -> dict[str, Any]:
+    async def _run_one_state(
+        st: str, *, include_optional: bool, paint: bool, existing_n: int = 0
+    ) -> dict[str, Any]:
         pull_limit = min(per_state_limit, 500) if paint else per_state_limit
         pull_min = min(min_per_state, pull_limit) if paint else min_per_state
+        # Deepen past the paint head so ArcGIS offset pages return unseen parcels.
+        page_offset = 0 if paint else max(0, int(existing_n or 0))
         try:
             listings, counts, state_errors = await asyncio.wait_for(
                 _pull_state_listings(
@@ -487,6 +495,7 @@ async def discover_opportunities(
                     include_optional_providers=include_optional,
                     settings=settings,
                     paint=paint,
+                    page_offset=page_offset,
                 ),
                 timeout=state_wall_clock_s,
             )
@@ -541,6 +550,7 @@ async def discover_opportunities(
                     st,
                     include_optional=(wave_start == 0 and i == 0),
                     paint=live_counts.get(st, 0) <= 0,
+                    existing_n=int(live_counts.get(st, 0) or 0),
                 )
                 for i, st in enumerate(wave)
             ]

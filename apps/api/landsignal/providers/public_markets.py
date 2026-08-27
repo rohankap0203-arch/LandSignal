@@ -45,8 +45,9 @@ _US_STATE_CODES = frozenset(
 )
 
 # Per-source / per-state wall clocks so one hung ArcGIS host cannot stall the 50-state map.
-_SOURCE_FETCH_TIMEOUT_S = 55.0
-_STATE_FETCH_TIMEOUT_S = 90.0
+# Deepen passes need longer budgets so OID shards can reach fresh parcels past the paint head.
+_SOURCE_FETCH_TIMEOUT_S = 90.0
+_STATE_FETCH_TIMEOUT_S = 150.0
 _HTTP_RETRY_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 
@@ -2492,8 +2493,8 @@ async def _fetch_arcgis_pages(
     page_size = max(1, int(page_size or src.page_size or 200))
     where_clause = where or src.where
     out_fields = (getattr(src, "out_fields", None) or "*").strip() or "*"
-    # Keep page count tight — over-paging statewide hosts (NY/NJ) blew paint budgets.
-    max_pages = max(2, min(12, (max(1, target) + page_size - 1) // page_size + 2))
+    # Deepen needs more pages so we don't only re-ingest the same head window.
+    max_pages = max(2, min(25, (max(1, target) + page_size - 1) // page_size + 2))
     consecutive_failures = 0
     for _ in range(max_pages):
         if len(out) >= target:
@@ -2956,21 +2957,26 @@ async def asyncio_gather_sources(
                 client, src, target=target, start_offset=start_offset
             )
 
-        # OID / value shards need a longer wall clock than single-page county feeds,
-        # but never approach multi-minute hangs — that stalled the 50-state map.
+        # OID / value shards need a longer wall clock than single-page county feeds.
         pull_timeout = _SOURCE_FETCH_TIMEOUT_S
         if getattr(src, "shard_by_objectid", False) or getattr(src, "shard_field", None):
-            pull_timeout = max(pull_timeout, 75.0)
+            pull_timeout = max(pull_timeout, 140.0)
         try:
             return await asyncio.wait_for(_pull(), timeout=pull_timeout)
         except asyncio.TimeoutError:
             errors.append(f"{src.source_id}: timed out")
             log.warning("public_tax_source_timeout", source=src.source_id)
-            # Last-chance plain page — often recovers partial inventory quickly.
+            # Last-chance plain page — skip further into the layer so deepen
+            # does not only re-ingest the already-cached head window.
             try:
+                page = max(1, int(getattr(src, "page_size", None) or 200))
+                deepen_offset = max(int(start_offset or 0), page * 4)
                 return await asyncio.wait_for(
                     _fetch_arcgis_pages(
-                        client, src, target=min(target, 800), start_offset=start_offset
+                        client,
+                        src,
+                        target=min(target, 1200),
+                        start_offset=deepen_offset,
                     ),
                     timeout=45.0,
                 )
