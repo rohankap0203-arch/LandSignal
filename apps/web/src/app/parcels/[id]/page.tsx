@@ -336,15 +336,6 @@ export default function ParcelIntelligencePage() {
             onExpand={() => setLandViewerOpen(true)}
             onViewImages={() => setImagesOpen(true)}
           />
-          <div className="flex flex-wrap gap-2 px-4 py-3 border-t border-[var(--line)]">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => setLandViewerOpen(true)}
-            >
-              Open land viewer
-            </button>
-          </div>
           <LandViewerModal
             open={landViewerOpen}
             onClose={() => setLandViewerOpen(false)}

@@ -6711,7 +6711,7 @@ a.acquire-block:hover {
   padding: 0;
   overflow: hidden;
   border-radius: 11px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1.5px solid #fff;
   background: #1a4a2e;
   cursor: pointer;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
@@ -6723,7 +6723,7 @@ a.acquire-block:hover {
 
 .parcel-map-view-images:hover {
   transform: translateY(-1px) scale(1.04);
-  border-color: rgba(143, 208, 176, 0.55);
+  border-color: #fff;
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.34);
 }
 
