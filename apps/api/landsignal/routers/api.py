@@ -1281,6 +1281,13 @@ async def search_meta() -> dict[str, Any]:
         for st, n in by_state.items()
         if n < payload["inventory_min_per_state_target"]
     )
+    # Full US map target — wired GIS coverage is 50 states + DC.
+    from landsignal.services.discover import _wired_states
+
+    wired = _wired_states(None)
+    payload["inventory_states_wired"] = len(wired)
+    payload["inventory_states_missing"] = sorted(st for st in wired if st not in by_state)
+    payload["inventory_coverage_pct"] = round(100.0 * len(by_state) / max(1, len(wired)), 1)
     # ATTOM / provider health (never includes API keys)
     try:
         from landsignal.services.property_providers.attom import AttomPropertyProvider

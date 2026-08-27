@@ -75,6 +75,44 @@ def _wired_states(states: list[str] | None) -> list[str]:
     )
 
 
+def _inventory_by_state(store: MemoryStore) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for p in store.parcels.values():
+        if p.is_demo or not p.state:
+            continue
+        st = p.state.upper()
+        counts[st] = counts.get(st, 0) + 1
+    return counts
+
+
+def _coverage_first_queue(
+    store: MemoryStore,
+    states: list[str] | None,
+    *,
+    min_per_state: int,
+) -> list[str]:
+    """Prefer states with zero / thin inventory so all 50 appear before we deepen A–I.
+
+    When the caller did not pin an explicit state list, skip states already at the
+    per-state floor — otherwise every nationwide run restarts at AK and stalls
+    the map at ~14 alphabetical states.
+    """
+    wired = _wired_states(states)
+    counts = _inventory_by_state(store)
+    if states is None:
+        gaps = [st for st in wired if counts.get(st, 0) < min_per_state]
+        if gaps:
+            wired = gaps
+    # 0 inventory first, then below floor, then (if explicit) already-full.
+    return sorted(
+        wired,
+        key=lambda st: (
+            0 if counts.get(st, 0) <= 0 else 1 if counts.get(st, 0) < min_per_state else 2,
+            st,
+        ),
+    )
+
+
 def _diversify(listings: list[dict], limit: int) -> list[dict]:
     by_state_provider: dict[str, dict[str, list[dict]]] = {}
     for row in listings:
@@ -386,7 +424,7 @@ async def discover_opportunities(
         store.scores.clear()
 
     min_per_state = max(500, int(getattr(settings, "discover_min_per_state", 2500) or 2500))
-    state_queue = _wired_states(states)
+    state_queue = _coverage_first_queue(store, states, min_per_state=min_per_state)
     per_state_limit = max(min_per_state, (limit + len(state_queue) - 1) // max(1, len(state_queue)))
     per_state_limit = min(per_state_limit, max(limit, min_per_state))
 
@@ -398,26 +436,23 @@ async def discover_opportunities(
     sample_ids: list[str] = []
     stopped_early = False
     stop_reason = ""
+    states_done: list[str] = []
 
     from landsignal.services.memory_guard import should_stop_heavy_work, snapshot
 
-    for idx, st in enumerate(state_queue):
-        stop, reason = should_stop_heavy_work()
-        if stop:
-            stopped_early = True
-            stop_reason = reason
-            errors.append(f"memory_guard: paused before {st} ({reason})")
-            log.warning("discover_paused_memory", state=st, reason=reason, **snapshot())
-            break
-        log.info(
-            "discover_state_start",
-            state=st,
-            index=idx + 1,
-            of=len(state_queue),
-            per_state_limit=per_state_limit,
-            inventory=sum(1 for p in store.parcels.values() if not p.is_demo),
-            **snapshot(),
-        )
+    # Pull several gap states at once (GIS I/O bound), then ingest/score one-by-one
+    # so we paint the 50-state map fast without exploding RSS.
+    wave_size = 4
+    log.info(
+        "discover_coverage_queue",
+        states=len(state_queue),
+        sample=state_queue[:12],
+        inventory_by_state_n=len(_inventory_by_state(store)),
+        min_per_state=min_per_state,
+        **snapshot(),
+    )
+
+    async def _run_one_state(st: str, *, include_optional: bool) -> dict[str, Any]:
         try:
             listings, counts, state_errors = await _pull_state_listings(
                 states=[st],
@@ -425,54 +460,103 @@ async def discover_opportunities(
                 min_acres=min_acres,
                 max_acres=max_acres,
                 min_per_state=min_per_state,
-                include_optional_providers=(idx == 0),
+                include_optional_providers=include_optional,
                 settings=settings,
             )
         except Exception as exc:  # noqa: BLE001
-            errors.append(f"{st}: {exc}")
             log.warning("discover_state_failed", state=st, error=str(exc)[:200])
-            continue
+            return {
+                "state": st,
+                "listings": [],
+                "counts": {},
+                "errors": [f"{st}: {exc}"],
+                "batch": None,
+            }
+        return {
+            "state": st,
+            "listings": listings,
+            "counts": counts,
+            "errors": state_errors,
+            "batch": None,
+        }
 
-        for k, v in counts.items():
-            source_counts[k] = source_counts.get(k, 0) + v
-        errors.extend(state_errors)
-
-        batch = await _ingest_and_score(
-            store, settings, listings, limit=per_state_limit, fast=fast
-        )
-        imported += int(batch.get("imported") or 0)
-        refreshed += int(batch.get("refreshed") or 0)
-        scored += int(batch.get("scored") or 0)
-        sample_ids.extend(batch.get("parcel_ids") or [])
-        if batch.get("stopped_early"):
+    for wave_start in range(0, len(state_queue), wave_size):
+        stop, reason = should_stop_heavy_work()
+        if stop:
             stopped_early = True
-            stop_reason = str(batch.get("stop_reason") or stop_reason)
-            errors.append(f"memory_guard: paused during {st} scoring ({stop_reason})")
-            # Still persist what we have, then stop the nationwide walk.
+            stop_reason = reason
+            errors.append(f"memory_guard: paused before wave ({reason})")
+            log.warning("discover_paused_memory", reason=reason, **snapshot())
+            break
+
+        wave = state_queue[wave_start : wave_start + wave_size]
+        log.info(
+            "discover_wave_start",
+            states=wave,
+            index=wave_start + 1,
+            of=len(state_queue),
+            inventory=sum(1 for p in store.parcels.values() if not p.is_demo),
+            **snapshot(),
+        )
+        pulled = await asyncio.gather(
+            *[
+                _run_one_state(st, include_optional=(wave_start == 0 and i == 0))
+                for i, st in enumerate(wave)
+            ]
+        )
+
+        for item in pulled:
+            st = item["state"]
+            for k, v in (item.get("counts") or {}).items():
+                source_counts[k] = source_counts.get(k, 0) + v
+            errors.extend(item.get("errors") or [])
+
+            stop, reason = should_stop_heavy_work()
+            if stop:
+                stopped_early = True
+                stop_reason = reason
+                errors.append(f"memory_guard: paused before ingest {st} ({reason})")
+                break
+
+            listings = item.get("listings") or []
+            if not listings:
+                states_done.append(st)
+                continue
+
+            batch = await _ingest_and_score(
+                store, settings, listings, limit=per_state_limit, fast=fast
+            )
+            imported += int(batch.get("imported") or 0)
+            refreshed += int(batch.get("refreshed") or 0)
+            scored += int(batch.get("scored") or 0)
+            sample_ids.extend(batch.get("parcel_ids") or [])
+            states_done.append(st)
+
             try:
                 from landsignal.store import persist_store
 
                 persist_store(store)
             except Exception as exc:  # noqa: BLE001
                 log.warning("discover_state_persist_failed", state=st, error=str(exc)[:200])
+
+            log.info(
+                "discover_state_done",
+                state=st,
+                imported_batch=batch.get("imported"),
+                scored_batch=batch.get("scored"),
+                inventory=sum(1 for p in store.parcels.values() if not p.is_demo),
+                states_with_inventory=len(_inventory_by_state(store)),
+                **snapshot(),
+            )
+            if batch.get("stopped_early"):
+                stopped_early = True
+                stop_reason = str(batch.get("stop_reason") or stop_reason)
+                errors.append(f"memory_guard: paused during {st} scoring ({stop_reason})")
+                break
+        if stopped_early:
             break
 
-        try:
-            from landsignal.store import persist_store
-
-            persist_store(store)
-        except Exception as exc:  # noqa: BLE001
-            log.warning("discover_state_persist_failed", state=st, error=str(exc)[:200])
-
-        log.info(
-            "discover_state_done",
-            state=st,
-            imported_batch=batch.get("imported"),
-            scored_batch=batch.get("scored"),
-            inventory=sum(1 for p in store.parcels.values() if not p.is_demo),
-            **snapshot(),
-        )
-
+    by_state = _inventory_by_state(store)
     return {
         "imported": imported,
         "refreshed": refreshed,
@@ -483,16 +567,19 @@ async def discover_opportunities(
         "errors": errors,
         "fast": fast,
         "states_scanned": state_queue,
+        "states_done": states_done,
         "inventory_total": sum(1 for p in store.parcels.values() if not p.is_demo),
+        "inventory_states": len(by_state),
+        "inventory_by_state": dict(sorted(by_state.items())),
         "stopped_early": stopped_early,
         "stop_reason": stop_reason,
         "memory": snapshot(),
         "note": (
-            "Progressive nationwide index: BLM LPAD + county tax-sale/surplus GIS "
-            f"({sum(source_counts.values())} raw rows considered; {refreshed} existing rows refreshed). "
-            "Parcels appear state-by-state — hit Show matches while the scan continues. "
-            "ATTOM enriches parcel intelligence on analyze; it does not invent for-sale listings. "
-            "Licensed MLS/Land.com/Crexi/Regrid remain unavailable without those API keys."
+            "Coverage-first nationwide index: gap states (0 / below floor) are filled before "
+            "deepening states already at the per-state target. "
+            f"{sum(source_counts.values())} raw rows considered; {refreshed} existing rows refreshed. "
+            f"{len(by_state)} states currently in live inventory. "
+            "ATTOM enriches parcel intelligence on analyze; it does not invent for-sale listings."
             + (f" Paused early to protect VM memory: {stop_reason}." if stopped_early else "")
         ),
     }

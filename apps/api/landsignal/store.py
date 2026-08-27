@@ -487,8 +487,9 @@ def load_persisted_store(store: MemoryStore) -> int:
         size = path.stat().st_size
     except OSError:
         return 0
-    # 50MB soft ceiling — larger dumps historically OOM'd boot on 15Gi VMs.
-    if size > 50_000_000:
+    # Hard ceiling for pathological dumps (pre-slim polygons / GIS attribute blobs).
+    # Slim nationwide snapshots of ~100k parcels can legitimately be 100–250MB.
+    if size > 400_000_000:
         structlog.get_logger().warning(
             "persist_skip_too_large",
             path=str(path),
