@@ -273,8 +273,10 @@ export const landsignalApi = {
   providers: () =>
     api<Array<{ id: string; kind: string; name: string; status: string; detail?: string }>>("/providers"),
   parcel: (id: string) => api<Record<string, unknown>>(`/parcels/${id}`),
-  locationImages: (id: string) =>
-    api<{
+  locationImages: (id: string, opts?: { mode?: "instant" | "full" | "enrich" }) => {
+    const mode = opts?.mode || "full";
+    const q = mode !== "full" ? `?mode=${encodeURIComponent(mode)}` : "";
+    return api<{
       ok: boolean;
       images: Array<{
         id: string;
@@ -286,11 +288,13 @@ export const landsignalApi = {
         attribution?: string;
         page_url?: string | null;
         embed?: boolean;
-        heading?: number | null;
+        caption?: string;
+        distance_m?: number | null;
       }>;
       count: number;
       attom_photos: boolean;
       note?: string;
+      phase?: string;
       maps?: {
         google_maps?: string;
         google_street_view?: string;
@@ -298,7 +302,8 @@ export const landsignalApi = {
         openstreetmap?: string;
         kartaview?: string;
       };
-    }>(`/parcels/${encodeURIComponent(id)}/location-images`),
+    }>(`/parcels/${encodeURIComponent(id)}/location-images${q}`);
+  },
   catalystSimulate: (
     id: string,
     body: { scenario_ids?: string[]; custom_text?: string; stress_case?: string },

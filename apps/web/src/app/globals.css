@@ -9370,6 +9370,32 @@ a.acquire-block:hover {
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
+
+.loc-images-head-enriching {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--brand-soft);
+  letter-spacing: 0.01em;
+}
+
+.loc-images-kind-chip {
+  position: absolute;
+  top: 0.55rem;
+  left: 0.55rem;
+  z-index: 2;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(10, 14, 12, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f4f1e8;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
 .loc-images-stage {
   position: relative;
   border-radius: 12px;
@@ -9678,13 +9704,14 @@ a.acquire-block:hover {
   position: absolute;
   left: 4px;
   bottom: 4px;
-  font-size: 9px;
+  font-size: 0.58rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  line-height: 1;
-  padding: 3px 4px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  padding: 2px 5px;
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.72);
   color: #fff;
 }
 .loc-images-note {
@@ -9692,6 +9719,9 @@ a.acquire-block:hover {
   font-size: 0.72rem;
   line-height: 1.35;
   color: var(--muted);
+}
+.loc-images-note--warn {
+  color: var(--warning);
 }
 .loc-images-links {
   display: flex;

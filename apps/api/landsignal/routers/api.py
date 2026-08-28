@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
 from landsignal.models import (
     AlertRuleCreate,
@@ -1480,8 +1480,18 @@ async def memory_diagnostics() -> dict[str, Any]:
 
 
 @router.get("/parcels/{parcel_id}/location-images")
-async def parcel_location_images(parcel_id: UUID) -> dict[str, Any]:
-    """USGS aerial + nearby Wikimedia/Wikipedia photos for View Images."""
+async def parcel_location_images(
+    parcel_id: UUID,
+    mode: str = Query("full", description="instant = aerial+SV only; full = + nearby road/ground"),
+) -> dict[str, Any]:
+    """Public land imagery for View Images (not MLS listing photos).
+
+    `instant` returns in ~0ms of upstream wait (satellite URL construction).
+    `full` adds nearby road frames + ground photos, with a short TTL cache.
+    """
+    import asyncio
+
+    from landsignal.scoring.geospatial import interior_pin_lat_lon
     from landsignal.services.location_images import build_location_images
 
     store = get_store(get_settings().demo_seed)
@@ -1489,11 +1499,29 @@ async def parcel_location_images(parcel_id: UUID) -> dict[str, Any]:
     if not parcel:
         raise HTTPException(404, "Parcel not found")
     listing = store.listing_for_parcel(parcel_id)
-    return build_location_images(
-        lat=parcel.latitude,
-        lon=parcel.longitude,
+
+    lat = parcel.latitude
+    lon = parcel.longitude
+    # Same land-true pin as the map — avoid lake/centroid misses.
+    try:
+        if getattr(parcel, "polygon", None):
+            from shapely.geometry import shape
+
+            geom = shape({"type": "Polygon", "coordinates": parcel.polygon})
+            pin = interior_pin_lat_lon(geom)
+            if pin and len(pin) == 2:
+                lat, lon = float(pin[0]), float(pin[1])
+    except Exception:  # noqa: BLE001
+        pass
+
+    mode_n = (mode or "full").strip().lower()
+    return await asyncio.to_thread(
+        build_location_images,
+        lat=lat,
+        lon=lon,
         acres=parcel.acreage,
         title=(listing.title if listing else None) or parcel.apn or "Parcel",
+        mode=mode_n,
     )
 
 

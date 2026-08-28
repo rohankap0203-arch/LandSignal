@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type MouseEvent, type KeyboardEvent } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
 import { TrajectorySpark } from "@/components/price-trajectory";
-import { LocationImagesModal } from "@/components/location-images-modal";
+import { LocationImagesModal, prefetchLocationImages } from "@/components/location-images-modal";
 import { SignalBadge } from "@/components/signal-badge";
 import type { RadarRow } from "@/lib/api";
 
@@ -242,6 +242,9 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             className="metric metric-action metric-images"
             title="Street View + nearby photos"
             aria-label="View images"
+            onMouseEnter={() => prefetchLocationImages(row.parcel_id)}
+            onFocus={() => prefetchLocationImages(row.parcel_id)}
+            onTouchStart={() => prefetchLocationImages(row.parcel_id)}
             onClick={(e) => {
               e.stopPropagation();
               setImagesOpen(true);
