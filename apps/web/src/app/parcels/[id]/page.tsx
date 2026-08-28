@@ -11,7 +11,7 @@ import { CatalystSimulator } from "@/components/catalyst-simulator";
 import { PriceTrajectory } from "@/components/price-trajectory";
 import { ReturnVisual } from "@/components/return-visual";
 import { ScoreBar } from "@/components/score-bar";
-import { OpportunityRecipe, ScoutInsightPanel } from "@/components/score-story";
+import { GroundTruthChecks, OpportunityRecipe, ScoutInsightPanel } from "@/components/score-story";
 import { SignalBadge } from "@/components/signal-badge";
 import { SignalCockpit } from "@/components/signal-cockpit";
 import { landsignalApi, type ActionLink } from "@/lib/api";
@@ -658,57 +658,7 @@ export default function ParcelIntelligencePage() {
         ratings={ratings}
       />
 
-      <section id="sec-land" className="scroll-mt-20">
-        <div className="mb-2">
-          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-            Ground truth
-          </div>
-          <h2 className="display text-lg font-semibold">Checks that move the score</h2>
-        </div>
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-          {(
-            [
-              "soil",
-              "flood",
-              "wetlands",
-              "transmission",
-              "access",
-              "slope",
-              "growth",
-              "resale",
-            ] as const
-          ).map((key) => {
-            const card = land[key] || {};
-            const level = String(card.level || card.knowledge_state || "")
-              .replace(/KnowledgeState\./gi, "")
-              .replace(/UNKNOWN/gi, "Not confirmed")
-              .replace(/KNOWN/gi, "Known")
-              .replace(/ESTIMATED/gi, "Estimate")
-              .replace(/OBSERVED/gi, "From source")
-              .replace(/BLENDED/gi, "Mixed")
-              .replace(/TEMPORARILY_UNAVAILABLE/gi, "Unavailable")
-              .replace(/_/g, " ");
-            return (
-              <details key={key} className="panel land-compact group">
-                <summary className="cursor-pointer list-none">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="font-semibold text-sm">{String(card.title || key)}</h3>
-                    <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">{level}</span>
-                  </div>
-                  <p className="mt-1 text-[var(--ink)]">
-                    {firstSentence(card.plain_english || "No reading for this pin yet.", 110)}
-                  </p>
-                </summary>
-                <ul className="mt-1 space-y-0.5">
-                  {((card.bullets as string[]) || []).slice(0, 2).map((b) => (
-                    <li key={b}>• {b}</li>
-                  ))}
-                </ul>
-              </details>
-            );
-          })}
-        </div>
-      </section>
+      <GroundTruthChecks land={land} />
 
     </div>
   );

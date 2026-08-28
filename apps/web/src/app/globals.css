@@ -5474,7 +5474,14 @@ a.acquire-block:hover {
 }
 
 .opportunity-recipe-inner {
-  padding: 1.1rem 1.15rem 1.2rem;
+  padding: 0.85rem 0.95rem 0.95rem;
+}
+
+.opportunity-recipe-kicker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .opportunity-recipe-eyebrow {
@@ -5490,20 +5497,20 @@ a.acquire-block:hover {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  margin-top: 0.25rem;
+  margin-top: 0.2rem;
 }
 
 .opportunity-recipe-title {
-  font-size: 1.25rem;
+  font-size: 1.12rem;
   font-weight: 650;
-  line-height: 1.25;
+  line-height: 1.2;
   margin: 0;
 }
 
 .opportunity-recipe-sub {
-  margin: 0.3rem 0 0;
-  font-size: 0.82rem;
-  line-height: 1.45;
+  margin: 0.2rem 0 0;
+  font-size: 0.76rem;
+  line-height: 1.4;
   color: var(--muted);
 }
 
@@ -5512,8 +5519,8 @@ a.acquire-block:hover {
   display: flex;
   align-items: baseline;
   gap: 1px;
-  padding: 0.45rem 0.65rem;
-  border-radius: 14px;
+  padding: 0.28rem 0.5rem;
+  border-radius: 11px;
   background:
     linear-gradient(
       145deg,
@@ -5525,7 +5532,7 @@ a.acquire-block:hover {
 
 .opportunity-recipe-total-n {
   font-family: var(--font-display);
-  font-size: 1.65rem;
+  font-size: 1.35rem;
   font-weight: 700;
   line-height: 1;
   color: var(--brand);
@@ -5533,7 +5540,7 @@ a.acquire-block:hover {
 }
 
 .opportunity-recipe-total-d {
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--muted);
 }
@@ -5541,19 +5548,19 @@ a.acquire-block:hover {
 .opportunity-recipe-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.75rem;
+  gap: 0.3rem;
+  margin-top: 0.55rem;
 }
 
 .opportunity-recipe-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.28rem 0.55rem;
+  gap: 0.2rem;
+  padding: 0.18rem 0.45rem;
   border-radius: 999px;
   background: var(--bg-soft);
   border: 1px solid var(--line);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   color: var(--muted);
 }
 
@@ -5573,19 +5580,29 @@ a.acquire-block:hover {
 }
 
 .opportunity-recipe-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  margin-top: 0.9rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.35rem;
+  margin-top: 0.7rem;
+}
+
+@media (min-width: 900px) {
+  .opportunity-recipe-list {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .recipe-ingredient.is-open {
+    grid-column: 1 / -1;
+  }
 }
 
 .recipe-ingredient {
   display: block;
   width: 100%;
   margin: 0;
-  padding: 0.8rem 0.85rem;
+  padding: 0.55rem 0.65rem;
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--bg-soft);
   color: inherit;
   text-align: left;
@@ -5607,7 +5624,7 @@ a.acquire-block:hover {
 .recipe-ingredient-top {
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 0.65rem;
+  gap: 0.5rem;
   align-items: start;
 }
 
@@ -5615,12 +5632,12 @@ a.acquire-block:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.55rem;
-  height: 1.55rem;
+  width: 1.35rem;
+  height: 1.35rem;
   border-radius: 999px;
   background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
   color: var(--brand);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
 }
@@ -5633,20 +5650,20 @@ a.acquire-block:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem 0.55rem;
+  gap: 0.28rem 0.4rem;
 }
 
 .recipe-ingredient-label {
-  font-size: 0.92rem;
+  font-size: 0.84rem;
   font-weight: 650;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 .recipe-verb {
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  padding: 0.15rem 0.45rem;
+  padding: 0.1rem 0.35rem;
   border-radius: 999px;
   background: var(--bg-elevated);
   color: var(--muted);
@@ -5668,10 +5685,22 @@ a.acquire-block:hover {
   color: color-mix(in srgb, var(--warning) 85%, var(--ink));
 }
 
+.recipe-measure {
+  font-size: 0.62rem;
+  font-weight: 650;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.recipe-bars {
+  display: grid;
+  gap: 0.18rem;
+  margin-top: 0.35rem;
+}
+
 .recipe-track {
   position: relative;
-  margin-top: 0.45rem;
-  height: 8px;
+  height: 6px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--line) 55%, var(--bg-elevated));
   overflow: hidden;
@@ -5688,6 +5717,20 @@ a.acquire-block:hover {
   transition: width 650ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.recipe-portion {
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 40%, transparent);
+  overflow: hidden;
+}
+
+.recipe-portion-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 28%, var(--brand-soft));
+  transition: width 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .recipe-track-weight {
   position: absolute;
   top: -2px;
@@ -5702,9 +5745,9 @@ a.acquire-block:hover {
 .recipe-meta-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem 0.55rem;
-  margin-top: 0.4rem;
-  font-size: 0.72rem;
+  gap: 0.25rem 0.45rem;
+  margin-top: 0.28rem;
+  font-size: 0.68rem;
   color: var(--muted);
 }
 
@@ -5714,9 +5757,15 @@ a.acquire-block:hover {
   font-variant-numeric: tabular-nums;
 }
 
+.recipe-contrib {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--brand) 70%, var(--ink));
+}
+
 .recipe-weight,
 .recipe-ks {
-  padding: 0.1rem 0.4rem;
+  padding: 0.05rem 0.32rem;
   border-radius: 999px;
   background: var(--bg-elevated);
 }
@@ -5728,40 +5777,47 @@ a.acquire-block:hover {
 }
 
 .recipe-tease {
-  margin: 0.45rem 0 0;
-  font-size: 0.78rem;
-  line-height: 1.45;
+  margin: 0.32rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
   color: var(--muted);
 }
 
 .recipe-depth {
-  margin-top: 0.55rem;
-  padding-top: 0.55rem;
+  margin-top: 0.45rem;
+  padding-top: 0.45rem;
   border-top: 1px dashed color-mix(in srgb, var(--line) 80%, transparent);
   animation: scout-beat-in 280ms ease both;
 }
 
-.recipe-weight-note {
+.recipe-why {
   margin: 0;
-  font-size: 0.74rem;
+  font-size: 0.78rem;
   line-height: 1.45;
+  color: var(--ink);
+}
+
+.recipe-weight-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.7rem;
+  line-height: 1.4;
   color: color-mix(in srgb, var(--ink) 75%, var(--muted));
 }
 
 .recipe-drivers {
-  margin: 0.45rem 0 0;
+  margin: 0.35rem 0 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.22rem;
 }
 
 .recipe-drivers li {
   position: relative;
-  padding-left: 0.85rem;
-  font-size: 0.74rem;
-  line-height: 1.4;
+  padding-left: 0.75rem;
+  font-size: 0.7rem;
+  line-height: 1.35;
   color: var(--muted);
 }
 
@@ -5769,9 +5825,210 @@ a.acquire-block:hover {
   content: "";
   position: absolute;
   left: 0;
-  top: 0.45em;
-  width: 0.35rem;
-  height: 0.35rem;
+  top: 0.4em;
+  width: 0.3rem;
+  height: 0.3rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-soft) 70%, var(--line));
+}
+
+/* Ground truth — compact dynamic checks */
+.ground-truth {
+  overflow: hidden;
+}
+
+.ground-truth-inner {
+  padding: 0.85rem 0.95rem 0.95rem;
+}
+
+.ground-truth-kicker-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem 0.75rem;
+}
+
+.ground-truth-eyebrow {
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ground-truth-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+
+.ground-truth-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.16rem 0.42rem;
+  border-radius: 999px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  font-size: 0.66rem;
+  color: var(--muted);
+}
+
+.ground-truth-chip strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.ground-truth-chip.is-up {
+  background: color-mix(in srgb, var(--positive) 10%, var(--bg-soft));
+  border-color: color-mix(in srgb, var(--positive) 28%, var(--line));
+}
+
+.ground-truth-title {
+  margin: 0.25rem 0 0;
+  font-size: 1.12rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.ground-truth-sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.ground-truth-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.35rem;
+  margin-top: 0.7rem;
+}
+
+@media (min-width: 640px) {
+  .ground-truth-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (min-width: 1100px) {
+  .ground-truth-grid {
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+  }
+
+  .ground-check.is-open {
+    grid-column: span 2;
+  }
+}
+
+.ground-check {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--bg-soft);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  animation: scout-beat-in 400ms ease both;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.ground-check:hover {
+  border-color: color-mix(in srgb, var(--brand-soft) 28%, var(--line));
+  transform: translateY(-1px);
+}
+
+.ground-check.is-open {
+  border-color: color-mix(in srgb, var(--brand-soft) 40%, var(--line));
+  background: color-mix(in srgb, var(--brand-soft) 7%, var(--bg-soft));
+}
+
+.ground-check.is-empty {
+  opacity: 0.72;
+}
+
+.ground-check-top {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.ground-check-title {
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.ground-check-level {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.ground-check-level.level-0 {
+  background: color-mix(in srgb, var(--positive) 14%, var(--bg-elevated));
+  color: var(--positive);
+}
+
+.ground-check-level.level-1 {
+  background: color-mix(in srgb, var(--brand-soft) 14%, var(--bg-elevated));
+  color: var(--brand-soft);
+}
+
+.ground-check-toggle {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.ground-check-tease {
+  margin: 0.3rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.ground-check.is-open .ground-check-tease {
+  color: var(--ink);
+}
+
+.ground-check-bullets {
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  animation: scout-beat-in 260ms ease both;
+}
+
+.ground-check-bullets li {
+  position: relative;
+  padding-left: 0.75rem;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.ground-check-bullets li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.4em;
+  width: 0.3rem;
+  height: 0.3rem;
   border-radius: 999px;
   background: color-mix(in srgb, var(--brand-soft) 70%, var(--line));
 }
