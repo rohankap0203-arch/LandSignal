@@ -16,6 +16,7 @@ export type LandViewerProps = {
   latitude?: number | null;
   longitude?: number | null;
   polygon?: number[][][] | null;
+  /** Optional — intelligence is opened only via explicit CTAs, never from map clicks. */
   reportHref?: string | null;
   /** When set, Closest uses the parcel's stored coordinates (preferred for every listing). */
   parcelId?: string | null;
@@ -367,7 +368,6 @@ export function LandViewerModal({
   latitude,
   longitude,
   polygon,
-  reportHref,
   parcelId,
 }: LandViewerProps) {
   const titleId = useId();
