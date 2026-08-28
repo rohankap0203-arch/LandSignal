@@ -2219,19 +2219,32 @@ async def list_land_alert_matches(profile_id: UUID | None = None, status: str | 
 
 @router.get("/parcels/{parcel_id}/geometry")
 async def parcel_geometry(parcel_id: UUID) -> dict[str, Any]:
-    """Lightweight map payload for Land Viewer — no live re-enrichment."""
+    """Map payload for Land Viewer — always includes a yellow-outline ring when possible."""
+    from landsignal.services.parcel_outline import outline_for_parcel
+
     store = get_store(get_settings().demo_seed)
     parcel = store.parcels.get(parcel_id)
     if not parcel:
         raise HTTPException(404, "Parcel not found")
+    outline = outline_for_parcel(
+        polygon=parcel.polygon,
+        latitude=parcel.latitude,
+        longitude=parcel.longitude,
+        acreage=parcel.acreage,
+    )
+    # Persist compact outline so the next open is instant.
+    if outline and parcel.polygon != outline:
+        parcel.polygon = outline
+        store.parcels[parcel.id] = parcel
     return {
         "parcel_id": str(parcel.id),
         "latitude": parcel.latitude,
         "longitude": parcel.longitude,
-        "polygon": parcel.polygon,
+        "polygon": outline,
         "acres": parcel.acreage,
         "state": parcel.state,
         "county": parcel.county,
+        "has_outline": bool(outline),
     }
 
 

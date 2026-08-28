@@ -62,8 +62,16 @@ def _refresh_listing(store: MemoryStore, listing, raw: dict[str, Any]) -> bool:
             parcel.longitude = raw["longitude"]
         if raw.get("acreage") is not None:
             parcel.acreage = raw["acreage"]
-        # Never keep polygons on the hot index path.
-        parcel.polygon = None
+        from landsignal.services.parcel_outline import outline_for_parcel
+
+        outline = outline_for_parcel(
+            polygon=raw.get("polygon"),
+            latitude=parcel.latitude,
+            longitude=parcel.longitude,
+            acreage=parcel.acreage,
+        )
+        if outline:
+            parcel.polygon = outline
         store.parcels[parcel.id] = parcel
     return price_moved
 
@@ -185,10 +193,16 @@ def _filter_rows(
             address=str(row.get("address") or ""),
         )
         row = {**row, "raw": stamped, "has_structure": bool(stamped.get("has_structure"))}
-        # Drop polygons during index — they OOM cloud VMs at nationwide scale.
-        # Detail pages / geometry endpoints can rehydrate boundaries later.
-        if row.get("polygon") is not None:
-            row = {**row, "polygon": None}
+        # Keep a compact outline only (≤28 verts) — full GIS rings OOM nationwide.
+        from landsignal.services.parcel_outline import outline_for_parcel
+
+        outline = outline_for_parcel(
+            polygon=row.get("polygon"),
+            latitude=row.get("latitude"),
+            longitude=row.get("longitude"),
+            acreage=row.get("acreage"),
+        )
+        row = {**row, "polygon": outline}
         out.append(row)
         pid = row.get("provider_id") or label
         source_counts[pid] = source_counts.get(pid, 0) + 1
@@ -243,7 +257,14 @@ async def _ingest_and_score(
         parcel, listing = store.upsert_manual({**raw, "provider_id": raw.get("provider_id") or "manual"})
         parcel.is_demo = False
         listing.is_demo = False
-        parcel.polygon = None
+        from landsignal.services.parcel_outline import outline_for_parcel
+
+        parcel.polygon = outline_for_parcel(
+            polygon=raw.get("polygon") or parcel.polygon,
+            latitude=parcel.latitude,
+            longitude=parcel.longitude,
+            acreage=parcel.acreage,
+        )
         store.parcels[parcel.id] = parcel
         store.listings[listing.id] = listing
         parcel_ids.append(parcel.id)

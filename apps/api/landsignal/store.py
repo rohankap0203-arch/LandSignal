@@ -413,13 +413,14 @@ _PERSIST_PATH = "/tmp/landsignal_inventory.json"
 def persist_store(store: MemoryStore | None = None) -> None:
     """Best-effort disk snapshot so API reloads don't wipe live inventory.
 
-    Polygons + fat GIS raw blobs are omitted — they dominate memory/disk and
-    previously produced 200MB+ dumps that OOM'd the API on boot.
+    Fat GIS attribute blobs are omitted. Compact parcel outlines (≤28 verts)
+    are kept so View Map can draw the yellow land boundary after restart.
     """
     import json
     from pathlib import Path
 
     from landsignal.services.memory_guard import slim_listing_raw, trim_score_lists
+    from landsignal.services.parcel_outline import compact_polygon, outline_for_parcel
 
     store = store or _STORE
     if store is None:
@@ -430,7 +431,13 @@ def persist_store(store: MemoryStore | None = None) -> None:
         if p.is_demo:
             continue
         row = p.model_dump(mode="json")
-        row["polygon"] = None
+        outline = compact_polygon(row.get("polygon")) or outline_for_parcel(
+            polygon=None,
+            latitude=row.get("latitude"),
+            longitude=row.get("longitude"),
+            acreage=row.get("acreage"),
+        )
+        row["polygon"] = outline
         parcels_out.append(row)
     listings_out = []
     for L in store.listings.values():
@@ -506,14 +513,26 @@ def load_persisted_store(store: MemoryStore) -> int:
     except Exception:
         return 0
     from landsignal.services.memory_guard import slim_listing_raw
+    from landsignal.services.parcel_outline import outline_for_parcel
 
     n = 0
     for raw in payload.get("parcels") or []:
         try:
             if isinstance(raw, dict):
-                raw = {**raw, "polygon": None}
+                outline = outline_for_parcel(
+                    polygon=raw.get("polygon"),
+                    latitude=raw.get("latitude"),
+                    longitude=raw.get("longitude"),
+                    acreage=raw.get("acreage"),
+                )
+                raw = {**raw, "polygon": outline}
             p = ParcelRecord.model_validate(raw)
-            p.polygon = None
+            if p.polygon is None:
+                p.polygon = outline_for_parcel(
+                    latitude=p.latitude,
+                    longitude=p.longitude,
+                    acreage=p.acreage,
+                )
             store.parcels[p.id] = p
             n += 1
         except Exception:

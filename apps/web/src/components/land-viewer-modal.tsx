@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { LiveMagnifier } from "@/components/live-magnifier";
+import { landsignalApi } from "@/lib/api";
 import { resolveLandPin } from "@/lib/land-pin";
 
 export type LandViewerProps = {
@@ -19,6 +20,33 @@ export type LandViewerProps = {
   /** When set, Closest uses the parcel's stored coordinates (preferred for every listing). */
   parcelId?: string | null;
 };
+
+/** Clear yellow land outline — same signal as the old inventory maps. */
+const LAND_OUTLINE = {
+  color: "#f2c14e",
+  weight: 3.25,
+  opacity: 1,
+  fillColor: "#f2c14e",
+  fillOpacity: 0.2,
+} as const;
+
+function ringsToLatLngs(polygon: number[][][] | null | undefined): [number, number][][] {
+  if (!polygon?.length) return [];
+  return polygon
+    .map((ring) =>
+      (ring || [])
+        .map((pt) => {
+          if (!pt || pt.length < 2) return null;
+          const lon = Number(pt[0]);
+          const lat = Number(pt[1]);
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+          if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+          return [lat, lon] as [number, number];
+        })
+        .filter((p): p is [number, number] => p != null),
+    )
+    .filter((ring) => ring.length >= 3);
+}
 
 type Basemap = "satellite" | "streets" | "hybrid";
 type Tool = "pan" | "measure" | "radius";
@@ -363,8 +391,11 @@ export function LandViewerModal({
   const [basemap, setBasemap] = useState<Basemap>("hybrid");
   const [tool, setTool] = useState<Tool>("pan");
   const [showBoundary, setShowBoundary] = useState(true);
+  const showBoundaryRef = useRef(true);
   const [showGrid, setShowGrid] = useState(false);
   const [radiusMiles, setRadiusMiles] = useState<0 | 1 | 5>(0);
+  const [resolvedPolygon, setResolvedPolygon] = useState<number[][][] | null>(polygon ?? null);
+  const [mapReady, setMapReady] = useState(false);
   const [coords, setCoords] = useState<string>("—");
   const [zoom, setZoom] = useState<number | null>(null);
   const [measureInfo, setMeasureInfo] = useState("Tap the map to drop the first point");
@@ -380,10 +411,10 @@ export function LandViewerModal({
   const nearbySearchGen = useRef(0);
   const nearbyHitIndexRef = useRef(0);
 
-  const hasGeo = isValidLatLon(latitude, longitude) || Boolean(polygon?.[0]?.length);
+  const hasGeo = isValidLatLon(latitude, longitude) || Boolean(resolvedPolygon?.[0]?.length);
   const landPin = useMemo(
-    () => resolveLandPin(latitude, longitude, polygon),
-    [latitude, longitude, polygon],
+    () => resolveLandPin(latitude, longitude, resolvedPolygon),
+    [latitude, longitude, resolvedPolygon],
   );
   const pinLat = landPin?.[0] ?? null;
   const pinLon = landPin?.[1] ?? null;
@@ -398,6 +429,29 @@ export function LandViewerModal({
 
   useEffect(() => setMounted(true), []);
 
+  // Prefer prop polygon; otherwise fetch compact outline for every inventory open.
+  useEffect(() => {
+    if (!open) return;
+    setResolvedPolygon(polygon ?? null);
+  }, [open, polygon]);
+
+  useEffect(() => {
+    if (!open || !parcelId) return;
+    // Always hit geometry so pin-only inventory still gets a yellow land outline.
+    if (polygon?.[0]?.length) return;
+    let cancelled = false;
+    void landsignalApi
+      .parcelGeometry(parcelId)
+      .then((g) => {
+        if (cancelled) return;
+        if (g.polygon?.[0]?.length) setResolvedPolygon(g.polygon);
+      })
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, parcelId, polygon]);
+
   // Do not prefetch all Closest chips on open — parallel Overpass/Photon storms
   // make the chip the user actually taps time out on "Working". Fetch on demand.
 
@@ -410,6 +464,7 @@ export function LandViewerModal({
     setShowGrid(false);
     setRadiusMiles(0);
     radiusMilesRef.current = 1;
+    setMapReady(false);
     setMeasureInfo("Tap the map to drop the first point");
     setMeasureTotalLabel(null);
     setMeasureSegmentLabel(null);
@@ -609,10 +664,10 @@ export function LandViewerModal({
     const meters = miles * 1609.344;
     L.circle(center, {
       radius: meters,
-      color: "#d6a243",
+      color: "#f2c14e",
       weight: 1.5,
       dashArray: "4 6",
-      fillColor: "#d6a243",
+      fillColor: "#f2c14e",
       fillOpacity: 0.08,
     }).addTo(group);
     map.fitBounds(L.latLng(center[0], center[1]).toBounds(meters * 2.15), { maxZoom: 14 });
@@ -656,7 +711,7 @@ export function LandViewerModal({
       if (!map || !layer) return;
 
       layer.clearLayers();
-      const color = chip?.color || "#d6a243";
+      const color = chip?.color || "#f2c14e";
       const rank = ordinalClosest(index);
       L.polyline([center, [hit.lat, hit.lon]], {
         color,
@@ -862,20 +917,9 @@ export function LandViewerModal({
       layersRef.current.radius = L.layerGroup().addTo(map);
       layersRef.current.grid = L.layerGroup().addTo(map);
 
-      if (polygon?.[0]?.length) {
-        const latlngs = polygon[0].map(([lon, lat]) => [lat, lon] as [number, number]);
-        const layer = L.polygon(latlngs, {
-          color: "#d6a243",
-          weight: 2.5,
-          fillColor: "#d6a243",
-          fillOpacity: 0.22,
-        }).addTo(map);
-        layersRef.current.parcel = layer;
-        map.fitBounds(layer.getBounds(), { padding: [48, 48], maxZoom: 17 });
-        if (landPin) {
-          layersRef.current.marker = L.marker(landPin).addTo(map).bindPopup(title || "Parcel");
-        }
-      } else if (hasGeo && landPin) {
+      // Pin first; yellow land outline is painted by the outline effect
+      // (geometry often arrives a tick after open on inventory cards).
+      if (hasGeo && landPin) {
         layersRef.current.marker = L.marker(landPin).addTo(map).bindPopup(title || "Parcel");
       }
 
@@ -909,18 +953,61 @@ export function LandViewerModal({
       requestAnimationFrame(() => map?.invalidateSize());
       window.setTimeout(() => map?.invalidateSize(), 80);
       window.setTimeout(() => map?.invalidateSize(), 240);
+      if (!cancelled) setMapReady(true);
     }
 
     boot();
     return () => {
       cancelled = true;
+      setMapReady(false);
       measurePts.current = [];
       layersRef.current = {};
       map?.remove();
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, latitude, longitude, polygon, title]);
+  }, [open, latitude, longitude, title, hasGeo, landPin?.[0], landPin?.[1]]);
+
+  // Yellow land outline — paint / refresh whenever geometry resolves (and map is ready).
+  useEffect(() => {
+    if (!open || !mapReady || !mapRef.current) return;
+    const map = mapRef.current;
+    const prev = layersRef.current.parcel;
+    if (prev) {
+      map.removeLayer(prev);
+      layersRef.current.parcel = undefined;
+    }
+    const rings = ringsToLatLngs(resolvedPolygon);
+    if (!rings.length) return;
+    let cancelled = false;
+    void import("leaflet").then((L) => {
+      if (cancelled || !mapRef.current) return;
+      const layer = L.polygon(rings, { ...LAND_OUTLINE });
+      layersRef.current.parcel = layer;
+      if (showBoundaryRef.current) layer.addTo(mapRef.current);
+      try {
+        mapRef.current.fitBounds(layer.getBounds(), { padding: [48, 48], maxZoom: 17 });
+      } catch {
+        /* ignore empty bounds */
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // showBoundary is read via ref so toggling Boundary does not re-fit the map.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, mapReady, resolvedPolygon]);
+
+  useEffect(() => {
+    showBoundaryRef.current = showBoundary;
+    const parcel = layersRef.current.parcel;
+    if (!parcel || !mapRef.current) return;
+    if (showBoundary) {
+      if (!mapRef.current.hasLayer(parcel)) parcel.addTo(mapRef.current);
+    } else {
+      mapRef.current.removeLayer(parcel);
+    }
+  }, [showBoundary]);
 
   const showGridRef = useRef(showGrid);
   useEffect(() => {
@@ -945,16 +1032,6 @@ export function LandViewerModal({
   useEffect(() => {
     applyBasemap(basemap);
   }, [basemap, applyBasemap]);
-
-  useEffect(() => {
-    const parcel = layersRef.current.parcel;
-    if (!parcel || !mapRef.current) return;
-    if (showBoundary) {
-      if (!mapRef.current.hasLayer(parcel)) parcel.addTo(mapRef.current);
-    } else {
-      mapRef.current.removeLayer(parcel);
-    }
-  }, [showBoundary]);
 
   useEffect(() => {
     void drawRadius(radiusMiles);
@@ -1081,7 +1158,7 @@ export function LandViewerModal({
                 type="button"
                 className={showBoundary ? "is-on" : undefined}
                 onClick={() => setShowBoundary((v) => !v)}
-                disabled={!polygon?.[0]?.length}
+                disabled={!resolvedPolygon?.[0]?.length}
               >
                 Boundary
               </button>

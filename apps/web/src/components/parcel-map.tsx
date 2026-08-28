@@ -107,10 +107,11 @@ export function ParcelMap({
       if (polygon?.[0]?.length) {
         const latlngs = polygon[0].map(([lon, lat]) => [lat, lon] as [number, number]);
         const layer = L.polygon(latlngs, {
-          color: "#d6a243",
-          weight: 2,
-          fillColor: "#d6a243",
-          fillOpacity: 0.25,
+          color: "#f2c14e",
+          weight: 3.25,
+          opacity: 1,
+          fillColor: "#f2c14e",
+          fillOpacity: 0.2,
         }).addTo(map);
         map.fitBounds(layer.getBounds(), {
           padding: compact ? [10, 10] : [24, 24],
