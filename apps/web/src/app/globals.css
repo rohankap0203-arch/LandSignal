@@ -439,6 +439,23 @@ select {
   transform: translateY(-1px);
 }
 
+/* Dark mode: label + brand marks read as white (logos are color PNGs/SVGs). */
+[data-theme="dark"] .used-by-label {
+  color: #ffffff;
+}
+
+[data-theme="dark"] .used-by-logo {
+  opacity: 1;
+}
+
+[data-theme="dark"] .used-by-logo img {
+  filter: brightness(0) invert(1);
+}
+
+[data-theme="dark"] .used-by-logo:hover {
+  opacity: 0.92;
+}
+
 @media (max-width: 640px) {
   .used-by-strip {
     padding: 1.1rem 0.75rem 0.35rem;
