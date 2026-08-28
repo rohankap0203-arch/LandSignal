@@ -139,12 +139,12 @@ function dollarRange(impact?: Impact, baseToday?: number | null): string | null 
   return `${fmt(low)}–${fmt(high)}`;
 }
 
-function softCap(x: number, cap = 0.85): number {
+function softCap(x: number, cap = 0.28, bleed = 0.12): number {
   if (x === 0) return 0;
   const sign = x > 0 ? 1 : -1;
   const ax = Math.abs(x);
   if (ax <= cap) return x;
-  return sign * (cap + (ax - cap) * 0.35);
+  return sign * (cap + (ax - cap) * bleed);
 }
 
 function combineImpacts(selected: Scenario[]) {
@@ -193,13 +193,23 @@ function combineImpacts(selected: Scenario[]) {
   const util = ["sewer_extension", "municipal_water", "electrical_expansion"].some((k) => keys.has(k));
   const entitle = ["zoning_change", "density_entitlement", "annexation"].some((k) => keys.has(k));
   if (util && entitle) {
-    hbu += 0.035;
+    hbu += 0.018;
+  }
+
+  let immC = softCap(imm);
+  let hbuC = softCap(hbu);
+  const level = immC + hbuC;
+  const levelCap = 0.32;
+  if (Math.abs(level) > levelCap) {
+    const scale = levelCap / Math.abs(level);
+    immC *= scale;
+    hbuC *= scale;
   }
 
   return {
-    immediate: softCap(imm),
-    rate: softCap(rate, 0.04),
-    hbu: softCap(hbu),
+    immediate: immC,
+    rate: softCap(rate, 0.018, 0.15),
+    hbu: hbuC,
   };
 }
 
