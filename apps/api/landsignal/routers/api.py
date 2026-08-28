@@ -2219,52 +2219,68 @@ async def list_land_alert_matches(profile_id: UUID | None = None, status: str | 
 
 @router.get("/parcels/{parcel_id}/geometry")
 async def parcel_geometry(parcel_id: UUID) -> dict[str, Any]:
-    """Map payload for Land Viewer — real GIS outline only (never a fake square)."""
+    """Map payload for Land Viewer — exact GIS boundary (never a fake square)."""
     from landsignal.services.parcel_geometry_live import fetch_real_parcel_outline
-    from landsignal.services.parcel_outline import compact_polygon, is_synthetic_square
+    from landsignal.services.parcel_outline import (
+        exact_polygon,
+        is_synthetic_square,
+        outline_matches_acreage,
+        ring_area_acres,
+    )
 
     store = get_store(get_settings().demo_seed)
     parcel = store.parcels.get(parcel_id)
     if not parcel:
         raise HTTPException(404, "Parcel not found")
 
-    # Drop invented acreage squares left over from the prior fallback.
+    # Demo / leftover invented squares are never shown as land boundaries.
     if is_synthetic_square(parcel.polygon):
         parcel.polygon = None
         parcel.geometry_confidence = None
         store.parcels[parcel.id] = parcel
 
-    outline = compact_polygon(parcel.polygon)
-    geometry_source = "stored" if outline else None
+    listing = store.listing_for_parcel(parcel.id)
+    raw = (listing.raw if listing and isinstance(listing.raw, dict) else {}) or {}
+
+    # Always prefer a live cadastral pull so View Map matches the true edge /
+    # acreage — not a memory-compacted sketch from inventory.
+    outline = await fetch_real_parcel_outline(
+        latitude=parcel.latitude,
+        longitude=parcel.longitude,
+        state=parcel.state,
+        county=parcel.county,
+        apn=parcel.apn or (str(raw.get("apn")) if raw.get("apn") else None),
+        external_id=listing.external_id if listing else None,
+        source_id=str(raw.get("source_id") or "") or None,
+        acreage=parcel.acreage,
+    )
+    geometry_source = "gis_live" if outline else None
 
     if not outline:
-        listing = store.listing_for_parcel(parcel.id)
-        raw = (listing.raw if listing and isinstance(listing.raw, dict) else {}) or {}
-        outline = await fetch_real_parcel_outline(
-            latitude=parcel.latitude,
-            longitude=parcel.longitude,
-            state=parcel.state,
-            county=parcel.county,
-            apn=parcel.apn or (str(raw.get("apn")) if raw.get("apn") else None),
-            external_id=listing.external_id if listing else None,
-            source_id=str(raw.get("source_id") or "") or None,
-        )
-        if outline:
-            geometry_source = "gis_live"
-            parcel.polygon = outline
-            parcel.geometry_confidence = 88.0
-            store.parcels[parcel.id] = parcel
+        # Fallback only: previously cached exact ring (never synthetic).
+        cached = exact_polygon(parcel.polygon)
+        if cached and outline_matches_acreage(cached, parcel.acreage):
+            outline = cached
+            geometry_source = "stored"
 
+    if outline:
+        parcel.polygon = outline
+        parcel.geometry_confidence = 95.0 if geometry_source == "gis_live" else 90.0
+        store.parcels[parcel.id] = parcel
+
+    measured = ring_area_acres(outline[0]) if outline and outline[0] else None
     return {
         "parcel_id": str(parcel.id),
         "latitude": parcel.latitude,
         "longitude": parcel.longitude,
         "polygon": outline,
         "acres": parcel.acreage,
+        "outline_acres": measured,
         "state": parcel.state,
         "county": parcel.county,
         "has_outline": bool(outline),
         "geometry_source": geometry_source,
+        "vertex_count": len(outline[0]) if outline and outline[0] else 0,
     }
 
 

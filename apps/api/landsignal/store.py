@@ -129,7 +129,7 @@ class MemoryStore:
             },
         ]
         for d in demos:
-            poly = _square_polygon(d["lon"], d["lat"], d["acreage"])
+            # Demo fixtures are pin-only — never invent a fake lot square for maps.
             parcel = ParcelRecord(
                 parcel_id=d["apn"],
                 apn=d["apn"],
@@ -138,9 +138,9 @@ class MemoryStore:
                 state=d["state"],
                 latitude=d["lat"],
                 longitude=d["lon"],
-                polygon=poly,
+                polygon=None,
                 acreage=d["acreage"],
-                geometry_confidence=70,
+                geometry_confidence=None,
                 is_demo=True,
             )
             listing = ListingRecord(
