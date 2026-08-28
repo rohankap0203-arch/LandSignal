@@ -32,8 +32,8 @@ type Props = {
   layoutKey?: string | number;
   /** Opens the full-screen land viewer from the caption row */
   onExpand?: () => void;
-  /** Opens the location images gallery from the satellite scene */
-  onViewImages?: () => void;
+  /** Opens the full-screen map tool (same viewer) from the map tile button */
+  onViewMap?: () => void;
 };
 
 export function ParcelMap({
@@ -47,7 +47,7 @@ export function ParcelMap({
   scrollWheelZoom = false,
   layoutKey = 0,
   onExpand,
-  onViewImages,
+  onViewMap,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
@@ -183,13 +183,13 @@ export function ParcelMap({
           <FullscreenIcon />
         </button>
       ) : null}
-      {onViewImages && !compact ? (
+      {onViewMap && !compact ? (
         <button
           type="button"
           className="parcel-map-view-images"
-          onClick={onViewImages}
-          aria-label="View images"
-          title="Street View + nearby photos"
+          onClick={onViewMap}
+          aria-label="View map"
+          title="Open full-screen map tools"
         >
           <span className="parcel-map-view-images-art" aria-hidden>
             <svg viewBox="0 0 120 72" preserveAspectRatio="xMidYMid slice">

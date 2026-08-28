@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type MouseEvent, type KeyboardEvent } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
+import { LandViewerModal } from "@/components/land-viewer-modal";
 import { TrajectorySpark } from "@/components/price-trajectory";
-import { LocationImagesModal, prefetchLocationImages } from "@/components/location-images-modal";
 import { SignalBadge } from "@/components/signal-badge";
 import type { RadarRow } from "@/lib/api";
 
@@ -52,7 +52,7 @@ function gapHelpTitle(headline: string | null | undefined, discountDisplay: stri
 export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
   const router = useRouter();
   const [gapHelpOpen, setGapHelpOpen] = useState(false);
-  const [imagesOpen, setImagesOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const links = Array.isArray(row.links) ? row.links : [];
   const posting =
     links.find((l) => l.kind === "primary" && l.available !== false) ||
@@ -240,14 +240,11 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           <button
             type="button"
             className="metric metric-action metric-images"
-            title="Street View + nearby photos"
-            aria-label="View images"
-            onMouseEnter={() => prefetchLocationImages(row.parcel_id)}
-            onFocus={() => prefetchLocationImages(row.parcel_id)}
-            onTouchStart={() => prefetchLocationImages(row.parcel_id)}
+            title="Open full-screen map tools for this land"
+            aria-label="View map"
             onClick={(e) => {
               e.stopPropagation();
-              setImagesOpen(true);
+              setMapOpen(true);
             }}
           >
             <span className="metric-images-art" aria-hidden>
@@ -271,7 +268,7 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
                 />
               </svg>
             </span>
-            <span className="metric-images-label">View images</span>
+            <span className="metric-images-label">View map</span>
           </button>
         </div>
 
@@ -377,15 +374,17 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
         </div>
       ) : null}
 
-      <LocationImagesModal
-        open={imagesOpen}
-        onClose={() => setImagesOpen(false)}
+      <LandViewerModal
+        open={mapOpen}
+        onClose={() => setMapOpen(false)}
         title={row.property_name}
         location={row.location}
+        acresDisplay={row.acres_display}
+        priceDisplay={row.price_display}
         latitude={row.latitude}
         longitude={row.longitude}
-        acres={row.acres}
         parcelId={row.parcel_id}
+        reportHref={`/parcels/${row.parcel_id}`}
       />
     </article>
   );

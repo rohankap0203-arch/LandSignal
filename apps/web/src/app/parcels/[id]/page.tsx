@@ -7,7 +7,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AcquireRail, type OutreachPlaybook } from "@/components/acquire-rail";
 import { LandLoader } from "@/components/land-loader";
 import { LandViewerModal } from "@/components/land-viewer-modal";
-import { LocationImagesModal } from "@/components/location-images-modal";
 import { CatalystSimulator } from "@/components/catalyst-simulator";
 import { PriceTrajectory } from "@/components/price-trajectory";
 import { ReturnVisual } from "@/components/return-visual";
@@ -126,7 +125,6 @@ export default function ParcelIntelligencePage() {
   const [watched, setWatched] = useState(false);
   const [watchMsg, setWatchMsg] = useState("");
   const [landViewerOpen, setLandViewerOpen] = useState(false);
-  const [imagesOpen, setImagesOpen] = useState(false);
   const [moneyMode, setMoneyMode] = useState<MoneyMode>("today");
   const [refreshing, setRefreshing] = useState(false);
   const [refreshNote, setRefreshNote] = useState("");
@@ -443,7 +441,7 @@ export default function ParcelIntelligencePage() {
             title={listing?.title as string}
             height={280}
             onExpand={() => setLandViewerOpen(true)}
-            onViewImages={() => setImagesOpen(true)}
+            onViewMap={() => setLandViewerOpen(true)}
           />
           <LandViewerModal
             open={landViewerOpen}
@@ -463,16 +461,6 @@ export default function ParcelIntelligencePage() {
             latitude={parcel.latitude as number}
             longitude={parcel.longitude as number}
             polygon={parcel.polygon as number[][][]}
-            parcelId={String(parcel.id || params.id)}
-          />
-          <LocationImagesModal
-            open={imagesOpen}
-            onClose={() => setImagesOpen(false)}
-            title={String(listing?.title || parcel.apn || "Parcel")}
-            location={[parcel.county, parcel.state].filter(Boolean).join(", ") || null}
-            latitude={parcel.latitude as number}
-            longitude={parcel.longitude as number}
-            acres={parcel.acres != null ? Number(parcel.acres) : null}
             parcelId={String(parcel.id || params.id)}
           />
           </div>

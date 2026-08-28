@@ -1566,7 +1566,7 @@ select {
   color: var(--brand);
 }
 
-/* View Images — landscape fills the tile; centered label */
+/* View map — landscape fills the tile; centered label */
 .metric-images {
   position: relative;
   overflow: hidden;
