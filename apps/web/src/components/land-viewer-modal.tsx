@@ -428,14 +428,22 @@ export function LandViewerModal({
       const pair = asLatLon(latitude, longitude);
       setCoords(pair ? formatCoordPair(pair[0], pair[1], 5) : "—");
     }
-    const prev = document.body.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverscroll = document.body.style.overscrollBehavior;
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
+    document.documentElement.classList.add("land-viewer-open");
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => {
-      document.body.style.overflow = prev;
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overscrollBehavior = prevBodyOverscroll;
+      document.documentElement.classList.remove("land-viewer-open");
       window.removeEventListener("keydown", onKey);
     };
   }, [open, onClose, latitude, longitude]);

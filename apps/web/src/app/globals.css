@@ -7069,6 +7069,14 @@ a.acquire-block:hover {
 }
 
 /* Full-screen land viewer */
+html.land-viewer-open,
+html.land-viewer-open body {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  /* Avoid layout jump / residual gutter when the map opens */
+  scrollbar-gutter: auto;
+}
+
 .land-viewer-backdrop {
   position: fixed;
   inset: 0;
@@ -7080,6 +7088,8 @@ a.acquire-block:hover {
   background: rgba(10, 14, 12, 0.72);
   backdrop-filter: blur(6px);
   animation: land-viewer-in 0.22s ease-out;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 @keyframes land-viewer-in {
@@ -7096,6 +7106,9 @@ a.acquire-block:hover {
   grid-template-rows: auto auto auto minmax(0, 1fr);
   width: 100%;
   height: 100%;
+  max-height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
   background:
     radial-gradient(1200px 500px at 10% -10%, color-mix(in srgb, var(--brand) 18%, transparent), transparent 60%),
     var(--bg);
