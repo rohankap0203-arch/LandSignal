@@ -439,7 +439,12 @@ select {
   transform: translateY(-1px);
 }
 
-/* Dark mode only: same logos as light, rendered in white tones. */
+.used-by-logo-img--dark {
+  display: none;
+}
+
+/* Dark mode: white label + white-tone logos. LW / USA.gov use dedicated
+   dark assets (CSS invert flattens their internal detail / adds fringe). */
 [data-theme="dark"] .used-by-label {
   color: #ffffff;
 }
@@ -448,8 +453,19 @@ select {
   opacity: 1;
 }
 
-[data-theme="dark"] .used-by-logo img {
+[data-theme="dark"] .used-by-logo:not(.used-by-logo--landwatch):not(.used-by-logo--usagov) img {
   filter: brightness(0) invert(1);
+}
+
+[data-theme="dark"] .used-by-logo--landwatch .used-by-logo-img--light,
+[data-theme="dark"] .used-by-logo--usagov .used-by-logo-img--light {
+  display: none;
+}
+
+[data-theme="dark"] .used-by-logo--landwatch .used-by-logo-img--dark,
+[data-theme="dark"] .used-by-logo--usagov .used-by-logo-img--dark {
+  display: block;
+  filter: none;
 }
 
 [data-theme="dark"] .used-by-logo:hover {

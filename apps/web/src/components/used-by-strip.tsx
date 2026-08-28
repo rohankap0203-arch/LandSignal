@@ -27,7 +27,8 @@ const LOGOS = [
     name: "LandWatch",
     href: "https://www.landwatch.com",
     src: "/brands/landwatch.png",
-    // Exact LandWatch LW mark
+    // Dark-only: white LW without plate/fringe (CSS invert makes a weird outline)
+    srcDark: "/brands/landwatch-dark.png",
     width: 160,
     height: 160,
   },
@@ -35,7 +36,8 @@ const LOGOS = [
     name: "USA.gov",
     href: "https://www.usa.gov",
     src: "/brands/usa-gov.png",
-    // Exact USA.gov logo from usa.gov brand assets
+    // Dark-only: same seal with white disc + dark glyphs (invert hides star/gov)
+    srcDark: "/brands/usa-gov-dark.png",
     width: 150,
     height: 150,
   },
@@ -46,30 +48,45 @@ export function UsedByStrip() {
     <section className="used-by-strip" aria-label="Used by buyers on">
       <p className="used-by-label">Used by buyers on</p>
       <ul className="used-by-logos">
-        {LOGOS.map((logo) => (
-          <li key={logo.name}>
-            <a
-              className={`used-by-logo used-by-logo--${logo.name
-                .toLowerCase()
-                .replace(/\./g, "")
-                .replace(/\s+/g, "-")}`}
-              href={logo.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={logo.name}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={logo.src}
-                alt={`${logo.name} logo`}
-                width={logo.width}
-                height={logo.height}
-                loading="lazy"
-                decoding="async"
-              />
-            </a>
-          </li>
-        ))}
+        {LOGOS.map((logo) => {
+          const slug = logo.name.toLowerCase().replace(/\./g, "").replace(/\s+/g, "-");
+          const darkSrc = "srcDark" in logo ? logo.srcDark : undefined;
+          return (
+            <li key={logo.name}>
+              <a
+                className={`used-by-logo used-by-logo--${slug}`}
+                href={logo.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={logo.name}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className={darkSrc ? "used-by-logo-img used-by-logo-img--light" : undefined}
+                  src={logo.src}
+                  alt={`${logo.name} logo`}
+                  width={logo.width}
+                  height={logo.height}
+                  loading="lazy"
+                  decoding="async"
+                />
+                {darkSrc ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    className="used-by-logo-img used-by-logo-img--dark"
+                    src={darkSrc}
+                    alt=""
+                    aria-hidden
+                    width={logo.width}
+                    height={logo.height}
+                    loading="lazy"
+                    decoding="async"
+                  />
+                ) : null}
+              </a>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
