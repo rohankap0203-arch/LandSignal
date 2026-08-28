@@ -47,7 +47,7 @@ type NearbyHit = {
 
 const NEARBY_RESULT_LIMIT = 3;
 /** UI watchdog — Closest must never spin past this even if the API is slow. */
-const NEARBY_UI_DEADLINE_MS = 12_000;
+const NEARBY_UI_DEADLINE_MS = 14_000;
 
 type NearbyChip = {
   kind: NearbyKind;
@@ -57,14 +57,14 @@ type NearbyChip = {
 };
 
 const NEARBY_CHIPS: NearbyChip[] = [
-  { kind: "flood", label: "Flood zone", color: "#3b82f6", maxMiles: 12.4 },
-  { kind: "wetland", label: "Wetland", color: "#14b8a6", maxMiles: 14 },
-  { kind: "water", label: "Water body", color: "#0ea5e9", maxMiles: 14 },
-  { kind: "road", label: "Paved road", color: "#a16207", maxMiles: 10 },
-  { kind: "power", label: "Power line", color: "#ca8a04", maxMiles: 14 },
-  { kind: "town", label: "Town/services", color: "#b45309", maxMiles: 25 },
-  { kind: "school", label: "School", color: "#7c3aed", maxMiles: 20 },
-  { kind: "hospital", label: "Hospital", color: "#dc2626", maxMiles: 40 },
+  { kind: "flood", label: "Flood zone", color: "#3b82f6", maxMiles: 15 },
+  { kind: "wetland", label: "Wetland", color: "#14b8a6", maxMiles: 18 },
+  { kind: "water", label: "Water body", color: "#0ea5e9", maxMiles: 18 },
+  { kind: "road", label: "Paved road", color: "#a16207", maxMiles: 12 },
+  { kind: "power", label: "Power line", color: "#ca8a04", maxMiles: 18 },
+  { kind: "town", label: "Town/services", color: "#b45309", maxMiles: 35 },
+  { kind: "school", label: "School", color: "#7c3aed", maxMiles: 25 },
+  { kind: "hospital", label: "Hospital", color: "#dc2626", maxMiles: 50 },
 ];
 
 const NEARBY_ROW1 = NEARBY_CHIPS.filter((c) =>
@@ -84,10 +84,36 @@ function beginNearbySearch() {
   return nearbyAbort;
 }
 
+/** Great-circle distance between two [lat, lon] points (meters). */
+function haversineMeters(a: [number, number], b: [number, number]): number {
+  const R = 6371008.8;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const [lat1, lon1] = a;
+  const [lat2, lon2] = b;
+  const φ1 = toRad(lat1);
+  const φ2 = toRad(lat2);
+  const Δφ = toRad(lat2 - lat1);
+  const Δλ = toRad(lon2 - lon1);
+  const h =
+    Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
 function formatDistance(meters: number) {
   if (!Number.isFinite(meters) || meters < 0) return "—";
   const miles = meters / 1609.344;
-  if (miles < 0.2) return `${Math.round(meters * 3.28084)} ft`;
+  const feet = meters * 3.28084;
+  if (miles < 0.15) return `${Math.round(feet).toLocaleString()} ft`;
+  if (miles < 1) {
+    return `${miles.toFixed(2)} mi (${Math.round(feet).toLocaleString()} ft)`;
+  }
+  return `${miles.toFixed(miles < 10 ? 2 : 1)} mi`;
+}
+
+function formatDistanceShort(meters: number) {
+  if (!Number.isFinite(meters) || meters < 0) return "—";
+  const miles = meters / 1609.344;
+  if (miles < 0.15) return `${Math.round(meters * 3.28084).toLocaleString()} ft`;
   return `${miles.toFixed(miles < 10 ? 2 : 1)} mi`;
 }
 
@@ -171,7 +197,7 @@ async function fetchNearby(
   const meta = NEARBY_CHIPS.find((c) => c.kind === kind);
   if (!meta) return { hits: [], message: "Unknown landmark type" };
 
-  const cacheKey = `api:v3:${kind}:${lat.toFixed(3)}:${lon.toFixed(3)}`;
+  const cacheKey = `api:v4:${kind}:${lat.toFixed(3)}:${lon.toFixed(3)}`;
   if (nearbyCache.has(cacheKey)) {
     const cached = nearbyCache.get(cacheKey)!;
     if (cached.hits.length) {
@@ -180,72 +206,89 @@ async function fetchNearby(
     }
   }
 
-  const ctl = beginNearbySearch();
-  let timeoutId: number | undefined;
-  try {
-    const data = await new Promise<Awaited<ReturnType<typeof requestNearbyPayload>>>((resolve, reject) => {
-      timeoutId = window.setTimeout(() => {
-        ctl.abort();
-        reject(new Error("Closest search timed out"));
-      }, NEARBY_UI_DEADLINE_MS);
-      const onAbort = () => {
-        if (timeoutId) window.clearTimeout(timeoutId);
-        reject(new DOMException("Aborted", "AbortError"));
+  const runOnce = async (): Promise<{ hits: NearbyHit[]; message: string | null; status?: string }> => {
+    const ctl = beginNearbySearch();
+    let timeoutId: number | undefined;
+    try {
+      const data = await new Promise<Awaited<ReturnType<typeof requestNearbyPayload>>>((resolve, reject) => {
+        timeoutId = window.setTimeout(() => {
+          ctl.abort();
+          reject(new Error("Closest search timed out"));
+        }, NEARBY_UI_DEADLINE_MS);
+        const onAbort = () => {
+          if (timeoutId) window.clearTimeout(timeoutId);
+          reject(new DOMException("Aborted", "AbortError"));
+        };
+        ctl.signal.addEventListener("abort", onAbort, { once: true });
+        requestNearbyPayload(kind, lat, lon, parcelId, ctl.signal)
+          .then((value) => {
+            if (timeoutId) window.clearTimeout(timeoutId);
+            ctl.signal.removeEventListener("abort", onAbort);
+            resolve(value);
+          })
+          .catch((err) => {
+            if (timeoutId) window.clearTimeout(timeoutId);
+            ctl.signal.removeEventListener("abort", onAbort);
+            reject(err);
+          });
+      });
+
+      if (isCancelled?.() || ctl.signal.aborted) {
+        return { hits: [], message: null };
+      }
+
+      const hits: NearbyHit[] = (data.hits || [])
+        .filter((h) => isValidLatLon(h.lat, h.lon) && Number.isFinite(h.meters))
+        .slice(0, NEARBY_RESULT_LIMIT)
+        .map((h) => ({
+          kind,
+          label: h.label || meta.label,
+          name: h.name || meta.label,
+          lat: Number(h.lat),
+          lon: Number(h.lon),
+          meters: Number(h.meters),
+          source: "live" as const,
+          detail: h.detail || undefined,
+          osmKey: h.osm_key || undefined,
+        }));
+
+      if (hits.length) {
+        onPartial?.(hits);
+        nearbyCache.set(cacheKey, { hits });
+        return { hits, message: null, status: "ok" };
+      }
+
+      const message =
+        data.message ||
+        (data.status === "unavailable"
+          ? `Map data temporarily unavailable for ${meta.label.toLowerCase()} — tap again to retry`
+          : `No mapped ${meta.label.toLowerCase()} within ~${meta.maxMiles} mi`);
+      return { hits: [], message, status: data.status };
+    } catch (e) {
+      if (isCancelled?.() || (e instanceof DOMException && e.name === "AbortError")) {
+        return { hits: [], message: null };
+      }
+      return {
+        hits: [],
+        message: `Couldn’t find ${meta.label.toLowerCase()} nearby — tap again to retry`,
+        status: "unavailable",
       };
-      ctl.signal.addEventListener("abort", onAbort, { once: true });
-      requestNearbyPayload(kind, lat, lon, parcelId, ctl.signal)
-        .then((value) => {
-          if (timeoutId) window.clearTimeout(timeoutId);
-          ctl.signal.removeEventListener("abort", onAbort);
-          resolve(value);
-        })
-        .catch((err) => {
-          if (timeoutId) window.clearTimeout(timeoutId);
-          ctl.signal.removeEventListener("abort", onAbort);
-          reject(err);
-        });
-    });
-
-    if (isCancelled?.() || ctl.signal.aborted) {
-      return { hits: [], message: null };
     }
+  };
 
-    const hits: NearbyHit[] = (data.hits || [])
-      .filter((h) => isValidLatLon(h.lat, h.lon) && Number.isFinite(h.meters))
-      .slice(0, NEARBY_RESULT_LIMIT)
-      .map((h) => ({
-        kind,
-        label: h.label || meta.label,
-        name: h.name || meta.label,
-        lat: Number(h.lat),
-        lon: Number(h.lon),
-        meters: Number(h.meters),
-        source: "live" as const,
-        detail: h.detail || undefined,
-        osmKey: h.osm_key || undefined,
-      }));
-
-    if (hits.length) {
-      onPartial?.(hits);
-      nearbyCache.set(cacheKey, { hits });
-      return { hits, message: null };
+  let result = await runOnce();
+  // One automatic retry on transient upstream failure — Closest must feel reliable.
+  if (
+    !result.hits.length &&
+    !isCancelled?.() &&
+    (result.status === "unavailable" || /unavailable|timed out|retry/i.test(result.message || ""))
+  ) {
+    await new Promise((r) => window.setTimeout(r, 450));
+    if (!isCancelled?.()) {
+      result = await runOnce();
     }
-
-    const message =
-      data.message ||
-      (data.status === "unavailable"
-        ? `Map data temporarily unavailable for ${meta.label.toLowerCase()} — tap again to retry`
-        : `No mapped ${meta.label.toLowerCase()} within ~${meta.maxMiles} mi`);
-    return { hits: [], message };
-  } catch (e) {
-    if (isCancelled?.() || (e instanceof DOMException && e.name === "AbortError")) {
-      return { hits: [], message: null };
-    }
-    return {
-      hits: [],
-      message: `Couldn’t find ${meta.label.toLowerCase()} nearby — tap again to retry`,
-    };
   }
+  return { hits: result.hits, message: result.message };
 }
 
 function MagnifierIcon({ className = "" }: { className?: string }) {
@@ -324,7 +367,9 @@ export function LandViewerModal({
   const [radiusMiles, setRadiusMiles] = useState<0 | 1 | 5>(0);
   const [coords, setCoords] = useState<string>("—");
   const [zoom, setZoom] = useState<number | null>(null);
-  const [measureInfo, setMeasureInfo] = useState("Click the map to drop measure points");
+  const [measureInfo, setMeasureInfo] = useState("Tap the map to drop the first point");
+  const [measureTotalLabel, setMeasureTotalLabel] = useState<string | null>(null);
+  const [measureSegmentLabel, setMeasureSegmentLabel] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [elevationFt, setElevationFt] = useState<string | null>(null);
   const [nearbyActive, setNearbyActive] = useState<NearbyKind | null>(null);
@@ -365,7 +410,9 @@ export function LandViewerModal({
     setShowGrid(false);
     setRadiusMiles(0);
     radiusMilesRef.current = 1;
-    setMeasureInfo("Click the map to drop measure points");
+    setMeasureInfo("Tap the map to drop the first point");
+    setMeasureTotalLabel(null);
+    setMeasureSegmentLabel(null);
     setCopied(false);
     setNearbyActive(null);
     setNearbyStatus("");
@@ -459,10 +506,14 @@ export function LandViewerModal({
     }
   }, [center, hasGeo]);
 
+  const redrawMeasureRef = useRef<(() => Promise<void>) | null>(null);
+
   const clearMeasure = useCallback(() => {
     measurePts.current = [];
     layersRef.current.measure?.clearLayers();
-    setMeasureInfo("Click the map to drop measure points");
+    setMeasureInfo("Tap the map to drop the first point");
+    setMeasureTotalLabel(null);
+    setMeasureSegmentLabel(null);
   }, []);
 
   const redrawMeasure = useCallback(async () => {
@@ -471,30 +522,73 @@ export function LandViewerModal({
     if (!group) return;
     group.clearLayers();
     const pts = measurePts.current;
-    if (!pts.length) return;
+    if (!pts.length) {
+      setMeasureInfo("Tap the map to drop the first point");
+      setMeasureTotalLabel(null);
+      setMeasureSegmentLabel(null);
+      return;
+    }
 
-    for (const p of pts) {
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
       L.circleMarker(p, {
-        radius: 5,
+        radius: i === 0 ? 6 : 5,
         color: "#f2c14e",
         weight: 2,
-        fillColor: "#fff",
+        fillColor: i === 0 ? "#f2c14e" : "#fff",
         fillOpacity: 1,
       }).addTo(group);
     }
-    if (pts.length > 1) {
-      L.polyline(pts, { color: "#f2c14e", weight: 2.5, dashArray: "6 4" }).addTo(group);
-      let total = 0;
-      for (let i = 1; i < pts.length; i++) total += haversineMeters(pts[i - 1], pts[i]);
-      // Path length only — do not invent acreage from open click shapes.
-      setMeasureInfo(
-        Number.isFinite(total) && total > 0
-          ? `Path ${formatDistance(total)} · click to continue`
-          : "Click the map to drop measure points",
-      );
-    } else {
-      setMeasureInfo("Point dropped — click again to measure");
+
+    if (pts.length === 1) {
+      setMeasureTotalLabel(null);
+      setMeasureSegmentLabel(null);
+      setMeasureInfo("Point 1 set — tap again for distance");
+      return;
     }
+
+    L.polyline(pts, { color: "#f2c14e", weight: 3, dashArray: "7 5", opacity: 0.95 }).addTo(group);
+
+    let total = 0;
+    let lastSeg = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const seg = haversineMeters(pts[i - 1], pts[i]);
+      lastSeg = seg;
+      total += seg;
+      const mid: [number, number] = [
+        (pts[i - 1][0] + pts[i][0]) / 2,
+        (pts[i - 1][1] + pts[i][1]) / 2,
+      ];
+      const label = formatDistanceShort(seg);
+      L.marker(mid, {
+        interactive: false,
+        keyboard: false,
+        icon: L.divIcon({
+          className: "land-viewer-measure-label",
+          html: `<span>${label}</span>`,
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
+        }),
+      }).addTo(group);
+    }
+
+    const totalText = formatDistance(total);
+    const segText = formatDistance(lastSeg);
+    setMeasureTotalLabel(totalText);
+    setMeasureSegmentLabel(pts.length > 2 ? segText : null);
+    setMeasureInfo(
+      pts.length === 2
+        ? `Distance ${totalText} · tap to add another point`
+        : `Total ${totalText} · last segment ${segText} · tap to continue`,
+    );
+  }, []);
+
+  redrawMeasureRef.current = redrawMeasure;
+
+  const undoMeasurePoint = useCallback(() => {
+    if (!measurePts.current.length) return;
+    measurePts.current = measurePts.current.slice(0, -1);
+    void redrawMeasureRef.current?.();
   }, []);
 
   const drawRadius = useCallback(async (miles: number) => {
@@ -830,9 +924,14 @@ export function LandViewerModal({
     toolRef.current = tool;
     const map = mapRef.current;
     if (!map) return;
-    map.dragging.enable();
-    map.getContainer().style.cursor = tool === "measure" ? "crosshair" : "";
-    if (tool !== "measure") clearMeasure();
+    if (tool === "measure") {
+      map.getContainer().style.cursor = "crosshair";
+      map.doubleClickZoom.disable();
+    } else {
+      map.getContainer().style.cursor = "";
+      map.doubleClickZoom.enable();
+      clearMeasure();
+    }
   }, [tool, clearMeasure]);
 
   useEffect(() => {
@@ -939,21 +1038,36 @@ export function LandViewerModal({
               <button
                 type="button"
                 className={tool === "pan" ? "is-on" : undefined}
-                onClick={() => setTool("pan")}
+                onClick={() => {
+                  toolRef.current = "pan";
+                  setTool("pan");
+                }}
               >
                 Pan
               </button>
               <button
                 type="button"
                 className={tool === "measure" ? "is-on" : undefined}
-                onClick={() => setTool("measure")}
+                onClick={() => {
+                  toolRef.current = "measure";
+                  setTool("measure");
+                }}
               >
                 Measure
               </button>
               {tool === "measure" ? (
-                <button type="button" onClick={clearMeasure} title="Clear measure points">
-                  Clear
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={undoMeasurePoint}
+                    title="Undo last measure point"
+                  >
+                    Undo
+                  </button>
+                  <button type="button" onClick={clearMeasure} title="Clear measure points">
+                    Clear
+                  </button>
+                </>
               ) : null}
               <button
                 type="button"
@@ -1126,10 +1240,22 @@ export function LandViewerModal({
             <div className="land-viewer-hud-row">
               {acresLabel ? <span>{acresLabel}</span> : null}
               {elevationFt ? <span>{elevationFt}</span> : null}
-              {tool === "measure" ? <span className="land-viewer-measure">{measureInfo}</span> : null}
               {nearbyStatus ? <span className="land-viewer-nearby-status">{nearbyStatus}</span> : null}
             </div>
           </div>
+
+          {tool === "measure" ? (
+            <div className="land-viewer-measure-panel" role="status" aria-live="polite">
+              <div className="land-viewer-measure-kicker">Measure distance</div>
+              <div className="land-viewer-measure-value">
+                {measureTotalLabel ?? "—"}
+              </div>
+              {measureSegmentLabel ? (
+                <div className="land-viewer-measure-seg">Last segment · {measureSegmentLabel}</div>
+              ) : null}
+              <div className="land-viewer-measure-hint">{measureInfo}</div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>,
