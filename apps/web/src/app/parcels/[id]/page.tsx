@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AcquireRail, type OutreachPlaybook } from "@/components/acquire-rail";
 import { LandLoader } from "@/components/land-loader";
 import { LandViewerModal } from "@/components/land-viewer-modal";
@@ -88,6 +88,37 @@ function WatchEyeButton({
   );
 }
 
+function RefreshIntelButton({
+  refreshing,
+  onRefresh,
+}: {
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`intel-refresh-btn${refreshing ? " is-busy" : ""}`}
+      onClick={onRefresh}
+      disabled={refreshing}
+      title="Refresh this intelligence report"
+      aria-label={refreshing ? "Refreshing intelligence" : "Refresh intelligence"}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden className={refreshing ? "is-spinning" : undefined}>
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.9"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M20 12a8 8 0 1 1-2.2-5.5M20 4v5h-5"
+        />
+      </svg>
+      <span>{refreshing ? "Refreshing…" : "Refresh"}</span>
+    </button>
+  );
+}
+
 export default function ParcelIntelligencePage() {
   const params = useParams<{ id: string }>();
   const [data, setData] = useState<AnyRec | null>(null);
@@ -97,20 +128,78 @@ export default function ParcelIntelligencePage() {
   const [landViewerOpen, setLandViewerOpen] = useState(false);
   const [imagesOpen, setImagesOpen] = useState(false);
   const [moneyMode, setMoneyMode] = useState<MoneyMode>("today");
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshNote, setRefreshNote] = useState("");
+  const touchStartY = useRef(0);
+
+  const loadParcel = useCallback(
+    async (opts?: { reanalyze?: boolean; soft?: boolean }) => {
+      const soft = Boolean(opts?.soft);
+      if (!soft) {
+        setError(null);
+      }
+      if (opts?.reanalyze) {
+        try {
+          await landsignalApi.analyze(params.id);
+        } catch {
+          // Still try a fresh parcel read — analyze can time out on cold stores.
+        }
+      }
+      const d = await landsignalApi.parcel(params.id);
+      setData(d);
+      setWatched(Boolean(d.watched));
+      setError(null);
+      return d;
+    },
+    [params.id],
+  );
 
   useEffect(() => {
     setData(null);
     setError(null);
-    landsignalApi
-      .parcel(params.id)
-      .then((d) => {
-        setData(d);
-        setWatched(Boolean(d.watched));
-      })
-      .catch((e: Error) => setError(e.message));
-  }, [params.id]);
+    setRefreshNote("");
+    loadParcel().catch((e: Error) => setError(e.message));
+  }, [loadParcel]);
 
-  if (error) return <div className="panel p-5 text-[var(--danger)]">{error}</div>;
+  // Kill browser pull-to-refresh on this page — refresh is an explicit button.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add("intel-no-pull-refresh");
+    const onTouchStart = (e: TouchEvent) => {
+      touchStartY.current = e.touches[0]?.clientY ?? 0;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (!e.cancelable) return;
+      const y = e.touches[0]?.clientY ?? 0;
+      const pullingDown = y > touchStartY.current + 8;
+      if (pullingDown && window.scrollY <= 0) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      root.classList.remove("intel-no-pull-refresh");
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchmove", onTouchMove);
+    };
+  }, []);
+
+  async function refreshIntelligence() {
+    if (refreshing) return;
+    setRefreshing(true);
+    setRefreshNote("");
+    try {
+      await loadParcel({ reanalyze: true, soft: true });
+      setRefreshNote("Updated just now");
+    } catch (e) {
+      setRefreshNote(e instanceof Error ? e.message : "Refresh failed — try again");
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  if (error && !data) return <div className="panel p-5 text-[var(--danger)]">{error}</div>;
   if (!data) {
     return (
       <LandLoader
@@ -197,14 +286,17 @@ export default function ParcelIntelligencePage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="intel-page space-y-5">
+      <div className="intel-page-nav">
         <Link href="/" className="text-sm text-[var(--muted)] hover:text-[var(--brand)]">
           ← Back to results
         </Link>
-        <Link href="/watchlist" className="text-sm text-[var(--muted)] hover:text-[var(--brand)]">
-          Open watchlist
-        </Link>
+        <div className="intel-page-nav-actions">
+          <RefreshIntelButton refreshing={refreshing} onRefresh={() => void refreshIntelligence()} />
+          <Link href="/watchlist" className="text-sm text-[var(--muted)] hover:text-[var(--brand)]">
+            Open watchlist
+          </Link>
+        </div>
       </div>
 
       <section className="panel">
@@ -228,6 +320,17 @@ export default function ParcelIntelligencePage() {
             </p>
           ) : null}
           {watchMsg ? <p className="mt-2 text-xs text-[var(--muted)]">{watchMsg}</p> : null}
+          {refreshNote ? (
+            <p
+              className={`mt-2 text-xs ${
+                /fail|error|try again/i.test(refreshNote)
+                  ? "text-[var(--danger)]"
+                  : "text-[var(--muted)]"
+              }`}
+            >
+              {refreshNote}
+            </p>
+          ) : null}
 
           <div className="next-process mt-4">
             <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">

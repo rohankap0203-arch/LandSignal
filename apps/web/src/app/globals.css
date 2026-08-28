@@ -4454,6 +4454,7 @@ a.btn-intel:hover {
 .intel-topbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
 
@@ -4471,6 +4472,88 @@ a.btn-intel:hover {
   height: 24px;
   min-height: 24px;
   align-self: center;
+}
+
+.intel-page {
+  overscroll-behavior-y: none;
+}
+
+html.intel-no-pull-refresh,
+html.intel-no-pull-refresh body {
+  overscroll-behavior-y: none;
+}
+
+.intel-page-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem 0.75rem;
+}
+
+.intel-page-nav-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem 0.75rem;
+}
+
+.intel-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 1.85rem;
+  padding: 0 0.65rem 0 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(20, 32, 28, 0.04);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.intel-refresh-btn svg {
+  width: 0.92rem;
+  height: 0.92rem;
+  flex-shrink: 0;
+}
+
+.intel-refresh-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-elevated));
+}
+
+.intel-refresh-btn:disabled,
+.intel-refresh-btn.is-busy {
+  opacity: 0.72;
+  cursor: wait;
+}
+
+.intel-refresh-btn svg.is-spinning {
+  animation: intel-refresh-spin 0.85s linear infinite;
+}
+
+@keyframes intel-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 520px) {
+  .intel-refresh-btn {
+    height: 1.75rem;
+    padding: 0 0.55rem 0 0.42rem;
+    font-size: 0.74rem;
+  }
 }
 
 .traj-stats {
