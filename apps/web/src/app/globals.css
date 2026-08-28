@@ -403,15 +403,22 @@ select {
   object-fit: contain;
 }
 
-/* Square brand marks read smaller — give them more height */
-.used-by-logo--landwatch,
-.used-by-logo--usagov {
-  height: 3.15rem;
+/* Square / compact brand marks */
+.used-by-logo--landwatch {
+  height: 2.35rem;
 }
 
-.used-by-logo--landwatch img,
+.used-by-logo--landwatch img {
+  max-width: 5.5rem;
+}
+
+/* USA.gov is a horizontal wordmark — give it width so text stays readable */
+.used-by-logo--usagov {
+  height: 2.15rem;
+}
+
 .used-by-logo--usagov img {
-  max-width: 3.15rem;
+  max-width: 9.75rem;
 }
 
 .used-by-logo--landcom {
@@ -439,7 +446,12 @@ select {
   transform: translateY(-1px);
 }
 
-/* Dark mode: label + brand marks read as white (logos are color PNGs/SVGs). */
+.used-by-logo-img--dark {
+  display: none;
+}
+
+/* Dark mode: label white; dedicated white marks for LW / USA.gov;
+   invert remaining color wordmarks (transparent PNGs/SVGs). */
 [data-theme="dark"] .used-by-label {
   color: #ffffff;
 }
@@ -448,8 +460,19 @@ select {
   opacity: 1;
 }
 
-[data-theme="dark"] .used-by-logo img {
+[data-theme="dark"] .used-by-logo:not(.used-by-logo--landwatch):not(.used-by-logo--usagov) img {
   filter: brightness(0) invert(1);
+}
+
+[data-theme="dark"] .used-by-logo--landwatch .used-by-logo-img--light,
+[data-theme="dark"] .used-by-logo--usagov .used-by-logo-img--light {
+  display: none;
+}
+
+[data-theme="dark"] .used-by-logo--landwatch .used-by-logo-img--dark,
+[data-theme="dark"] .used-by-logo--usagov .used-by-logo-img--dark {
+  display: block;
+  filter: none;
 }
 
 [data-theme="dark"] .used-by-logo:hover {
@@ -470,14 +493,20 @@ select {
     height: 2.15rem;
   }
 
-  .used-by-logo--landwatch,
-  .used-by-logo--usagov {
-    height: 2.65rem;
+  .used-by-logo--landwatch {
+    height: 2rem;
   }
 
-  .used-by-logo--landwatch img,
+  .used-by-logo--landwatch img {
+    max-width: 4.75rem;
+  }
+
+  .used-by-logo--usagov {
+    height: 1.85rem;
+  }
+
   .used-by-logo--usagov img {
-    max-width: 2.65rem;
+    max-width: 8.25rem;
   }
 
   .used-by-logo--landcom {

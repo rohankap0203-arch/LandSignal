@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 72" role="img" aria-label="LandWatch">
+  <!-- Clean LW mark  transparent, no plate / stroke fringe -->
+  <text
+    x="60"
+    y="54"
+    text-anchor="middle"
+    font-family="Georgia, 'Times New Roman', Times, serif"
+    font-size="58"
+    font-weight="700"
+    fill="#e85c1c"
+  >LW</text>
+</svg>
