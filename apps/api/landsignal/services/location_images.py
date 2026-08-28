@@ -1,18 +1,21 @@
 """Location imagery for View Images — street-level + clear aerials.
 
 ATTOM under the current entitlement does not return MLS listing photo galleries.
-We assemble a non-redundant gallery from:
+We assemble a non-redundant gallery that stays on / next to THIS parcel:
   - Google Street View (interactive embed at the pin)
-  - KartaView / OpenStreetCam nearby drive-by street photos
-  - Filtered Wikimedia Commons ground photos (skip maps/diagrams/logos)
-  - Wikipedia nearby place photos
-  - One clear USGS aerial (plus a wide context frame only when street coverage is thin)
-  - Esri World Imagery only as last-resort aerial when nothing else lands
+  - Nearby KartaView drive-by frames (hard distance gate)
+  - Tightly filtered Wikimedia ground photos (close + land-ish only)
+  - USGS aerial of the pin (always)
+  - Esri World Imagery only as last-resort aerial when USGS fails to land
+
+Wikipedia town/landmark thumbs are intentionally omitted — they are the main
+source of ridiculous off-topic photos for vacant rural land.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -25,12 +28,30 @@ log = structlog.get_logger()
 
 _UA = "LandSignal/1.0 (land investment intelligence; contact: landsignal@local)"
 
+# Maps, logos, people, interiors, civic buildings — not usable land context.
 _SKIP_LABEL = re.compile(
     r"(map|diagram|chart|logo|seal|coat of arms|flag of|svg|icon|qr.?code|"
     r"signature|passport|certificate|blank|placeholder|locator|"
     r"administrative|boundary|census|topographic|dem\b|orthophoto|"
     r"naip|landsat|sentinel|view of earth|iss\d|from space|"
-    r"\btif\b|\.tif|\.tiff|geotiff|aerial.?index|doqq)",
+    r"\btif\b|\.tif|\.tiff|geotiff|aerial.?index|doqq|"
+    r"portrait|selfie|wedding|funeral|interior|museum|stadium|arena|"
+    r"cathedral|church|mosque|synagogue|temple|skyscraper|skyline|"
+    r"city hall|courthouse|capitol|school|university|hospital|airport|"
+    r"train station|bus station|subway|metro|shopping|mall|"
+    r"statue of|monument to|memorial to|plaque|poster|flyer|"
+    r"actor|actress|politician|senator|governor|president|"
+    r"baseball|football|basketball|soccer|hockey)",
+    re.I,
+)
+
+# Prefer titles that sound like land / landscape / outdoor context.
+_LANDISH = re.compile(
+    r"(land|farm|ranch|field|pasture|meadow|prairie|forest|woods|timber|"
+    r"creek|river|lake|pond|marsh|wetland|hill|ridge|valley|canyon|"
+    r"desert|mountain|bluff|trail|road|highway|acre|parcel|lot|"
+    r"rural|countryside|agriculture|orchard|vineyard|range|"
+    r"grass|soil|fence|gate|barn|silo|view from)",
     re.I,
 )
 
@@ -52,6 +73,20 @@ def _pad_for_acres(acres: float | None, mult: float = 1.0) -> float:
     return base * mult
 
 
+def _max_street_m(acres: float | None) -> float:
+    """Hard radius for street-level photos — scale gently with tract size."""
+    if acres is None or acres <= 0:
+        return 700.0
+    # ~√acres * 80m, capped — large tracts can look a bit farther from a road
+    return float(min(1200.0, max(450.0, math.sqrt(float(acres)) * 85.0)))
+
+
+def _max_ground_m(acres: float | None) -> float:
+    if acres is None or acres <= 0:
+        return 1200.0
+    return float(min(1800.0, max(800.0, math.sqrt(float(acres)) * 110.0)))
+
+
 def _img(
     *,
     fid: str,
@@ -64,6 +99,7 @@ def _img(
     page_url: str | None = None,
     embed: bool = False,
     heading: float | None = None,
+    distance_m: float | None = None,
 ) -> dict[str, Any]:
     row: dict[str, Any] = {
         "id": fid,
@@ -78,6 +114,8 @@ def _img(
     }
     if heading is not None:
         row["heading"] = heading
+    if distance_m is not None:
+        row["distance_m"] = round(float(distance_m), 1)
     return row
 
 
@@ -89,7 +127,7 @@ def _heading_gap(a: float, b: float) -> float:
 def _usgs_aerial(lat: float, lon: float, acres: float | None, *, wide: bool) -> list[dict[str, Any]]:
     """One sharp parcel aerial; optional wide context only when street coverage is thin."""
     frames: list[tuple[str, str, float]] = [
-        ("usgs-parcel", "Aerial — parcel", 0.85),
+        ("usgs-parcel", "Aerial — this parcel", 0.85),
     ]
     if wide:
         frames.append(("usgs-area", "Aerial — surrounding land", 2.6))
@@ -109,6 +147,7 @@ def _usgs_aerial(lat: float, lon: float, acres: float | None, *, wide: bool) -> 
                 source="usgs",
                 kind="aerial",
                 attribution="USGS The National Map",
+                distance_m=0.0,
             )
         )
     return out
@@ -124,11 +163,12 @@ def _esri_fallback(lat: float, lon: float, acres: float | None) -> list[dict[str
     return [
         _img(
             fid="esri-aerial",
-            label="Satellite aerial overview",
+            label="Satellite — this parcel",
             url=url,
             source="esri",
             kind="aerial",
             attribution="Esri World Imagery",
+            distance_m=0.0,
         )
     ]
 
@@ -139,7 +179,6 @@ def _street_view_embed(lat: float, lon: float, acres: float | None = None) -> di
         "https://www.google.com/maps/embed?origin=mfe&pb="
         f"!6m6!1m5!2m2!1d{lat}!2d{lon}!4f0!5f1"
     )
-    # Reliable aerial thumbnail for the strip (no third-party static-map host).
     pad = _pad_for_acres(acres, 0.55)
     thumb = (
         "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export"
@@ -148,7 +187,7 @@ def _street_view_embed(lat: float, lon: float, acres: float | None = None) -> di
     )
     return _img(
         fid="google-street-view",
-        label="Street View — look around",
+        label="Street View — look around at this pin",
         url=embed_url,
         thumb_url=thumb,
         source="google",
@@ -156,14 +195,17 @@ def _street_view_embed(lat: float, lon: float, acres: float | None = None) -> di
         attribution="Google Street View",
         page_url=f"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={lat}%2C{lon}",
         embed=True,
+        distance_m=0.0,
     )
 
 
-def _kartaview_street(lat: float, lon: float, *, limit: int = 6) -> list[dict[str, Any]]:
-    """Nearby drive-by street photos from KartaView / OpenStreetCam."""
-    # Prefer tight radius first for clarity; widen if empty.
+def _kartaview_street(lat: float, lon: float, *, acres: float | None = None, limit: int = 4) -> list[dict[str, Any]]:
+    """Nearby drive-by street photos — never auto-widen past a hard land-relevant radius."""
+    max_m = _max_street_m(acres)
+    # Query slightly wider than the hard gate so the API returns candidates, then filter.
+    query_radii = [int(min(900, max_m)), int(min(1600, max(max_m, 900)))]
     rows: list[dict[str, Any]] = []
-    for radius in (900, 2500, 6000):
+    for radius in query_radii:
         data = _http_json(
             f"https://api.openstreetcam.org/2.0/photo/?lat={lat}&lng={lon}&radius={radius}",
             timeout=5.0,
@@ -181,6 +223,8 @@ def _kartaview_street(lat: float, lon: float, *, limit: int = 6) -> list[dict[st
             heading = float(r.get("heading") or 0.0)
         except (TypeError, ValueError):
             continue
+        if dist > max_m:
+            continue
         fu = str(r.get("fileurl") or "")
         if "{{sizeprefix}}" not in fu:
             continue
@@ -189,12 +233,10 @@ def _kartaview_street(lat: float, lon: float, *, limit: int = 6) -> list[dict[st
 
     picked: list[dict[str, Any]] = []
     used_headings: list[float] = []
-    used_sequences: set[str] = set()
     for dist, heading, r in scored:
         if any(_heading_gap(heading, h) < 48.0 for h in used_headings):
             continue
         seq = str(r.get("sequenceId") or "")
-        # Keep at most two frames from the same drive sequence.
         if seq and sum(1 for p in picked if str(p.get("_seq") or "") == seq) >= 2:
             continue
         fu = str(r["fileurl"])
@@ -204,11 +246,9 @@ def _kartaview_street(lat: float, lon: float, *, limit: int = 6) -> list[dict[st
         meters = max(1, int(round(dist)))
         compass = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][int((heading + 22.5) % 360) // 45]
         if meters < 25:
-            label = f"Street level — facing {compass}"
-        elif meters < 1000:
-            label = f"Street level — {meters} m · {compass}"
+            label = f"Road by this land — facing {compass}"
         else:
-            label = f"Street level — {meters / 1000:.1f} km · {compass}"
+            label = f"Road by this land — {meters} m · {compass}"
         row = _img(
             fid=f"kv-{pid}",
             label=label,
@@ -221,12 +261,11 @@ def _kartaview_street(lat: float, lon: float, *, limit: int = 6) -> list[dict[st
             if r.get("sequenceId") is not None
             else "https://kartaview.org/",
             heading=heading,
+            distance_m=dist,
         )
         row["_seq"] = seq
         picked.append(row)
         used_headings.append(heading)
-        if seq:
-            used_sequences.add(seq)
         if len(picked) >= limit:
             break
     for row in picked:
@@ -234,18 +273,20 @@ def _kartaview_street(lat: float, lon: float, *, limit: int = 6) -> list[dict[st
     return picked
 
 
-def _wikimedia_ground(lat: float, lon: float, *, limit: int = 5) -> list[dict[str, Any]]:
-    """Nearby File: photos from Wikimedia Commons — filtered for real ground scenes."""
+def _wikimedia_ground(lat: float, lon: float, *, acres: float | None = None, limit: int = 2) -> list[dict[str, Any]]:
+    """Close, land-relevant Commons photos only — reject far / civic / portrait junk."""
+    max_m = _max_ground_m(acres)
+    # Commons geosearch max is 10000m; we still hard-filter after.
     gs_url = (
         "https://commons.wikimedia.org/w/api.php?action=query&list=geosearch"
-        f"&gscoord={lat}|{lon}&gsradius=10000&gslimit={max(8, min(limit * 3, 20))}"
+        f"&gscoord={lat}|{lon}&gsradius={min(10000, int(max_m * 2))}"
+        f"&gslimit={max(8, min(limit * 4, 16))}"
         "&gsnamespace=6&format=json"
     )
     data = _http_json(gs_url)
     hits = ((data or {}).get("query") or {}).get("geosearch") or []
     if not hits:
         return []
-    # Prefer closer photos first.
     hits = sorted(hits, key=lambda h: float(h.get("dist") or 1e9))
     page_ids = [str(h["pageid"]) for h in hits if h.get("pageid")]
     if not page_ids:
@@ -261,6 +302,12 @@ def _wikimedia_ground(lat: float, lon: float, *, limit: int = 5) -> list[dict[st
     out: list[dict[str, Any]] = []
     seen_urls: set[str] = set()
     for hit in hits:
+        try:
+            dist = float(hit.get("dist") or 1e9)
+        except (TypeError, ValueError):
+            continue
+        if dist > max_m:
+            continue
         page = by_id.get(str(hit.get("pageid")))
         if not page:
             continue
@@ -275,30 +322,25 @@ def _wikimedia_ground(lat: float, lon: float, *, limit: int = 5) -> list[dict[st
             continue
         if title.lower().endswith((".tif", ".tiff", ".svg")):
             continue
+        # Beyond ~600m require a land-ish title so random civic photos don't sneak in.
+        if dist > 600 and not _LANDISH.search(title):
+            continue
         width = int(ii.get("width") or 0)
         height = int(ii.get("height") or 0)
         if width and width < 640:
             continue
-        # Prefer landscape / street-ish aspect (not tall portraits or ultra-wide maps).
         if width and height:
             ratio = width / max(height, 1)
             if ratio < 0.55 or ratio > 2.6:
                 continue
-        # Skip tiny thumbs that are mostly satellite tiles pretending to be photos.
         if height and height < 420:
             continue
         url = ii.get("thumburl") or ii.get("url")
         if not url or url in seen_urls:
             continue
         seen_urls.add(url)
-        dist = hit.get("dist")
-        label = title[:80]
-        if dist is not None:
-            try:
-                meters = int(round(float(dist)))
-                label = f"{title[:64]} · {meters} m"
-            except (TypeError, ValueError):
-                pass
+        meters = int(round(dist))
+        label = f"{title[:64]} · {meters} m from pin"
         page_url = f"https://commons.wikimedia.org/wiki/{quote(str(page.get('title') or ''))}"
         out.append(
             _img(
@@ -310,57 +352,7 @@ def _wikimedia_ground(lat: float, lon: float, *, limit: int = 5) -> list[dict[st
                 kind="ground",
                 attribution="Wikimedia Commons",
                 page_url=page_url,
-            )
-        )
-        if len(out) >= limit:
-            break
-    return out
-
-
-def _wikipedia_nearby(lat: float, lon: float, *, limit: int = 3) -> list[dict[str, Any]]:
-    """Nearby Wikipedia article thumbnails — towns, parks, landmarks near the pin."""
-    gs_url = (
-        "https://en.wikipedia.org/w/api.php?action=query&list=geosearch"
-        f"&gscoord={lat}|{lon}&gsradius=10000&gslimit={max(4, min(limit * 3, 12))}&format=json"
-    )
-    data = _http_json(gs_url)
-    hits = ((data or {}).get("query") or {}).get("geosearch") or []
-    if not hits:
-        return []
-    hits = sorted(hits, key=lambda h: float(h.get("dist") or 1e9))
-    page_ids = [str(h["pageid"]) for h in hits if h.get("pageid")]
-    if not page_ids:
-        return []
-    info_url = (
-        "https://en.wikipedia.org/w/api.php?action=query&prop=pageimages|info"
-        f"&pageids={'|'.join(page_ids[:10])}"
-        "&piprop=thumbnail|name&pithumbsize=1280&inprop=url&format=json"
-    )
-    info = _http_json(info_url)
-    pages = ((info or {}).get("query") or {}).get("pages") or {}
-    by_id = {str(p.get("pageid")): p for p in pages.values() if p.get("pageid") is not None}
-    out: list[dict[str, Any]] = []
-    for hit in hits:
-        page = by_id.get(str(hit.get("pageid")))
-        if not page:
-            continue
-        thumb = page.get("thumbnail") or {}
-        url = thumb.get("source")
-        if not url:
-            continue
-        title = str(page.get("title") or "Nearby place").strip()
-        if _SKIP_LABEL.search(title) or title.lower().startswith("list of"):
-            continue
-        out.append(
-            _img(
-                fid=f"wp-{page.get('pageid')}",
-                label=f"Nearby — {title}"[:90],
-                url=url,
-                thumb_url=url,
-                source="wikipedia",
-                kind="ground",
-                attribution="Wikipedia",
-                page_url=page.get("fullurl"),
+                distance_m=dist,
             )
         )
         if len(out) >= limit:
@@ -387,48 +379,44 @@ def build_location_images(
 
     lat_f = float(lat)
     lon_f = float(lon)
+    acres_f = float(acres) if acres is not None else None
 
-    # Parallelize external photo lookups — sequential calls were making View Images feel stuck.
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        fut_street = pool.submit(_kartaview_street, lat_f, lon_f, limit=6)
-        fut_ground = pool.submit(_wikimedia_ground, lat_f, lon_f, limit=4)
-        fut_wiki = pool.submit(_wikipedia_nearby, lat_f, lon_f, limit=3)
+    # Aerial first (always on-pin) + street-level near the land. No Wikipedia thumbs.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        fut_street = pool.submit(_kartaview_street, lat_f, lon_f, acres=acres_f, limit=4)
+        fut_ground = pool.submit(_wikimedia_ground, lat_f, lon_f, acres=acres_f, limit=2)
         street = fut_street.result()
         ground = fut_ground.result()
-        wiki_places = fut_wiki.result()
 
     images: list[dict[str, Any]] = []
-    images.append(_street_view_embed(lat_f, lon_f, acres))
-    # Prefer a real street photo thumb for the Street View slot when available.
+    # Parcel aerial is the trustworthy lead — proves you're looking at THIS land.
+    images.extend(_usgs_aerial(lat_f, lon_f, acres_f, wide=len(street) == 0))
+    images.append(_street_view_embed(lat_f, lon_f, acres_f))
     if street and street[0].get("thumb_url"):
-        images[0]["thumb_url"] = street[0]["thumb_url"]
+        # Prefer a real nearby street thumb for the Street View slot when available.
+        for i, row in enumerate(images):
+            if row.get("id") == "google-street-view":
+                images[i] = {**row, "thumb_url": street[0]["thumb_url"]}
+                break
     images.extend(street)
 
     seen = {i["url"] for i in images}
-    for row in ground + wiki_places:
+    for row in ground:
         if row["url"] in seen:
             continue
         images.append(row)
         seen.add(row["url"])
 
-    streetish_photos = len(street)
-    # Keep aerials minimal — never stack USGS + Esri lookalikes.
-    images.extend(
-        _usgs_aerial(
-            lat_f,
-            lon_f,
-            acres,
-            wide=streetish_photos == 0 and not ground and not wiki_places,
-        )
-    )
+    if not any(i.get("kind") == "aerial" for i in images):
+        images.extend(_esri_fallback(lat_f, lon_f, acres_f))
 
     street_n = sum(1 for i in images if i.get("kind") in ("street", "streetview"))
     ground_n = sum(1 for i in images if i.get("kind") == "ground")
     note = (
-        f"Gallery prioritizes Street View and {street_n} street-level frame"
-        f"{'' if street_n == 1 else 's'}, plus {ground_n} nearby place photo"
-        f"{'' if ground_n == 1 else 's'} when available. "
-        "ATTOM enriches property records on this key — it does not supply MLS listing photos."
+        f"Gallery stays on this pin: aerial of the parcel, Street View, "
+        f"and {street_n} nearby road frame{'' if street_n == 1 else 's'}"
+        + (f" plus {ground_n} close land photo{'' if ground_n == 1 else 's'}" if ground_n else "")
+        + ". Far town / landmark thumbnails are filtered out so you only see what’s applicable."
     )
 
     return {

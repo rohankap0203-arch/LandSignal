@@ -227,9 +227,9 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             <div className="k">Opportunity</div>
             <div
               className="v"
-              title="Personalized to your strategy / hold filters when set; otherwise the global score (0–100)"
+              title="Global opportunity score (0–100) — same number as the intelligence report"
             >
-              {Math.round(row.fit_score ?? row.personalized_opportunity ?? row.opportunity)}
+              {Math.round(row.opportunity)}
               <span className="metric-denom">/100</span>
             </div>
           </div>

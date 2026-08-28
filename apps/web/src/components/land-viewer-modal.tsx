@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { LiveMagnifier } from "@/components/live-magnifier";
+import { resolveLandPin } from "@/lib/land-pin";
 
 export type LandViewerProps = {
   open: boolean;
@@ -334,13 +335,20 @@ export function LandViewerModal({
   const nearbySearchGen = useRef(0);
   const nearbyHitIndexRef = useRef(0);
 
-  const hasGeo = isValidLatLon(latitude, longitude);
-  const pinLabel = hasGeo ? formatCoordPair(latitude!, longitude!, 5) : null;
+  const hasGeo = isValidLatLon(latitude, longitude) || Boolean(polygon?.[0]?.length);
+  const landPin = useMemo(
+    () => resolveLandPin(latitude, longitude, polygon),
+    [latitude, longitude, polygon],
+  );
+  const pinLat = landPin?.[0] ?? null;
+  const pinLon = landPin?.[1] ?? null;
+  const pinLabel =
+    pinLat != null && pinLon != null ? formatCoordPair(pinLat, pinLon, 5) : null;
   const acresLabel = useMemo(() => legitimateAcresDisplay(acresDisplay), [acresDisplay]);
   const priceLabel = useMemo(() => legitimatePriceDisplay(priceDisplay), [priceDisplay]);
   const center = useMemo<[number, number]>(
-    () => (hasGeo ? [latitude!, longitude!] : [39.5, -98.35]),
-    [hasGeo, latitude, longitude],
+    () => (landPin ? landPin : [39.5, -98.35]),
+    [landPin],
   );
 
   useEffect(() => setMounted(true), []);
@@ -395,7 +403,7 @@ export function LandViewerModal({
     (async () => {
       try {
         const res = await fetch(
-          `https://api.open-meteo.com/v1/elevation?latitude=${latitude}&longitude=${longitude}`,
+          `https://api.open-meteo.com/v1/elevation?latitude=${pinLat ?? latitude}&longitude=${pinLon ?? longitude}`,
         );
         if (!res.ok || cancelled) return;
         const data = (await res.json()) as { elevation?: Array<number | null> };
@@ -420,7 +428,7 @@ export function LandViewerModal({
     return () => {
       cancelled = true;
     };
-  }, [open, hasGeo, latitude, longitude]);
+  }, [open, hasGeo, pinLat, pinLon, latitude, longitude]);
 
   const applyBasemap = useCallback((mode: Basemap) => {
     const { streets, satellite } = layersRef.current;
@@ -636,8 +644,8 @@ export function LandViewerModal({
       try {
         const result = await fetchNearby(
           kind,
-          latitude!,
-          longitude!,
+          pinLat ?? latitude!,
+          pinLon ?? longitude!,
           applyPartial,
           () => gen !== nearbySearchGen.current,
           parcelId,
@@ -675,7 +683,7 @@ export function LandViewerModal({
         await paintNearbyHit(hits[0], 0);
       }
     },
-    [hasGeo, latitude, longitude, nearbyActive, paintNearbyHit, parcelId],
+    [hasGeo, pinLat, pinLon, latitude, longitude, nearbyActive, paintNearbyHit, parcelId],
   );
 
   const showPrevNearby = useCallback(() => {
@@ -762,11 +770,14 @@ export function LandViewerModal({
         }).addTo(map);
         layersRef.current.parcel = layer;
         map.fitBounds(layer.getBounds(), { padding: [48, 48], maxZoom: 17 });
-      } else if (hasGeo) {
-        layersRef.current.marker = L.marker(center).addTo(map).bindPopup(title || "Parcel");
+        if (landPin) {
+          layersRef.current.marker = L.marker(landPin).addTo(map).bindPopup(title || "Parcel");
+        }
+      } else if (hasGeo && landPin) {
+        layersRef.current.marker = L.marker(landPin).addTo(map).bindPopup(title || "Parcel");
       }
 
-      if (hasGeo) setCoords(formatCoordPair(latitude!, longitude!, 5));
+      if (landPin) setCoords(formatCoordPair(landPin[0], landPin[1], 5));
       map.on("mousemove", (e) => {
         const lat = e.latlng.lat;
         const lon = e.latlng.lng;
@@ -843,9 +854,8 @@ export function LandViewerModal({
   }, [radiusMiles, drawRadius]);
 
   async function copyCoords() {
-    const pair = asLatLon(latitude, longitude);
-    if (!pair) return;
-    const text = formatCoordPair(pair[0], pair[1], 6);
+    if (!landPin) return;
+    const text = formatCoordPair(landPin[0], landPin[1], 6);
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -855,14 +865,14 @@ export function LandViewerModal({
     }
   }
 
-  const mapsUrl = hasGeo
-    ? `https://www.google.com/maps?q=${latitude},${longitude}`
+  const mapsUrl = landPin
+    ? `https://www.google.com/maps?q=${landPin[0]},${landPin[1]}`
     : null;
-  const directionsUrl = hasGeo
-    ? `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`
+  const directionsUrl = landPin
+    ? `https://www.google.com/maps/dir/?api=1&destination=${landPin[0]},${landPin[1]}`
     : null;
-  const streetViewUrl = hasGeo
-    ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${latitude},${longitude}`
+  const streetViewUrl = landPin
+    ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${landPin[0]},${landPin[1]}`
     : null;
 
   if (!mounted || !open) return null;

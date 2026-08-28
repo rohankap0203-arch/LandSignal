@@ -535,6 +535,13 @@ export default function ParcelIntelligencePage() {
       <CatalystSimulator
         parcelId={String(params.id)}
         engine={(data.catalyst_engine as Parameters<typeof CatalystSimulator>[0]["engine"]) || null}
+        moneyMode={moneyMode}
+        onMoneyModeChange={setMoneyMode}
+        inflation={
+          (((data.market_trajectory as AnyRec) || {}).inflation as Parameters<
+            typeof CatalystSimulator
+          >[0]["inflation"]) || null
+        }
       />
 
       <section id="sec-why" className="insight-pair scroll-mt-20">

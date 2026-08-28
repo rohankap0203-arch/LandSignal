@@ -10,6 +10,14 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import {
+  cpiFromMeta,
+  deflate,
+  MONEY_LABEL_BEFORE,
+  MONEY_LABEL_TODAY,
+  type InflationMeta,
+  type MoneyMode,
+} from "@/lib/inflation";
 
 type Impact = {
   p10?: number;
@@ -414,19 +422,34 @@ function DollarBurst({ burst }: { burst: { id: number; tone: "up" | "down" } | n
 function PathChart({
   path,
   active,
+  showToday,
+  cpi,
 }: {
   path: PathPoint[];
   active: boolean;
+  showToday?: boolean;
+  cpi?: number;
 }) {
   const [hoverX, setHoverX] = useState<number | null>(null);
   if (path.length < 2) return null;
+
+  const view = path.map((p) => {
+    const y = Number(p.offset || 0);
+    const baseRaw = Number(p.baseline_value || 0);
+    const scenRaw = Number(p.scenario_value || 0);
+    const base =
+      showToday && y > 0 ? Number(deflate(baseRaw, y, cpi) ?? baseRaw) : baseRaw;
+    const scen =
+      showToday && y > 0 ? Number(deflate(scenRaw, y, cpi) ?? scenRaw) : scenRaw;
+    return { ...p, offset: y, baseline_value: base, scenario_value: scen };
+  });
 
   const marks = [0, 5, 10, 20, 40, 60, 80];
   const w = 560;
   const h = 128;
   const pad = { t: 10, r: 10, b: 20, l: 6 };
-  const xs = path.map((p) => Number(p.offset || 0));
-  const ys = path.flatMap((p) => [Number(p.baseline_value || 0), Number(p.scenario_value || 0)]);
+  const xs = view.map((p) => Number(p.offset || 0));
+  const ys = view.flatMap((p) => [Number(p.baseline_value || 0), Number(p.scenario_value || 0)]);
   const minX = Math.min(...xs);
   const maxX = Math.max(Math.max(...xs), 80);
   const minY = Math.min(...ys) * 0.98;
@@ -437,7 +460,7 @@ function PathChart({
     pad.t + (1 - (y - minY) / Math.max(1, maxY - minY)) * (h - pad.t - pad.b);
 
   const atYear = (y: number) => {
-    const hit = path.find((p) => Number(p.offset) >= y) || path[path.length - 1];
+    const hit = view.find((p) => Number(p.offset) >= y) || view[view.length - 1];
     return {
       year: y,
       base: Number(hit.baseline_value || 0),
@@ -446,7 +469,7 @@ function PathChart({
   };
 
   const line = (key: "baseline_value" | "scenario_value") =>
-    path
+    view
       .map(
         (p, i) =>
           `${i ? "L" : "M"}${sx(Number(p.offset || 0)).toFixed(1)},${sy(Number(p[key] || 0)).toFixed(1)}`,
@@ -455,10 +478,10 @@ function PathChart({
 
   const band = (() => {
     if (!active) return "";
-    const forward = path
+    const forward = view
       .map((p) => `${sx(Number(p.offset || 0)).toFixed(1)},${sy(Number(p.scenario_value || 0)).toFixed(1)}`)
       .join(" ");
-    const back = [...path]
+    const back = [...view]
       .reverse()
       .map((p) => `${sx(Number(p.offset || 0)).toFixed(1)},${sy(Number(p.baseline_value || 0)).toFixed(1)}`)
       .join(" ");
@@ -579,15 +602,27 @@ function shortLabel(label: string): string {
 
 export function CatalystSimulator({
   engine,
+  moneyMode: moneyModeProp,
+  onMoneyModeChange,
+  inflation,
 }: {
   parcelId?: string;
   engine: Engine | null | undefined;
+  moneyMode?: MoneyMode;
+  onMoneyModeChange?: (mode: MoneyMode) => void;
+  inflation?: InflationMeta | null;
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [stress, setStress] = useState("custom");
   const [burst, setBurst] = useState<{ id: number; tone: "up" | "down" } | null>(null);
+  const [moneyModeLocal, setMoneyModeLocal] = useState<MoneyMode>("today");
   const burstSeq = useRef(0);
+
+  const moneyMode = moneyModeProp ?? moneyModeLocal;
+  const setMoneyMode = onMoneyModeChange ?? setMoneyModeLocal;
+  const showToday = moneyMode === "today";
+  const cpi = cpiFromMeta(inflation);
 
   const scenarios = useMemo(() => [...(engine?.scenarios || [])], [engine]);
 
@@ -844,6 +879,24 @@ export function CatalystSimulator({
               <div className="fse-path">
                 <div className="fse-path-head">
                   <h3>Value path</h3>
+                  <div className="money-mode-toggle fse-path-money" role="group" aria-label="Dollar view">
+                    <button
+                      type="button"
+                      className={moneyMode === "nominal" ? "is-active" : undefined}
+                      aria-pressed={moneyMode === "nominal"}
+                      onClick={() => setMoneyMode("nominal")}
+                    >
+                      {MONEY_LABEL_BEFORE}
+                    </button>
+                    <button
+                      type="button"
+                      className={moneyMode === "today" ? "is-active" : undefined}
+                      aria-pressed={moneyMode === "today"}
+                      onClick={() => setMoneyMode("today")}
+                    >
+                      {MONEY_LABEL_TODAY}
+                    </button>
+                  </div>
                   <Tip label="How the value path works">
                     <strong>Reading the path</strong>
                     <span>
@@ -853,6 +906,10 @@ export function CatalystSimulator({
                     <span>
                       Drag across the chart to check a year. Value usually doesn’t jump on day one —
                       it ramps in as the market prices the change.
+                    </span>
+                    <span>
+                      Use <em>Today&apos;s dollars</em> to see future boxes in today’s purchasing power
+                      (same CPI screen as Land value / Hold return).
                     </span>
                   </Tip>
                 </div>
@@ -866,13 +923,18 @@ export function CatalystSimulator({
                     <div className="fse-path-years">
                       {([5, 10, 20, 40, 60, 80] as const).map((y) => {
                         const row = summary.years[y];
-                        const shown = hasSel ? row.s : row.b;
+                        const raw = hasSel ? row.s : row.b;
+                        const rawBase = row.b;
+                        const shown =
+                          showToday ? Number(deflate(raw, y, cpi) ?? raw) : raw;
+                        const shownBase =
+                          showToday ? Number(deflate(rawBase, y, cpi) ?? rawBase) : rawBase;
                         return (
                           <div key={y} className="fse-path-bubble">
                             <span>{y} yr</span>
                             <strong title={money(shown)}>{shortMoney(shown)}</strong>
                             {hasSel ? (
-                              <em title={`Baseline ${money(row.b)}`}>vs {shortMoney(row.b)}</em>
+                              <em title={`Baseline ${money(shownBase)}`}>vs {shortMoney(shownBase)}</em>
                             ) : null}
                           </div>
                         );
@@ -883,18 +945,29 @@ export function CatalystSimulator({
 
                 {hasSel && summary ? (
                   <p className="fse-delta">
-                    Extra vs baseline @ 10 yr:{" "}
+                    Extra vs baseline @ 10 yr
+                    {showToday ? " (today’s $)" : ""}:{" "}
                     <strong>
-                      {Number(summary.add) >= 0 ? "+" : ""}
-                      {money(summary.add)} ({Number(summary.addPct) >= 0 ? "+" : ""}
-                      {summary.addPct}%)
+                      {(() => {
+                        const add = showToday
+                          ? Number(deflate(summary.years[10].s, 10, cpi) ?? 0) -
+                            Number(deflate(summary.years[10].b, 10, cpi) ?? 0)
+                          : Number(summary.add);
+                        return (
+                          <>
+                            {add >= 0 ? "+" : ""}
+                            {money(add)} ({Number(summary.addPct) >= 0 ? "+" : ""}
+                            {summary.addPct}%)
+                          </>
+                        );
+                      })()}
                     </strong>
                   </p>
                 ) : (
                   <p className="fse-delta muted">Select catalysts to diverge from baseline.</p>
                 )}
 
-                <PathChart path={chartPath} active={hasSel} />
+                <PathChart path={chartPath} active={hasSel} showToday={showToday} cpi={cpi} />
                 <div className="fse-legend">
                   <span className="base">Baseline</span>
                   <span className="scen">With selected</span>

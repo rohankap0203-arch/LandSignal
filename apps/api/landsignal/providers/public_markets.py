@@ -55,11 +55,13 @@ def _acres_from_geom(geom: dict | None) -> tuple[float | None, float | None, flo
     if not geom:
         return None, None, None, None
     try:
+        from landsignal.scoring.geospatial import interior_pin_lat_lon
+
         g = shape(geom)
         if g.is_empty:
             return None, None, None, None
         g = unary_union(g)
-        lat, lon = g.centroid.y, g.centroid.x
+        lat, lon = interior_pin_lat_lon(g)
         acreage = None
         polygon = None
         if geom.get("type") == "Polygon":
@@ -68,9 +70,14 @@ def _acres_from_geom(geom: dict | None) -> tuple[float | None, float | None, flo
         elif geom.get("type") == "MultiPolygon":
             total = 0.0
             first = None
+            # Prefer the largest ring for stored outline + acreage sum across parts
+            best_area = -1.0
             for poly in geom["coordinates"]:
-                total += ring_area_square_meters(poly[0])
-                first = first or poly
+                a = ring_area_square_meters(poly[0])
+                total += a
+                if a > best_area:
+                    best_area = a
+                    first = poly
             acreage = acres_from_square_meters(total)
             polygon = first
         return acreage, lat, lon, polygon
