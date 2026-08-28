@@ -441,7 +441,6 @@ export default function ParcelIntelligencePage() {
             title={listing?.title as string}
             height={280}
             onExpand={() => setLandViewerOpen(true)}
-            onViewMap={() => setLandViewerOpen(true)}
           />
           <LandViewerModal
             open={landViewerOpen}
