@@ -283,6 +283,14 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
               Scout pick
             </span>
           )}
+          {row.has_structure ? (
+            <span
+              className="chip"
+              title="A home, cottage, cabin, or ranch house appears to be on this parcel — not vacant land"
+            >
+              Property on site
+            </span>
+          ) : null}
           <span className="chip">{row.best_strategy_label}</span>
           <span className="chip" title="Detail page builds a year-by-year path from soil, flood, growth, channel, and more">
             Multi-factor path

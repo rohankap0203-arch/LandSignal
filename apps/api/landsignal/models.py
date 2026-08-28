@@ -326,6 +326,7 @@ class RadarRow(BaseModel):
     return_thesis: str | None = None
     conviction: str | None = None
     scout_note: str | None = None
+    has_structure: bool = False
     trajectory_regime: str | None = None
     trajectory_label: str | None = None
     trajectory_cagr_5y: str | None = None

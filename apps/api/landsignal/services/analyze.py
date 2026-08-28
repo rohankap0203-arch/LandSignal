@@ -12,10 +12,19 @@ from landsignal.providers.enrichment import build_enrichment_providers
 from landsignal.scoring.engine import compute_score, personalized_score
 from landsignal.scoring.financial import farmland_scenario
 from landsignal.services.narratives import hidden_value_score, why_still_unsold
+from landsignal.services.land_gate import listing_has_structure
 from landsignal.settings import Settings, get_settings
 from landsignal.store import MemoryStore
 
 log = structlog.get_logger()
+
+
+def _score_has_structure(listing, parcel, attom_patch: dict) -> bool:
+    if attom_patch.get("has_structure"):
+        return True
+    if listing is None:
+        return False
+    return listing_has_structure(listing, parcel)
 
 # Coarse regional land value priors ($/acre) — ESTIMATED only, for screening when no comps vendor.
 STATE_PPA_PRIOR = {
@@ -484,7 +493,7 @@ async def analyze_parcel(
         "county": parcel.county,
         "state": parcel.state,
         "provider_id": listing.provider_id if listing else None,
-        "has_structure": bool(attom_patch.get("has_structure")),
+        "has_structure": _score_has_structure(listing, parcel, attom_patch),
         "building_sqft": attom_patch.get("buildingSqFt"),
         "bedrooms": attom_patch.get("bedrooms"),
         "estimated_value_low_usd": _wrap(comps_n.get("estimated_value_low_usd"), existing.comps),

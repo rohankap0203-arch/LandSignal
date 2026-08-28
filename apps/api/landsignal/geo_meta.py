@@ -278,6 +278,14 @@ def search_meta_payload(inventory_regions: list[str] | None = None) -> dict:
                 "title": "Market channel",
                 "body": "Where the listing comes from: federal BLM land, county tax sale, government surplus, or a parcel you added yourself.",
             },
+            "strategy": {
+                "title": "Strategy",
+                "body": (
+                    "Pick a land use to rank (farm, develop, timber…). "
+                    "Homes, cottages, and ranch houses stay out of vacant-land results — "
+                    "choose Property on site to browse those separately."
+                ),
+            },
         },
         "allows_custom": [
             "price",

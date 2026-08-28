@@ -190,6 +190,7 @@ export type RadarRow = {
   return_thesis?: string | null;
   conviction?: string | null;
   scout_note?: string | null;
+  has_structure?: boolean;
   trajectory_regime?: string | null;
   trajectory_label?: string | null;
   trajectory_cagr_5y?: string | null;

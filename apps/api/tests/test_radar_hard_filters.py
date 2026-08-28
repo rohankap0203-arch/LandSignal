@@ -146,7 +146,7 @@ async def test_no_matches_when_band_empty_strict_mode(isolated_store):
 
 @pytest.mark.asyncio
 async def test_extreme_band_broadens_inside_state(isolated_store):
-    """broaden=true never invents parcels — it falls back to real land in-state."""
+    """broaden=true softens region/channel only — acre/price/state bands stay absolute."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         r = await client.get(
@@ -154,10 +154,55 @@ async def test_extreme_band_broadens_inside_state(isolated_store):
             params={"state": "FL", "min_acres": 5000, "broaden": True, "limit": 50},
         )
     assert r.status_code == 200
-    rows = r.json()
-    assert len(rows) >= 1
-    assert all(row.get("state") == "FL" for row in rows)
-    assert all((row.get("acres") or 0) < 5000 for row in rows)
+    # No FL fixture has 5000+ acres — hard acre band must stay empty.
+    assert r.json() == []
+
+
+@pytest.mark.asyncio
+async def test_property_on_site_hard_split(isolated_store):
+    """Homes stay out of vacant-land results; Property on site surfaces them."""
+    _seed_scored_parcel(
+        isolated_store,
+        state="FL",
+        county="Sumter",
+        acreage=12.0,
+        ask=18_000,
+        external_id="fl-cottage",
+        strategy=Strategy.IMPROVED_PROPERTY,
+        opportunity=88.0,
+    )
+    for listing in isolated_store.listings.values():
+        if listing.external_id == "fl-cottage":
+            listing.title = "Cottage on 12 acres — tax sale"
+            listing.raw = {
+                "ask_role": "assessed_land",
+                "IMPRVT_VAL": 55_000,
+                "has_structure": True,
+            }
+            break
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        vacant = await client.get(
+            "/v1/radar",
+            params={"state": "FL", "min_acres": 5, "strategy": "FARMLAND", "limit": 50},
+        )
+        homes = await client.get(
+            "/v1/radar",
+            params={
+                "state": "FL",
+                "min_acres": 5,
+                "strategy": "IMPROVED_PROPERTY",
+                "limit": 50,
+            },
+        )
+    assert vacant.status_code == 200 and homes.status_code == 200
+    vacant_ids = {row["property_name"] for row in vacant.json()}
+    home_rows = homes.json()
+    assert not any("Cottage" in n for n in vacant_ids)
+    assert any(row.get("has_structure") for row in home_rows)
+    assert any("Cottage" in (row.get("property_name") or "") for row in home_rows)
+    assert any("Land AV" in (row.get("price_display") or "") for row in home_rows)
 
 
 @pytest.mark.asyncio

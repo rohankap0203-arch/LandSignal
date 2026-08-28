@@ -272,7 +272,10 @@ def _provider_label(provider_id: str | None, county: str | None = None) -> str:
 def _strategy_label(s) -> str:
     if not s:
         return "Undetermined"
-    return s.value.replace("_", " ").title()
+    val = s.value if hasattr(s, "value") else str(s)
+    if val == "IMPROVED_PROPERTY":
+        return "Property on site"
+    return val.replace("_", " ").title()
 
 
 def _normalize_state(state: str | None) -> str | None:
@@ -480,6 +483,7 @@ async def radar(
         discount_pct: float | None
         strategy_soft_miss: bool
         best_strategy: Any
+        has_structure: bool = False
 
     def _in_band(
         value: float | None,
@@ -651,21 +655,56 @@ async def radar(
             ):
                 continue
             strategy_soft_miss = False
+            from landsignal.services.land_gate import listing_has_structure
+
+            on_site = listing_has_structure(listing, parcel)
+            wants_property_on_site = any(
+                pref.upper().replace(" ", "_") == "IMPROVED_PROPERTY" for pref in (strategy_prefs or [])
+            )
+            land_only_prefs = bool(strategy_prefs) and not wants_property_on_site
+            # Foolproof split: homes/cottages never mix into vacant-land strategy results.
+            if on_site and not wants_property_on_site:
+                continue
+            # Selecting only Property on site → show structure parcels (or IMPROVED best use).
+            only_property_on_site = wants_property_on_site and all(
+                pref.upper().replace(" ", "_") in {"IMPROVED_PROPERTY", "CUSTOM"}
+                or pref.upper() == "CUSTOM"
+                for pref in strategy_prefs
+            )
+            if only_property_on_site and not on_site:
+                # Still allow CUSTOM text matches below via soft miss; hard-require structure
+                # when IMPROVED_PROPERTY is the only concrete strategy.
+                concrete = [
+                    pref.upper().replace(" ", "_")
+                    for pref in strategy_prefs
+                    if pref.upper().replace(" ", "_") != "CUSTOM"
+                ]
+                if concrete == ["IMPROVED_PROPERTY"] and not on_site:
+                    continue
             if strategy_prefs:
                 known = {
-            "FARMLAND",
-            "DEVELOPMENT",
-            "LAND_BANK",
-            "RECREATIONAL",
-            "ENERGY",
-            "TIMBER",
-            "IMPROVED_PROPERTY",
-        }
+                    "FARMLAND",
+                    "DEVELOPMENT",
+                    "LAND_BANK",
+                    "RECREATIONAL",
+                    "ENERGY",
+                    "TIMBER",
+                    "IMPROVED_PROPERTY",
+                }
                 hit_any = False
                 blob = f"{listing.title} {listing.description or ''} {_strategy_label(score.best_strategy)}".lower()
                 for pref in strategy_prefs:
                     s_up = pref.upper().replace(" ", "_")
-                    if s_up in known:
+                    if s_up == "IMPROVED_PROPERTY":
+                        if on_site or (
+                            score.best_strategy and score.best_strategy.value == "IMPROVED_PROPERTY"
+                        ) or (
+                            score.secondary_strategy
+                            and score.secondary_strategy.value == "IMPROVED_PROPERTY"
+                        ):
+                            hit_any = True
+                            break
+                    elif s_up in known:
                         if (score.best_strategy and score.best_strategy.value == s_up) or (
                             score.secondary_strategy and score.secondary_strategy.value == s_up
                         ):
@@ -675,7 +714,8 @@ async def radar(
                         hit_any = True
                         break
                 if not hit_any:
-                    # Strategy never hides inventory — only re-ranks via fit/score.
+                    # Land strategies never hide other land — only re-rank.
+                    # Property-on-site already hard-gated above.
                     strategy_soft_miss = True
             if min_score is not None and score.opportunity < min_score:
                 continue
@@ -689,14 +729,22 @@ async def radar(
                 if tokens and not any(t in blob for t in tokens):
                     continue
 
+            # Prefer IMPROVED when the user asked for Property on site and structure is present.
+            strat_for_fit = score.best_strategy.value if score.best_strategy else None
+            if wants_property_on_site and on_site:
+                strat_for_fit = "IMPROVED_PROPERTY"
             fit = personalized_score(
                 score.opportunity,
                 profile,
                 ask,
                 parcel.acreage,
-                score.best_strategy.value if score.best_strategy else None,
+                strat_for_fit,
                 score.risk,
             )
+            if wants_property_on_site and on_site:
+                fit = float(fit) + 14.0
+            if land_only_prefs and on_site:
+                fit = float(fit) - 30.0
             out.append(
                 _Cand(
                     parcel_id=parcel.id,
@@ -710,6 +758,7 @@ async def radar(
                     discount_pct=score.asking_discount_pct,
                     strategy_soft_miss=strategy_soft_miss,
                     best_strategy=score.best_strategy,
+                    has_structure=on_site,
                 )
             )
         return out
@@ -753,6 +802,12 @@ async def radar(
         comps_n = {}
         if enrichment and enrichment.comps:
             comps_n = enrichment.comps.normalized or enrichment.comps.value or {}
+        from landsignal.services.land_gate import listing_has_structure
+
+        on_site = bool(cand.has_structure) or listing_has_structure(listing, parcel)
+        ask_role = None
+        if isinstance(listing.raw, dict):
+            ask_role = listing.raw.get("ask_role")
         pd = price_display(
             ask,
             listing.provider_id,
@@ -763,6 +818,8 @@ async def radar(
             acres=parcel.acreage,
             apn=parcel.apn,
             comps_normalized=comps_n if isinstance(comps_n, dict) else {},
+            ask_role=str(ask_role) if ask_role else None,
+            has_structure=on_site,
         )
         vd = value_display(
             score.estimated_value_usd,
@@ -836,10 +893,18 @@ async def radar(
         if settle_disc is not None:
             # Keep chip copy short — opener gap belongs in help / reasons, not the label.
             discount_display = f"Likely finish {settle_disc:+.1f}% vs our value"
+        elif on_site and str(pd.get("kind") or "").startswith("assessed"):
+            discount_display = "Land AV only — not a home sale price"
         elif score.asking_discount_pct is not None:
             discount_display = f"{score.asking_discount_pct:+.1f}% vs our value"
         else:
             discount_display = "No public price to compare"
+        # Never advertise a vacant-land "bargain %" when a dwelling is on site + land AV only.
+        row_discount_pct = (
+            None
+            if (on_site and str(pd.get("kind") or "").startswith("assessed"))
+            else (settle_disc if settle_disc is not None else score.asking_discount_pct)
+        )
 
         discount_help: str | None = None
         gap_pct = settle_disc if settle_disc is not None else score.asking_discount_pct
@@ -1075,7 +1140,7 @@ async def radar(
             estimated_value=score.estimated_value_usd,
             estimated_value_display=vd["display"],
             value_knowledge=vd["knowledge_state"],
-            discount_pct=score.asking_discount_pct,
+            discount_pct=row_discount_pct,
             discount_display=discount_display,
             discount_help=discount_help,
             opportunity=score.opportunity,
@@ -1134,6 +1199,7 @@ async def radar(
             return_thesis=thesis,
             conviction=conviction,
             scout_note=scout_note,
+            has_structure=on_site,
             trajectory_regime=traj.get("regime"),
             trajectory_label=traj.get("regime_label"),
             trajectory_cagr_5y=traj.get("cagr_5y_display"),
@@ -1634,6 +1700,12 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     comps_n = {}
     if enrichment and enrichment.comps:
         comps_n = enrichment.comps.normalized or enrichment.comps.value or {}
+    from landsignal.services.land_gate import listing_has_structure
+
+    on_site = listing_has_structure(listing, parcel) if listing else False
+    ask_role = None
+    if listing and isinstance(listing.raw, dict):
+        ask_role = listing.raw.get("ask_role")
     price = price_display(
         ask,
         listing.provider_id if listing else None,
@@ -1644,6 +1716,8 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         acres=parcel.acreage,
         apn=parcel.apn,
         comps_normalized=comps_n if isinstance(comps_n, dict) else {},
+        ask_role=str(ask_role) if ask_role else None,
+        has_structure=on_site,
     )
     brief = build_intelligence_brief(
         parcel=parcel,

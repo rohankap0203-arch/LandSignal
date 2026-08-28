@@ -538,10 +538,20 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
     lift = 0.0
     lift_notes: list[str] = []
     provider = str(inp.get("provider_id") or "")
+    has_structure = bool(inp.get("has_structure") or inp.get("hasStructure"))
     eff_discount = discount
+    # Never treat a dwelling parcel's land AV / teaser as a vacant-land deep bargain.
+    if has_structure:
+        lift_notes.append("Property on site — vacant-land underwrite / deep-discount lifts skipped")
+        if screens.get("IMPROVED_PROPERTY") != "FAIL":
+            # Force improved use to the front when a home is present.
+            strategy_scores["IMPROVED_PROPERTY"] = max(
+                float(strategy_scores.get("IMPROVED_PROPERTY") or 0),
+                72.0,
+            )
     # Unpriced process inventory (≥5 ac): underwrite a channel entry so mispricing can surface.
     # Vacant GIS screens are NOT confirmed sales — only a mild “maybe approachable” underwrite.
-    if (
+    elif (
         eff_discount is None
         and ask is None
         and base is not None
@@ -562,7 +572,7 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
             f"{'Map-screen' if provider == 'public_vacant_gis' else 'Process'} underwrite "
             f"~${underwrite:,.0f} vs mark ${base:,.0f} ({eff_discount:.0f}% gap)"
         )
-    if eff_discount is not None:
+    if not has_structure and eff_discount is not None:
         if provider == "public_vacant_gis":
             # Soft and capped — vacant GIS alone must not manufacture a top-board buy
             if eff_discount <= -25:
@@ -587,29 +597,38 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
             lift += 5
             lift_notes.append(f"Mild discount lift (+5) for {eff_discount:.0f}% vs model")
     # Channel edge only when the file also shows a real price/use gap (not bare vacant GIS)
-    if provider in ("public_tax_sale", "public_surplus", "blm_lpad") and (
+    # and there is no dwelling (homes use Property on site — not vacant bargain math).
+    if not has_structure and provider in ("public_tax_sale", "public_surplus", "blm_lpad") and (
         (eff_discount is not None and eff_discount <= -12) or float(acres or 0) >= 30
     ):
         lift += 6
         lift_notes.append("Off-MLS / process channel scout edge (+6)")
     sp = _v(inp, "seller_pressure_score")
-    if sp is not None and sp >= 68 and provider != "public_vacant_gis":
+    if not has_structure and sp is not None and sp >= 68 and provider != "public_vacant_gis":
         lift += 6
         lift_notes.append("Distressed / high seller-pressure channel (+6)")
-    if ask is None and acres >= 40 and provider in ("public_tax_sale", "public_surplus", "blm_lpad"):
+    if (
+        not has_structure
+        and ask is None
+        and acres >= 40
+        and provider in ("public_tax_sale", "public_surplus", "blm_lpad")
+    ):
         lift += 8
         lift_notes.append("Unpriced large-tract process edge (+8)")
         if (_v(inp, "scarcity_score") or 0) >= 60:
             lift += 5
             lift_notes.append("Scarcity on large unpriced tract (+5)")
-    elif ask is None and acres >= 40 and provider == "public_vacant_gis":
+    elif not has_structure and ask is None and acres >= 40 and provider == "public_vacant_gis":
         lift += 1.5
         lift_notes.append("Large vacant map screen — still need an owner path (+1.5)")
     # Usable-acre quality when soil is strong and flood/wetlands are contained
     if (prime or 0) >= 45 and (wetland or 0) < 18 and (_v(inp, "flood_zone_pct") or 0) < 25:
         lift += 6
         lift_notes.append("Cleaner soil + contained flood/wetland screens (+6)")
-    if risk > 75:
+    if has_structure:
+        lift *= 0.35
+        lift_notes.append("Lift cut — property on site (not a vacant land bargain)")
+    elif risk > 75:
         lift *= 0.65
         lift_notes.append("Lift cut — elevated risk")
     elif risk > 62:

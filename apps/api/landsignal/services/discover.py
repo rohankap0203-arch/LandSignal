@@ -42,7 +42,16 @@ def _refresh_listing(store: MemoryStore, listing, raw: dict[str, Any]) -> bool:
         listing.description = raw["description"]
     listing.last_seen_at = _utcnow()
     merged = {**(listing.raw or {}), **{k: v for k, v in raw.items() if k != "polygon"}}
-    listing.raw = slim_listing_raw(merged)
+    from landsignal.services.land_gate import stamp_structure_flags
+
+    listing.raw = slim_listing_raw(
+        stamp_structure_flags(
+            merged,
+            title=listing.title,
+            description=listing.description,
+            address=str(merged.get("address") or merged.get("Address") or ""),
+        )
+    )
     store.listings[listing.id] = listing
     store.index_listing(listing)
     parcel = store.parcels.get(listing.parcel_id)
@@ -156,17 +165,26 @@ def _filter_rows(
         acres = row.get("acreage")
         if acres is not None and (acres < min_acres or acres > max_acres):
             continue
-        from landsignal.services.land_gate import is_land_inventory
+        from landsignal.services.land_gate import is_land_inventory, stamp_structure_flags
 
+        raw_for_gate = row.get("raw") if isinstance(row.get("raw"), dict) else row
         if not is_land_inventory(
             provider_id=row.get("provider_id"),
             title=str(row.get("title") or ""),
             description=str(row.get("description") or ""),
             address=str(row.get("address") or ""),
             acreage=acres if isinstance(acres, (int, float)) else None,
-            raw=row.get("raw") if isinstance(row.get("raw"), dict) else row,
+            raw=raw_for_gate if isinstance(raw_for_gate, dict) else None,
         ):
             continue
+        # Stamp structure so radar can hard-split Property on site vs vacant land.
+        stamped = stamp_structure_flags(
+            raw_for_gate if isinstance(raw_for_gate, dict) else {},
+            title=str(row.get("title") or ""),
+            description=str(row.get("description") or ""),
+            address=str(row.get("address") or ""),
+        )
+        row = {**row, "raw": stamped, "has_structure": bool(stamped.get("has_structure"))}
         # Drop polygons during index — they OOM cloud VMs at nationwide scale.
         # Detail pages / geometry endpoints can rehydrate boundaries later.
         if row.get("polygon") is not None:

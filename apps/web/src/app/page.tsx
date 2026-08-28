@@ -625,7 +625,7 @@ export default function SearchPage() {
             label="Strategy"
             tip={{
               title: "Strategy",
-              body: "Ranks matching uses higher (farm, develop, timber…). Other land still shows.",
+              body: "Ranks matching land uses higher. Homes, cottages, and ranch houses are kept out of vacant-land results — pick Property on site to see those.",
             }}
           >
             <HeroSelect
@@ -637,7 +637,14 @@ export default function SearchPage() {
                 : SEARCH_META_FALLBACK.strategies
               ).map((s) => ({
                 value: s,
-                label: s === "Any" ? "Any" : s === "CUSTOM" ? "Type my own…" : s.replaceAll("_", " "),
+                label:
+                  s === "Any"
+                    ? "Any"
+                    : s === "CUSTOM"
+                      ? "Type my own…"
+                      : s === "IMPROVED_PROPERTY"
+                        ? "Property on site"
+                        : s.replaceAll("_", " "),
               }))}
               onChange={(v) =>
                 setForm((f) => ({
