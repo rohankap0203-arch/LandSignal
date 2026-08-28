@@ -321,6 +321,8 @@ export const landsignalApi = {
       acres: number | null;
       state?: string | null;
       county?: string | null;
+      has_outline?: boolean;
+      geometry_source?: string | null;
     }>(`/parcels/${id}/geometry`),
   nearby: (lat: number, lon: number, kind: string, init?: RequestInit) =>
     api<{

@@ -62,16 +62,12 @@ def _refresh_listing(store: MemoryStore, listing, raw: dict[str, Any]) -> bool:
             parcel.longitude = raw["longitude"]
         if raw.get("acreage") is not None:
             parcel.acreage = raw["acreage"]
-        from landsignal.services.parcel_outline import outline_for_parcel
+        from landsignal.services.parcel_outline import compact_polygon
 
-        outline = outline_for_parcel(
-            polygon=raw.get("polygon"),
-            latitude=parcel.latitude,
-            longitude=parcel.longitude,
-            acreage=parcel.acreage,
-        )
+        outline = compact_polygon(raw.get("polygon"))
         if outline:
             parcel.polygon = outline
+            parcel.geometry_confidence = 88.0
         store.parcels[parcel.id] = parcel
     return price_moved
 
@@ -193,15 +189,10 @@ def _filter_rows(
             address=str(row.get("address") or ""),
         )
         row = {**row, "raw": stamped, "has_structure": bool(stamped.get("has_structure"))}
-        # Keep a compact outline only (≤28 verts) — full GIS rings OOM nationwide.
-        from landsignal.services.parcel_outline import outline_for_parcel
+        # Keep a compact REAL GIS outline only (≤64 verts) — never invent squares.
+        from landsignal.services.parcel_outline import compact_polygon
 
-        outline = outline_for_parcel(
-            polygon=row.get("polygon"),
-            latitude=row.get("latitude"),
-            longitude=row.get("longitude"),
-            acreage=row.get("acreage"),
-        )
+        outline = compact_polygon(row.get("polygon"))
         row = {**row, "polygon": outline}
         out.append(row)
         pid = row.get("provider_id") or label
@@ -257,14 +248,12 @@ async def _ingest_and_score(
         parcel, listing = store.upsert_manual({**raw, "provider_id": raw.get("provider_id") or "manual"})
         parcel.is_demo = False
         listing.is_demo = False
-        from landsignal.services.parcel_outline import outline_for_parcel
+        from landsignal.services.parcel_outline import compact_polygon
 
-        parcel.polygon = outline_for_parcel(
-            polygon=raw.get("polygon") or parcel.polygon,
-            latitude=parcel.latitude,
-            longitude=parcel.longitude,
-            acreage=parcel.acreage,
-        )
+        outline = compact_polygon(raw.get("polygon") or parcel.polygon)
+        parcel.polygon = outline
+        if outline:
+            parcel.geometry_confidence = 88.0
         store.parcels[parcel.id] = parcel
         store.listings[listing.id] = listing
         parcel_ids.append(parcel.id)

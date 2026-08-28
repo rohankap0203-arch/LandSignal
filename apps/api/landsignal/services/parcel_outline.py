@@ -1,17 +1,16 @@
-"""Compact parcel outlines for View Map — yellow boundary without OOM.
+"""Accurate parcel outlines for View Map — real GIS rings only (never invented).
 
-Full GIS rings can be thousands of vertices and previously blew memory when
-kept on every nationwide parcel. We keep a tiny outline (≤28 verts) or an
-acreage-sized square around the pin so View Map can always draw the land.
+Full cadastral rings can be thousands of vertices and previously OOM'd nationwide
+inventory. We keep a compact exterior (≤64 verts) that still follows the true
+boundary. If GIS never gave a ring (point-only layers), polygon stays None —
+View Map shows the pin, not a fake lot square.
 """
 
 from __future__ import annotations
 
-import math
 from typing import Any
 
-
-_MAX_OUTLINE_POINTS = 28
+_MAX_OUTLINE_POINTS = 64
 
 
 def _f(v: Any) -> float | None:
@@ -24,31 +23,20 @@ def _f(v: Any) -> float | None:
         return None
 
 
-def acreage_square_polygon(
-    lon: float,
-    lat: float,
-    acres: float | None,
-) -> list[list[list[float]]]:
-    """Axis-aligned square matching published acreage (fallback outline)."""
-    ac = _f(acres)
-    if ac is None or ac <= 0:
-        ac = 5.0
-    # Cap absurd assessor typos so the outline stays on-screen.
-    ac = max(0.25, min(ac, 10_000.0))
-    m2 = ac * 4046.8564224
-    side = math.sqrt(m2)
-    m_per_deg_lat = 111_320.0
-    m_per_deg_lon = 111_320.0 * max(0.2, math.cos(lat * math.pi / 180.0))
-    d_lat = (side / 2.0) / m_per_deg_lat
-    d_lon = (side / 2.0) / m_per_deg_lon
-    ring = [
-        [lon - d_lon, lat - d_lat],
-        [lon + d_lon, lat - d_lat],
-        [lon + d_lon, lat + d_lat],
-        [lon - d_lon, lat + d_lat],
-        [lon - d_lon, lat - d_lat],
-    ]
-    return [ring]
+def is_synthetic_square(polygon: Any) -> bool:
+    """True for the old acreage-square / demo placeholder — not a real parcel edge."""
+    if not isinstance(polygon, list) or not polygon:
+        return False
+    ring = polygon[0]
+    if not isinstance(ring, list) or len(ring) != 5:
+        return False
+    try:
+        pts = [(float(p[0]), float(p[1])) for p in ring[:4]]
+    except (TypeError, ValueError, IndexError):
+        return False
+    lons = [p[0] for p in pts]
+    lats = [p[1] for p in pts]
+    return len(set(round(x, 6) for x in lons)) == 2 and len(set(round(y, 6) for y in lats)) == 2
 
 
 def _close_ring(ring: list[list[float]]) -> list[list[float]]:
@@ -82,15 +70,15 @@ def compact_polygon(
     *,
     max_points: int = _MAX_OUTLINE_POINTS,
 ) -> list[list[list[float]]] | None:
-    """Return a memory-safe exterior ring for map outline drawing."""
+    """Return a memory-safe exterior ring that still follows the real GIS boundary."""
+    if is_synthetic_square(polygon):
+        return None
     if not isinstance(polygon, list) or not polygon:
         return None
-    # GeoJSON Polygon: [ring, hole, ...] — keep exterior only.
-    # MultiPolygon accidentally passed as coords: [ [ring...], [ring...] ]
     ring = polygon[0]
     if not isinstance(ring, list) or not ring:
         return None
-    # If first element looks like a ring-of-rings (MultiPolygon mishandle), dive once.
+    # MultiPolygon mishandle: dive once.
     if ring and isinstance(ring[0], list) and ring[0] and isinstance(ring[0][0], list):
         ring = ring[0]
     cleaned: list[list[float]] = []
@@ -105,7 +93,6 @@ def compact_polygon(
         cleaned.append([lon, lat])
     if len(cleaned) < 3:
         return None
-    # Prefer shapely simplify when available for better shape fidelity.
     try:
         from shapely.geometry import Polygon
 
@@ -116,15 +103,13 @@ def compact_polygon(
             return None
         if poly.geom_type == "MultiPolygon" and len(poly.geoms):
             poly = max(poly.geoms, key=lambda g: g.area)
-        # Progressive tolerance until under budget.
         tol = 0.0
-        for _ in range(8):
+        for _ in range(10):
             simplified = poly.simplify(tol, preserve_topology=True) if tol > 0 else poly
             coords = list(simplified.exterior.coords)
             if len(coords) <= max_points:
                 return [_close_ring([[float(x), float(y)] for x, y in coords])]
-            # Grow tolerance in degrees (~111km per deg) — start tiny.
-            tol = 0.00002 if tol <= 0 else tol * 2.2
+            tol = 0.00001 if tol <= 0 else tol * 2.0
         coords = list(poly.exterior.coords)
         return [_subsample_ring([[float(x), float(y)] for x, y in coords], max_points)]
     except Exception:
@@ -134,16 +119,9 @@ def compact_polygon(
 def outline_for_parcel(
     *,
     polygon: Any = None,
-    latitude: float | None = None,
-    longitude: float | None = None,
-    acreage: float | None = None,
+    latitude: float | None = None,  # noqa: ARG001 — kept for call-site compat
+    longitude: float | None = None,  # noqa: ARG001
+    acreage: float | None = None,  # noqa: ARG001
 ) -> list[list[list[float]]] | None:
-    """Best available outline: compact real boundary, else acreage square on pin."""
-    compact = compact_polygon(polygon)
-    if compact:
-        return compact
-    lat = _f(latitude)
-    lon = _f(longitude)
-    if lat is None or lon is None:
-        return None
-    return acreage_square_polygon(lon, lat, acreage)
+    """Real compact GIS outline only. Never invents acreage squares."""
+    return compact_polygon(polygon)

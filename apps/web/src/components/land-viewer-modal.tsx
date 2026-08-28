@@ -437,14 +437,15 @@ export function LandViewerModal({
 
   useEffect(() => {
     if (!open || !parcelId) return;
-    // Always hit geometry so pin-only inventory still gets a yellow land outline.
-    if (polygon?.[0]?.length) return;
+    // Always resolve from /geometry so inventory gets the real GIS outline
+    // (never trust a leftover fake square on the card payload).
     let cancelled = false;
     void landsignalApi
       .parcelGeometry(parcelId)
       .then((g) => {
         if (cancelled) return;
         if (g.polygon?.[0]?.length) setResolvedPolygon(g.polygon);
+        else if (!polygon?.[0]?.length) setResolvedPolygon(null);
       })
       .catch(() => null);
     return () => {

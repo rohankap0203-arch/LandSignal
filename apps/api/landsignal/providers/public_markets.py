@@ -2560,6 +2560,9 @@ async def _fetch_arcgis_pages(
                 continue
             valid = _validate_inventory_row(row)
             if valid:
+                valid = {**valid, "source_id": src.source_id}
+                if isinstance(valid.get("raw"), dict):
+                    valid["raw"] = {**valid["raw"], "source_id": src.source_id}
                 out.append(valid)
                 if len(out) >= target:
                     break
