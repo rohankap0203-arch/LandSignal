@@ -104,25 +104,37 @@ export function BuyingPowerLogic({
     (usePurchase != null ? "Purchase today" : "Value today");
   const endLabel = variant === "hold" ? `Money back · ${years} yr` : `Projected · ${years} yr`;
 
+  const toggle = () => setOpen((o) => !o);
+
   return (
-    <div className={`buy-power ${className}`.trim()}>
-      <button
-        type="button"
-        className={`buy-power-toggle ${open ? "is-open" : ""}`}
+    <div className={`buy-power ${open ? "is-open" : ""} ${className}`.trim()}>
+      {/* Collapsed: whole card is the hit target (mouse + finger). Expanded: header toggles. */}
+      <div
+        className="buy-power-hit"
+        role="button"
+        tabIndex={0}
         aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        aria-label="Did this beat inflation?"
+        onClick={toggle}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggle();
+          }
+        }}
       >
-        <span className="buy-power-k">Did this beat inflation?</span>
-        <span className={`buy-power-verdict ${beatInflation ? "is-pos" : "is-neg"}`}>
-          {beatInflation ? "Yes" : "No"}
-        </span>
-        <span className="buy-power-chev" aria-hidden>
-          {open ? "▾" : "▸"}
-        </span>
-      </button>
-      {!open ? (
-        <p className="buy-power-teaser">{headline}</p>
-      ) : (
+        <div className="buy-power-toggle">
+          <span className="buy-power-k">Did this beat inflation?</span>
+          <span className={`buy-power-verdict ${beatInflation ? "is-pos" : "is-neg"}`}>
+            {beatInflation ? "Yes" : "No"}
+          </span>
+          <span className="buy-power-chev" aria-hidden>
+            {open ? "▾" : "▸"}
+          </span>
+        </div>
+        {!open ? <p className="buy-power-teaser">{headline}</p> : null}
+      </div>
+      {open ? (
         <div className="buy-power-body">
           <p className="buy-power-head">{headline}</p>
 
@@ -203,7 +215,7 @@ export function BuyingPowerLogic({
             </li>
           </ul>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

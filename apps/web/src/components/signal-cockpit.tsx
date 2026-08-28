@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { HelpTip } from "@/components/filter-field";
 
 type AnyRec = Record<string, unknown>;
 
@@ -18,6 +17,7 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
     (p) => Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)),
   );
   const [active, setActive] = useState(0);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const layout = useMemo(() => {
     if (!points.length) return null;
@@ -47,6 +47,16 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
   }, [points]);
 
   const selected = points[Math.min(active, Math.max(0, points.length - 1))];
+  const first = points[0];
+  const last = points[points.length - 1];
+  const startLabel = first ? String(first.label || "Start") : "Start";
+  const endLabel = last ? String(last.label || "Value") : "Value";
+  const startPrice = first ? money(first.x) : null;
+  const endPrice = last ? money(last.x) : null;
+  const startShare =
+    first != null && Number.isFinite(Number(first.y)) ? `${Number(first.y).toFixed(0)}%` : null;
+  const endShare =
+    last != null && Number.isFinite(Number(last.y)) ? `${Number(last.y).toFixed(0)}%` : null;
 
   return (
     <div className="signal-cockpit">
@@ -55,11 +65,17 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
           <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
             Who’s still bidding at each price
           </div>
-          <HelpTip
-            tone="panel"
-            title="What this chart shows"
-            body="As the price climbs, fewer buyers stay in. Each point is a price level on this file — from the start bid toward our value — and roughly how much competition is still there. Use it to see where the crowd thins and what a realistic finish looks like, not as a promise of the sale price."
-          />
+          <button
+            type="button"
+            className={`help-q signal-help-q ${helpOpen ? "on" : ""}`}
+            aria-label="What this bidding chart means"
+            aria-haspopup="dialog"
+            aria-expanded={helpOpen}
+            title="What this chart means"
+            onClick={() => setHelpOpen(true)}
+          >
+            ?
+          </button>
         </div>
         <h3 className="display text-lg font-semibold">
           {String(cockpit.subtitle || "Price up → fewer buyers left")}
@@ -68,6 +84,63 @@ export function SignalCockpit({ cockpit }: { cockpit: AnyRec }) {
           Tap a point or legend item to read that price level.
         </p>
       </div>
+
+      {helpOpen ? (
+        <div
+          className="help-modal-backdrop"
+          role="presentation"
+          onClick={() => setHelpOpen(false)}
+        >
+          <div
+            className="help-modal help-modal--compact"
+            role="dialog"
+            aria-modal="true"
+            aria-label="What this bidding chart means"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h4 className="display text-base font-semibold">Bidding by price</h4>
+              <button
+                type="button"
+                className="help-q on"
+                aria-label="Close"
+                onClick={() => setHelpOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <p className="mt-2 text-sm leading-snug text-[var(--ink-soft)]">
+              Higher price → fewer buyers stay in. Each point is a price on this file and about how
+              much of the crowd is still bidding.
+            </p>
+            <ul className="help-modal-list">
+              <li>
+                <strong>{startLabel}</strong>
+                <span>
+                  {startPrice && startShare
+                    ? `${startPrice} · ~${startShare} still in`
+                    : "Low ask — most of the crowd is still bidding."}
+                </span>
+              </li>
+              <li>
+                <strong>Climb</strong>
+                <span>As price rises, competition thins. Tap a point to read that level.</span>
+              </li>
+              <li>
+                <strong>{endLabel}</strong>
+                <span>
+                  {endPrice && endShare
+                    ? `${endPrice} · ~${endShare} left — finish band, not a promise`
+                    : "Near our value — fewer buyers, clearer finish band."}
+                </span>
+              </li>
+            </ul>
+            <p className="mt-3 text-xs leading-snug text-[var(--muted)]">
+              Use it to see where the crowd thins — not a guaranteed sale price.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {layout ? (
         <>

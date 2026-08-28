@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { resolveLandPin } from "@/lib/land-pin";
 
 function FullscreenIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
         d="M8 3H4v4M16 3h4v4M8 21H4v-4M16 21h4v-4"
         stroke="currentColor"
@@ -67,8 +68,8 @@ export function ParcelMap({
 
       if (cancelled || !ref.current) return;
       ref.current.innerHTML = "";
-      const center: [number, number] =
-        latitude != null && longitude != null ? [latitude, longitude] : [39.5, -98.35];
+      const pin = resolveLandPin(latitude, longitude, polygon);
+      const center: [number, number] = pin || [39.5, -98.35];
 
       map = L.map(ref.current, {
         scrollWheelZoom,
@@ -78,7 +79,7 @@ export function ParcelMap({
         keyboard: true,
         zoomControl: true,
         attributionControl: false,
-      }).setView(center, latitude != null ? (compact ? 15 : 11) : 4);
+      }).setView(center, pin != null ? (compact ? 15 : 11) : 4);
       if (cancelled) {
         map.remove();
         map = null;
@@ -103,18 +104,21 @@ export function ParcelMap({
       if (polygon?.[0]?.length) {
         const latlngs = polygon[0].map(([lon, lat]) => [lat, lon] as [number, number]);
         const layer = L.polygon(latlngs, {
-          color: "#d6a243",
-          weight: 2,
-          fillColor: "#d6a243",
-          fillOpacity: 0.25,
+          color: "#f2c14e",
+          weight: 3.25,
+          opacity: 1,
+          fillColor: "#f2c14e",
+          fillOpacity: 0.2,
         }).addTo(map);
         map.fitBounds(layer.getBounds(), {
           padding: compact ? [10, 10] : [24, 24],
           maxZoom: compact ? 17 : 18,
         });
+        // Always drop an on-land pin so lakeshore parcels don't look empty / off-parcel.
+        if (pin) L.marker(pin).addTo(map).bindPopup(title || "Parcel");
         if (title) layer.bindPopup(title);
-      } else if (latitude != null && longitude != null) {
-        L.marker([latitude, longitude]).addTo(map).bindPopup(title || "Parcel");
+      } else if (pin) {
+        L.marker(pin).addTo(map).bindPopup(title || "Parcel");
       }
 
       const bump = () => map?.invalidateSize({ animate: false });
@@ -170,7 +174,11 @@ export function ParcelMap({
         <button
           type="button"
           className="parcel-map-expand"
-          onClick={onExpand}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onExpand();
+          }}
           aria-label="Open full screen land view"
           title="Full screen land view"
         >

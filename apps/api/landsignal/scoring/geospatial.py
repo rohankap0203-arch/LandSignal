@@ -36,6 +36,37 @@ def acres_from_square_meters(m2: float) -> float:
     return m2 / 4046.8564224
 
 
+def interior_pin_lat_lon(geom) -> tuple[float, float]:
+    """Lat/lon guaranteed on the land — never a lake-hole geometric centroid.
+
+    Prefer centroid when it lies inside the polygon; otherwise use Shapely's
+    representative_point (always interior). For MultiPolygon, pin the largest part.
+    """
+    from shapely.ops import unary_union
+
+    g = unary_union(geom)
+    if g.is_empty:
+        raise ValueError("empty geometry")
+    if g.geom_type == "MultiPolygon" and len(g.geoms):
+        g = max(g.geoms, key=lambda p: p.area)
+    elif g.geom_type == "GeometryCollection":
+        polys = [p for p in g.geoms if p.geom_type in ("Polygon", "MultiPolygon") and not p.is_empty]
+        if not polys:
+            c = g.centroid
+            return float(c.y), float(c.x)
+        g = unary_union(polys)
+        if g.geom_type == "MultiPolygon" and len(g.geoms):
+            g = max(g.geoms, key=lambda p: p.area)
+    c = g.centroid
+    try:
+        if g.contains(c) or g.covers(c):
+            return float(c.y), float(c.x)
+    except Exception:
+        pass
+    rp = g.representative_point()
+    return float(rp.y), float(rp.x)
+
+
 def buildable_acreage_estimate(
     acreage: float,
     wetland_pct: float | None,

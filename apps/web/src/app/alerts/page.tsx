@@ -92,6 +92,7 @@ const STRATEGY_OPTS = [
   { id: "RECREATIONAL", label: "Recreational" },
   { id: "TIMBER", label: "Timber" },
   { id: "ENERGY", label: "Energy" },
+  { id: "IMPROVED_PROPERTY", label: "Property on site" },
 ];
 
 const LAND_TYPE_OPTS = ["Vacant", "Raw land", "Farmland", "Timber", "Recreational", "Residential lot", "Commercial"];
@@ -131,6 +132,7 @@ const BUDGET_PRESETS: { id: string; label: string; min: string; max: string }[] 
   { id: "150k", label: "Up to $150k", min: "", max: "150000" },
   { id: "250k", label: "Up to $250k", min: "", max: "250000" },
   { id: "500k", label: "Up to $500k", min: "", max: "500000" },
+  { id: "750k", label: "Up to $750k", min: "", max: "750000" },
   { id: "1m", label: "Up to $1M", min: "", max: "1000000" },
   { id: "2_5m", label: "Up to $2.5M", min: "", max: "2500000" },
   { id: "5m", label: "Up to $5M", min: "", max: "5000000" },
@@ -544,7 +546,6 @@ function MatchCard({
         latitude={row.latitude}
         longitude={row.longitude}
         polygon={viewerPolygon}
-        reportHref={href}
         parcelId={row.parcel_id}
       />
     </div>
@@ -1355,8 +1356,8 @@ export default function LandAlertsPage() {
               <span>Infrastructure</span>
               <HelpTip
                 tone="panel"
-                title="Infrastructure prefs"
-                body="Road access: frontage or easement. Utilities: power/water/sewer nearby. Power: grid close enough for service or energy. Water: surface, irrigation, or well potential. Any = no preference."
+                title="Infrastructure"
+                body="Road, utilities, power, or water nearby. Any = no preference."
               />
             </div>
             <div className="land-alert-chips acq-chips-tight">

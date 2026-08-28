@@ -596,8 +596,7 @@ export function PriceTrajectory({
               ))}
             </ul>
             <p className="mt-2.5 text-[11px] text-[var(--muted)] leading-snug">
-              Tap a button to change only the future. Tap again to turn it off. Past years never
-              change.
+              Tap a hitch to change only the future path. Tap again to turn it off.
             </p>
           </div>
         </div>

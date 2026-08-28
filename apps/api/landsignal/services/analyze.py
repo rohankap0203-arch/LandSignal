@@ -12,10 +12,19 @@ from landsignal.providers.enrichment import build_enrichment_providers
 from landsignal.scoring.engine import compute_score, personalized_score
 from landsignal.scoring.financial import farmland_scenario
 from landsignal.services.narratives import hidden_value_score, why_still_unsold
+from landsignal.services.land_gate import listing_has_structure
 from landsignal.settings import Settings, get_settings
 from landsignal.store import MemoryStore
 
 log = structlog.get_logger()
+
+
+def _score_has_structure(listing, parcel, attom_patch: dict) -> bool:
+    if attom_patch.get("has_structure"):
+        return True
+    if listing is None:
+        return False
+    return listing_has_structure(listing, parcel)
 
 # Coarse regional land value priors ($/acre) — ESTIMATED only, for screening when no comps vendor.
 STATE_PPA_PRIOR = {
@@ -251,6 +260,88 @@ async def analyze_parcel(
                         parcel.county = str(gn["county_name"]).replace(" County", "")
                         store.parcels[parcel_id] = parcel
 
+    # ATTOM property intelligence (optional, circuit-broken). Never blocks analyze.
+    attom_patch: dict[str, Any] = {}
+    if (
+        getattr(settings, "attom_enrich_on_analyze", True)
+        and (not fast)
+        and getattr(settings, "attom_data_mode", "api") != "disabled"
+    ):
+        try:
+            from landsignal.services.property_providers.pipeline import (
+                attom_fields_to_enrichment_patch,
+                enrich_with_attom,
+            )
+
+            attom_res = await enrich_with_attom(
+                {
+                    "apn": parcel.apn,
+                    "address": parcel.address,
+                    "state": parcel.state,
+                    "county": parcel.county,
+                    "latitude": parcel.latitude,
+                    "longitude": parcel.longitude,
+                    "acreage": parcel.acreage,
+                    "attom_id": (existing.raw or {}).get("attom_id") if hasattr(existing, "raw") else None,
+                },
+                deep=True,
+                settings=settings,
+            )
+            if attom_res.get("ok"):
+                attom_patch = attom_fields_to_enrichment_patch(attom_res.get("fields") or {})
+                try:
+                    from landsignal.services.property_providers.pipeline import snapshot_attom_enrichment
+
+                    snapshot_attom_enrichment(
+                        parcel_key=str(parcel_id),
+                        fields=attom_res.get("fields") or {},
+                        meta={
+                            "state": attom_res.get("state"),
+                            "data_confidence": attom_res.get("data_confidence"),
+                            "apn": parcel.apn,
+                            "state_code": parcel.state,
+                            "county": parcel.county,
+                        },
+                    )
+                except Exception:
+                    pass
+                # Authoritative acreage from ATTOM lotSize1 when parcel acres missing
+                if (parcel.acreage is None or parcel.acreage <= 0) and attom_patch.get("attom_acreage"):
+                    parcel.acreage = float(attom_patch["attom_acreage"])
+                    store.parcels[parcel_id] = parcel
+                if not parcel.apn and (attom_res.get("fields") or {}).get("apn"):
+                    apn_v = (attom_res.get("fields") or {}).get("apn")
+                    # apn may be raw string in id search; detail uses licensed field sometimes
+                    parcel.apn = apn_v if isinstance(apn_v, str) else None
+                    store.parcels[parcel_id] = parcel
+                # Stash temporary licensed snapshot on enrichment.other (TTL metadata inside fields)
+                existing.other = Provenanced(
+                    value={
+                        "attom": {
+                            "ok": True,
+                            "state": attom_res.get("state"),
+                            "fields": attom_res.get("fields"),
+                            "data_confidence": attom_res.get("data_confidence"),
+                            "improved": attom_res.get("improved"),
+                            "persistencePolicy": "TEMPORARY_LICENSED",
+                        }
+                    },
+                    knowledge_state=KnowledgeState.KNOWN,
+                    confidence=0.85,
+                    source="ATTOM",
+                    retrieved_at=datetime.now(timezone.utc),
+                )
+            else:
+                existing.other = Provenanced(
+                    value={"attom": {"ok": False, "state": attom_res.get("state"), "error": attom_res.get("error")}},
+                    knowledge_state=KnowledgeState.TEMPORARILY_UNAVAILABLE,
+                    confidence=0.2,
+                    source="ATTOM",
+                    retrieved_at=datetime.now(timezone.utc),
+                )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("attom_analyze_hook_failed", error_type=type(exc).__name__)
+
     soil_n = (existing.soil.normalized or existing.soil.value or {}) if existing.soil else {}
     flood_n = (existing.flood.normalized or existing.flood.value or {}) if existing.flood else {}
     wet_n = (existing.wetlands.normalized or existing.wetlands.value or {}) if existing.wetlands else {}
@@ -402,6 +493,9 @@ async def analyze_parcel(
         "county": parcel.county,
         "state": parcel.state,
         "provider_id": listing.provider_id if listing else None,
+        "has_structure": _score_has_structure(listing, parcel, attom_patch),
+        "building_sqft": attom_patch.get("buildingSqFt"),
+        "bedrooms": attom_patch.get("bedrooms"),
         "estimated_value_low_usd": _wrap(comps_n.get("estimated_value_low_usd"), existing.comps),
         "estimated_value_base_usd": _wrap(comps_n.get("estimated_value_base_usd"), existing.comps),
         "estimated_value_high_usd": _wrap(comps_n.get("estimated_value_high_usd"), existing.comps),
@@ -514,9 +608,6 @@ async def analyze_parcel(
         "estimated_value_usd": result.get("estimated_value_usd"),
         "best_strategy": result.get("best_strategy"),
     }
-    unsold = why_still_unsold(narrative_ctx)
-    hidden = hidden_value_score(narrative_ctx)
-
     from landsignal.services.market_trajectory import build_market_trajectory
 
     # Lightweight score stand-in so trajectory can use mark/discount before ScoreRecord exists
@@ -525,72 +616,84 @@ async def analyze_parcel(
         asking_discount_pct = result.get("asking_discount_pct")
         risk = result.get("risk")
 
-    trajectory = build_market_trajectory(
-        parcel=parcel,
-        listing=listing,
-        score=_ScoreProxy(),
-        enrichment=existing,
-    )
-    existing.narratives = {
-        "why_unsold": unsold,
-        "hidden_value": hidden,
-        "market_trajectory": trajectory,
-    }
+    # Fast/bulk discover: skip heavy narrative + multi-year scenario trees.
+    # Detail pages (fast=False) still build the full enrichment package.
+    if fast:
+        existing.narratives = {}
+        existing.scenarios = []
+        store.enrichments[parcel_id] = existing
+        why_still = list(result["why_still_available"])
+        unsold = {}
+        hidden = {"evidence": [], "hidden_value_score": 0}
+    else:
+        unsold = why_still_unsold(narrative_ctx)
+        hidden = hidden_value_score(narrative_ctx)
+        trajectory = build_market_trajectory(
+            parcel=parcel,
+            listing=listing,
+            score=_ScoreProxy(),
+            enrichment=existing,
+        )
+        existing.narratives = {
+            "why_unsold": unsold,
+            "hidden_value": hidden,
+            "market_trajectory": trajectory,
+        }
 
-    # Farmland scenarios when acreage + ask or estimated value exist —
-    # BASE appreciation follows this parcel's trajectory rate when available.
-    purchase = ask or comps_n.get("estimated_value_base_usd")
-    traj_rate = float(trajectory.get("annual_rate") or 0.03)
-    scenarios = []
-    if purchase and parcel.acreage:
-        hold_options = [1, 3, 5, 10, 15, 25, 40, 60, 80, 100]
-        for case, rent, appr in (
-            ("BEAR", 140, max(0.0, traj_rate - 0.02)),
-            ("BASE", 200, traj_rate),
-            ("BULL", 280, min(0.08, traj_rate + 0.02)),
-        ):
-            sc = farmland_scenario(
-                cash_rent_per_acre=rent,
-                acres=float(parcel.acreage),
-                vacancy_rate=0.05,
-                opex_per_acre=25,
-                taxes=purchase * 0.01,
-                insurance=1200,
-                management=purchase * 0.005,
-                purchase_price=float(purchase),
-                hold_years=10,
-                exit_cap_rate=0.05,
-                annual_appreciation=appr,
-                discount_rate=0.1,
-            )
-            exits = {
-                str(y): round(float(purchase) * ((1 + appr) ** y), 0) for y in hold_options
-            }
-            rent_stack = {
-                str(y): round(float(sc.get("noi") or 0) * y, 0) for y in hold_options
-            }
-            scenarios.append(
-                {
-                    "strategy": "FARMLAND",
-                    "case_type": case,
-                    **sc,
-                    "knowledge_state": "ESTIMATED",
-                    "annual_appreciation": appr,
-                    "annual_appreciation_display": f"{appr*100:.1f}%/yr",
-                    "cash_rent_per_acre": rent,
-                    "purchase_price": float(purchase),
-                    "hold_years_options": hold_options,
-                    "exit_value_by_year": exits,
-                    "rent_stack_by_year": rent_stack,
+        # Farmland scenarios when acreage + ask or estimated value exist —
+        # BASE appreciation follows this parcel's trajectory rate when available.
+        purchase = ask or comps_n.get("estimated_value_base_usd")
+        traj_rate = float(trajectory.get("annual_rate") or 0.03)
+        scenarios = []
+        if purchase and parcel.acreage:
+            hold_options = [1, 3, 5, 10, 15, 25, 40, 60, 80, 100]
+            for case, rent, appr in (
+                ("BEAR", 140, max(0.0, traj_rate - 0.02)),
+                ("BASE", 200, traj_rate),
+                ("BULL", 280, min(0.08, traj_rate + 0.02)),
+            ):
+                sc = farmland_scenario(
+                    cash_rent_per_acre=rent,
+                    acres=float(parcel.acreage),
+                    vacancy_rate=0.05,
+                    opex_per_acre=25,
+                    taxes=purchase * 0.01,
+                    insurance=1200,
+                    management=purchase * 0.005,
+                    purchase_price=float(purchase),
+                    hold_years=10,
+                    exit_cap_rate=0.05,
+                    annual_appreciation=appr,
+                    discount_rate=0.1,
+                )
+                exits = {
+                    str(y): round(float(purchase) * ((1 + appr) ** y), 0) for y in hold_options
                 }
-            )
-    existing.scenarios = scenarios
-    store.enrichments[parcel_id] = existing
+                rent_stack = {
+                    str(y): round(float(sc.get("noi") or 0) * y, 0) for y in hold_options
+                }
+                scenarios.append(
+                    {
+                        "strategy": "FARMLAND",
+                        "case_type": case,
+                        **sc,
+                        "knowledge_state": "ESTIMATED",
+                        "annual_appreciation": appr,
+                        "annual_appreciation_display": f"{appr*100:.1f}%/yr",
+                        "cash_rent_per_acre": rent,
+                        "purchase_price": float(purchase),
+                        "hold_years_options": hold_options,
+                        "exit_value_by_year": exits,
+                        "rent_stack_by_year": rent_stack,
+                    }
+                )
+        existing.scenarios = scenarios
+        store.enrichments[parcel_id] = existing
 
-    # Augment explanations with narratives
-    why_still = list(result["why_still_available"])
-    if unsold.get("most_likely"):
-        why_still.insert(0, f"Most likely: {unsold['most_likely']['reason']}")
+        # Augment explanations with narratives
+        why_still = list(result["why_still_available"])
+        if unsold.get("most_likely"):
+            why_still.insert(0, f"Most likely: {unsold['most_likely']['reason']}")
 
     record = ScoreRecord(
         parcel_id=parcel_id,
@@ -612,19 +715,29 @@ async def analyze_parcel(
         deal_readiness=result["deal_readiness"],
         strategy_scores=result["strategy_scores"],
         strategy_screens=result["strategy_screens"],
-        components=result["components"],
-        explanations=result["explanations"]
-        + [f"[hidden_value] {e}" for e in hidden.get("evidence", [])],
-        why_interesting=result["why_interesting"]
-        + ([f"Hidden value score {hidden['hidden_value_score']}"] if hidden else []),
-        why_mispriced=result["why_mispriced"],
-        what_could_kill=result["what_could_kill"],
-        why_still_available=why_still,
-        manual_verification=result["manual_verification"],
+        components=(result["components"] or [])[:12] if fast else result["components"],
+        explanations=(
+            (result["explanations"] or [])[:8]
+            if fast
+            else result["explanations"] + [f"[hidden_value] {e}" for e in hidden.get("evidence", [])]
+        ),
+        why_interesting=(
+            (result["why_interesting"] or [])[:6]
+            if fast
+            else result["why_interesting"]
+            + ([f"Hidden value score {hidden['hidden_value_score']}"] if hidden else [])
+        ),
+        why_mispriced=(result["why_mispriced"] or [])[:6] if fast else result["why_mispriced"],
+        what_could_kill=(result["what_could_kill"] or [])[:6] if fast else result["what_could_kill"],
+        why_still_available=why_still[:8] if fast else why_still,
+        manual_verification=(result["manual_verification"] or [])[:6]
+        if fast
+        else result["manual_verification"],
         input_hash=result["input_hash"],
-        input_snapshot=score_input,
+        input_snapshot={} if fast else score_input,
     )
-    store.scores.setdefault(parcel_id, []).append(record)
+    # Keep only the latest score — history was a silent RAM tax at nationwide scale.
+    store.scores[parcel_id] = [record]
     log.info(
         "score_computed",
         parcel_id=str(parcel_id),
@@ -633,5 +746,6 @@ async def analyze_parcel(
         confidence=record.confidence,
         signal=record.signal.value,
         input_hash=record.input_hash,
+        fast=fast,
     )
     return record

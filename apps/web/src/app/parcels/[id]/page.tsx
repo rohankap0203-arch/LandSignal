@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AcquireRail, type OutreachPlaybook } from "@/components/acquire-rail";
 import { LandLoader } from "@/components/land-loader";
 import { LandViewerModal } from "@/components/land-viewer-modal";
@@ -11,6 +11,7 @@ import { CatalystSimulator } from "@/components/catalyst-simulator";
 import { PriceTrajectory } from "@/components/price-trajectory";
 import { ReturnVisual } from "@/components/return-visual";
 import { ScoreBar } from "@/components/score-bar";
+import { GroundTruthChecks, OpportunityRecipe, ScoutInsightPanel } from "@/components/score-story";
 import { SignalBadge } from "@/components/signal-badge";
 import { SignalCockpit } from "@/components/signal-cockpit";
 import { landsignalApi, type ActionLink } from "@/lib/api";
@@ -86,29 +87,117 @@ function WatchEyeButton({
   );
 }
 
+function RefreshIntelButton({
+  refreshing,
+  onRefresh,
+}: {
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`intel-refresh-btn${refreshing ? " is-busy" : ""}`}
+      onClick={onRefresh}
+      disabled={refreshing}
+      title="Refresh this intelligence report"
+      aria-label={refreshing ? "Refreshing intelligence" : "Refresh intelligence"}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden className={refreshing ? "is-spinning" : undefined}>
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.9"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M20 12a8 8 0 1 1-2.2-5.5M20 4v5h-5"
+        />
+      </svg>
+      <span>{refreshing ? "Refreshing…" : "Refresh"}</span>
+    </button>
+  );
+}
+
 export default function ParcelIntelligencePage() {
   const params = useParams<{ id: string }>();
   const [data, setData] = useState<AnyRec | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [watched, setWatched] = useState(false);
   const [watchMsg, setWatchMsg] = useState("");
-  const [openRating, setOpenRating] = useState<string | null>(null);
   const [landViewerOpen, setLandViewerOpen] = useState(false);
   const [moneyMode, setMoneyMode] = useState<MoneyMode>("today");
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshNote, setRefreshNote] = useState("");
+  const touchStartY = useRef(0);
+
+  const loadParcel = useCallback(
+    async (opts?: { reanalyze?: boolean; soft?: boolean }) => {
+      const soft = Boolean(opts?.soft);
+      if (!soft) {
+        setError(null);
+      }
+      if (opts?.reanalyze) {
+        try {
+          await landsignalApi.analyze(params.id);
+        } catch {
+          // Still try a fresh parcel read — analyze can time out on cold stores.
+        }
+      }
+      const d = await landsignalApi.parcel(params.id);
+      setData(d);
+      setWatched(Boolean(d.watched));
+      setError(null);
+      return d;
+    },
+    [params.id],
+  );
 
   useEffect(() => {
     setData(null);
     setError(null);
-    landsignalApi
-      .parcel(params.id)
-      .then((d) => {
-        setData(d);
-        setWatched(Boolean(d.watched));
-      })
-      .catch((e: Error) => setError(e.message));
-  }, [params.id]);
+    setRefreshNote("");
+    loadParcel().catch((e: Error) => setError(e.message));
+  }, [loadParcel]);
 
-  if (error) return <div className="panel p-5 text-[var(--danger)]">{error}</div>;
+  // Kill browser pull-to-refresh on this page — refresh is an explicit button.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add("intel-no-pull-refresh");
+    const onTouchStart = (e: TouchEvent) => {
+      touchStartY.current = e.touches[0]?.clientY ?? 0;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (!e.cancelable) return;
+      const y = e.touches[0]?.clientY ?? 0;
+      const pullingDown = y > touchStartY.current + 8;
+      if (pullingDown && window.scrollY <= 0) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      root.classList.remove("intel-no-pull-refresh");
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchmove", onTouchMove);
+    };
+  }, []);
+
+  async function refreshIntelligence() {
+    if (refreshing) return;
+    setRefreshing(true);
+    setRefreshNote("");
+    try {
+      await loadParcel({ reanalyze: true, soft: true });
+      setRefreshNote("Updated just now");
+    } catch (e) {
+      setRefreshNote(e instanceof Error ? e.message : "Refresh failed — try again");
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  if (error && !data) return <div className="panel p-5 text-[var(--danger)]">{error}</div>;
   if (!data) {
     return (
       <LandLoader
@@ -195,14 +284,17 @@ export default function ParcelIntelligencePage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="intel-page space-y-5">
+      <div className="intel-page-nav">
         <Link href="/" className="text-sm text-[var(--muted)] hover:text-[var(--brand)]">
           ← Back to results
         </Link>
-        <Link href="/watchlist" className="text-sm text-[var(--muted)] hover:text-[var(--brand)]">
-          Open watchlist
-        </Link>
+        <div className="intel-page-nav-actions">
+          <RefreshIntelButton refreshing={refreshing} onRefresh={() => void refreshIntelligence()} />
+          <Link href="/watchlist" className="text-sm text-[var(--muted)] hover:text-[var(--brand)]">
+            Open watchlist
+          </Link>
+        </div>
       </div>
 
       <section className="panel">
@@ -226,6 +318,17 @@ export default function ParcelIntelligencePage() {
             </p>
           ) : null}
           {watchMsg ? <p className="mt-2 text-xs text-[var(--muted)]">{watchMsg}</p> : null}
+          {refreshNote ? (
+            <p
+              className={`mt-2 text-xs ${
+                /fail|error|try again/i.test(refreshNote)
+                  ? "text-[var(--danger)]"
+                  : "text-[var(--muted)]"
+              }`}
+            >
+              {refreshNote}
+            </p>
+          ) : null}
 
           <div className="next-process mt-4">
             <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
@@ -239,16 +342,22 @@ export default function ParcelIntelligencePage() {
                 <div className="min-w-0">
                   <div className="font-semibold text-sm">Learn this land</div>
                     <p className="next-process-note">
-                      Skim value, return, why this land, score parts, land checks.
+                      Skim value, return, future scenarios, why this land, score parts, land checks.
                     </p>
                   <button
                     type="button"
                     className="next-process-action"
                     onClick={() => {
-                      const el = document.getElementById("sec-read-start");
-                      if (!el) return;
-                      // Land below the sticky header + scroll-to chips (slightly lower than before).
-                      const top = el.getBoundingClientRect().top + window.scrollY - 56;
+                      const nav = document.getElementById("sec-scroll-to");
+                      const read = document.getElementById("sec-read-start");
+                      if (!read) return;
+                      // Sticky header clearance + a thin peek of Scroll-to still visible.
+                      const headerOffset = 52;
+                      const peek = 16;
+                      const anchor = nav
+                        ? nav.getBoundingClientRect().bottom + window.scrollY
+                        : read.getBoundingClientRect().top + window.scrollY;
+                      const top = Math.max(0, anchor - headerOffset - peek);
                       window.scrollTo({ top, behavior: "smooth" });
                     }}
                   >
@@ -333,7 +442,6 @@ export default function ParcelIntelligencePage() {
             height={280}
             onExpand={() => setLandViewerOpen(true)}
           />
-          </div>
           <LandViewerModal
             open={landViewerOpen}
             onClose={() => setLandViewerOpen(false)}
@@ -354,6 +462,7 @@ export default function ParcelIntelligencePage() {
             polygon={parcel.polygon as number[][][]}
             parcelId={String(parcel.id || params.id)}
           />
+          </div>
         </div>
 
         <div className="border-t border-[var(--line)] p-6">
@@ -516,120 +625,39 @@ export default function ParcelIntelligencePage() {
       <CatalystSimulator
         parcelId={String(params.id)}
         engine={(data.catalyst_engine as Parameters<typeof CatalystSimulator>[0]["engine"]) || null}
+        moneyMode={moneyMode}
+        onMoneyModeChange={setMoneyMode}
+        inflation={
+          (((data.market_trajectory as AnyRec) || {}).inflation as Parameters<
+            typeof CatalystSimulator
+          >[0]["inflation"]) || null
+        }
       />
 
       <section id="sec-why" className="insight-pair scroll-mt-20">
-        <InsightList
+        <ScoutInsightPanel
+          tone="edge"
           eyebrow="Scout edge"
           title="What makes this one worth opening"
+          blurb="The specific buys we spotted on this file — tap a beat for the full read."
           items={whyOpp}
         />
-        <InsightList
+        <ScoutInsightPanel
+          tone="board"
           eyebrow="Still on the board"
           title="Why it hasn’t been scooped yet"
+          blurb="Friction that keeps casual buyers away — useful if you can work through it."
           items={whyStill}
         />
       </section>
 
-      <section id="sec-score" className="panel p-5 scroll-mt-20">
-        <h2 className="display text-xl font-semibold">What makes up the opportunity score</h2>
-        <p className="mt-0.5 text-sm text-[var(--muted)]">{identity}</p>
-        <div className="mt-3 grid gap-2 md:grid-cols-2">
-          {ratings.map((r) => {
-            const scoreN = Number(r.score || 0);
-            const key = String(r.key);
-            const open = openRating === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                className={`rounded-xl bg-[var(--bg-soft)] p-3 text-left transition hover:ring-1 hover:ring-[var(--brand-soft)] ${open ? "ring-1 ring-[var(--brand-soft)]" : ""}`}
-                onClick={() => setOpenRating(open ? null : key)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-semibold text-sm">{String(r.label)}</div>
-                  <div className="text-sm font-semibold whitespace-nowrap">
-                    {String(r.score_display || `${scoreN.toFixed(0)}/100`)}
-                  </div>
-                </div>
-                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${Math.max(4, Math.min(100, scoreN))}%`,
-                      background: `hsl(${scoreN * 1.2} 65% 42%)`,
-                    }}
-                  />
-                </div>
-                <p className="mt-1.5 text-xs leading-snug text-[var(--muted)]">
-                  {open
-                    ? String(r.why_this_number || r.plain_english || r.simple || "")
-                    : firstSentence(r.why_this_number || r.plain_english || r.simple || "", 110)}
-                </p>
-                {open && (
-                  <ul className="mt-1.5 space-y-0.5 text-xs text-[var(--muted)]">
-                    {((r.drivers as string[]) || (r.evidence as string[]) || []).slice(0, 3).map((e) => (
-                      <li key={e}>• {e}</li>
-                    ))}
-                  </ul>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </section>
+      <OpportunityRecipe
+        identity={identity}
+        opportunity={Number(score?.opportunity || 0)}
+        ratings={ratings}
+      />
 
-      <section id="sec-land" className="scroll-mt-20">
-        <div className="mb-2">
-          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-            Ground truth
-          </div>
-          <h2 className="display text-lg font-semibold">Checks that move the score</h2>
-        </div>
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-          {(
-            [
-              "soil",
-              "flood",
-              "wetlands",
-              "transmission",
-              "access",
-              "slope",
-              "growth",
-              "resale",
-            ] as const
-          ).map((key) => {
-            const card = land[key] || {};
-            const level = String(card.level || card.knowledge_state || "")
-              .replace(/KnowledgeState\./gi, "")
-              .replace(/UNKNOWN/gi, "Not confirmed")
-              .replace(/KNOWN/gi, "Known")
-              .replace(/ESTIMATED/gi, "Estimate")
-              .replace(/OBSERVED/gi, "From source")
-              .replace(/BLENDED/gi, "Mixed")
-              .replace(/TEMPORARILY_UNAVAILABLE/gi, "Unavailable")
-              .replace(/_/g, " ");
-            return (
-              <details key={key} className="panel land-compact group">
-                <summary className="cursor-pointer list-none">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="font-semibold text-sm">{String(card.title || key)}</h3>
-                    <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">{level}</span>
-                  </div>
-                  <p className="mt-1 text-[var(--ink)]">
-                    {firstSentence(card.plain_english || "No reading for this pin yet.", 110)}
-                  </p>
-                </summary>
-                <ul className="mt-1 space-y-0.5">
-                  {((card.bullets as string[]) || []).slice(0, 2).map((b) => (
-                    <li key={b}>• {b}</li>
-                  ))}
-                </ul>
-              </details>
-            );
-          })}
-        </div>
-      </section>
+      <GroundTruthChecks land={land} />
 
     </div>
   );
@@ -704,55 +732,3 @@ function PriceStat({ label, value, kind }: { label: string; value: string; kind?
   );
 }
 
-function InsightList({
-  title,
-  items,
-  eyebrow,
-}: {
-  title: string;
-  items: AnyRec[];
-  eyebrow?: string;
-}) {
-  const [open, setOpen] = useState<number>(-1);
-  const rows = (items || []).filter((item) => {
-    const headline = String(item?.headline || item || "").trim();
-    return Boolean(headline);
-  });
-  return (
-    <div className="panel insight-interactive">
-      <div className="insight-interactive-inner">
-        {eyebrow ? (
-          <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">{eyebrow}</div>
-        ) : null}
-        <h2 className="display text-lg font-semibold leading-snug">{title}</h2>
-        <div className="insight-list">
-          {rows.map((item, i) => {
-            const active = open === i;
-            const detail = String(item.detail || "").trim();
-            return (
-              <button
-                key={`${String(item.headline || item)}-${i}`}
-                type="button"
-                className={`insight-item${active ? " is-open" : ""}`}
-                onClick={() => setOpen(active ? -1 : i)}
-              >
-                <div className="insight-item-head">
-                  <div className="font-semibold text-sm leading-snug">{String(item.headline || item)}</div>
-                  <span className="insight-item-toggle" aria-hidden>
-                    {active ? "−" : "+"}
-                  </span>
-                </div>
-                {active && detail ? (
-                  <p className="insight-item-detail">{detail}</p>
-                ) : null}
-              </button>
-            );
-          })}
-          {!rows.length ? (
-            <p className="text-sm text-[var(--muted)]">No parcel-specific narrative yet.</p>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}

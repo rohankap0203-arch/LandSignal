@@ -10,7 +10,11 @@ from shapely.ops import unary_union
 
 from landsignal.models import ProviderStatus
 from landsignal.providers.base import ListingProvider, ProviderResult
-from landsignal.scoring.geospatial import acres_from_square_meters, ring_area_square_meters
+from landsignal.scoring.geospatial import (
+    acres_from_square_meters,
+    interior_pin_lat_lon,
+    ring_area_square_meters,
+)
 
 log = structlog.get_logger()
 
@@ -163,8 +167,7 @@ class BlmLpadProvider(ListingProvider):
                 g = shape(geom)
                 if not g.is_empty:
                     g = unary_union(g)
-                    c = g.centroid
-                    lat, lon = c.y, c.x
+                    lat, lon = interior_pin_lat_lon(g)
                     if geom.get("type") == "Polygon":
                         acreage = acres_from_square_meters(
                             ring_area_square_meters(geom["coordinates"][0])
@@ -172,12 +175,16 @@ class BlmLpadProvider(ListingProvider):
                         polygon = geom["coordinates"]
                     elif geom.get("type") == "MultiPolygon":
                         total = 0.0
-                        rings = []
+                        best = None
+                        best_area = -1.0
                         for poly in geom["coordinates"]:
-                            total += ring_area_square_meters(poly[0])
-                            rings.append(poly[0])
+                            a = ring_area_square_meters(poly[0])
+                            total += a
+                            if a > best_area:
+                                best_area = a
+                                best = poly
                         acreage = acres_from_square_meters(total)
-                        polygon = [rings[0]] if rings else None
+                        polygon = best
             except Exception as exc:  # noqa: BLE001
                 log.warning("blm_geom_parse_failed", error=str(exc))
 

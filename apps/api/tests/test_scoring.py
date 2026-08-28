@@ -81,6 +81,46 @@ def test_score_reproducible_and_mispricing():
     assert a["opportunity"] == b["opportunity"]
     assert a["asking_discount_pct"] < -15
     assert a["opportunity"] >= 70
+    assert a["signal"] in ("STRONG", "EXCEPTIONAL")
+    assert a["evidence_ratio"] >= 0.7
+    assert a["known_core_factors"] >= 4
+
+
+def test_thin_vacant_gis_cannot_rank_as_strong_buy():
+    """Bare vacant GIS map screens must not clear STRONG / top-board territory."""
+    thin = compute_score(
+        {
+            "acreage": 40,
+            "provider_id": "public_vacant_gis",
+            "known_attribute_ratio": 0.15,
+            "geometry_confidence": 40,
+            "comps_count": 0,
+        }
+    )
+    assert thin["opportunity"] < 55
+    assert thin["signal"] == "WATCH"
+    assert thin["confidence"] < 45
+    assert thin["evidence_ratio"] < 0.55
+
+
+def test_rich_file_outranks_thin_vacant_gis():
+    """#1 of live inventory must prefer evidence-backed mispricing over thin map screens."""
+    rich = compute_score(base_input())
+    thin = compute_score(
+        {
+            "acreage": 80,
+            "provider_id": "public_vacant_gis",
+            "estimated_value_base_usd": p(200_000),
+            "known_attribute_ratio": 0.2,
+            "geometry_confidence": 50,
+            "comps_count": 0,
+        }
+    )
+    assert rich["opportunity"] > thin["opportunity"] + 15
+    assert rich["confidence"] > thin["confidence"]
+    assert rich["signal"] in ("STRONG", "EXCEPTIONAL")
+    assert thin["signal"] == "WATCH"
+    assert thin["opportunity"] < 60
 
 
 def test_missing_data_lowers_confidence_not_auto_fail_quality():
@@ -116,3 +156,23 @@ def test_personalized_separate():
         g["risk"],
     )
     assert personal < g["opportunity"]
+
+
+def test_no_opportunistic_nudge_on_middling_files():
+    """v3.6 removed the sitewide +6 scout nudge that inflated thin inventory."""
+    mid = compute_score(
+        {
+            "acreage": 20,
+            "asking_price_usd": 300_000,
+            "estimated_value_base_usd": p(310_000),
+            "known_attribute_ratio": 0.35,
+            "geometry_confidence": 55,
+            "comps_count": 1,
+            "wetland_pct": p(12),
+            "flood_zone_pct": p(8),
+            "legal_access_confidence": p(60),
+        }
+    )
+    notes = " ".join(mid.get("score_lift_notes") or [])
+    assert "Opportunistic scout nudge" not in notes
+    assert mid["algorithm_version"] == "landsignal_score_v3_6_0"

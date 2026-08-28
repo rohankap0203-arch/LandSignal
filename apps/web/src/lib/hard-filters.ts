@@ -35,16 +35,32 @@ function regionPasses(row: RadarRow, region?: string | null): boolean {
 
 /**
  * Hard gate for search results.
- * - State is always hard.
+ * - State is always hard (supports multi-select "FL,TX").
  * - When broaden=true (default), acres/price/region trust the API's never-empty cascade
  *   (API may widen ~35% or fall back inside the state) so legitimate land still shows.
  * - When broaden=false, acres/price/region are strict client-side too.
  * - Strategy + hold never drop rows.
  */
 export function rowPassesHardFilters(row: RadarRow, filters: SearchFilters): boolean {
-  const state = (filters.state || "").trim().toUpperCase();
-  if (state && state !== "ANY") {
-    if ((row.state || "").toUpperCase() !== state) return false;
+  const stateRaw = (filters.state || "").trim().toUpperCase();
+  if (stateRaw && stateRaw !== "ANY" && stateRaw !== "ALL" && stateRaw !== "*") {
+    const wanted = new Set(
+      stateRaw
+        .replace(/;/g, ",")
+        .split(",")
+        .map((s) => {
+          let t = s.trim();
+          if (!t || t === "ANY" || t === "ALL" || t === "*") return "";
+          if (t.includes("—")) t = t.split("—", 1)[0].trim();
+          if (t.includes("-") && t.length > 2) t = t.split("-", 1)[0].trim();
+          return t.slice(0, 2);
+        })
+        .filter(Boolean),
+    );
+    if (wanted.size) {
+      const rowState = (row.state || "").trim().toUpperCase().slice(0, 2);
+      if (!rowState || !wanted.has(rowState)) return false;
+    }
   }
   const broaden = filters.broaden !== false;
   if (broaden) {
@@ -69,8 +85,20 @@ export function enforceHardFilters(
 /** Human-readable summary of hard constraints currently applied. */
 export function describeHardFilters(filters: SearchFilters): string {
   const bits: string[] = [];
-  const state = (filters.state || "").trim().toUpperCase();
-  if (state && state !== "ANY") bits.push(state);
+  const stateRaw = (filters.state || "").trim().toUpperCase();
+  if (stateRaw && stateRaw !== "ANY" && stateRaw !== "ALL" && stateRaw !== "*") {
+    const states = stateRaw
+      .replace(/;/g, ",")
+      .split(",")
+      .map((s) => {
+        let t = s.trim();
+        if (!t || t === "ANY" || t === "ALL" || t === "*") return "";
+        if (t.includes("—")) t = t.split("—", 1)[0].trim();
+        return t.slice(0, 2);
+      })
+      .filter(Boolean);
+    if (states.length) bits.push(states.join(", "));
+  }
   if (filters.region) bits.push(filters.region);
   if (filters.min_acres != null || filters.max_acres != null) {
     if (filters.min_acres != null && filters.max_acres != null) {

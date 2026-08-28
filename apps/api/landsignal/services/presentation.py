@@ -146,6 +146,8 @@ def price_display(
     acres: float | None = None,
     apn: str | None = None,
     comps_normalized: dict[str, Any] | None = None,
+    ask_role: str | None = None,
+    has_structure: bool = False,
 ) -> dict[str, Any]:
     src = estimate_source(
         ask=ask,
@@ -157,6 +159,7 @@ def price_display(
         apn=apn,
         comps_normalized=comps_normalized,
     )
+    role = str(ask_role or "").strip().lower()
     if ask is not None and ask > 0:
         if auction_path and auction_path.get("is_opening_bid"):
             settle = (auction_path or {}).get("expected_settle_usd")
@@ -188,6 +191,39 @@ def price_display(
                 "display": f"${ask:,.0f} start (usually finishes higher)",
                 "kind": "minimum_bid",
                 "opening_bid_usd": ask,
+                "estimate_source": None,
+            }
+        # Land assessment / scrap ask must never read as a listed home price.
+        if role in {"assessed_land", "assessed", "land_av", "tax_assessed"} or (
+            has_structure and role in {"", "asking"} and provider_id in {
+                "public_vacant_gis", "public_tax_sale", "public_surplus"
+            }
+        ):
+            if has_structure:
+                return {
+                    "amount_usd": ask,
+                    "label": "Land assessment only — home on site",
+                    "display": f"Land AV ${ask:,.0f} (home not in this price)",
+                    "kind": "assessed_land_structure",
+                    "estimate_source": src,
+                    "note": (
+                        "Assessor land value only. A dwelling/ranch house is on this parcel — "
+                        "this is not a whole-property sale price."
+                    ),
+                }
+            return {
+                "amount_usd": ask,
+                "label": "Assessed land (not a listing)",
+                "display": f"Land AV ${ask:,.0f}",
+                "kind": "assessed_land",
+                "estimate_source": src,
+            }
+        if has_structure:
+            return {
+                "amount_usd": ask,
+                "label": "Published price · property on site",
+                "display": f"${ask:,.0f}",
+                "kind": "asking_structure",
                 "estimate_source": None,
             }
         return {
