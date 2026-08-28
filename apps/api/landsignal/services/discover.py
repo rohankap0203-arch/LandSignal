@@ -508,7 +508,7 @@ async def discover_opportunities(
     async def _run_one_state(
         st: str, *, include_optional: bool, paint: bool, existing_n: int = 0
     ) -> dict[str, Any]:
-        pull_limit = min(per_state_limit, 500) if paint else per_state_limit
+        pull_limit = min(per_state_limit, 1500) if paint else per_state_limit
         pull_min = min(min_per_state, pull_limit) if paint else min_per_state
         # Deepen past the paint head so ArcGIS offset pages return unseen parcels.
         page_offset = 0 if paint else max(0, int(existing_n or 0))
@@ -602,11 +602,11 @@ async def discover_opportunities(
                 states_done.append(st)
                 continue
 
-            # First-pass paint for brand-new states: small batch so all 50 appear
-            # quickly; later gap-fill deepens toward min_per_state.
+            # First-pass paint for brand-new states: thicker batch so coverage + depth
+            # land together; later gap-fill deepens toward min_per_state (~2700 → ~138k).
             state_limit = per_state_limit
             if live_counts.get(st, 0) <= 0:
-                state_limit = min(per_state_limit, 500)
+                state_limit = min(per_state_limit, 1500)
 
             batch = await _ingest_and_score(
                 store, settings, listings, limit=state_limit, fast=fast
@@ -641,6 +641,80 @@ async def discover_opportunities(
         if stopped_early:
             break
 
+    # Keep deepening in the same job until every state hits the floor (or memory/limit).
+    # User expectation: inventory features apply to the FULL nationwide book (~138k+),
+    # not a thin first-paint pass.
+    deepen_passes = 0
+    while not stopped_early and deepen_passes < 8:
+        by_now = _inventory_by_state(store)
+        gaps = [st for st in state_queue if by_now.get(st, 0) < min_per_state]
+        if not gaps:
+            break
+        remaining = max(0, int(limit) - imported - refreshed)
+        if remaining < 50:
+            break
+        deepen_passes += 1
+        log.info(
+            "discover_deepen_pass",
+            pass_n=deepen_passes,
+            gaps=len(gaps),
+            sample=gaps[:12],
+            remaining=remaining,
+            **snapshot(),
+        )
+        for i in range(0, len(gaps), wave_size):
+            stop, reason = should_stop_heavy_work()
+            if stop:
+                stopped_early = True
+                stop_reason = reason
+                errors.append(f"memory_guard: paused deepen ({reason})")
+                break
+            wave = gaps[i : i + wave_size]
+            live_counts = _inventory_by_state(store)
+            pulled = await asyncio.gather(
+                *[
+                    _run_one_state(
+                        st,
+                        include_optional=True,
+                        paint=False,
+                        existing_n=int(live_counts.get(st, 0) or 0),
+                    )
+                    for st in wave
+                ]
+            )
+            for item in pulled:
+                st = item["state"]
+                for k, v in (item.get("counts") or {}).items():
+                    source_counts[k] = source_counts.get(k, 0) + v
+                errors.extend(item.get("errors") or [])
+                listings = item.get("listings") or []
+                if not listings:
+                    continue
+                need = max(0, min_per_state - int(live_counts.get(st, 0) or 0))
+                state_limit = max(50, min(need + 100, remaining, per_state_limit))
+                batch = await _ingest_and_score(
+                    store, settings, listings, limit=state_limit, fast=fast
+                )
+                imported += int(batch.get("imported") or 0)
+                refreshed += int(batch.get("refreshed") or 0)
+                scored += int(batch.get("scored") or 0)
+                sample_ids.extend(batch.get("parcel_ids") or [])
+                if st not in states_done:
+                    states_done.append(st)
+                try:
+                    from landsignal.store import persist_store
+
+                    persist_store(store)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("discover_deepen_persist_failed", state=st, error=str(exc)[:200])
+                if batch.get("stopped_early"):
+                    stopped_early = True
+                    stop_reason = str(batch.get("stop_reason") or stop_reason)
+                    break
+                remaining = max(0, int(limit) - imported - refreshed)
+            if stopped_early:
+                break
+
     by_state = _inventory_by_state(store)
     return {
         "imported": imported,
@@ -653,6 +727,7 @@ async def discover_opportunities(
         "fast": fast,
         "states_scanned": state_queue,
         "states_done": states_done,
+        "deepen_passes": deepen_passes,
         "inventory_total": sum(1 for p in store.parcels.values() if not p.is_demo),
         "inventory_states": len(by_state),
         "inventory_by_state": dict(sorted(by_state.items())),
@@ -664,6 +739,7 @@ async def discover_opportunities(
             "deepening states already at the per-state target. "
             f"{sum(source_counts.values())} raw rows considered; {refreshed} existing rows refreshed. "
             f"{len(by_state)} states currently in live inventory. "
+            f"Deepen passes={deepen_passes}; floor={min_per_state}/state (~{min_per_state * 51} nationwide). "
             "ATTOM enriches parcel intelligence on analyze; it does not invent for-sale listings."
             + (f" Paused early to protect VM memory: {stop_reason}." if stopped_early else "")
         ),

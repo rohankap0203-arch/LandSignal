@@ -489,13 +489,17 @@ def load_persisted_store(store: MemoryStore) -> int:
         size = path.stat().st_size
     except OSError:
         return 0
-    # Hard ceiling for pathological dumps (pre-slim polygons / GIS attribute blobs).
-    # Slim nationwide snapshots of ~100k parcels can legitimately be 100–250MB.
-    if size > 400_000_000:
+    # Hard ceiling for pathological dumps (pre-slim GIS attribute blobs).
+    # Nationwide ~140k with compact rings can be ~700MB–1.2GB — must load, not quarantine.
+    import os
+
+    max_bytes = int(os.environ.get("LANDSIGNAL_PERSIST_MAX_BYTES") or 1_500_000_000)
+    if size > max_bytes:
         structlog.get_logger().warning(
             "persist_skip_too_large",
             path=str(path),
             bytes=size,
+            max_bytes=max_bytes,
             note="Quarantined fat inventory dump; starting empty so API stays reachable.",
         )
         try:

@@ -141,6 +141,16 @@ async def discover(
                 persist_store(store)
             except Exception:
                 pass
+            # Bake GIS outlines into every parcel missing one — full inventory, not a sample.
+            try:
+                from landsignal.services.outline_bake import bake_outlines_for_inventory
+
+                bake = await bake_outlines_for_inventory(store, concurrency=8, only_missing=True)
+                summary = {**summary, "outline_bake": bake}
+            except Exception as bake_exc:  # noqa: BLE001
+                import structlog
+
+                structlog.get_logger().warning("outline_bake_after_discover_failed", error=str(bake_exc)[:200])
             return summary
         except Exception as exc:  # noqa: BLE001
             import structlog
@@ -157,10 +167,64 @@ async def discover(
             "reset": reset,
             "fast": fast,
             "inventory_now": sum(1 for p in store.parcels.values() if not p.is_demo),
-            "note": "Nationwide scan started. Parcels appear as they index — hit Show matches every few seconds.",
+            "note": (
+                "Nationwide scan started toward the full book (~2700/state ≈ 138k+). "
+                "Real GIS outlines bake into every parcel after ingest — not on-demand only."
+            ),
         }
     return await _run()
 
+
+@router.post("/inventory/bake-outlines")
+async def bake_inventory_outlines(
+    background: bool = True,
+    limit: int | None = None,
+    concurrency: int = 8,
+    only_missing: bool = True,
+) -> dict[str, Any]:
+    """Bake exact GIS land outlines into every inventory parcel (full book)."""
+    import asyncio
+
+    from landsignal.services.outline_bake import bake_outlines_for_inventory, bake_status
+
+    store = get_store(get_settings().demo_seed)
+
+    async def _run() -> dict[str, Any]:
+        return await bake_outlines_for_inventory(
+            store,
+            limit=limit,
+            concurrency=concurrency,
+            only_missing=only_missing,
+        )
+
+    if background:
+        asyncio.create_task(_run())
+        return {
+            "started": True,
+            "background": True,
+            "status": bake_status(),
+            "inventory_now": sum(1 for p in store.parcels.values() if not p.is_demo),
+            "note": "Baking real GIS outlines into all inventory parcels missing a boundary.",
+        }
+    return await _run()
+
+
+@router.get("/inventory/bake-outlines/status")
+async def bake_inventory_outlines_status() -> dict[str, Any]:
+    from landsignal.services.outline_bake import bake_status
+    from landsignal.services.parcel_outline import compact_polygon
+
+    store = get_store(get_settings().demo_seed)
+    total = sum(1 for p in store.parcels.values() if not p.is_demo)
+    with_outline = sum(
+        1 for p in store.parcels.values() if not p.is_demo and compact_polygon(p.polygon)
+    )
+    return {
+        **bake_status(),
+        "inventory_total": total,
+        "inventory_with_outline": with_outline,
+        "inventory_missing_outline": max(0, total - with_outline),
+    }
 
 @router.post("/ingest/manual")
 async def ingest_manual(body: ManualIngestRequest) -> dict[str, Any]:

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     auto_discover_on_startup: bool = False
     discover_limit: int = 1_000_000
     # ~2k × 50 states ≈ 100k inventory target from public GIS / BLM / surplus.
-    discover_min_per_state: int = 2000
+    discover_min_per_state: int = 2700
     discover_min_acres: float = 0.1
     # Always-on Land Alerts monitor (seconds between discovery cycles; respects source rate limits)
     # Default OFF — the monitor re-runs discover and was a top OOM trigger on cloud agents.
