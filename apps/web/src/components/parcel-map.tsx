@@ -177,7 +177,11 @@ export function ParcelMap({
         <button
           type="button"
           className="parcel-map-expand"
-          onClick={onExpand}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onExpand();
+          }}
           aria-label="Open full screen land view"
           title="Full screen land view"
         >
@@ -188,7 +192,11 @@ export function ParcelMap({
         <button
           type="button"
           className="parcel-map-view-images"
-          onClick={onViewMap}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewMap();
+          }}
           aria-label="View map"
           title="Open full-screen map tools"
         >

@@ -125,9 +125,17 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
   }, [gapHelpOpen]);
 
   function openIntel(e?: MouseEvent | KeyboardEvent) {
+    // Map tools stay on the map — never treat map chrome as an intel shortcut.
+    if (mapOpen) return;
     if (e) {
       const t = e.target as HTMLElement | null;
-      if (t?.closest("a, button, input, select, textarea, label")) return;
+      if (
+        t?.closest(
+          "a, button, input, select, textarea, label, .metric-action, .metric-images, .land-viewer, .land-viewer-backdrop",
+        )
+      ) {
+        return;
+      }
     }
     router.push(href);
   }
@@ -242,7 +250,11 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             className="metric metric-action metric-images"
             title="Open full-screen map tools for this land"
             aria-label="View map"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             onClick={(e) => {
+              e.preventDefault();
               e.stopPropagation();
               setMapOpen(true);
             }}
@@ -384,7 +396,6 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
         latitude={row.latitude}
         longitude={row.longitude}
         parcelId={row.parcel_id}
-        reportHref={`/parcels/${row.parcel_id}`}
       />
     </article>
   );

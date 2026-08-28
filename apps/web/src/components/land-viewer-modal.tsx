@@ -1088,11 +1088,6 @@ export function LandViewerModal({
             </p>
           </div>
           <div className="land-viewer-top-actions">
-            {reportHref ? (
-              <a className="land-viewer-link" href={reportHref}>
-                Full report
-              </a>
-            ) : null}
             <button type="button" className="land-viewer-close" onClick={onClose} aria-label="Close land view">
               ✕
             </button>
