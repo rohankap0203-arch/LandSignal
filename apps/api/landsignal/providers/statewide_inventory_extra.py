@@ -1059,7 +1059,9 @@ SOURCES: list[ArcgisMarketSource] = [
         "https://gistech.countyofkane.org/arcgis/rest/services/KanePINList/MapServer/0/query",
         "IL",
         _norm_il_kane,
-        where="RecordedAcreage>=1 AND RecordedAcreage<=2500",
+        # RecordedAcreage is present on attributes but rejected in WHERE by this MapServer.
+        # Pull broadly and let normalize/filter drop sub-acre rows.
+        where="1=1",
         page_size=1000,
     ),
     _src(
@@ -1089,9 +1091,9 @@ SOURCES: list[ArcgisMarketSource] = [
         "PA",
         _norm_pa_pasda,
         where="1=1",
-        shard=True,
+        shard=False,
         objectid_max=5_000_000,
-        page_size=1000,
+        page_size=500,
     ),
     _src(
         "al_jefferson_parcels",
@@ -1163,16 +1165,6 @@ SOURCES: list[ArcgisMarketSource] = [
             "SUM_IMPROVEMENT_VALUE,SUM_FAIR_MARKET_VALUE,STATUS"
         ),
     ),
-    _src(
-        "la_orleans_parcels",
-        "Orleans Parish LA Parcels (0.25ac+)",
-        "https://gis.nola.gov/arcgis/rest/services/apps/property3/MapServer/15/query",
-        "LA",
-        _norm_la_orleans_parcels,
-        where="1=1",
-        page_size=500,
-        out_fields=(
-            "OBJECTID,PARCELID,TAXBILLID,PARID,SITEADDRESS,OWNERNME1,UNIT,USECD,ASS_SQFT"
-        ),
-    ),
+    # Orleans Parish GIS (gis.nola.gov) hangs / fails transport and previously
+    # ate the whole LA state wall-clock — leave it out so BRLA can paint LA.
 ]

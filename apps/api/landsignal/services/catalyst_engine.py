@@ -13,6 +13,8 @@ Design principles
 - Hypothetical / modeled scenarios are labeled as such — never presented as
   observed municipal or corporate facts.
 - Catalyst interactions are correlation-aware (no naive additive stacking).
+- Upside is tempered to land-market realism: most single catalysts clear mid
+  single-digits to low-teens at default distance; stacks stay well under 2×.
 """
 
 from __future__ import annotations
@@ -20,6 +22,20 @@ from __future__ import annotations
 import math
 import re
 from typing import Any
+
+# Taxonomy channels are structural upper bounds. Realized land-market transmission
+# for a typical what-if is a fraction of that — without this temper, Approved
+# auto-scenarios routinely printed 40–70% single-event uplifts.
+# Calibrated so: Proposed autos clear mid-single-digits; Approved near-node
+# unlocks land in the teens–low-20s; stacked paths stay well under 2× by y10.
+POSITIVE_CHANNEL_SCALE = 0.68
+# Soft absolute caps on displayed / path-driving channel levels.
+LEVEL_SOFT_CAP = 0.32  # joint imm+hbu after stacking
+CHANNEL_SOFT_CAP = 0.28
+RATE_SOFT_CAP = 0.018
+COMBINED_DISPLAY_CAP = 0.38
+# Extra upside temper after flood/wetland transmission (not stacked with scale).
+UPSIDE_TEMPER = 0.82
 
 # ---------------------------------------------------------------------------
 # Extensible event taxonomy
@@ -589,6 +605,7 @@ def screens_from_score_context(
     strategy_fit = comps.get("hbu_optionality", 50.0)
 
     # Enrichment flood override when present
+    wetland = 70.0  # higher = less wetland constraint (default mild)
     if enrichment is not None:
         flood_layer = getattr(enrichment, "flood", None)
         if flood_layer is not None:
@@ -601,11 +618,30 @@ def screens_from_score_context(
                             break
                         except (TypeError, ValueError):
                             pass
+        wet_layer = getattr(enrichment, "wetlands", None)
+        if wet_layer is not None:
+            attrs = getattr(wet_layer, "attributes", None) or getattr(wet_layer, "value", None) or {}
+            if isinstance(attrs, dict):
+                for k in ("wetland_pct", "pct_wetland", "wetlands_pct"):
+                    if attrs.get(k) is not None:
+                        try:
+                            wetland = _clip(100.0 - float(attrs[k]), 0, 100)
+                            break
+                        except (TypeError, ValueError):
+                            pass
+            elif isinstance(attrs, (int, float)):
+                wetland = _clip(100.0 - float(attrs), 0, 100)
+
+    soil = _snap_val("prime_farmland_pct")
+    if soil is None:
+        soil = 55.0  # neutral — lack of soil data must not invent farm quality
 
     return [
         {"key": "growth", "score": float(growth)},
         {"key": "access", "score": float(access)},
         {"key": "flood", "score": float(flood)},
+        {"key": "wetland", "score": float(wetland)},
+        {"key": "soil", "score": float(soil)},
         {"key": "title", "score": float(title)},
         {"key": "strategy", "score": float(strategy_fit)},
     ]
@@ -724,19 +760,37 @@ def parcel_compatibility_score(
         score = _clip(score, 0, 100)
         return score, reasons
 
-    if flood < 40:
-        score -= 10
-        reasons.append("Flood constraints reduce ability to capitalize on growth catalysts")
+    if flood < 55:
+        # Continuous flood haircut — SFHA / high flood screens mute growth upside.
+        pen = int(round((55 - flood) * 0.55))
+        score -= pen
+        reasons.append("Flood exposure reduces ability to capitalize on growth catalysts")
+    wetland = _score(screens, "wetland", 70.0)
+    if wetland < 50:
+        pen = int(round((50 - wetland) * 0.4))
+        score -= pen
+        reasons.append("Wetland constraints limit developable / HBU upside from catalysts")
+    soil = _score(screens, "soil", 55.0)
+    if soil < 35 and event_key in {
+        "zoning_change",
+        "density_entitlement",
+        "sewer_extension",
+        "municipal_water",
+        "master_planned_community",
+        "residential_subdivision",
+    }:
+        score -= 8
+        reasons.append("Weak soils / limited usable ground mute entitlement & utility upside")
     if title < 45:
-        score -= 6
+        score -= 8
         reasons.append("Title / access friction can mute catalyst capitalization")
 
     if strategy_fit >= 70:
-        score += 6
+        score += 4
 
     score = _clip(score, 0, 100)
     if not reasons:
-        reasons.append("Compatibility based on zoning-adjacent screens, access, growth, and strategy fit")
+        reasons.append("Compatibility based on zoning-adjacent screens, access, growth, flood/wetland, and strategy fit")
     return score, reasons
 
 
@@ -786,15 +840,15 @@ def highest_best_use_multiplier(
     hbu = 1.0
     if meta.get("category") in {"utilities", "entitlement", "access"}:
         if strategy in {"hold_develop", "subdivide", "flip"}:
-            hbu += 0.25
+            hbu += 0.12
         if acres and acres >= 5:
-            hbu += 0.1
+            hbu += 0.05
         if _score(screens, "growth") >= 65:
-            hbu += 0.08
+            hbu += 0.04
     if meta.get("sign", 1) < 0 and meta.get("category") == "downside":
         if strategy in {"hold_develop", "subdivide"}:
             hbu += 0.15  # HBU damage more severe for developable land
-    return _clip(hbu, 0.5, 1.8)
+    return _clip(hbu, 0.5, 1.45)
 
 
 def infrastructure_compatibility(event_key: str, screens: dict[str, dict[str, Any]]) -> float:
@@ -880,35 +934,44 @@ def compute_scenario_impact(
     )
     factor = core * mod
 
-    # Adjacency / frontage premium — catalysts next door hit harder than half-life decay alone.
+    # Adjacency premium — next-door matters, but not a 40% free multiplier.
     if effective_dist <= 0.15:
-        factor *= 1.4
+        factor *= 1.12
     elif effective_dist <= 0.35:
-        factor *= 1.18
+        factor *= 1.06
     elif effective_dist <= 0.75:
-        factor *= 1.08
+        factor *= 1.03
 
-    # Mild temper on bullish catalysts — still opportunistic, less aggressive.
+    # Continuous flood / wetland transmission haircut on upside.
+    flood = _score(screens, "flood")
+    wetland = _score(screens, "wetland", 70.0)
+    constraint = min(flood, wetland)
     if float(channels.get("immediate", 0.0)) >= 0:
-        factor *= 0.88
+        # Clear land (~80+) ≈ full transmission; constrained land transmits far less.
+        factor *= _clip(0.42 + 0.58 * (constraint / 100.0), 0.35, 1.0)
+        # Institutional temper — taxonomy bases are ceilings, not expected outcomes.
+        factor *= UPSIDE_TEMPER
 
     # Externality haircut for catalysts that can help markets but hurt amenity parcels.
     ext = float(meta.get("externality_risk") or 0.0)
     if ext > 0 and strategy in {"recreation", "hold_appreciate"} and compat < 55:
         factor *= max(0.2, 1.0 - ext * 0.85 - (55 - compat) / 140.0)
 
-    immediate = float(channels.get("immediate", 0.0)) * factor
-    rate = float(channels.get("rate", 0.0)) * factor
-    hbu = float(channels.get("hbu", 0.0)) * factor
+    ch_scale = POSITIVE_CHANNEL_SCALE if float(channels.get("immediate", 0.0)) >= 0 else 1.0
+    immediate = float(channels.get("immediate", 0.0)) * factor * ch_scale
+    rate = float(channels.get("rate", 0.0)) * factor * ch_scale
+    hbu = float(channels.get("hbu", 0.0)) * factor * ch_scale
 
     # Nonlinear HBU: only material when compatibility and stage are meaningful.
-    if abs(hbu) > 0 and (compat < 40 or stage_f < 0.35):
-        hbu *= 0.45
+    if abs(hbu) > 0 and (compat < 40 or stage_f < 0.22):
+        hbu *= 0.55
+    elif abs(hbu) > 0 and stage_f < 0.35:
+        hbu *= 0.78
 
     # Combined multiperiod impact proxy used for UI ranges (10-year horizon lens).
     combined = immediate + hbu + rate * 8.0
-    # Soft absolute cap — moderately opportunistic, not fantasy.
-    combined = _clip(combined, -0.65, 0.78)
+    # Soft absolute cap — land-market realistic, not fantasy.
+    combined = _clip(combined, -0.55, COMBINED_DISPLAY_CAP)
 
     # Confidence / dispersion from evidence quality proxies (no fabricated comps).
     evidence_n = 0  # real comps not yet wired — do not invent
@@ -935,9 +998,9 @@ def compute_scenario_impact(
     p90 = combined * (1.0 + dispersion) if combined >= 0 else combined * (1.0 - dispersion)
     # Keep ordering for negatives; bound display bands to institutional ranges.
     lo, mid, hi = sorted([p10, p50, p90])
-    lo = _clip(lo, -0.6, 0.72)
-    mid = _clip(mid, -0.6, 0.72)
-    hi = _clip(hi, -0.6, 0.72)
+    lo = _clip(lo, -0.5, COMBINED_DISPLAY_CAP)
+    mid = _clip(mid, -0.5, COMBINED_DISPLAY_CAP)
+    hi = _clip(hi, -0.5, COMBINED_DISPLAY_CAP)
 
     return {
         "event_key": event_key,
@@ -994,25 +1057,33 @@ def compute_scenario_impact(
 
 
 def _default_distance(event_key: str, screens: dict[str, dict[str, Any]]) -> float:
-    """Heuristic distance assumption for auto-surfaced hypotheticals (labeled as such)."""
+    """Heuristic distance for auto-surfaced hypotheticals (labeled as such).
+
+    Defaults sit near ~0.7–1.0× half-life so decay is real — not a free
+    near-node assumption that prints outsized uplifts.
+    """
     hl = float(EVENT_TAXONOMY[event_key]["distance_half_life_mi"])
     access = _score(screens, "access")
     growth = _score(screens, "growth")
-    # Better access / growth → catalysts assumed closer on the path of expansion.
-    # Keep well inside the half-life so auto scenarios remain economically meaningful.
-    base = hl * (0.95 - growth / 180.0 - access / 280.0)
-    return _clip(base, hl * 0.18, hl * 1.35)
+    # Better access / growth → somewhat closer on the path of expansion.
+    base = hl * (1.05 - growth / 220.0 - access / 320.0)
+    return _clip(base, hl * 0.55, hl * 1.6)
 
 
 def _default_stage(event_key: str, screens: dict[str, dict[str, Any]]) -> str:
     """Illustrative what-if stage for auto-surfaced Hypothetical scenarios.
 
-    Auto scenarios ask \"what if this catalyst materialized,\" so we evaluate at
-    Approved certainty by default. Growth still shapes distance, timing, and
-    market sensitivity — not whether the what-if is worth showing.
+    Autos are not observed projects — never assume Approved. Growth only
+    nudges Proposed → Filed → Under Review so impact stays factor-aware
+    without printing entitlement-grade certainty.
     """
-    _ = event_key, screens
-    return "Approved"
+    _ = event_key
+    growth = _score(screens, "growth")
+    if growth >= 75:
+        return "Under Review"
+    if growth >= 55:
+        return "Filed"
+    return "Proposed"
 
 
 def _timing_years(event_key: str, stage: str, screens: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -1185,16 +1256,13 @@ def select_auto_scenarios(
         meta = EVENT_TAXONOMY[key]
         stage = _default_stage(key, screens)
         dist = _default_distance(key, screens)
-        # Retail / mall auto-scenarios assume nearby-node proximity when access supports it
-        if key in {"major_restaurant", "major_retailer", "shopping_center"} and access >= 50:
-            dist = min(dist, 0.5 if key == "major_restaurant" else 1.0)
         timing = _timing_years(key, stage, screens)
-        # Retail nodes get recognized faster once open / approved
+        # Retail still recognizes faster than municipal utilities — but not overnight.
         if key in {"major_restaurant", "major_retailer", "shopping_center"}:
             timing = {
                 **timing,
-                "value_recognition_start_offset": min(float(timing["value_recognition_start_offset"]), 1.0),
-                "value_recognition_full_offset": min(float(timing["value_recognition_full_offset"]), 3.5),
+                "value_recognition_start_offset": min(float(timing["value_recognition_start_offset"]), 2.0),
+                "value_recognition_full_offset": min(float(timing["value_recognition_full_offset"]), 5.5),
             }
         impact = compute_scenario_impact(
             key,
@@ -1302,29 +1370,38 @@ def combine_scenario_impacts(selected: list[dict[str, Any]]) -> dict[str, Any]:
     util = keys & {"sewer_extension", "municipal_water", "electrical_expansion"}
     entitle = keys & {"zoning_change", "density_entitlement", "annexation"}
     if util and entitle:
-        boost = 0.035
+        boost = 0.018
         hbu += boost
         p50 += boost
         p10 += boost * 0.6
         p90 += boost * 1.3
 
-    # Soft cap to avoid absurd stacking
-    def soft_cap(x: float, cap: float = 0.75) -> float:
+    # Soft cap to avoid absurd stacking — bleed-through is small.
+    def soft_cap(x: float, cap: float = CHANNEL_SOFT_CAP, bleed: float = 0.12) -> float:
         if x == 0:
             return 0.0
         sign = 1 if x > 0 else -1
         ax = abs(x)
         if ax <= cap:
             return x
-        return sign * (cap + (ax - cap) * 0.35)
+        return sign * (cap + (ax - cap) * bleed)
+
+    imm_c = soft_cap(imm)
+    hbu_c = soft_cap(hbu)
+    # Joint level cap — path uses imm+hbu together; capping each alone still overstated.
+    level = imm_c + hbu_c
+    if abs(level) > LEVEL_SOFT_CAP:
+        scale = LEVEL_SOFT_CAP / abs(level)
+        imm_c *= scale
+        hbu_c *= scale
 
     return {
-        "immediate": round(soft_cap(imm), 4),
-        "rate": round(soft_cap(rate, 0.04), 5),
-        "hbu": round(soft_cap(hbu), 4),
-        "combined_p10": round(soft_cap(p10), 4),
-        "combined_p50": round(soft_cap(p50), 4),
-        "combined_p90": round(soft_cap(p90), 4),
+        "immediate": round(imm_c, 4),
+        "rate": round(soft_cap(rate, RATE_SOFT_CAP, 0.15), 5),
+        "hbu": round(hbu_c, 4),
+        "combined_p10": round(soft_cap(p10, COMBINED_DISPLAY_CAP), 4),
+        "combined_p50": round(soft_cap(p50, COMBINED_DISPLAY_CAP), 4),
+        "combined_p90": round(soft_cap(p90, COMBINED_DISPLAY_CAP), 4),
         "interaction_notes": [],
     }
 
@@ -1375,14 +1452,27 @@ def apply_catalysts_to_path(
         # Smoothstep
         w = w * w * (3 - 2 * w)
 
-        # Rate compounds along the path relative to baseline growth already in path:
-        # apply extra rate on top of baseline level as years elapse after recognition start.
-        rate_mult = (1.0 + rate) ** max(0.0, y - start) if y > start else 1.0
-        level_mult = 1.0 + (imm + hbu) * w
-        scen_v = base_v * level_mult * (rate_mult if w > 0 else 1.0)
+        # Rate compounds mainly on the catalyzed increment — not a free multiplier
+        # on the entire baseline (that produced fantasy 2–3× bull paths).
+        rate_years = max(0.0, y - start) if y > start else 0.0
+        rate_mult = (1.0 + rate) ** rate_years if rate_years else 1.0
+        level_lift = (imm + hbu) * w
+        level_mult = 1.0 + level_lift
+        # Mute rate on the baseline; keep more of it on the uplift itself.
+        rate_on_path = 1.0 + (rate_mult - 1.0) * (0.30 + 0.70 * min(1.0, abs(level_lift) * 2.0))
+        scen_v = base_v * level_mult * (rate_on_path if w > 0 else 1.0)
         # Blend rate effect with recognition weight
         if w < 1 and y > start:
             scen_v = base_v + (scen_v - base_v) * max(w, 0.35)
+        # Hard path sanity: stacked what-ifs shouldn't invent >55% by year 10.
+        if base_v > 0 and y >= 8:
+            max_delta = 0.55 if (imm + hbu) >= 0 else -0.55
+            ratio = scen_v / base_v
+            if max_delta >= 0:
+                ratio = min(ratio, 1.0 + max_delta)
+            else:
+                ratio = max(ratio, 1.0 + max_delta)
+            scen_v = base_v * ratio
 
         out.append(
             {
@@ -1486,26 +1576,39 @@ def build_stress_cases(
         )[:2]
     ]
 
-    # Bull / Bear must select meaningfully MORE than Most Likely
-    bull_ids = [s["id"] for s in upside]  # all favorable autos
+    # Bull / Bear: top few catalysts by compatibility×certainty — not every upside auto.
+    bull_sorted = sorted(
+        upside,
+        key=lambda s: abs(float((s.get("impact") or {}).get("p50") or 0))
+        * float(s.get("compatibility_score") or 50)
+        * float(s.get("project_certainty_pct") or 20),
+        reverse=True,
+    )
+    bear_sorted = sorted(
+        downside,
+        key=lambda s: abs(float((s.get("impact") or {}).get("p50") or 0))
+        * float(s.get("compatibility_score") or 50),
+        reverse=True,
+    )
+    bull_ids = [s["id"] for s in bull_sorted[:3]]
     if len(bull_ids) <= len(most_likely_ids):
-        bull_ids = [s["id"] for s in upside[: max(4, len(most_likely_ids) + 2)]]
+        bull_ids = [s["id"] for s in bull_sorted[: max(3, len(most_likely_ids) + 1)]]
 
-    bear_ids = [s["id"] for s in downside]  # all adverse autos
+    bear_ids = [s["id"] for s in bear_sorted[:3]]
     if len(bear_ids) <= len(most_likely_ids):
-        bear_ids = [s["id"] for s in downside[: max(4, len(most_likely_ids) + 2)]]
+        bear_ids = [s["id"] for s in bear_sorted[: max(3, len(most_likely_ids) + 1)]]
 
     return {
         "baseline": {"scenario_ids": [], "label": "Baseline", "description": "Existing Value Path only."},
         "bull": {
             "scenario_ids": bull_ids,
             "label": "Bull Case",
-            "description": "All favorable plausible catalysts on this file (broader than Most Likely).",
+            "description": "Top compatible favorable catalysts (not every upside auto on the file).",
         },
         "bear": {
             "scenario_ids": bear_ids,
             "label": "Bear Case",
-            "description": "All material downside catalysts on this file (broader than Most Likely).",
+            "description": "Top material downside catalysts on this file.",
         },
         "most_likely": {
             "scenario_ids": most_likely_ids,

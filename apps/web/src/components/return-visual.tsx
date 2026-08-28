@@ -710,14 +710,13 @@ export function ReturnVisual({
               </button>
             </div>
             <p className="mt-2 text-sm leading-snug text-[var(--ink-soft)]">
-              Not a flat %/yr line. Soil, flood, wetlands, growth, channel, carry, and exit bend the
-              path
+              Path bends with soil, flood, wetlands, growth, carry, and exit
               {intel?.purchase_usd ? ` from a ~${money(intel.purchase_usd)} buy` : ""}.
             </p>
             <ul className="help-modal-list">
               <li>
                 <strong>Cautious</strong>
-                <span>Slower rents, softer exit, higher carry.</span>
+                <span>Softer exit, higher carry.</span>
               </li>
               <li>
                 <strong>Typical</strong>
@@ -729,10 +728,9 @@ export function ReturnVisual({
               </li>
             </ul>
             <p className="mt-3 text-xs leading-snug text-[var(--muted)]">
-              Drag the chart · tap a factor · 1–100 yr hold.{" "}
-              <strong>Future dollars</strong> = projected money back.{" "}
-              <strong>Today’s dollars</strong> = that same money in purchasing power (~{cpiDisplay}{" "}
-              inflation). Screen only — not an appraisal.
+              Drag the chart · tap a factor · 1–100 yr.{" "}
+              <strong>Today’s dollars</strong> = purchasing power (~{cpiDisplay} inflation). Screen
+              only — not an appraisal.
             </p>
           </div>
         </div>

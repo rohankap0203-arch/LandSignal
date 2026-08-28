@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FilterField } from "@/components/filter-field";
 import { HeroSelect } from "@/components/hero-select";
+import { UsedByStrip } from "@/components/used-by-strip";
 import { LandLoader } from "@/components/land-loader";
 import { PropertyCard } from "@/components/property-card";
 import {
@@ -234,15 +235,37 @@ export default function SearchPage() {
     [meta],
   );
 
+  const scrollToUsedByStrip = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const usedBy = document.querySelector(".used-by-strip") as HTMLElement | null;
+    if (!usedBy) return;
+    const header = document.querySelector(".shell-header") as HTMLElement | null;
+    const headerH = header?.getBoundingClientRect().height ?? 0;
+    // Bring "Used by buyers on" into view under the sticky header while matches load.
+    const top = usedBy.getBoundingClientRect().top + window.scrollY - headerH - 8;
+    const scroller = document.scrollingElement || document.documentElement;
+    scroller.scrollTo({ top: Math.max(0, top), behavior });
+  }, []);
+
+  const scrollToScoutedOpportunities = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const heading = document.querySelector("#search-results h2") as HTMLElement | null;
+    if (!heading) return;
+    const header = document.querySelector(".shell-header") as HTMLElement | null;
+    const headerH = header?.getBoundingClientRect().height ?? 0;
+    // Sit just under the sticky header so "Scouted opportunities" is the first thing seen.
+    const top = heading.getBoundingClientRect().top + window.scrollY - headerH - 4;
+    const scroller = document.scrollingElement || document.documentElement;
+    scroller.scrollTo({ top: Math.max(0, top), behavior });
+  }, []);
+
   const runSearch = useCallback(
     async (override?: FormState) => {
       setLoading(true);
       setError(null);
       setHasSearched(true);
       setRows([]);
-      // Smooth-scroll to results as soon as search starts
+      // Step 1: on click, scroll so Used-by logos are on screen while Surveying matches loads.
       requestAnimationFrame(() => {
-        document.getElementById("search-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrollToUsedByStrip("smooth");
       });
       try {
         const active = override ?? form;
@@ -271,54 +294,108 @@ export default function SearchPage() {
                 ` · ${total.toLocaleString()} live parcels indexed`
             : `No parcels match ${filterLabel}. Widen price/acres/state, or Reset to Any, then Show matches again.`,
         );
-        // Re-align after results paint
-        requestAnimationFrame(() => {
-          document.getElementById("search-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
       } catch (e) {
         const raw = e instanceof Error ? e.message : "Search failed";
-        const friendly = /not reachable|could not reach|Internal Server Error/i.test(raw)
-          ? "LandSignal API is not reachable. Start it with `npm run dev:api`, then try Show matches again."
-          : /Failed to fetch|NetworkError|Load failed|timeout|abort/i.test(raw)
-            ? "Search failed to load results. Tap Show matches again — if it keeps failing, refresh the page."
-            : raw.length > 280
-              ? "Search failed. Tap Show matches again — if it keeps failing, try Reset to Any first."
-              : raw;
+        const friendly = /not reachable on port 8000|could not reach the LandSignal API|ECONNREFUSED|fetch failed/i.test(
+          raw,
+        )
+          ? "LandSignal API is not reachable. Open the Cursor web preview on port 3000 with the API on 8000, then try Show matches again."
+          : /Failed to fetch|NetworkError|Load failed/i.test(raw)
+            ? "Search failed to load results (network). Hard-refresh the port-3000 preview, then try Show matches again."
+            : /Internal Server Error/i.test(raw)
+              ? "Search hit a server error. Tap Show matches again — if it keeps failing, click Refresh live inventory first."
+              : raw.length > 280
+                ? "Search failed. Tap Show matches again — if it keeps failing, try Reset to Any first."
+                : raw;
         setError(friendly);
         setStatus(null);
       } finally {
         setLoading(false);
       }
     },
-    [filtersFromForm, form],
+    [filtersFromForm, form, scrollToUsedByStrip],
   );
 
+  // Step 2: the instant results paint, scroll again so Used-by is off-screen and Scouted opportunities is on top.
   useEffect(() => {
-    // Load live catalogs (inventory counts, regions) — keep fallback if this fails
+    if (!hasSearched || loading) return;
     let cancelled = false;
-    landsignalApi
-      .searchMeta()
-      .then((live) => {
-        if (cancelled || !live) return;
-        setMeta({
-          ...SEARCH_META_FALLBACK,
-          ...live,
-          states: live.states?.length ? live.states : SEARCH_META_FALLBACK.states,
-          strategies: live.strategies?.length ? live.strategies : SEARCH_META_FALLBACK.strategies,
-          price_presets: live.price_presets?.length
-            ? live.price_presets
-            : SEARCH_META_FALLBACK.price_presets,
-          acre_presets: live.acre_presets?.length
-            ? live.acre_presets
-            : SEARCH_META_FALLBACK.acre_presets,
-          hold_years: live.hold_years?.length ? live.hold_years : SEARCH_META_FALLBACK.hold_years,
-        });
-      })
-      .catch(() => {
-        /* keep SEARCH_META_FALLBACK — absolute localhost API bases fail on phones */
-      });
+    const t1 = window.setTimeout(() => {
+      if (!cancelled) scrollToScoutedOpportunities("smooth");
+    }, 50);
+    const t2 = window.setTimeout(() => {
+      if (cancelled) return;
+      const heading = document.querySelector("#search-results h2") as HTMLElement | null;
+      const header = document.querySelector(".shell-header") as HTMLElement | null;
+      if (!heading) return;
+      const headerH = header?.getBoundingClientRect().height ?? 0;
+      const delta = heading.getBoundingClientRect().top - headerH - 4;
+      if (Math.abs(delta) > 10) {
+        const scroller = document.scrollingElement || document.documentElement;
+        scroller.scrollTo({ top: Math.max(0, window.scrollY + delta), behavior: "auto" });
+      }
+    }, 420);
     return () => {
       cancelled = true;
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [hasSearched, loading, rows.length, scrollToScoutedOpportunities]);
+
+  useEffect(() => {
+    // Stay naturally connected: poll meta hard at first, auto-start discover if empty.
+    let cancelled = false;
+    let discoverKicked = false;
+    let tick: number | null = null;
+
+    const applyMeta = (live: SearchMeta) => {
+      if (cancelled || !live) return;
+      setMeta({
+        ...SEARCH_META_FALLBACK,
+        ...live,
+        inventory_count: live.inventory_count ?? 0,
+        states: live.states?.length ? live.states : SEARCH_META_FALLBACK.states,
+        strategies: live.strategies?.length ? live.strategies : SEARCH_META_FALLBACK.strategies,
+        price_presets: live.price_presets?.length
+          ? live.price_presets
+          : SEARCH_META_FALLBACK.price_presets,
+        acre_presets: live.acre_presets?.length
+          ? live.acre_presets
+          : SEARCH_META_FALLBACK.acre_presets,
+        hold_years: live.hold_years?.length ? live.hold_years : SEARCH_META_FALLBACK.hold_years,
+      });
+      const count = live.inventory_count ?? 0;
+      if (!discoverKicked && count < 50) {
+        discoverKicked = true;
+        void landsignalApi.discover(120000, 0.1, false, undefined, true).catch(() => {
+          discoverKicked = false;
+        });
+      }
+    };
+
+    const refresh = () =>
+      landsignalApi
+        .searchMeta()
+        .then(applyMeta)
+        .catch(() => {
+          setMeta((prev) => ({
+            ...prev,
+            inventory_count: prev.inventory_count ?? 0,
+          }));
+        });
+
+    void refresh();
+    let n = 0;
+    tick = window.setInterval(() => {
+      if (cancelled) return;
+      n += 1;
+      // Fast for ~40s, then every 12s
+      if (n <= 25 || n % 8 === 0) void refresh();
+    }, 1500);
+
+    return () => {
+      cancelled = true;
+      if (tick != null) window.clearInterval(tick);
     };
   }, []);
 
@@ -353,7 +430,13 @@ export default function SearchPage() {
       let cmp = 0;
       switch (key) {
         case "score_desc":
-          cmp = num(b.opportunity) - num(a.opportunity) || num(b.fit_score) - num(a.fit_score);
+          // Align with API: opportunity → confidence → risk → discount → fit → id
+          cmp =
+            num(b.opportunity) - num(a.opportunity) ||
+            num(b.confidence) - num(a.confidence) ||
+            num(a.risk) - num(b.risk) ||
+            num(a.discount_pct ?? 0) - num(b.discount_pct ?? 0) ||
+            num(b.fit_score) - num(a.fit_score);
           break;
         case "risk_asc":
           cmp = num(a.risk) - num(b.risk) || num(b.fit_score) - num(a.fit_score);
@@ -392,7 +475,10 @@ export default function SearchPage() {
         <div>
           <div className="hero-brand-row">
             <div className="hero-brand-mark">LandSignal</div>
-            <div className="hero-live" title="Live public inventory index">
+            <div
+              className="hero-live"
+              title="Live public GIS / BLM inventory indexed in this session"
+            >
               <span className="hero-live-dot" aria-hidden />
               <span>Live</span>
             </div>
@@ -539,7 +625,7 @@ export default function SearchPage() {
             label="Strategy"
             tip={{
               title: "Strategy",
-              body: "Boosts matching uses (farm, develop, timber…). Other results stay — they just rank lower.",
+              body: "Ranks matching land uses higher. Homes, cottages, and ranch houses are kept out of vacant-land results — pick Property on site to see those.",
             }}
           >
             <HeroSelect
@@ -551,7 +637,14 @@ export default function SearchPage() {
                 : SEARCH_META_FALLBACK.strategies
               ).map((s) => ({
                 value: s,
-                label: s === "Any" ? "Any" : s === "CUSTOM" ? "Type my own…" : s.replaceAll("_", " "),
+                label:
+                  s === "Any"
+                    ? "Any"
+                    : s === "CUSTOM"
+                      ? "Type my own…"
+                      : s === "IMPROVED_PROPERTY"
+                        ? "Property on site"
+                        : s.replaceAll("_", " "),
               }))}
               onChange={(v) =>
                 setForm((f) => ({
@@ -656,16 +749,12 @@ export default function SearchPage() {
               </button>
             </div>
           </div>
-          {meta?.inventory_count != null && (
-            <div className="filter-inventory-note">
-              Live inventory: {meta.inventory_count} parcels
-              {inventoryStates.length ? ` across ${inventoryStates.length} states (${inventoryStates.join(", ")})` : ""}
-            </div>
-          )}
         </div>
       </section>
 
-      <div id="search-results" className="results-head scroll-mt-24">
+      <UsedByStrip />
+
+      <div id="search-results" className="results-head scroll-mt-0">
         <div>
           <h2 className="display text-2xl font-semibold">Scouted opportunities</h2>
           {status ? <p className="mt-1 text-[var(--muted)]">{status}</p> : null}
@@ -719,26 +808,35 @@ export default function SearchPage() {
 
       {!loading && hasSearched && !rows.length && (
         <div className="panel empty-state">
-          <div className="display text-2xl text-[var(--ink)]">No matches for this search</div>
+          <div className="display text-2xl text-[var(--ink)]">No exact matches found</div>
           <p className="mx-auto mt-2 max-w-lg">
             {(() => {
               const picked = selectedStates(form.states);
               const live = new Set(inventoryStates || []);
               const missing = picked.filter((c) => live.size > 0 && !live.has(c));
+              if ((meta?.inventory_count ?? 0) === 0) {
+                return (
+                  <>
+                    Live inventory is empty in this session. Click{" "}
+                    <strong>Refresh live inventory</strong>, wait for the parcel count to climb, then
+                    Show matches again. Hard filters were not changed.
+                  </>
+                );
+              }
               if (missing.length) {
                 return (
                   <>
                     No live inventory indexed for{" "}
-                    <strong>{missing.join(", ")}</strong> right now — results stay empty on purpose
-                    (we don’t fill with other states). Reset to Any, pick a state that shows in
-                    inventory, or run Inventory refresh, then Show matches again.
+                    <strong>{missing.join(", ")}</strong> — we never fill with other states. Reset to
+                    Any, pick a covered state, or refresh inventory.
                   </>
                 );
               }
               return (
                 <>
-                  Nothing in live inventory matches these exact filters. Widen price, acres, or
-                  price/acres — or Reset to Any — then click Show matches again.
+                  Nothing satisfies these hard filters (state, region, price, acres). Suggestions you
+                  can choose: expand acreage slightly, raise max price, or search a neighboring
+                  county/region. LandSignal will not silently weaken your filters.
                 </>
               );
             })()}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type MouseEvent, type KeyboardEvent } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
+import { LandViewerModal } from "@/components/land-viewer-modal";
 import { TrajectorySpark } from "@/components/price-trajectory";
 import { SignalBadge } from "@/components/signal-badge";
 import type { RadarRow } from "@/lib/api";
@@ -50,8 +51,8 @@ function gapHelpTitle(headline: string | null | undefined, discountDisplay: stri
 
 export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
   const router = useRouter();
-  const [intelPending, setIntelPending] = useState(false);
   const [gapHelpOpen, setGapHelpOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const links = Array.isArray(row.links) ? row.links : [];
   const posting =
     links.find((l) => l.kind === "primary" && l.available !== false) ||
@@ -124,17 +125,24 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
   }, [gapHelpOpen]);
 
   function openIntel(e?: MouseEvent | KeyboardEvent) {
+    // Map tools stay on the map — never treat map chrome as an intel shortcut.
+    if (mapOpen) return;
     if (e) {
       const t = e.target as HTMLElement | null;
-      if (t?.closest("a, button, input, select, textarea, label")) return;
+      if (
+        t?.closest(
+          "a, button, input, select, textarea, label, .metric-action, .metric-images, .land-viewer, .land-viewer-backdrop",
+        )
+      ) {
+        return;
+      }
     }
-    setIntelPending(true);
     router.push(href);
   }
 
   return (
     <article
-      className={`panel property-card card-clickable ${intelPending ? "pending" : ""}`}
+      className="panel property-card card-clickable"
       style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
       onClick={openIntel}
       onKeyDown={(e) => {
@@ -193,7 +201,6 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             className="hover:text-[var(--brand-soft)]"
             onClick={(e) => {
               e.stopPropagation();
-              setIntelPending(true);
             }}
           >
             {row.property_name}
@@ -224,19 +231,57 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
             <div className="k">Our estimate</div>
             <div className="v">{row.estimated_value_display}</div>
           </div>
-            <div className="metric">
+          <div className="metric">
             <div className="k">Opportunity</div>
             <div
               className="v"
-              title="Personalized to your strategy / hold filters when set; otherwise the global score"
+              title="Global opportunity score (0–100) — same number as the intelligence report"
             >
-              {Math.round(row.fit_score ?? row.personalized_opportunity ?? row.opportunity)}
+              {Math.round(row.opportunity)}
+              <span className="metric-denom">/100</span>
             </div>
           </div>
           <div className="metric">
             <div className="k">Risk</div>
             <div className="v">{Math.round(row.risk)}</div>
           </div>
+          <button
+            type="button"
+            className="metric metric-action metric-images"
+            title="Open full-screen map tools for this land"
+            aria-label="View map"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setMapOpen(true);
+            }}
+          >
+            <span className="metric-images-art" aria-hidden>
+              <svg viewBox="0 0 120 72" preserveAspectRatio="xMidYMid slice">
+                <defs>
+                  <linearGradient id="viSky" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#1a3d32" />
+                    <stop offset="55%" stopColor="#245844" />
+                    <stop offset="100%" stopColor="#2f6b52" />
+                  </linearGradient>
+                </defs>
+                <rect width="120" height="72" fill="url(#viSky)" />
+                <circle className="metric-images-art-sun" cx="92" cy="20" r="10" />
+                <path
+                  className="metric-images-art-land-far"
+                  d="M0 40 C22 34 36 46 54 40 C72 34 90 44 120 36 L120 72 L0 72 Z"
+                />
+                <path
+                  className="metric-images-art-land"
+                  d="M0 50 C20 44 38 56 58 50 C78 44 98 54 120 48 L120 72 L0 72 Z"
+                />
+              </svg>
+            </span>
+            <span className="metric-images-label">View map</span>
+          </button>
         </div>
 
         <div className="card-chip-line mt-2">
@@ -250,6 +295,14 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
               Scout pick
             </span>
           )}
+          {row.has_structure ? (
+            <span
+              className="chip"
+              title="A home, cottage, cabin, or ranch house appears to be on this parcel — not vacant land"
+            >
+              Property on site
+            </span>
+          ) : null}
           <span className="chip">{row.best_strategy_label}</span>
           <span className="chip" title="Detail page builds a year-by-year path from soil, flood, growth, channel, and more">
             Multi-factor path
@@ -285,13 +338,12 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
         <div className="card-actions mt-3">
           <Link
             href={href}
-            className={`btn-intel ${intelPending ? "pending" : ""}`}
+            className="btn-intel"
             onClick={(e) => {
               e.stopPropagation();
-              setIntelPending(true);
             }}
           >
-            {intelPending ? "Opening…" : "Open Intelligence"}
+            Open Intelligence
           </Link>
         </div>
       </div>
@@ -333,6 +385,18 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           </div>
         </div>
       ) : null}
+
+      <LandViewerModal
+        open={mapOpen}
+        onClose={() => setMapOpen(false)}
+        title={row.property_name}
+        location={row.location}
+        acresDisplay={row.acres_display}
+        priceDisplay={row.price_display}
+        latitude={row.latitude}
+        longitude={row.longitude}
+        parcelId={row.parcel_id}
+      />
     </article>
   );
 }

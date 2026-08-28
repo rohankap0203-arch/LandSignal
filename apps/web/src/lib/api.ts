@@ -33,9 +33,9 @@ function friendlyApiError(status: number, body: string): string {
     trimmed.startsWith("<html")
   ) {
     if (status === 502 || status === 503 || status === 504) {
-      return "LandSignal API is not reachable. Start it with `npm run dev:api`, then try Show matches again.";
+      return "LandSignal API is not reachable on port 8000. Keep web on port 3000 with the API running, then try Show matches again.";
     }
-    return "Search could not reach the LandSignal API. Start `npm run dev:api`, then try Show matches again.";
+    return `Search failed (API ${status}). Tap Show matches again — if it keeps failing, click Refresh live inventory.`;
   }
   return trimmed.length > 280 ? `API ${status}` : trimmed;
 }
@@ -55,7 +55,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     if (e instanceof DOMException && e.name === "AbortError") throw e;
     if (init?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
     throw new Error(
-      "LandSignal API is not reachable. Start it with `npm run dev:api`, then try Show matches again.",
+      "LandSignal API on port 8000 is not responding. Hard-refresh the port-3000 preview, then try Show matches again.",
     );
   }
   if (!res.ok) {
@@ -190,6 +190,7 @@ export type RadarRow = {
   return_thesis?: string | null;
   conviction?: string | null;
   scout_note?: string | null;
+  has_structure?: boolean;
   trajectory_regime?: string | null;
   trajectory_label?: string | null;
   trajectory_cagr_5y?: string | null;
@@ -214,7 +215,21 @@ export type SearchMeta = {
   tooltips?: Record<string, { title: string; body: string }>;
   inventory_states?: string[];
   inventory_count?: number;
+  inventory_by_state?: Record<string, number>;
+  inventory_states_wired?: number;
+  inventory_states_missing?: string[];
+  inventory_coverage_pct?: number;
+  inventory_states_target?: number;
+  inventory_states_live?: number;
+  filters_offer_all_states?: boolean;
+  filters_note?: string;
   allows_custom?: string[];
+  attom?: {
+    configured?: boolean;
+    state?: string;
+    ok?: boolean;
+    active_listing_access?: boolean;
+  };
 };
 
 export type SearchFilters = {
@@ -235,6 +250,8 @@ export type SearchFilters = {
   sort?: string;
   q?: string;
   broaden?: boolean;
+  /** Keep list payloads tunnel-friendly; detail pages fetch full parcel intel. */
+  limit?: number;
 };
 
 function toQuery(filters: SearchFilters): string {
@@ -250,11 +267,43 @@ function toQuery(filters: SearchFilters): string {
 }
 
 export const landsignalApi = {
-  radar: (filters: SearchFilters = {}) => api<RadarRow[]>(`/radar${toQuery(filters)}`),
+  radar: (filters: SearchFilters = {}) =>
+    api<RadarRow[]>(`/radar${toQuery({ limit: 60, ...filters })}`),
   searchMeta: () => api<SearchMeta>("/search/meta"),
   providers: () =>
     api<Array<{ id: string; kind: string; name: string; status: string; detail?: string }>>("/providers"),
   parcel: (id: string) => api<Record<string, unknown>>(`/parcels/${id}`),
+  locationImages: (id: string, opts?: { mode?: "instant" | "full" | "enrich" }) => {
+    const mode = opts?.mode || "full";
+    const q = mode !== "full" ? `?mode=${encodeURIComponent(mode)}` : "";
+    return api<{
+      ok: boolean;
+      images: Array<{
+        id: string;
+        label: string;
+        url: string;
+        thumb_url?: string;
+        source: string;
+        kind: string;
+        attribution?: string;
+        page_url?: string | null;
+        embed?: boolean;
+        caption?: string;
+        distance_m?: number | null;
+      }>;
+      count: number;
+      attom_photos: boolean;
+      note?: string;
+      phase?: string;
+      maps?: {
+        google_maps?: string;
+        google_street_view?: string;
+        google_earth?: string;
+        openstreetmap?: string;
+        kartaview?: string;
+      };
+    }>(`/parcels/${encodeURIComponent(id)}/location-images${q}`);
+  },
   catalystSimulate: (
     id: string,
     body: { scenario_ids?: string[]; custom_text?: string; stress_case?: string },
@@ -272,6 +321,8 @@ export const landsignalApi = {
       acres: number | null;
       state?: string | null;
       county?: string | null;
+      has_outline?: boolean;
+      geometry_source?: string | null;
     }>(`/parcels/${id}/geometry`),
   nearby: (lat: number, lon: number, kind: string, init?: RequestInit) =>
     api<{

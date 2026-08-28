@@ -44,10 +44,10 @@ _US_STATE_CODES = frozenset(
     }
 )
 
-# Per-source wall clock so one hung ArcGIS host cannot stall nationwide discover.
-# Statewide OID-shard pulls need more than 2 minutes to return real volume.
-_SOURCE_FETCH_TIMEOUT_S = 240.0
-_STATE_FETCH_TIMEOUT_S = 480.0
+# Per-source / per-state wall clocks so one hung ArcGIS host cannot stall the 50-state map.
+# Deepen passes need longer budgets so OID shards can reach fresh parcels past the paint head.
+_SOURCE_FETCH_TIMEOUT_S = 90.0
+_STATE_FETCH_TIMEOUT_S = 150.0
 _HTTP_RETRY_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 
@@ -55,11 +55,13 @@ def _acres_from_geom(geom: dict | None) -> tuple[float | None, float | None, flo
     if not geom:
         return None, None, None, None
     try:
+        from landsignal.scoring.geospatial import interior_pin_lat_lon
+
         g = shape(geom)
         if g.is_empty:
             return None, None, None, None
         g = unary_union(g)
-        lat, lon = g.centroid.y, g.centroid.x
+        lat, lon = interior_pin_lat_lon(g)
         acreage = None
         polygon = None
         if geom.get("type") == "Polygon":
@@ -68,9 +70,14 @@ def _acres_from_geom(geom: dict | None) -> tuple[float | None, float | None, flo
         elif geom.get("type") == "MultiPolygon":
             total = 0.0
             first = None
+            # Prefer the largest ring for stored outline + acreage sum across parts
+            best_area = -1.0
             for poly in geom["coordinates"]:
-                total += ring_area_square_meters(poly[0])
-                first = first or poly
+                a = ring_area_square_meters(poly[0])
+                total += a
+                if a > best_area:
+                    best_area = a
+                    first = poly
             acreage = acres_from_square_meters(total)
             polygon = first
         return acreage, lat, lon, polygon
@@ -427,6 +434,12 @@ def _norm_hartford_surplus(raw: dict) -> dict | None:
 
 def _norm_baltimore_taxsale(raw: dict) -> dict | None:
     props = raw.get("properties") or {}
+    # bldg_no holds the house number for improved lots; vacant lots are null.
+    if props.get("bldg_no") not in (None, "", 0, "0"):
+        return None
+    addr = str(props.get("Address") or "").strip()
+    if addr and addr[:1].isdigit():
+        return None
     geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
     # Shape__Area often web-mercator m²; prefer geometry acres after outSR=4326
     acreage = geom_acres
@@ -434,13 +447,12 @@ def _norm_baltimore_taxsale(raw: dict) -> dict | None:
         return None  # skip tiny urban stubs; keep larger tax-sale tracts
     pid = props.get("Blocklot") or props.get("ObjectID")
     lien = _fnum(props.get("LIEN_AMOUNT"))
-    addr = props.get("Address") or ""
     return {
         "provider_id": "public_tax_sale",
         "external_id": f"balt:{pid}",
-        "title": f"Baltimore MD tax sale · {addr or pid}",
+        "title": f"Baltimore MD tax sale · vacant · {addr or pid}",
         "description": (
-            f"Baltimore City, MD tax-sale inventory (public GIS). "
+            f"Baltimore City, MD tax-sale vacant / unimproved lot (public GIS). "
             f"Owner mark={props.get('Owner') or 'n/a'}. Lien mark=${lien}. "
             "Public tax-sale channel — not MLS."
         ),
@@ -449,7 +461,7 @@ def _norm_baltimore_taxsale(raw: dict) -> dict | None:
         "state": "MD",
         "county": "Baltimore City",
         "apn": str(pid),
-        "address": f"{addr}, Baltimore, MD".strip(", "),
+        "address": f"{addr}, Baltimore, MD".strip(", ") if addr else "Baltimore, MD",
         "latitude": lat,
         "longitude": lon,
         "polygon": polygon,
@@ -750,6 +762,17 @@ def _validate_inventory_row(row: dict | None) -> dict | None:
                 return None
         title = str(row.get("title") or "").strip()
         if not title:
+            return None
+        from landsignal.services.land_gate import is_land_inventory
+
+        if not is_land_inventory(
+            provider_id=provider,
+            title=title,
+            description=str(row.get("description") or ""),
+            address=str(row.get("address") or ""),
+            acreage=acres,
+            raw=row.get("raw") if isinstance(row.get("raw"), dict) else row,
+        ):
             return None
         out = dict(row)
         out["state"] = state
@@ -1279,10 +1302,12 @@ def _norm_dallas_vacant(raw: dict) -> dict | None:
         return None
     pid = props.get("ACCT") or props.get("GIS_ACCT") or props.get("OBJECTID")
     use = props.get("PROP_CL") or "Vacant tract"
+    # Prefer land-only CAD marks; total/market only when land fields are absent.
     land_val = _fnum(
-        props.get("TOT_VAL")
-        or props.get("LAND_VAL")
+        props.get("LAND_VAL")
         or props.get("Land_Value")
+        or props.get("LAND_VALUE")
+        or props.get("TOT_VAL")
         or props.get("MARKET_VALUE")
     )
     return {
@@ -2141,6 +2166,7 @@ SOURCES: list[ArcgisMarketSource] = [
         "MD",
         "Baltimore City",
         _norm_baltimore_taxsale,
+        where="bldg_no IS NULL",
     ),
     ArcgisMarketSource(
         "ramsey_mn_forfeit",
@@ -2300,8 +2326,8 @@ SOURCES: list[ArcgisMarketSource] = [
         "Statewide",
         _norm_nj_mod4_vacant,
         where="PROP_CLASS='1' AND CALC_ACRE>=1 AND IMPRVT_VAL=0",
-        page_size=1000,
-        shard_by_objectid=True,
+        page_size=500,
+        shard_by_objectid=False,
         objectid_max=4_000_000,
     ),
     ArcgisMarketSource(
@@ -2312,8 +2338,8 @@ SOURCES: list[ArcgisMarketSource] = [
         "Statewide",
         _norm_nj_mod4_farm,
         where="PROP_CLASS='3B' AND CALC_ACRE>=10",
-        page_size=1000,
-        shard_by_objectid=True,
+        page_size=500,
+        shard_by_objectid=False,
         objectid_max=4_000_000,
     ),
     # Statewide cadastral screens — FL/NJ/NY/MA/AR here; NC/NE/WA/WI/UT/IN/VT/CT appended
@@ -2321,32 +2347,30 @@ SOURCES: list[ArcgisMarketSource] = [
     # a clean public vacant class filter exists (DE/HI/IA/KY/LA/ME/MS/ND/NH/OK/RI/SC/SD/WV/…).
     ArcgisMarketSource(
         "ny_orpts_vacant",
-        "New York ORPTS Vacant Land (1ac+)",
-        "https://gisservices.its.ny.gov/arcgis/rest/services/NYS_Tax_Parcels_Public/MapServer/1/query",
+        "New York ORPTS Vacant Land centroids (1ac+)",
+        # Polygon MapServer on gisservices.its.ny.gov times out; centroid points are fast.
+        "https://nysgeohub.ny.gov/arcgis/rest/services/Parcels/NYS_Tax_Parcel_Centroid_Points/FeatureServer/0/query",
         "NY",
         "Statewide",
         _norm_ny_orpts_vacant,
         where=(
-            "PROP_CLASS >= 300 AND PROP_CLASS < 400 AND PROP_CLASS <> 315 "
-            "AND CALC_ACRES >= 1 AND CALC_ACRES <= 2500 AND OWNER_TYPE='8'"
+            "PROP_CLASS LIKE '3%' AND PROP_CLASS <> '315' "
+            "AND OWNER_TYPE='8' AND CALC_ACRES >= 1"
         ),
-        page_size=1000,
-        shard_by_objectid=True,
+        page_size=200,
+        shard_by_objectid=False,
         objectid_max=5_000_000,
     ),
     ArcgisMarketSource(
         "ny_orpts_agriculture",
-        "New York ORPTS Agriculture (10ac+)",
-        "https://gisservices.its.ny.gov/arcgis/rest/services/NYS_Tax_Parcels_Public/MapServer/1/query",
+        "New York ORPTS Agriculture (disabled — vacant centroids cover NY)",
+        "https://nysgeohub.ny.gov/arcgis/rest/services/Parcels/NYS_Tax_Parcel_Centroid_Points/FeatureServer/0/query",
         "NY",
         "Statewide",
         _norm_ny_orpts_ag,
-        where=(
-            "PROP_CLASS >= 100 AND PROP_CLASS < 200 "
-            "AND CALC_ACRES >= 10 AND CALC_ACRES <= 2500 AND OWNER_TYPE='8'"
-        ),
-        page_size=1000,
-        shard_by_objectid=True,
+        where="1=0",
+        page_size=100,
+        shard_by_objectid=False,
         objectid_max=5_000_000,
     ),
     ArcgisMarketSource(
@@ -2478,8 +2502,8 @@ async def _fetch_arcgis_pages(
     page_size = max(1, int(page_size or src.page_size or 200))
     where_clause = where or src.where
     out_fields = (getattr(src, "out_fields", None) or "*").strip() or "*"
-    # Over-page: statewide vacant rows often fail normalize, so raw ≫ normalized.
-    max_pages = max(2, min(40, (max(1, target) // page_size) * 5 + 3))
+    # Deepen needs more pages so we don't only re-ingest the same head window.
+    max_pages = max(2, min(25, (max(1, target) + page_size - 1) // page_size + 2))
     consecutive_failures = 0
     for _ in range(max_pages):
         if len(out) >= target:
@@ -2536,6 +2560,9 @@ async def _fetch_arcgis_pages(
                 continue
             valid = _validate_inventory_row(row)
             if valid:
+                valid = {**valid, "source_id": src.source_id}
+                if isinstance(valid.get("raw"), dict):
+                    valid["raw"] = {**valid["raw"], "source_id": src.source_id}
                 out.append(valid)
                 if len(out) >= target:
                     break
@@ -2730,14 +2757,15 @@ class PublicTaxSaleProvider(ListingProvider):
             state_keys = sorted(by_state_sources.keys())
             n_states = max(1, len(state_keys))
             # Every state gets a large floor — FL is not special-cased for nationwide pulls.
-            min_per_state = max(1500, int(query.get("min_per_state") or 5000))
+            # Every state gets a floor — but honor small paint budgets from discover.
+            min_per_state = max(100, int(query.get("min_per_state") or 5000))
             per_state = max(min_per_state, (limit + n_states - 1) // n_states)
             if prefer and n_states <= 3:
-                # Targeted few-state discovers may still consume nearly the full budget.
-                per_state = max(
-                    per_state,
-                    min(limit, max(8000, (limit * 95) // 100 // n_states)),
-                )
+                # Targeted few-state discovers may consume the full requested budget,
+                # but never inflate past `limit` — the old 8000 floor made single-state
+                # "paint" pulls hang for minutes and left half the US map empty.
+                per_state = max(per_state, min(limit, max(min_per_state, (limit + n_states - 1) // n_states)))
+                per_state = min(per_state, max(1, limit))
             start_offset = max(0, int(query.get("offset") or 0))
             out: list[dict] = []
             timeout = httpx.Timeout(connect=12.0, read=55.0, write=30.0, pool=30.0)
@@ -2923,6 +2951,12 @@ async def asyncio_gather_sources(
             target = max(per_source, statewide_target)
 
         async def _pull() -> list[dict]:
+            # Small paint budgets must not enter OID/value shard loops — those
+            # were hanging NJ/NY/TX and leaving the 50-state map incomplete.
+            if target <= 800:
+                return await _fetch_arcgis_pages(
+                    client, src, target=target, start_offset=start_offset
+                )
             if getattr(src, "shard_field", None) and getattr(src, "shard_values", None):
                 return await _fetch_arcgis_value_shards(
                     client, src, target=target, start_offset=start_offset
@@ -2938,17 +2972,23 @@ async def asyncio_gather_sources(
         # OID / value shards need a longer wall clock than single-page county feeds.
         pull_timeout = _SOURCE_FETCH_TIMEOUT_S
         if getattr(src, "shard_by_objectid", False) or getattr(src, "shard_field", None):
-            pull_timeout = max(pull_timeout, 360.0)
+            pull_timeout = max(pull_timeout, 140.0)
         try:
             return await asyncio.wait_for(_pull(), timeout=pull_timeout)
         except asyncio.TimeoutError:
             errors.append(f"{src.source_id}: timed out")
             log.warning("public_tax_source_timeout", source=src.source_id)
-            # Last-chance plain page — often recovers partial inventory quickly.
+            # Last-chance plain page — skip further into the layer so deepen
+            # does not only re-ingest the already-cached head window.
             try:
+                page = max(1, int(getattr(src, "page_size", None) or 200))
+                deepen_offset = max(int(start_offset or 0), page * 4)
                 return await asyncio.wait_for(
                     _fetch_arcgis_pages(
-                        client, src, target=min(target, 800), start_offset=start_offset
+                        client,
+                        src,
+                        target=min(target, 1200),
+                        start_offset=deepen_offset,
                     ),
                     timeout=45.0,
                 )

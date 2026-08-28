@@ -35,8 +35,8 @@ OVERPASS_ENDPOINTS = [
 ]
 
 # Whole chip budget — API must answer inside this window.
-SEARCH_DEADLINE_S = 8.0
-MIRROR_TIMEOUT_S = 5.0
+SEARCH_DEADLINE_S = 10.0
+MIRROR_TIMEOUT_S = 5.5
 CACHE_TTL_S = 6 * 3600
 RESULT_LIMIT = 3
 
@@ -45,8 +45,8 @@ _CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 KIND_META: dict[str, dict[str, Any]] = {
     "flood": {
         "label": "Flood zone",
-        "max_miles": 12.4,
-        "radii_m": [12000],
+        "max_miles": 15.0,
+        "radii_m": [12000, 22000],
         "out": "center",
         "parts": ['way["waterway"~"^(river|stream|canal)$"]'],
         "fallback_parts": [
@@ -62,8 +62,8 @@ KIND_META: dict[str, dict[str, Any]] = {
     },
     "wetland": {
         "label": "Wetland",
-        "max_miles": 14.0,
-        "radii_m": [16000],
+        "max_miles": 18.0,
+        "radii_m": [16000, 28000],
         "out": "center",
         "parts": ['nwr["natural"="wetland"]', 'nwr["wetland"]'],
         "photon": [
@@ -73,8 +73,8 @@ KIND_META: dict[str, dict[str, Any]] = {
     },
     "water": {
         "label": "Water body",
-        "max_miles": 14.0,
-        "radii_m": [16000],
+        "max_miles": 18.0,
+        "radii_m": [16000, 28000],
         "out": "center",
         "parts": [
             'nwr["natural"="water"]',
@@ -87,33 +87,44 @@ KIND_META: dict[str, dict[str, Any]] = {
             {"q": "pond", "osm_tag": "water:pond"},
         ],
     },
-    "road": {
-        "label": "Paved road",
-        "max_miles": 10.0,
-        "radii_m": [12000],
-        "out": "center",
-        "parts": ['way["highway"~"^(primary|secondary|tertiary)$"]'],
-        "photon": [],
-    },
     "power": {
         "label": "Power line",
-        "max_miles": 14.0,
-        "radii_m": [8000, 16000],
+        "max_miles": 18.0,
+        "radii_m": [8000, 16000, 28000],
         "out": "center",
         # Towers/poles are denser + faster than full line geometry extracts.
         "parts": [
             'node["power"="tower"]',
             'node["power"="pole"]',
             'way["power"="line"]',
+            'node["power"="substation"]',
         ],
-        "photon": [],
+        "photon": [
+            {"q": "power tower", "osm_tag": "power:tower"},
+            {"q": "power pole", "osm_tag": "power:pole"},
+            {"q": "substation", "osm_tag": "power:substation"},
+        ],
+    },
+    "road": {
+        "label": "Paved road",
+        "max_miles": 12.0,
+        "radii_m": [8000, 16000, 25000],
+        "out": "center",
+        "parts": [
+            'way["highway"~"^(primary|secondary|tertiary|residential|unclassified|trunk)$"]',
+        ],
+        "photon": [
+            {"q": "road", "osm_tag": "highway:primary"},
+            {"q": "road", "osm_tag": "highway:secondary"},
+            {"q": "road", "osm_tag": "highway:residential"},
+        ],
     },
     "town": {
         "label": "Town / services",
-        "max_miles": 25.0,
-        "radii_m": [28000],
+        "max_miles": 35.0,
+        "radii_m": [28000, 50000],
         "out": "center",
-        "parts": ['node["place"~"^(city|town|village)$"]'],
+        "parts": ['node["place"~"^(city|town|village|hamlet)$"]'],
         "photon": [
             {"q": "town", "osm_tag": "place:town"},
             {"q": "city", "osm_tag": "place:city"},
@@ -122,12 +133,13 @@ KIND_META: dict[str, dict[str, Any]] = {
     },
     "school": {
         "label": "School",
-        "max_miles": 20.0,
-        "radii_m": [30000],
+        "max_miles": 25.0,
+        "radii_m": [20000, 35000],
         "out": "center",
         "parts": [
             'node["amenity"="school"]',
             'way["amenity"="school"]',
+            'node["amenity"="kindergarten"]',
         ],
         "photon": [
             {"q": "school", "osm_tag": "amenity:school"},
@@ -136,8 +148,8 @@ KIND_META: dict[str, dict[str, Any]] = {
     },
     "hospital": {
         "label": "Hospital",
-        "max_miles": 40.0,
-        "radii_m": [50000],
+        "max_miles": 50.0,
+        "radii_m": [50000, 80000],
         "out": "center",
         "parts": [
             'node["amenity"="hospital"]',
@@ -259,9 +271,9 @@ def _matches(kind: str, el: dict[str, Any]) -> bool:
             "unclassified",
         }
     if kind == "power":
-        return tags.get("power") in {"line", "minor_line", "tower", "pole"}
+        return tags.get("power") in {"line", "minor_line", "tower", "pole", "substation"}
     if kind == "town":
-        return tags.get("place") in {"city", "town", "village"}
+        return tags.get("place") in {"city", "town", "village", "hamlet"}
     if kind == "school":
         return (
             tags.get("amenity") in {"school", "kindergarten"}
@@ -703,7 +715,7 @@ async def _nominatim_towns(lat: float, lon: float, radius_m: int, budget_s: floa
 
 
 def _cache_key(kind: str, lat: float, lon: float) -> str:
-    return f"v2:{kind}:{lat:.3f}:{lon:.3f}"
+    return f"v3:{kind}:{lat:.3f}:{lon:.3f}"
 
 
 async def find_nearby(lat: float, lon: float, kind: str) -> dict[str, Any]:

@@ -22,6 +22,69 @@ def test_extract_nested_land_av_and_landval():
     assert extract_assessed_land_usd({"raw": {"LAND_LV": 40_000}}) == 40_000
 
 
+def test_land_preferred_over_total_and_skip_total_when_improved():
+    from landsignal.services.assessed_price import (
+        extract_assessed_total_usd,
+        resolve_budget_filter_usd,
+    )
+
+    # Prefer land-only over total when both present
+    assert extract_assessed_land_usd({"LAND_VAL": 80_000, "TOT_VAL": 400_000}) == 80_000
+    # Unimproved: total is an OK last resort
+    assert extract_assessed_land_usd({"TOT_VAL": 120_000}) == 120_000
+    # Improved with only total: do not invent a vacant-land ask from the total
+    assert extract_assessed_land_usd({"TOT_VAL": 400_000, "IMPRVT_VAL": 320_000}) is None
+    assert extract_assessed_total_usd({"TOT_VAL": 400_000, "IMPRVT_VAL": 320_000}) == 400_000
+
+    # Property on site + land AV → use total (honest whole-parcel mark)
+    assert (
+        resolve_budget_filter_usd(
+            ask=12_000,
+            raw={"ask_role": "assessed_land", "LAND_VAL": 12_000, "TOT_VAL": 385_000},
+            estimated_value_usd=410_000,
+            has_structure=True,
+            ask_role="assessed_land",
+        )
+        == 385_000
+    )
+    # Property on site + land AV, no total → model mark
+    assert (
+        resolve_budget_filter_usd(
+            ask=8_000,
+            raw={"ask_role": "assessed_land", "LAND_VAL": 8_000},
+            estimated_value_usd=275_000,
+            has_structure=True,
+            ask_role="assessed_land",
+        )
+        == 275_000
+    )
+    # Vacant land AV stays land AV
+    assert (
+        resolve_budget_filter_usd(
+            ask=180_000,
+            raw={"ask_role": "assessed_land", "LAND_VAL": 180_000},
+            estimated_value_usd=220_000,
+            has_structure=False,
+            ask_role="assessed_land",
+        )
+        == 180_000
+    )
+
+
+def test_price_presets_include_750k():
+    from landsignal.geo_meta import search_meta_payload
+
+    labels = [p["label"] for p in search_meta_payload()["price_presets"]]
+    assert "Up to $500k" in labels
+    assert "Up to $750k" in labels
+    i500 = labels.index("Up to $500k")
+    i750 = labels.index("Up to $750k")
+    assert i750 == i500 + 1
+    preset = next(p for p in search_meta_payload()["price_presets"] if p["label"] == "Up to $750k")
+    assert preset["max"] == 750_000
+    assert preset["min"] is None
+
+
 def test_backfill_sets_ask_and_role():
     listing = ListingRecord(
         parcel_id=ParcelRecord(

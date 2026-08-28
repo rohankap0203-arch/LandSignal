@@ -202,6 +202,7 @@ def search_meta_payload(inventory_regions: list[str] | None = None) -> dict:
             "RECREATIONAL",
             "ENERGY",
             "TIMBER",
+            "IMPROVED_PROPERTY",
             "CUSTOM",
         ],
         "hold_years": ["Any", 1, 3, 5, 10, 15, 25, 40, 60, 80, 100],
@@ -218,6 +219,7 @@ def search_meta_payload(inventory_regions: list[str] | None = None) -> dict:
             {"label": "Up to $150k", "min": None, "max": 150000},
             {"label": "Up to $250k", "min": None, "max": 250000},
             {"label": "Up to $500k", "min": None, "max": 500000},
+            {"label": "Up to $750k", "min": None, "max": 750000},
             {"label": "Up to $1M", "min": None, "max": 1000000},
             {"label": "Up to $2.5M", "min": None, "max": 2500000},
             {"label": "Up to $5M", "min": None, "max": 5000000},
@@ -276,6 +278,14 @@ def search_meta_payload(inventory_regions: list[str] | None = None) -> dict:
             "market_channel": {
                 "title": "Market channel",
                 "body": "Where the listing comes from: federal BLM land, county tax sale, government surplus, or a parcel you added yourself.",
+            },
+            "strategy": {
+                "title": "Strategy",
+                "body": (
+                    "Pick a land use to rank (farm, develop, timber…). "
+                    "Homes, cottages, and ranch houses stay out of vacant-land results — "
+                    "choose Property on site to browse those separately."
+                ),
             },
         },
         "allows_custom": [

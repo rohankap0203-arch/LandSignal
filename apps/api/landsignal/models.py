@@ -43,6 +43,7 @@ class Strategy(str, Enum):
     RECREATIONAL = "RECREATIONAL"
     ENERGY = "ENERGY"
     TIMBER = "TIMBER"
+    IMPROVED_PROPERTY = "IMPROVED_PROPERTY"
 
 
 class Provenanced(BaseModel):
@@ -148,6 +149,8 @@ class EnrichmentBundle(BaseModel):
     comps: Provenanced = Field(default_factory=Provenanced)
     infrastructure: Provenanced = Field(default_factory=Provenanced)
     growth: Provenanced = Field(default_factory=Provenanced)
+    # Temporary licensed IQ (e.g. ATTOM) — TTL metadata lives inside value
+    other: Provenanced | None = None
     narratives: dict = Field(default_factory=dict)
     scenarios: list[dict] = Field(default_factory=list)
 
@@ -323,6 +326,7 @@ class RadarRow(BaseModel):
     return_thesis: str | None = None
     conviction: str | None = None
     scout_note: str | None = None
+    has_structure: bool = False
     trajectory_regime: str | None = None
     trajectory_label: str | None = None
     trajectory_cagr_5y: str | None = None

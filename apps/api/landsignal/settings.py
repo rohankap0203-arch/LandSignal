@@ -15,16 +15,23 @@ class Settings(BaseSettings):
     store_backend: Literal["memory", "postgres"] = "memory"
     demo_seed: bool = False
     force_live_on_demo: bool = False
-    auto_discover_on_startup: bool = True
+    # Default OFF in cloud VMs — startup nationwide discover OOMs 15Gi pods.
+    # Use POST /v1/discover (background) when you want to grow inventory.
+    auto_discover_on_startup: bool = False
     discover_limit: int = 1_000_000
-    discover_min_per_state: int = 15000
+    # ~2k × 50 states ≈ 100k inventory target from public GIS / BLM / surplus.
+    discover_min_per_state: int = 2700
     discover_min_acres: float = 0.1
     # Always-on Land Alerts monitor (seconds between discovery cycles; respects source rate limits)
-    land_alerts_monitor_enabled: bool = True
+    # Default OFF — the monitor re-runs discover and was a top OOM trigger on cloud agents.
+    land_alerts_monitor_enabled: bool = False
     land_alerts_poll_seconds: int = 900
     # Keep in step with discover_limit so the always-on monitor rebuilds full inventory
     # after restarts (memory store) instead of capping around ~2.5k parcels.
     land_alerts_discover_limit: int = 1_000_000
+    # Hard RSS ceiling (MB) for discover/rescore — leave headroom for web + agent.
+    hard_rss_mb: int = 7500
+    soft_rss_mb: int = 6000
     http_timeout_seconds: float = 20.0
     mapbox_token: str | None = None
     smtp_url: str | None = None
@@ -36,6 +43,15 @@ class Settings(BaseSettings):
     crexi_api_key: str | None = None
     regrid_api_key: str | None = None
     enable_live_gov_enrichment: bool = True
+
+    # ATTOM Property API — server-side only. Never expose to the browser.
+    attom_api_key: str | None = None
+    # api | bulk | disabled  (bulk reserved for a future licensed bulk feed)
+    attom_data_mode: Literal["api", "bulk", "disabled"] = "api"
+    # Must stay ≤ 86400 under current ATTOM API retention terms
+    attom_cache_ttl_seconds: int = 82_800
+    attom_enrich_on_analyze: bool = True
+    attom_enrich_top_n: int = 40
 
 
 @lru_cache

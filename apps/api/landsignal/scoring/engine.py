@@ -6,18 +6,21 @@ from typing import Any
 
 from landsignal.scoring.financial import asking_discount_pct, clamp, margin_of_safety
 
-ALGORITHM_VERSION = "landsignal_score_v3_5_0"
-WEIGHT_VERSION = "weights_opportunistic_v3_5"
+ALGORITHM_VERSION = "landsignal_score_v3_6_0"
+WEIGHT_VERSION = "weights_evidence_v3_6"
 
+# Buy-edge first: mispricing + risk-adjusted quality + real optionality.
+# Unknown categories are dampened in the blend (see compute_score) so thin
+# files cannot float to the top of a 100k+ Top opportunities board.
 DEFAULT_WEIGHTS = {
-    "valuation_mispricing": 0.26,
-    "intrinsic_land_quality": 0.10,
+    "valuation_mispricing": 0.28,
+    "intrinsic_land_quality": 0.12,
     "hbu_optionality": 0.14,
-    "growth_appreciation": 0.13,
+    "growth_appreciation": 0.11,
     "infrastructure": 0.08,
     "liquidity": 0.06,
-    "scarcity": 0.07,
-    "catalysts": 0.06,
+    "scarcity": 0.06,
+    "catalysts": 0.05,
     "seller_dynamics": 0.05,
     "risk": 0.05,
 }
@@ -29,6 +32,7 @@ STRATEGIES = [
     "RECREATIONAL",
     "ENERGY",
     "TIMBER",
+    "IMPROVED_PROPERTY",
 ]
 
 
@@ -122,6 +126,20 @@ def screen_strategies(inp: dict) -> dict[str, str]:
     else:
         land_bank = "PASS"
 
+    # Improved Property is a selectable strategy AND a soft characteristic —
+    # never auto-exclude parcels that happen to have a dwelling.
+    has_structure = bool(inp.get("has_structure") or inp.get("hasStructure"))
+    bldg = _v(inp, "building_sqft") or _v(inp, "buildingSqFt")
+    beds = _v(inp, "bedrooms")
+    if not has_structure and ((bldg is not None and bldg > 0) or (beds is not None and beds > 0)):
+        has_structure = True
+    if has_structure:
+        improved = "PASS"
+    elif landlocked == "FAIL":
+        improved = "FAIL"
+    else:
+        improved = "MANUAL_REVIEW"
+
     return {
         "FARMLAND": farmland,
         "DEVELOPMENT": development,
@@ -129,6 +147,7 @@ def screen_strategies(inp: dict) -> dict[str, str]:
         "RECREATIONAL": recreational,
         "ENERGY": energy,
         "TIMBER": timber,
+        "IMPROVED_PROPERTY": improved,
     }
 
 
@@ -209,12 +228,15 @@ def deal_readiness(inp: dict) -> float:
 
 
 def _signal(opportunity: float, risk: float, confidence: float) -> str:
-    """Surface real asymmetric process buys — opportunistic so strong files can surface."""
+    """Surface real asymmetric process buys — exceptional requires evidence, not priors."""
     if opportunity < 34 or (risk > 85 and opportunity < 58):
         return "REJECT"
-    if opportunity >= 74 and risk <= 55 and confidence >= 32:
+    # Confidence floors keep thin GIS scouts out of STRONG/EXCEPTIONAL on Top opportunities.
+    if opportunity >= 80 and risk <= 48 and confidence >= 58:
         return "EXCEPTIONAL"
-    if opportunity >= 60 and risk <= 65:
+    if opportunity >= 70 and risk <= 55 and confidence >= 48:
+        return "STRONG"
+    if opportunity >= 64 and risk <= 60 and confidence >= 40:
         return "STRONG"
     return "WATCH"
 
@@ -288,10 +310,10 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
     if slope is not None:
         q_parts.append(clamp(100 - slope * 3, 0, 100))
         q_evidence.append(f"{tag}: avg slope {slope:.1f}% → tillable/build score {clamp(100 - slope * 3, 0, 100):.0f}")
-    quality_value = _round1(sum(q_parts) / len(q_parts)) if q_parts else 50.0
+    quality_value = _round1(sum(q_parts) / len(q_parts)) if q_parts else 42.0
     quality_ks = "KNOWN" if q_parts else "UNKNOWN"
     if not q_parts:
-        q_evidence = [f"{tag}: soil/slope not confirmed — quality held at {quality_value:.0f}/100 (not penalized)"]
+        q_evidence = [f"{tag}: soil/slope not confirmed — quality held at cautious {quality_value:.0f}/100"]
     else:
         q_evidence.append(f"Composite land quality → {quality_value:.0f}/100")
 
@@ -320,6 +342,19 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
         if screens["ENERGY"] == "FAIL"
         else _round1(clamp(solar * 0.6 + (40 if _v(inp, "nearest_transmission_m") is not None else 20), 0, 100)),
         "TIMBER": 0.0 if screens["TIMBER"] == "FAIL" else _round1(clamp(timber, 0, 100)),
+        "IMPROVED_PROPERTY": 0.0
+        if screens.get("IMPROVED_PROPERTY") == "FAIL"
+        else _round1(
+            clamp(
+                (
+                    (70 if inp.get("has_structure") or inp.get("hasStructure") else 35)
+                    + (access * 0.2)
+                    + ((_v(inp, "building_sqft") or _v(inp, "buildingSqFt") or 0) / 40)
+                ),
+                0,
+                100,
+            )
+        ),
     }
     pass_scores = [v for k, v in strategy_scores.items() if screens[k] != "FAIL"]
     top = sorted(pass_scores, reverse=True)[:3]
@@ -370,19 +405,19 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
             ],
         ),
         "growth_appreciation": (
-            growth_v if growth_v is not None else 55.0,
+            growth_v if growth_v is not None else 42.0,
             "UNKNOWN" if growth_v is None else "KNOWN",
             [
-                f"{tag}: path-of-growth not confirmed — held at 55/100 (opportunistic prior)"
+                f"{tag}: path-of-growth not confirmed — cautious prior 42/100 (not an edge)"
                 if growth_v is None
                 else f"{tag}: path-of-growth {growth_v:.0f} → growth rating {growth_v:.0f}/100"
             ],
         ),
         "infrastructure": (
-            infra,
+            infra if infra_parts else 42.0,
             "UNKNOWN" if not infra_parts else "ESTIMATED",
             [
-                f"{tag}: access/frontage/transmission incomplete — infra {infra:.0f}/100"
+                f"{tag}: access/frontage/transmission incomplete — infra held at cautious 42/100"
                 if not infra_parts
                 else f"{tag}: infra composite {infra:.0f}/100"
                 + (f"; transmission {tx:,.0f} m" if tx is not None else "")
@@ -390,37 +425,37 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
             ],
         ),
         "liquidity": (
-            liq if liq is not None else 54.0,
+            liq if liq is not None else 42.0,
             "UNKNOWN" if liq is None else "KNOWN",
             [
-                f"{tag}: liquidity proxy missing — held at 54/100 (opportunistic prior)"
+                f"{tag}: liquidity proxy missing — cautious prior 42/100 (not an edge)"
                 if liq is None
                 else f"{tag}: liquidity proxy {liq:.0f} → {liq:.0f}/100"
             ],
         ),
         "scarcity": (
-            _v(inp, "scarcity_score") if _v(inp, "scarcity_score") is not None else 54.0,
+            _v(inp, "scarcity_score") if _v(inp, "scarcity_score") is not None else 42.0,
             "UNKNOWN" if _v(inp, "scarcity_score") is None else "KNOWN",
             [
-                f"{tag}: scarcity proxy missing — held at 54/100 (opportunistic prior)"
+                f"{tag}: scarcity proxy missing — cautious prior 42/100 (not an edge)"
                 if _v(inp, "scarcity_score") is None
                 else f"{tag}: scarcity {_v(inp, 'scarcity_score'):.0f} on {float(acres):,.2f} ac → {_v(inp, 'scarcity_score'):.0f}/100"
             ],
         ),
         "catalysts": (
-            _v(inp, "catalyst_score") if _v(inp, "catalyst_score") is not None else 56.0,
+            _v(inp, "catalyst_score") if _v(inp, "catalyst_score") is not None else 40.0,
             "UNKNOWN" if _v(inp, "catalyst_score") is None else "KNOWN",
             [
-                f"{tag}: no structured catalyst on file — catalysts {(_v(inp, 'catalyst_score') or 56):.0f}/100"
+                f"{tag}: no structured catalyst on file — cautious prior 40/100"
                 if _v(inp, "catalyst_score") is None
                 else f"{tag}: catalyst score {_v(inp, 'catalyst_score'):.0f}/100"
             ],
         ),
         "seller_dynamics": (
-            _v(inp, "seller_pressure_score") if _v(inp, "seller_pressure_score") is not None else 55.0,
+            _v(inp, "seller_pressure_score") if _v(inp, "seller_pressure_score") is not None else 42.0,
             "UNKNOWN" if _v(inp, "seller_pressure_score") is None else "KNOWN",
             [
-                f"{tag}: seller-pressure proxy missing ({inp.get('provider_id') or 'listing'}) — held at 55/100"
+                f"{tag}: seller-pressure proxy missing ({inp.get('provider_id') or 'listing'}) — cautious prior 42/100"
                 if _v(inp, "seller_pressure_score") is None
                 else f"{tag}: seller pressure {_v(inp, 'seller_pressure_score'):.0f} via {inp.get('provider_id') or 'listing'} → {_v(inp, 'seller_pressure_score'):.0f}/100"
             ],
@@ -433,33 +468,90 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
         ),
     }
 
+    # Evidence-weighted blend: UNKNOWN / thin categories cannot dominate Top opportunities.
+    # KNOWN evidence keeps full weight; ESTIMATED is tempered; UNKNOWN is heavily dampened
+    # and pulled toward a cautious prior so middling invent-ed 50s do not float #1 of 100k+.
+    evidence_weight_scale = {
+        "KNOWN": 1.0,
+        "ESTIMATED": 0.78,
+        "UNKNOWN": 0.30,
+        "TEMPORARILY_UNAVAILABLE": 0.22,
+    }
+    # Valuation UNKNOWN is the hardest penalty — without price discovery, "best buy" is speculation.
+    unknown_category_scale = {
+        "valuation_mispricing": 0.18,
+        "intrinsic_land_quality": 0.40,
+        "hbu_optionality": 0.45,
+        "growth_appreciation": 0.35,
+        "infrastructure": 0.40,
+        "liquidity": 0.40,
+        "scarcity": 0.45,
+        "catalysts": 0.40,
+        "seller_dynamics": 0.40,
+        "risk": 0.55,
+    }
+
     components = []
     opportunity = 0.0
+    effective_w_sum = 0.0
+    known_core = 0
+    core_categories = {
+        "valuation_mispricing",
+        "intrinsic_land_quality",
+        "hbu_optionality",
+        "growth_appreciation",
+        "risk",
+    }
     for category, weight in weights.items():
         value, ks, evidence = category_values[category]
-        contribution = value * weight
+        if ks == "UNKNOWN":
+            scale = unknown_category_scale.get(category, 0.30)
+        else:
+            scale = evidence_weight_scale.get(ks, 0.50)
+        eff_w = weight * scale
+        effective_w_sum += eff_w
+        contribution = value * eff_w
         opportunity += contribution
+        if category in core_categories and ks in ("KNOWN", "ESTIMATED"):
+            known_core += 1
         components.append(
             {
                 "category": category,
                 "label": category,
                 "value": _round1(value),
                 "weight": weight,
+                "effective_weight": _round1(eff_w),
                 "contribution": _round1(contribution),
                 "knowledge_state": ks,
                 "evidence": evidence,
             }
         )
+    if effective_w_sum > 0:
+        # Re-normalize so dampened UNKNOWN mass does not leave the score artificially low
+        # on researched files — but still reflects relative evidence density via later gates.
+        opportunity = opportunity / effective_w_sum * sum(weights.values())
     opportunity = _round1(clamp(opportunity, 0, 100))
+    nominal_w = sum(weights.values()) or 1.0
+    evidence_ratio = round(effective_w_sum / nominal_w, 3)
 
-    # Evidence-backed lifts so thin “everything ~50” fast scores can separate real edges
+    # Evidence-backed lifts so real process edges can separate — tempered for map screens.
     lift = 0.0
     lift_notes: list[str] = []
     provider = str(inp.get("provider_id") or "")
+    has_structure = bool(inp.get("has_structure") or inp.get("hasStructure"))
     eff_discount = discount
+    # Never treat a dwelling parcel's land AV / teaser as a vacant-land deep bargain.
+    if has_structure:
+        lift_notes.append("Property on site — vacant-land underwrite / deep-discount lifts skipped")
+        if screens.get("IMPROVED_PROPERTY") != "FAIL":
+            # Force improved use to the front when a home is present.
+            strategy_scores["IMPROVED_PROPERTY"] = max(
+                float(strategy_scores.get("IMPROVED_PROPERTY") or 0),
+                72.0,
+            )
     # Unpriced process inventory (≥5 ac): underwrite a channel entry so mispricing can surface.
     # Vacant GIS screens are NOT confirmed sales — only a mild “maybe approachable” underwrite.
-    if (
+    elif (
         eff_discount is None
         and ask is None
         and base is not None
@@ -473,25 +565,25 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
             if provider == "public_surplus"
             else 0.78
             if provider == "blm_lpad"
-            else 0.88  # vacant map screen — mild approachable underwrite
+            else 0.92  # vacant map screen — very mild approachable underwrite
         )
         eff_discount = asking_discount_pct(underwrite, base)
         lift_notes.append(
             f"{'Map-screen' if provider == 'public_vacant_gis' else 'Process'} underwrite "
             f"~${underwrite:,.0f} vs mark ${base:,.0f} ({eff_discount:.0f}% gap)"
         )
-    if eff_discount is not None:
+    if not has_structure and eff_discount is not None:
         if provider == "public_vacant_gis":
-            # Soft but real — vacant GIS can still surface as approachable map screens
+            # Soft and capped — vacant GIS alone must not manufacture a top-board buy
             if eff_discount <= -25:
-                lift += 9
-                lift_notes.append(f"Map-screen value gap (+9) for {eff_discount:.0f}% vs model")
+                lift += 3.5
+                lift_notes.append(f"Map-screen value gap (+3.5) for {eff_discount:.0f}% vs model")
             elif eff_discount <= -12:
-                lift += 6
-                lift_notes.append(f"Soft map-screen edge (+6) for {eff_discount:.0f}% vs model")
+                lift += 2.0
+                lift_notes.append(f"Soft map-screen edge (+2) for {eff_discount:.0f}% vs model")
             elif eff_discount <= -5:
-                lift += 3
-                lift_notes.append(f"Mild map-screen edge (+3) for {eff_discount:.0f}% vs model")
+                lift += 1.0
+                lift_notes.append(f"Mild map-screen edge (+1) for {eff_discount:.0f}% vs model")
         elif eff_discount <= -50:
             lift += 20
             lift_notes.append(f"Deep discount lift (+20) for {eff_discount:.0f}% vs model")
@@ -505,53 +597,94 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
             lift += 5
             lift_notes.append(f"Mild discount lift (+5) for {eff_discount:.0f}% vs model")
     # Channel edge only when the file also shows a real price/use gap (not bare vacant GIS)
-    if provider in ("public_tax_sale", "public_surplus", "blm_lpad") and (
+    # and there is no dwelling (homes use Property on site — not vacant bargain math).
+    if not has_structure and provider in ("public_tax_sale", "public_surplus", "blm_lpad") and (
         (eff_discount is not None and eff_discount <= -12) or float(acres or 0) >= 30
     ):
         lift += 6
         lift_notes.append("Off-MLS / process channel scout edge (+6)")
     sp = _v(inp, "seller_pressure_score")
-    if sp is not None and sp >= 68 and provider != "public_vacant_gis":
+    if not has_structure and sp is not None and sp >= 68 and provider != "public_vacant_gis":
         lift += 6
         lift_notes.append("Distressed / high seller-pressure channel (+6)")
-    if ask is None and acres >= 40 and provider in ("public_tax_sale", "public_surplus", "blm_lpad"):
+    if (
+        not has_structure
+        and ask is None
+        and acres >= 40
+        and provider in ("public_tax_sale", "public_surplus", "blm_lpad")
+    ):
         lift += 8
         lift_notes.append("Unpriced large-tract process edge (+8)")
         if (_v(inp, "scarcity_score") or 0) >= 60:
             lift += 5
             lift_notes.append("Scarcity on large unpriced tract (+5)")
-    elif ask is None and acres >= 40 and provider == "public_vacant_gis":
-        lift += 4
-        lift_notes.append("Large vacant map screen — still need an owner path (+4)")
+    elif not has_structure and ask is None and acres >= 40 and provider == "public_vacant_gis":
+        lift += 1.5
+        lift_notes.append("Large vacant map screen — still need an owner path (+1.5)")
     # Usable-acre quality when soil is strong and flood/wetlands are contained
     if (prime or 0) >= 45 and (wetland or 0) < 18 and (_v(inp, "flood_zone_pct") or 0) < 25:
         lift += 6
         lift_notes.append("Cleaner soil + contained flood/wetland screens (+6)")
-    if risk > 75:
+    if has_structure:
+        lift *= 0.35
+        lift_notes.append("Lift cut — property on site (not a vacant land bargain)")
+    elif risk > 75:
         lift *= 0.65
         lift_notes.append("Lift cut — elevated risk")
     elif risk > 62:
         lift *= 0.9
         lift_notes.append("Lift tempered — moderate-high risk")
+    # Scale lifts by evidence density — thin files keep little of any manufactured edge
+    if evidence_ratio < 0.45:
+        lift *= 0.35
+        if lift:
+            lift_notes.append("Lift cut — thin evidence ratio")
+    elif evidence_ratio < 0.65:
+        lift *= 0.70
+        if lift:
+            lift_notes.append("Lift tempered — partial evidence")
     if lift:
         opportunity = _round1(clamp(opportunity + lift, 0, 100))
 
-    # Sitewide opportunistic nudge: lift middling scout files without
-    # collapsing the top of the board into a flat 95–100 cluster.
-    before_curve = opportunity
-    if opportunity < 70:
-        opportunity = _round1(clamp(opportunity + 6.0 + max(0.0, 55.0 - opportunity) * 0.12, 0, 100))
-    elif opportunity < 82:
-        opportunity = _round1(clamp(opportunity + 3.5, 0, 100))
-    else:
-        opportunity = _round1(clamp(opportunity + 1.5, 0, 100))
-    if opportunity > before_curve + 0.4:
+    confidence = compute_confidence(inp)
+
+    # Depth bonus: multi-factor researched files earn a small, capped lift
+    # (replaces the old sitewide opportunistic nudge that inflated thin scouts)
+    if known_core >= 4 and confidence >= 62 and valuation_ks in ("KNOWN", "ESTIMATED"):
+        depth_bonus = min(4.5, 1.5 + (known_core - 3) * 0.8 + (confidence - 62) * 0.04)
+        opportunity = _round1(clamp(opportunity + depth_bonus, 0, 100))
+        lift_notes.append(f"Research depth bonus (+{depth_bonus:.1f}) — multi-factor corroborated file")
+
+    # Hard evidence gates for Top-opportunities integrity
+    if confidence < 58:
+        shrink = (58.0 - confidence) / 58.0
+        opportunity = _round1(
+            opportunity * (1.0 - 0.72 * shrink) + 40.0 * (0.72 * shrink)
+        )
         lift_notes.append(
-            f"Opportunistic scout nudge (+{opportunity - before_curve:.1f}) — "
-            "favor finding the next look, not punishing thin files"
+            f"Confidence gate — pulled toward cautious neutral (confidence {confidence:.0f})"
         )
 
-    confidence = compute_confidence(inp)
+    if valuation_ks == "UNKNOWN" and known_core <= 2:
+        opportunity = min(opportunity, 48.0)
+        lift_notes.append("Valuation ceiling 48 — no price discovery + thin core evidence")
+    elif valuation_ks == "UNKNOWN":
+        opportunity = min(opportunity, 58.0)
+        lift_notes.append("Valuation ceiling 58 — no ask/baseline price discovery")
+
+    if evidence_ratio < 0.35:
+        opportunity = min(opportunity, 46.0)
+        lift_notes.append("Evidence-ratio ceiling 46 — file too thin for Top opportunities")
+    elif evidence_ratio < 0.50:
+        opportunity = min(opportunity, 56.0)
+        lift_notes.append("Evidence-ratio ceiling 56 — partial file")
+
+    # Bare vacant GIS without corroborating land attributes cannot clear STRONG territory
+    if provider == "public_vacant_gis" and known_core <= 2 and confidence < 45:
+        opportunity = min(opportunity, 52.0)
+        lift_notes.append("Vacant GIS map-screen ceiling 52 — needs owner path + diligence")
+
+    opportunity = _round1(clamp(opportunity, 0, 100))
 
     ranked = sorted(
         [(k, v) for k, v in strategy_scores.items() if screens[k] != "FAIL"],
@@ -607,6 +740,8 @@ def compute_score(inp: dict, weights: dict | None = None, weight_version: str = 
         "estimated_value_usd": base,
         "asking_discount_pct": discount if discount is not None else eff_discount,
         "deal_readiness": deal_readiness(inp),
+        "evidence_ratio": evidence_ratio,
+        "known_core_factors": known_core,
         "components": components,
         "explanations": [f"[{c['category']}] {e}" for c in components for e in c["evidence"]],
         "why_interesting": why_interesting + lift_notes,

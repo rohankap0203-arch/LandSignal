@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { resolveLandPin } from "@/lib/land-pin";
 
 function FullscreenIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
         d="M8 3H4v4M16 3h4v4M8 21H4v-4M16 21h4v-4"
         stroke="currentColor"
@@ -31,6 +32,8 @@ type Props = {
   layoutKey?: string | number;
   /** Opens the full-screen land viewer from the caption row */
   onExpand?: () => void;
+  /** Opens the full-screen map tool (same viewer) from the map tile button */
+  onViewMap?: () => void;
 };
 
 export function ParcelMap({
@@ -44,6 +47,7 @@ export function ParcelMap({
   scrollWheelZoom = false,
   layoutKey = 0,
   onExpand,
+  onViewMap,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
@@ -67,8 +71,8 @@ export function ParcelMap({
 
       if (cancelled || !ref.current) return;
       ref.current.innerHTML = "";
-      const center: [number, number] =
-        latitude != null && longitude != null ? [latitude, longitude] : [39.5, -98.35];
+      const pin = resolveLandPin(latitude, longitude, polygon);
+      const center: [number, number] = pin || [39.5, -98.35];
 
       map = L.map(ref.current, {
         scrollWheelZoom,
@@ -78,7 +82,7 @@ export function ParcelMap({
         keyboard: true,
         zoomControl: true,
         attributionControl: false,
-      }).setView(center, latitude != null ? (compact ? 15 : 11) : 4);
+      }).setView(center, pin != null ? (compact ? 15 : 11) : 4);
       if (cancelled) {
         map.remove();
         map = null;
@@ -103,18 +107,21 @@ export function ParcelMap({
       if (polygon?.[0]?.length) {
         const latlngs = polygon[0].map(([lon, lat]) => [lat, lon] as [number, number]);
         const layer = L.polygon(latlngs, {
-          color: "#d6a243",
-          weight: 2,
-          fillColor: "#d6a243",
-          fillOpacity: 0.25,
+          color: "#f2c14e",
+          weight: 3.25,
+          opacity: 1,
+          fillColor: "#f2c14e",
+          fillOpacity: 0.2,
         }).addTo(map);
         map.fitBounds(layer.getBounds(), {
           padding: compact ? [10, 10] : [24, 24],
           maxZoom: compact ? 17 : 18,
         });
+        // Always drop an on-land pin so lakeshore parcels don't look empty / off-parcel.
+        if (pin) L.marker(pin).addTo(map).bindPopup(title || "Parcel");
         if (title) layer.bindPopup(title);
-      } else if (latitude != null && longitude != null) {
-        L.marker([latitude, longitude]).addTo(map).bindPopup(title || "Parcel");
+      } else if (pin) {
+        L.marker(pin).addTo(map).bindPopup(title || "Parcel");
       }
 
       const bump = () => map?.invalidateSize({ animate: false });
@@ -170,11 +177,50 @@ export function ParcelMap({
         <button
           type="button"
           className="parcel-map-expand"
-          onClick={onExpand}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onExpand();
+          }}
           aria-label="Open full screen land view"
           title="Full screen land view"
         >
           <FullscreenIcon />
+        </button>
+      ) : null}
+      {onViewMap && !compact ? (
+        <button
+          type="button"
+          className="parcel-map-view-images"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewMap();
+          }}
+          aria-label="View map"
+          title="Open full-screen map tools"
+        >
+          <span className="parcel-map-view-images-art" aria-hidden>
+            <svg viewBox="0 0 120 72" preserveAspectRatio="xMidYMid slice">
+              <defs>
+                <linearGradient id="pmViSky" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#1a3d32" />
+                  <stop offset="55%" stopColor="#245844" />
+                  <stop offset="100%" stopColor="#2f6b52" />
+                </linearGradient>
+              </defs>
+              <rect width="120" height="72" fill="url(#pmViSky)" />
+              <circle className="metric-images-art-sun" cx="92" cy="20" r="10" />
+              <path
+                className="metric-images-art-land-far"
+                d="M0 40 C22 34 36 46 54 40 C72 34 90 44 120 36 L120 72 L0 72 Z"
+              />
+              <path
+                className="metric-images-art-land"
+                d="M0 50 C20 44 38 56 58 50 C78 44 98 54 120 48 L120 72 L0 72 Z"
+              />
+            </svg>
+          </span>
         </button>
       ) : null}
     </div>
