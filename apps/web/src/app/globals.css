@@ -439,7 +439,8 @@ select {
   transform: translateY(-1px);
 }
 
-.used-by-logo-img--dark {
+/* Must beat `.used-by-logo img { display: block }` or both light+dark marks show. */
+.used-by-logo .used-by-logo-img--dark {
   display: none;
 }
 
