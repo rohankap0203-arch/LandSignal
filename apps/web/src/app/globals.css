@@ -7765,8 +7765,7 @@ html.land-viewer-open body {
   display: none !important;
 }
 
-.parcel-map-expand,
-.parcel-map-view-images {
+.parcel-map-expand {
   position: absolute;
   right: 0.65rem;
   z-index: 500;
@@ -7812,36 +7811,6 @@ html.land-viewer-open body {
 
 .parcel-map-expand:active {
   transform: scale(0.96);
-}
-
-.parcel-map-view-images {
-  bottom: 0.65rem;
-  overflow: hidden;
-  border: 1.5px solid #fff;
-  background: #1a4a2e;
-}
-
-.parcel-map-view-images:hover {
-  transform: translateY(-1px) scale(1.04);
-  border-color: #fff;
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.34);
-}
-
-.parcel-map-view-images:active {
-  transform: scale(0.96);
-}
-
-.parcel-map-view-images-art {
-  display: block;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-.parcel-map-view-images-art svg {
-  display: block;
-  width: 100%;
-  height: 100%;
 }
 
 .land-viewer-map {
@@ -8141,8 +8110,7 @@ html.land-viewer-open body {
     font-size: 0 !important;
   }
 
-  .parcel-map-expand,
-  .parcel-map-view-images {
+  .parcel-map-expand {
     box-sizing: border-box;
     width: 2.2rem;
     height: 2.2rem;
@@ -8153,10 +8121,6 @@ html.land-viewer-open body {
 
   .parcel-map-expand {
     top: 0.5rem;
-  }
-
-  .parcel-map-view-images {
-    bottom: 0.5rem;
   }
 
   .parcel-map-expand svg {
