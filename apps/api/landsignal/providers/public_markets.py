@@ -1302,10 +1302,12 @@ def _norm_dallas_vacant(raw: dict) -> dict | None:
         return None
     pid = props.get("ACCT") or props.get("GIS_ACCT") or props.get("OBJECTID")
     use = props.get("PROP_CL") or "Vacant tract"
+    # Prefer land-only CAD marks; total/market only when land fields are absent.
     land_val = _fnum(
-        props.get("TOT_VAL")
-        or props.get("LAND_VAL")
+        props.get("LAND_VAL")
         or props.get("Land_Value")
+        or props.get("LAND_VALUE")
+        or props.get("TOT_VAL")
         or props.get("MARKET_VALUE")
     )
     return {

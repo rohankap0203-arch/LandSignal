@@ -582,8 +582,10 @@ async def radar(
 
             from landsignal.services.assessed_price import (
                 backfill_listing_ask_from_assessed,
-                extract_assessed_land_usd,
+                resolve_budget_filter_usd,
             )
+            from landsignal.services.land_gate import listing_has_structure
+            from landsignal.services.purchase_credibility import detect_ask_role
 
             # GIS vacant screens often only have assessor land value — promote to ask.
             backfill_listing_ask_from_assessed(listing)
@@ -604,8 +606,10 @@ async def radar(
                 ):
                     continue
 
-            # Budget recognition: dollars-to-own for auctions; market ask or
-            # assessor land value for GIS vacant screens (never model estimate).
+            on_site = listing_has_structure(listing, parcel)
+
+            # Budget recognition: auction settle, real ask, or honest assessed mark.
+            # Never let land-AV-with-home pass a low max_price as a fake bargain.
             budget_usd: float | None = None
             if use_min_price is not None or use_max_price is not None:
                 enrichment = store.enrichments.get(parcel.id)
@@ -627,24 +631,33 @@ async def radar(
                         provider_id=listing.provider_id,
                         state=parcel.state,
                     )
+                settle = None
                 if isinstance(auction_path, dict):
                     settle = auction_path.get("expected_settle_usd") or auction_path.get(
                         "settle_high_usd"
                     )
-                    if settle is not None:
-                        try:
-                            budget_usd = float(settle)
-                        except (TypeError, ValueError):
-                            budget_usd = None
-                if budget_usd is None and ask is not None and ask > 0:
-                    budget_usd = float(ask)
-                if budget_usd is None:
-                    budget_usd = extract_assessed_land_usd(listing.raw)
+                budget_usd = resolve_budget_filter_usd(
+                    ask=ask,
+                    raw=listing.raw,
+                    estimated_value_usd=score.estimated_value_usd,
+                    has_structure=on_site,
+                    ask_role=detect_ask_role(listing),
+                    auction_settle_usd=settle,
+                )
+                # Homes with only land AV and no total/model mark: never pass a
+                # max-price band as a fake bargain (fail closed even if unpriced allowed).
+                price_unknown_ok = allow_unknown_price
+                if (
+                    on_site
+                    and budget_usd is None
+                    and (use_min_price is not None or use_max_price is not None)
+                ):
+                    price_unknown_ok = False
                 if not _in_band(
                     budget_usd,
                     use_min_price,
                     use_max_price,
-                    allow_unknown=allow_unknown_price,
+                    allow_unknown=price_unknown_ok,
                 ):
                     continue
             if not _in_band(
@@ -655,9 +668,6 @@ async def radar(
             ):
                 continue
             strategy_soft_miss = False
-            from landsignal.services.land_gate import listing_has_structure
-
-            on_site = listing_has_structure(listing, parcel)
             wants_property_on_site = any(
                 pref.upper().replace(" ", "_") == "IMPROVED_PROPERTY" for pref in (strategy_prefs or [])
             )
@@ -1248,11 +1258,27 @@ async def radar(
     from landsignal.services.property_providers.diagnostics import DIAGNOSTICS
 
     def _row_passes_hard(row: RadarRow) -> bool:
+        listing = store.listing_for_parcel(row.parcel_id)
+        from landsignal.services.assessed_price import resolve_budget_filter_usd
+        from landsignal.services.purchase_credibility import detect_ask_role
+
+        budget = resolve_budget_filter_usd(
+            ask=row.ask,
+            raw=getattr(listing, "raw", None) if listing else None,
+            estimated_value_usd=row.estimated_value,
+            has_structure=bool(row.has_structure),
+            ask_role=detect_ask_role(listing) if listing else None,
+        )
+        # Fail closed: property-on-site without an honest whole-property mark.
+        if (
+            gate_max_price is not None or gate_min_price is not None
+        ) and row.has_structure and budget is None:
+            return False
         blob = {
             "state": row.state,
             "county": row.county,
             "region": row.region,
-            "asking_price_usd": row.ask,
+            "asking_price_usd": budget if budget is not None else row.ask,
             "acreage": row.acres,
             "property_name": row.property_name,
         }

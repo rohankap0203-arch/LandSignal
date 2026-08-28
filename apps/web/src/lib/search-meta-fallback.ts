@@ -86,6 +86,7 @@ export const SEARCH_META_FALLBACK: SearchMeta = {
     { label: "Up to $150k", min: null, max: 150000 },
     { label: "Up to $250k", min: null, max: 250000 },
     { label: "Up to $500k", min: null, max: 500000 },
+    { label: "Up to $750k", min: null, max: 750000 },
     { label: "Up to $1M", min: null, max: 1000000 },
     { label: "Up to $2.5M", min: null, max: 2500000 },
     { label: "Up to $5M", min: null, max: 5000000 },

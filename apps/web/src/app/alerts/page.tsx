@@ -132,6 +132,7 @@ const BUDGET_PRESETS: { id: string; label: string; min: string; max: string }[] 
   { id: "150k", label: "Up to $150k", min: "", max: "150000" },
   { id: "250k", label: "Up to $250k", min: "", max: "250000" },
   { id: "500k", label: "Up to $500k", min: "", max: "500000" },
+  { id: "750k", label: "Up to $750k", min: "", max: "750000" },
   { id: "1m", label: "Up to $1M", min: "", max: "1000000" },
   { id: "2_5m", label: "Up to $2.5M", min: "", max: "2500000" },
   { id: "5m", label: "Up to $5M", min: "", max: "5000000" },

@@ -219,6 +219,7 @@ def search_meta_payload(inventory_regions: list[str] | None = None) -> dict:
             {"label": "Up to $150k", "min": None, "max": 150000},
             {"label": "Up to $250k", "min": None, "max": 250000},
             {"label": "Up to $500k", "min": None, "max": 500000},
+            {"label": "Up to $750k", "min": None, "max": 750000},
             {"label": "Up to $1M", "min": None, "max": 1000000},
             {"label": "Up to $2.5M", "min": None, "max": 2500000},
             {"label": "Up to $5M", "min": None, "max": 5000000},

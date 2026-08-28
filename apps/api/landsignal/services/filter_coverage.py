@@ -17,23 +17,35 @@ _STATE_NAME = {s["code"]: s["name"] for s in US_STATES}
 
 
 def _budget_usd(listing, score, store) -> float | None:
-    ask = listing.asking_price_usd
-    if ask is not None and ask > 0:
-        return float(ask)
     try:
-        from landsignal.services.assessed_price import extract_assessed_land_usd
+        from landsignal.services.assessed_price import resolve_budget_filter_usd
+        from landsignal.services.land_gate import listing_has_structure
+        from landsignal.services.purchase_credibility import detect_ask_role
 
-        assessed = extract_assessed_land_usd(listing.raw)
-        if assessed is not None and assessed > 0:
-            return float(assessed)
+        parcel = getattr(store, "parcels", {}).get(getattr(listing, "parcel_id", None))
+        return resolve_budget_filter_usd(
+            ask=listing.asking_price_usd,
+            raw=getattr(listing, "raw", None),
+            estimated_value_usd=getattr(score, "estimated_value_usd", None),
+            has_structure=listing_has_structure(listing, parcel) if parcel else False,
+            ask_role=detect_ask_role(listing),
+        )
     except Exception:
-        pass
-    est = getattr(score, "estimated_value_usd", None)
-    if est is not None and est > 0:
-        # Unpriced process parcels: use model mark only for "has inventory in band"
-        # coverage of open-ended presets — never as a fake ask on the card.
-        return float(est)
-    return None
+        ask = listing.asking_price_usd
+        if ask is not None and ask > 0:
+            return float(ask)
+        try:
+            from landsignal.services.assessed_price import extract_assessed_land_usd
+
+            assessed = extract_assessed_land_usd(listing.raw)
+            if assessed is not None and assessed > 0:
+                return float(assessed)
+        except Exception:
+            pass
+        est = getattr(score, "estimated_value_usd", None)
+        if est is not None and est > 0:
+            return float(est)
+        return None
 
 
 def _preset_hit_price(budget: float | None, preset: dict[str, Any], *, unpriced_ok: bool) -> bool:

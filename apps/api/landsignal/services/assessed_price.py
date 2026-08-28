@@ -3,14 +3,20 @@
 Public vacant GIS rarely has a true MLS ask. County/state CAD layers expose
 land assessed / market land values under many field names — including nested
 under listing.raw["raw"] after persistence.
+
+Accuracy rules:
+- Prefer land-only fields for vacant tracts.
+- Never treat building/improvement totals as a vacant-land ask.
+- When a dwelling is on site and we only have land AV, do not pretend that
+  land AV is the whole-property budget — use total assessed or the model mark.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-# Prefer land-only marks; never treat building/improvement totals as budget price.
-_LAND_VALUE_KEYS = (
+# Land-only marks (never include improvement / building totals here).
+_LAND_ONLY_KEYS = (
     "LND_VAL",
     "LAND_VAL",
     "Land_Value",
@@ -32,8 +38,43 @@ _LAND_VALUE_KEYS = (
     "assessed_land_usd",
     "LAND_MKT_VALUE",
     "MARKETLAND",
-    "TOT_VAL",  # last-resort when layer only publishes total and tract is unimproved
     "Land",
+)
+
+# Whole-parcel assessed / market totals — usable only when land-only is missing
+# on unimproved tracts, or as a budget proxy when a home is on site.
+_TOTAL_VALUE_KEYS = (
+    "TOT_VAL",
+    "TOTAL_VAL",
+    "TotalValue",
+    "total_value",
+    "MARKET_VALUE",
+    "MarketValue",
+    "market_value",
+    "MKT_VAL",
+    "APPRAISED_VAL",
+    "AppraisedValue",
+    "AssessedValue",
+    "assessed_value",
+    "JUST_VALUE",
+    "JustValue",
+    "TAX_VAL",
+    "TaxVal",
+)
+
+_IMPROVEMENT_VALUE_KEYS = (
+    "IMPRVT_VAL",
+    "impr_value",
+    "IMPROVEMENT_VALUE",
+    "ImprovementValue",
+    "improvement_value",
+    "NFMIMPVL",
+    "BLDG_VAL",
+    "BldgVal",
+    "BuildingValue",
+    "building_value",
+    "IMP_VAL",
+    "ImpVal",
 )
 
 
@@ -49,19 +90,97 @@ def _as_positive_float(val: Any) -> float | None:
     return None
 
 
-def extract_assessed_land_usd(raw: Any) -> float | None:
-    """Return first positive land-value mark from a listing.raw blob (any nesting)."""
+def _blobs(raw: Any) -> list[dict]:
     if not isinstance(raw, dict):
-        return None
+        return []
     blobs: list[dict] = [raw]
     inner = raw.get("raw")
     if isinstance(inner, dict):
         blobs.append(inner)
+    return blobs
+
+
+def _first_key(blobs: list[dict], keys: tuple[str, ...]) -> float | None:
     for blob in blobs:
-        for key in _LAND_VALUE_KEYS:
+        for key in keys:
             num = _as_positive_float(blob.get(key))
             if num is not None:
                 return num
+    return None
+
+
+def raw_has_improvement_value(raw: Any) -> bool:
+    """True when CAD reports a positive building / improvement dollar mark."""
+    return _first_key(_blobs(raw), _IMPROVEMENT_VALUE_KEYS) is not None
+
+
+def extract_assessed_land_usd(raw: Any) -> float | None:
+    """Return best land-value mark from a listing.raw blob (any nesting).
+
+    Prefers land-only fields. Falls back to total assessed ONLY when the blob
+    shows no improvement dollars — otherwise totals would overstate vacant land
+    or understate a home (depending on misuse).
+    """
+    blobs = _blobs(raw)
+    if not blobs:
+        return None
+    land = _first_key(blobs, _LAND_ONLY_KEYS)
+    if land is not None:
+        return land
+    if raw_has_improvement_value(raw):
+        # Improved parcel with no land-only field — do not invent a vacant ask
+        # from the whole-property total.
+        return None
+    return _first_key(blobs, _TOTAL_VALUE_KEYS)
+
+
+def extract_assessed_total_usd(raw: Any) -> float | None:
+    """Whole-parcel assessed / market total when present."""
+    return _first_key(_blobs(raw), _TOTAL_VALUE_KEYS)
+
+
+def resolve_budget_filter_usd(
+    *,
+    ask: float | None = None,
+    raw: Any = None,
+    estimated_value_usd: float | None = None,
+    has_structure: bool = False,
+    ask_role: str | None = None,
+    auction_settle_usd: float | None = None,
+) -> float | None:
+    """Dollar used for price-band filters — as honest as available data allows.
+
+    - Auction settle when known (what you actually pay).
+    - Published ask when it is a real list / opener (not land-AV-with-home).
+    - Property on site + land AV only → total assessed, else model mark
+      (never the land-only teaser as a whole-home budget).
+    - Vacant GIS → land assessed ask / land extract.
+    """
+    settle = _as_positive_float(auction_settle_usd)
+    if settle is not None:
+        return float(settle)
+
+    role = str(ask_role or "").strip().lower()
+    ask_n = _as_positive_float(ask)
+    land_av_role = role in {"assessed_land", "assessed", "land_av", "tax_assessed"}
+    est = _as_positive_float(estimated_value_usd)
+
+    # Homes with only a land-assessment mark: land AV is NOT the buy price.
+    if has_structure and land_av_role:
+        total = extract_assessed_total_usd(raw)
+        if total is not None:
+            return float(total)
+        if est is not None:
+            return float(est)
+        # No honest whole-property dollars — unknown (fail closed when band set).
+        return None
+
+    if ask_n is not None:
+        return float(ask_n)
+
+    assessed = extract_assessed_land_usd(raw)
+    if assessed is not None:
+        return float(assessed)
     return None
 
 
