@@ -51,6 +51,7 @@ function LotFace({ lot }: { lot: LotCard }) {
     <>
       <div className="la-solo-lot-state">{lot.state}</div>
       <div className="la-solo-lot-acres">{lot.acres}</div>
+      <div className="la-solo-lot-price">{lot.price}</div>
     </>
   );
 }
@@ -174,7 +175,7 @@ export function LandAlertsLoader({
             glassMood === "pass" ? " is-no" : ""
           }`}
         >
-          <MagnifierIcon size={28} />
+          <MagnifierIcon size={40} />
           <span className="la-solo-glass-beam" />
         </div>
         <div className="land-scan" />

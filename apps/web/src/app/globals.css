@@ -7090,9 +7090,9 @@ a.acquire-block:hover {
   position: absolute;
   left: 50%;
   top: 52%;
-  width: 3.35rem;
-  padding: 0.28rem 0.32rem 0.26rem;
-  border-radius: 7px;
+  width: 6.6rem;
+  padding: 0.38rem 0.55rem 0.34rem;
+  border-radius: 9px;
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.3);
   color: #f7f8f9;
@@ -7116,23 +7116,28 @@ a.acquire-block:hover {
 
 .la-solo-lot-state {
   margin-top: 0;
-  font-size: 0.48rem;
+  font-size: 0.58rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   opacity: 0.88;
 }
 
 .la-solo-lot-acres {
-  margin-top: 0.1rem;
-  font-size: 0.68rem;
+  margin-top: 0.12rem;
+  font-size: 0.92rem;
   font-weight: 650;
   line-height: 1.05;
   color: #fff;
 }
 
 .la-solo-lot-price {
-  display: none;
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.88);
 }
 
 .la-solo-lot.is-exit {
@@ -7155,16 +7160,16 @@ a.acquire-block:hover {
 
 .la-solo-stamp {
   position: absolute;
-  right: -0.15rem;
-  top: -0.2rem;
+  right: -0.28rem;
+  top: -0.28rem;
   border-radius: 999px;
   display: grid;
   place-items: center;
-  font-size: 0.48rem;
+  font-size: 0.58rem;
   font-weight: 750;
   letter-spacing: 0.06em;
   line-height: 1;
-  padding: 0.14rem 0.28rem;
+  padding: 0.18rem 0.38rem;
   border: 1px solid rgba(255, 255, 255, 0.35);
   background: rgba(0, 0, 0, 0.35);
   color: #fff;
@@ -7187,7 +7192,7 @@ a.acquire-block:hover {
   left: 50%;
   top: 46%;
   color: #ffffff;
-  transform: translate3d(-42%, -58%, 0) scale(0.7);
+  transform: translate3d(-42%, -58%, 0) scale(0.92);
   animation: la-solo-glass-hunt 3.2s ease-in-out infinite;
   z-index: 30;
   pointer-events: none;
@@ -7291,34 +7296,34 @@ a.acquire-block:hover {
 @keyframes la-solo-glass-hunt {
   0%,
   100% {
-    transform: translate3d(-48%, -52%, 0) scale(0.7) rotate(-6deg);
+    transform: translate3d(-48%, -52%, 0) scale(0.92) rotate(-6deg);
   }
   50% {
-    transform: translate3d(-40%, -60%, 0) scale(0.7) rotate(3deg);
+    transform: translate3d(-40%, -60%, 0) scale(0.92) rotate(3deg);
   }
 }
 
 @keyframes la-solo-glass-yes {
   0% {
-    transform: translate3d(-42%, -58%, 0) scale(0.7);
+    transform: translate3d(-42%, -58%, 0) scale(0.92);
   }
   50% {
-    transform: translate3d(-42%, -46%, 0) scale(0.76);
+    transform: translate3d(-42%, -46%, 0) scale(1);
   }
   100% {
-    transform: translate3d(-42%, -58%, 0) scale(0.7);
+    transform: translate3d(-42%, -58%, 0) scale(0.92);
   }
 }
 
 @keyframes la-solo-glass-no {
   0% {
-    transform: translate3d(-42%, -58%, 0) scale(0.7);
+    transform: translate3d(-42%, -58%, 0) scale(0.92);
   }
   50% {
-    transform: translate3d(-62%, -54%, 0) scale(0.64) rotate(-10deg);
+    transform: translate3d(-62%, -54%, 0) scale(0.84) rotate(-10deg);
   }
   100% {
-    transform: translate3d(-42%, -58%, 0) scale(0.7);
+    transform: translate3d(-42%, -58%, 0) scale(0.92);
   }
 }
 
