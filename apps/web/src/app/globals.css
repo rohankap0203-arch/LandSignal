@@ -7291,34 +7291,34 @@ a.acquire-block:hover {
 @keyframes la-solo-glass-hunt {
   0%,
   100% {
-    transform: translate3d(-48%, -52%, 0) scale(0.78) rotate(-6deg);
+    transform: translate3d(-48%, -52%, 0) scale(0.7) rotate(-6deg);
   }
   50% {
-    transform: translate3d(-40%, -60%, 0) scale(0.78) rotate(3deg);
+    transform: translate3d(-40%, -60%, 0) scale(0.7) rotate(3deg);
   }
 }
 
 @keyframes la-solo-glass-yes {
   0% {
-    transform: translate3d(-42%, -58%, 0) scale(0.78);
+    transform: translate3d(-42%, -58%, 0) scale(0.7);
   }
   50% {
-    transform: translate3d(-42%, -46%, 0) scale(0.84);
+    transform: translate3d(-42%, -46%, 0) scale(0.76);
   }
   100% {
-    transform: translate3d(-42%, -58%, 0) scale(0.78);
+    transform: translate3d(-42%, -58%, 0) scale(0.7);
   }
 }
 
 @keyframes la-solo-glass-no {
   0% {
-    transform: translate3d(-42%, -58%, 0) scale(0.78);
+    transform: translate3d(-42%, -58%, 0) scale(0.7);
   }
   50% {
-    transform: translate3d(-62%, -54%, 0) scale(0.72) rotate(-10deg);
+    transform: translate3d(-62%, -54%, 0) scale(0.64) rotate(-10deg);
   }
   100% {
-    transform: translate3d(-42%, -58%, 0) scale(0.78);
+    transform: translate3d(-42%, -58%, 0) scale(0.7);
   }
 }
 
