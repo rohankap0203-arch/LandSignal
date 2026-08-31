@@ -7037,20 +7037,36 @@ a.acquire-block:hover {
 }
 
 .la-solo-hud-status.is-match {
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.55);
-  background: rgba(255, 255, 255, 0.14);
+  color: #d8ffe8;
+  border-color: rgba(90, 200, 140, 0.65);
+  background: rgba(60, 150, 100, 0.28);
 }
 
 .la-solo-hud-status.is-pass {
-  color: rgba(255, 255, 255, 0.7);
-  border-color: rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.04);
+  color: #ffd4ce;
+  border-color: rgba(230, 100, 90, 0.65);
+  background: rgba(160, 50, 45, 0.28);
 }
 
 .la-solo-lots {
   position: absolute;
   inset: 0;
+  pointer-events: none;
+}
+
+/* Soft “filed” tray at the bottom for approved lots */
+.la-solo-stage::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 0.45rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(90, 200, 140, 0.35), rgba(90, 200, 140, 0.08));
+  box-shadow: 0 0 18px rgba(90, 200, 140, 0.2);
+  opacity: 0.7;
+  z-index: 5;
   pointer-events: none;
 }
 
@@ -7074,6 +7090,7 @@ a.acquire-block:hover {
     border-color 240ms ease,
     background 240ms ease;
   z-index: calc(20 - var(--slot));
+  will-change: transform, opacity;
 }
 
 .la-solo-lot.slot-0 {
@@ -7115,18 +7132,18 @@ a.acquire-block:hover {
   opacity: 0.8;
 }
 
+/* KEEP — green flash, then file / deposit downward into the tray */
 .la-solo-lot.is-match {
-  border-color: rgba(255, 255, 255, 0.7);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.1));
-  transform: translate(42%, -78%) scale(0.92) rotate(6deg);
-  opacity: 0;
+  z-index: 40;
+  outline: none;
+  animation: la-solo-file-down 0.62s cubic-bezier(0.22, 0.82, 0.28, 1) forwards;
 }
 
+/* SKIP — red flash, then hard toss left off-stage */
 .la-solo-lot.is-pass {
-  border-color: rgba(255, 255, 255, 0.25);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
-  transform: translate(-130%, -20%) scale(0.86) rotate(-8deg);
-  opacity: 0;
+  z-index: 40;
+  outline: none;
+  animation: la-solo-toss-left 0.58s cubic-bezier(0.18, 0.7, 0.25, 1) forwards;
 }
 
 .la-solo-stamp {
@@ -7147,14 +7164,15 @@ a.acquire-block:hover {
 }
 
 .la-solo-stamp.is-match {
-  background: rgba(255, 255, 255, 0.92);
-  color: #111;
-  border-color: #fff;
+  background: rgba(72, 190, 120, 0.95);
+  color: #062214;
+  border-color: rgba(180, 255, 210, 0.9);
 }
 
 .la-solo-stamp.is-pass {
-  background: rgba(0, 0, 0, 0.45);
-  color: rgba(255, 255, 255, 0.85);
+  background: rgba(210, 78, 70, 0.95);
+  color: #fff;
+  border-color: rgba(255, 180, 170, 0.85);
 }
 
 .la-solo-glass {
@@ -7170,12 +7188,12 @@ a.acquire-block:hover {
 }
 
 .la-solo-glass.is-yes {
-  color: #fff;
+  color: #9aecc0;
   animation: la-solo-glass-yes 0.45s ease-out;
 }
 
 .la-solo-glass.is-no {
-  color: rgba(255, 255, 255, 0.72);
+  color: #f0a39a;
   animation: la-solo-glass-no 0.45s ease-out;
 }
 
@@ -7198,6 +7216,62 @@ a.acquire-block:hover {
   background: rgba(255, 255, 255, 0.75);
 }
 
+@keyframes la-solo-toss-left {
+  0% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 1;
+    border-color: rgba(230, 100, 90, 0.95);
+    background: linear-gradient(180deg, rgba(210, 70, 60, 0.55), rgba(120, 35, 30, 0.4));
+    box-shadow:
+      0 0 0 2px rgba(230, 90, 80, 0.55),
+      0 12px 28px rgba(0, 0, 0, 0.4);
+  }
+  22% {
+    transform: translate(-58%, -62%) scale(1.04) rotate(-12deg);
+    opacity: 1;
+    border-color: rgba(255, 120, 110, 1);
+    box-shadow:
+      0 0 0 3px rgba(230, 90, 80, 0.45),
+      0 0 24px rgba(230, 80, 70, 0.45);
+  }
+  100% {
+    transform: translate(-220%, -18%) scale(0.78) rotate(-28deg);
+    opacity: 0;
+    border-color: rgba(230, 100, 90, 0.5);
+    background: linear-gradient(180deg, rgba(180, 55, 50, 0.35), rgba(90, 30, 28, 0.2));
+  }
+}
+
+@keyframes la-solo-file-down {
+  0% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 1;
+    border-color: rgba(90, 200, 140, 0.95);
+    background: linear-gradient(180deg, rgba(70, 180, 120, 0.5), rgba(40, 110, 75, 0.35));
+    box-shadow:
+      0 0 0 2px rgba(90, 200, 140, 0.5),
+      0 12px 28px rgba(0, 0, 0, 0.35);
+  }
+  28% {
+    transform: translate(-50%, -58%) scale(1.05) rotate(2deg);
+    opacity: 1;
+    border-color: rgba(140, 230, 180, 1);
+    box-shadow:
+      0 0 0 3px rgba(90, 200, 140, 0.4),
+      0 0 26px rgba(90, 200, 140, 0.4);
+  }
+  62% {
+    transform: translate(-50%, 18%) scale(0.9) rotate(0deg);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(-50%, 78%) scale(0.72) rotate(0deg);
+    opacity: 0;
+    border-color: rgba(90, 200, 140, 0.45);
+    background: linear-gradient(180deg, rgba(70, 180, 120, 0.28), rgba(40, 110, 75, 0.18));
+  }
+}
+
 @keyframes la-solo-glass-hunt {
   0%,
   100% {
@@ -7216,7 +7290,7 @@ a.acquire-block:hover {
     transform: translate(-42%, -58%) scale(1);
   }
   50% {
-    transform: translate(-30%, -72%) scale(1.08);
+    transform: translate(-42%, -42%) scale(1.06);
   }
   100% {
     transform: translate(-42%, -58%) scale(1);
@@ -7228,7 +7302,7 @@ a.acquire-block:hover {
     transform: translate(-42%, -58%) scale(1);
   }
   50% {
-    transform: translate(-62%, -48%) scale(0.94) rotate(-12deg);
+    transform: translate(-68%, -52%) scale(0.94) rotate(-14deg);
   }
   100% {
     transform: translate(-42%, -58%) scale(1);
@@ -7250,7 +7324,9 @@ a.acquire-block:hover {
 @media (prefers-reduced-motion: reduce) {
   .la-solo-glass,
   .la-solo-glass-beam,
-  .la-solo-lot {
+  .la-solo-lot,
+  .la-solo-lot.is-match,
+  .la-solo-lot.is-pass {
     animation: none !important;
     transition: none !important;
   }
