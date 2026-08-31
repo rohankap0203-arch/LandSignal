@@ -150,9 +150,6 @@ export function LandAlertsLoader({
     <div className="land-alerts-loader is-matching is-solo-scan" role="status" aria-live="polite">
       <div className="la-solo-stage" aria-hidden>
         <div className="la-solo-horizon" />
-        <div className="la-solo-hud">
-          <span className="la-solo-hud-chip">FILTER PASS</span>
-        </div>
 
         <div className="la-solo-lots">
           {queue.map((lot, i) => (
@@ -179,7 +176,7 @@ export function LandAlertsLoader({
             glassMood === "pass" ? " is-no" : ""
           }`}
         >
-          <MagnifierIcon size={72} />
+          <MagnifierIcon size={108} />
           <span className="la-solo-glass-beam" />
         </div>
       </div>

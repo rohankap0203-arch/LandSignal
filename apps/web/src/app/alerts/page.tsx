@@ -975,9 +975,8 @@ export default function LandAlertsPage() {
           <span className="land-alerts-back is-disabled" aria-disabled="true">
             ← Back
           </span>
-          <div className="land-alerts-live is-neutral" title="Running filter pass">
-            <LiveMagnifier size={28} label="Filter pass" />
-            <span>Filter pass</span>
+          <div className="land-alerts-live is-neutral" title="Matching land">
+            <LiveMagnifier size={28} label="Matching land" />
           </div>
         </div>
         <LandAlertsLoader mode="matching" />
