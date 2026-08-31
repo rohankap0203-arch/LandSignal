@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FilterField } from "@/components/filter-field";
 import { HeroSelect } from "@/components/hero-select";
 import { UsedByStrip } from "@/components/used-by-strip";
