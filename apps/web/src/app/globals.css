@@ -373,21 +373,23 @@ select {
 .used-by-logos {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: center; /* vertically center logo marks in the row */
   justify-content: center;
-  gap: 1.25rem 3.5rem;
+  column-gap: 3.25rem;
+  row-gap: 1.25rem;
   margin: 0;
   padding: 0;
   list-style: none;
   width: 100%;
-  max-width: 62rem;
+  max-width: 60rem; /* keeps the strip to two rows with wider gaps */
 }
 
 .used-by-logo {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 2.55rem;
+  /* Shared row height so letterforms sit on one vertical center line */
+  height: 3.25rem;
   text-decoration: none;
   opacity: 0.92;
   transition:
@@ -397,46 +399,85 @@ select {
 
 .used-by-logo img {
   display: block;
-  height: 100%;
+  height: auto;
+  max-height: 100%;
   width: auto;
   max-width: 10.5rem;
   object-fit: contain;
+  object-position: center;
 }
 
-/* Square brand marks read smaller — give them more height */
-.used-by-logo--landwatch,
-.used-by-logo--usagov {
-  height: 3.15rem;
+/* Square LW — compact horizontal footprint */
+.used-by-logo--landwatch {
+  margin-inline: 0;
 }
 
-.used-by-logo--landwatch img,
-.used-by-logo--usagov img {
-  max-width: 3.15rem;
-}
-
-.used-by-logo--landcom {
-  height: 3.25rem;
+.used-by-logo--landwatch img {
+  max-height: 3rem;
+  max-width: 3rem;
+  /* Sit a touch below the shared letter centerline */
+  transform: translateY(0.48rem);
 }
 
 .used-by-logo--landcom img {
-  max-width: 15.5rem;
+  max-height: 2.35rem;
+  max-width: 13.5rem;
 }
 
-.used-by-logo--zillow {
-  height: 1.8rem;
-}
-
-.used-by-logo--realtorcom {
-  height: 2.25rem;
+.used-by-logo--zillow img {
+  max-height: 1.55rem;
+  max-width: 8.5rem;
 }
 
 .used-by-logo--realtorcom img {
-  max-width: 12.5rem;
+  max-height: 1.75rem;
+  max-width: 11rem;
+}
+
+/* Dome sits above the shared letter centerline; nudge so “GovDeals” text aligns */
+.used-by-logo--govdeals img {
+  max-height: 3.15rem;
+  max-width: 9.5rem;
+  transform: translateY(-0.28rem);
 }
 
 .used-by-logo:hover {
   opacity: 1;
   transform: translateY(-1px);
+}
+
+/* Must beat `.used-by-logo img { display: block }` or both light+dark marks show. */
+.used-by-logo .used-by-logo-img--dark {
+  display: none;
+}
+
+/* Dark mode: white label + white-tone logos. LW / GovDeals use dedicated
+   dark assets (CSS invert flattens their internal detail / adds fringe). */
+[data-theme="dark"] .used-by-label {
+  color: #ffffff;
+}
+
+[data-theme="dark"] .used-by-logo {
+  opacity: 1;
+}
+
+[data-theme="dark"] .used-by-logo:not(.used-by-logo--landwatch):not(.used-by-logo--govdeals) img {
+  filter: brightness(0) invert(1);
+}
+
+[data-theme="dark"] .used-by-logo--landwatch .used-by-logo-img--light,
+[data-theme="dark"] .used-by-logo--govdeals .used-by-logo-img--light {
+  display: none;
+}
+
+[data-theme="dark"] .used-by-logo--landwatch .used-by-logo-img--dark,
+[data-theme="dark"] .used-by-logo--govdeals .used-by-logo-img--dark {
+  display: block;
+  filter: none;
+}
+
+[data-theme="dark"] .used-by-logo:hover {
+  opacity: 0.92;
 }
 
 @media (max-width: 640px) {
@@ -446,29 +487,43 @@ select {
   }
 
   .used-by-logos {
-    gap: 1.05rem 2.15rem;
+    column-gap: 2.15rem;
+    row-gap: 1.1rem;
+    max-width: 100%;
   }
 
+  /* Keep one shared row height so marks stay vertically centered */
   .used-by-logo {
-    height: 2.15rem;
+    height: 2.7rem;
   }
 
-  .used-by-logo--landwatch,
-  .used-by-logo--usagov {
-    height: 2.65rem;
+  .used-by-logo--landwatch {
+    margin-inline: 0;
   }
 
-  .used-by-logo--landwatch img,
-  .used-by-logo--usagov img {
+  .used-by-logo--landwatch img {
+    max-height: 2.65rem;
     max-width: 2.65rem;
-  }
-
-  .used-by-logo--landcom {
-    height: 2.75rem;
+    transform: translateY(0.36rem);
   }
 
   .used-by-logo--landcom img {
-    max-width: 13rem;
+    max-height: 2.15rem;
+    max-width: 11.5rem;
+  }
+
+  .used-by-logo--zillow img {
+    max-height: 1.35rem;
+  }
+
+  .used-by-logo--realtorcom img {
+    max-height: 1.55rem;
+  }
+
+  .used-by-logo--govdeals img {
+    max-height: 2.55rem;
+    max-width: 8.25rem;
+    transform: translateY(-0.2rem);
   }
 
   .used-by-logo img {
@@ -482,6 +537,7 @@ select {
   gap: 12px;
   margin-top: 22px;
   overflow: visible;
+  overflow-anchor: none;
 }
 
 .filter-field {
@@ -776,6 +832,7 @@ select {
   max-height: min(16.5rem, 48vh);
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   border-radius: 14px;
   border: 1px solid rgba(247, 250, 248, 0.16);
   background:
@@ -7731,8 +7788,7 @@ html.land-viewer-open body {
   display: none !important;
 }
 
-.parcel-map-expand,
-.parcel-map-view-images {
+.parcel-map-expand {
   position: absolute;
   right: 0.65rem;
   z-index: 500;
@@ -7778,36 +7834,6 @@ html.land-viewer-open body {
 
 .parcel-map-expand:active {
   transform: scale(0.96);
-}
-
-.parcel-map-view-images {
-  bottom: 0.65rem;
-  overflow: hidden;
-  border: 1.5px solid #fff;
-  background: #1a4a2e;
-}
-
-.parcel-map-view-images:hover {
-  transform: translateY(-1px) scale(1.04);
-  border-color: #fff;
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.34);
-}
-
-.parcel-map-view-images:active {
-  transform: scale(0.96);
-}
-
-.parcel-map-view-images-art {
-  display: block;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-.parcel-map-view-images-art svg {
-  display: block;
-  width: 100%;
-  height: 100%;
 }
 
 .land-viewer-map {
@@ -8107,8 +8133,7 @@ html.land-viewer-open body {
     font-size: 0 !important;
   }
 
-  .parcel-map-expand,
-  .parcel-map-view-images {
+  .parcel-map-expand {
     box-sizing: border-box;
     width: 2.2rem;
     height: 2.2rem;
@@ -8119,10 +8144,6 @@ html.land-viewer-open body {
 
   .parcel-map-expand {
     top: 0.5rem;
-  }
-
-  .parcel-map-view-images {
-    bottom: 0.5rem;
   }
 
   .parcel-map-expand svg {

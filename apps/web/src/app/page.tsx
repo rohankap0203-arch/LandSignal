@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FilterField } from "@/components/filter-field";
 import { HeroSelect } from "@/components/hero-select";
 import { UsedByStrip } from "@/components/used-by-strip";
@@ -316,15 +316,18 @@ export default function SearchPage() {
     [filtersFromForm, form, scrollToUsedByStrip],
   );
 
-  // Step 2: the instant results paint, scroll again so Used-by is off-screen and Scouted opportunities is on top.
+  // Step 2: once per finished search, bring "Scouted opportunities" under the sticky header.
+  // Do not re-run on later rows.length noise — that fought users scrolling the filters/results.
+  const searchScrollGen = useRef(0);
   useEffect(() => {
     if (!hasSearched || loading) return;
-    let cancelled = false;
+    const gen = ++searchScrollGen.current;
     const t1 = window.setTimeout(() => {
-      if (!cancelled) scrollToScoutedOpportunities("smooth");
+      if (searchScrollGen.current !== gen) return;
+      scrollToScoutedOpportunities("smooth");
     }, 50);
     const t2 = window.setTimeout(() => {
-      if (cancelled) return;
+      if (searchScrollGen.current !== gen) return;
       const heading = document.querySelector("#search-results h2") as HTMLElement | null;
       const header = document.querySelector(".shell-header") as HTMLElement | null;
       if (!heading) return;
@@ -336,11 +339,12 @@ export default function SearchPage() {
       }
     }, 420);
     return () => {
-      cancelled = true;
       window.clearTimeout(t1);
       window.clearTimeout(t2);
     };
-  }, [hasSearched, loading, rows.length, scrollToScoutedOpportunities]);
+    // Intentionally omit rows.length — only when a search finishes (loading → false).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasSearched, loading, scrollToScoutedOpportunities]);
 
   useEffect(() => {
     // Stay naturally connected: poll meta hard at first, auto-start discover if empty.
