@@ -375,13 +375,13 @@ select {
   flex-wrap: wrap;
   align-items: center; /* vertically center logo marks in the row */
   justify-content: center;
-  column-gap: 2.65rem;
-  row-gap: 1.15rem;
+  column-gap: 3.25rem;
+  row-gap: 1.25rem;
   margin: 0;
   padding: 0;
   list-style: none;
   width: 100%;
-  max-width: 56rem; /* keeps the strip to two rows with wider gaps */
+  max-width: 60rem; /* keeps the strip to two rows with wider gaps */
 }
 
 .used-by-logo {
@@ -409,12 +409,12 @@ select {
 
 /* Square LW — compact horizontal footprint */
 .used-by-logo--landwatch {
-  margin-inline: -0.4rem;
+  margin-inline: 0;
 }
 
 .used-by-logo--landwatch img {
-  max-height: 2.55rem;
-  max-width: 2.55rem;
+  max-height: 3rem;
+  max-width: 3rem;
   /* Sit a touch below the shared letter centerline */
   transform: translateY(0.32rem);
 }
@@ -487,8 +487,8 @@ select {
   }
 
   .used-by-logos {
-    column-gap: 1.75rem;
-    row-gap: 1rem;
+    column-gap: 2.15rem;
+    row-gap: 1.1rem;
     max-width: 100%;
   }
 
@@ -498,12 +498,12 @@ select {
   }
 
   .used-by-logo--landwatch {
-    margin-inline: -0.25rem;
+    margin-inline: 0;
   }
 
   .used-by-logo--landwatch img {
-    max-height: 2.25rem;
-    max-width: 2.25rem;
+    max-height: 2.65rem;
+    max-width: 2.65rem;
     transform: translateY(0.24rem);
   }
 
