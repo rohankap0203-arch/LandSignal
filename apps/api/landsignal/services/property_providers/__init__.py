@@ -28,6 +28,8 @@ class IntelligenceProviderState(str, Enum):
 
 class PersistencePolicy(str, Enum):
     TEMPORARY_LICENSED = "TEMPORARY_LICENSED"
+    # Already-captured ATTOM (or similar) IQ kept forever after the live key is gone.
+    RESERVED_LAST_KNOWN = "RESERVED_LAST_KNOWN"
     PERMANENT_INDEPENDENT = "PERMANENT_INDEPENDENT"
     USER_SUPPLIED = "USER_SUPPLIED"
     LANDSIGNAL_MODEL = "LANDSIGNAL_MODEL"

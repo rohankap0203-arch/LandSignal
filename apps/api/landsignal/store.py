@@ -599,6 +599,13 @@ def load_persisted_store(store: MemoryStore) -> int:
                     continue
     except Exception:
         pass
+    # Reattach every ATTOM field a live key once presented (survives key expiry).
+    try:
+        from landsignal.services.property_providers.pipeline import hydrate_attom_memory_into_store
+
+        hydrate_attom_memory_into_store(store)
+    except Exception:
+        pass
     return n
 
 
@@ -613,6 +620,17 @@ def get_store(seed_demo: bool = False) -> MemoryStore:
             structlog.get_logger().info("store_restored_from_disk", parcels=loaded)
         elif seed_demo:
             _STORE.seed_demo()
+        # Always attempt ATTOM reserve hydrate (even on empty/demo) so restarts keep IQ.
+        try:
+            from landsignal.services.property_providers.pipeline import hydrate_attom_memory_into_store
+
+            n_attom = hydrate_attom_memory_into_store(_STORE)
+            if n_attom:
+                import structlog
+
+                structlog.get_logger().info("store_attom_memory_restored", parcels=n_attom)
+        except Exception:
+            pass
     return _STORE
 
 

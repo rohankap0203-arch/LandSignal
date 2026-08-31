@@ -261,6 +261,7 @@ async def analyze_parcel(
                         store.parcels[parcel_id] = parcel
 
     # ATTOM property intelligence (optional, circuit-broken). Never blocks analyze.
+    # Once a live key presents fields, they are reserved forever — key expiry must not erase them.
     attom_patch: dict[str, Any] = {}
     if (
         getattr(settings, "attom_enrich_on_analyze", True)
@@ -271,10 +272,13 @@ async def analyze_parcel(
             from landsignal.services.property_providers.pipeline import (
                 attom_fields_to_enrichment_patch,
                 enrich_with_attom,
+                prior_attom_ok,
+                snapshot_attom_enrichment,
             )
 
             attom_res = await enrich_with_attom(
                 {
+                    "parcel_id": str(parcel_id),
                     "apn": parcel.apn,
                     "address": parcel.address,
                     "state": parcel.state,
@@ -286,61 +290,143 @@ async def analyze_parcel(
                 },
                 deep=True,
                 settings=settings,
+                parcel_key=str(parcel_id),
             )
             if attom_res.get("ok"):
-                attom_patch = attom_fields_to_enrichment_patch(attom_res.get("fields") or {})
-                try:
-                    from landsignal.services.property_providers.pipeline import snapshot_attom_enrichment
-
-                    snapshot_attom_enrichment(
-                        parcel_key=str(parcel_id),
-                        fields=attom_res.get("fields") or {},
-                        meta={
-                            "state": attom_res.get("state"),
-                            "data_confidence": attom_res.get("data_confidence"),
-                            "apn": parcel.apn,
-                            "state_code": parcel.state,
-                            "county": parcel.county,
-                        },
-                    )
-                except Exception:
-                    pass
+                fields = attom_res.get("fields") or {}
+                attom_patch = attom_fields_to_enrichment_patch(fields)
+                from_memory = bool(attom_res.get("from_memory"))
+                if not from_memory:
+                    try:
+                        snapshot_attom_enrichment(
+                            parcel_key=str(parcel_id),
+                            fields=fields,
+                            meta={
+                                "state": attom_res.get("state"),
+                                "data_confidence": attom_res.get("data_confidence"),
+                                "apn": parcel.apn,
+                                "state_code": parcel.state,
+                                "county": parcel.county,
+                            },
+                        )
+                    except Exception:
+                        pass
                 # Authoritative acreage from ATTOM lotSize1 when parcel acres missing
                 if (parcel.acreage is None or parcel.acreage <= 0) and attom_patch.get("attom_acreage"):
                     parcel.acreage = float(attom_patch["attom_acreage"])
                     store.parcels[parcel_id] = parcel
-                if not parcel.apn and (attom_res.get("fields") or {}).get("apn"):
-                    apn_v = (attom_res.get("fields") or {}).get("apn")
-                    # apn may be raw string in id search; detail uses licensed field sometimes
+                if not parcel.apn and fields.get("apn"):
+                    apn_v = fields.get("apn")
                     parcel.apn = apn_v if isinstance(apn_v, str) else None
                     store.parcels[parcel_id] = parcel
-                # Stash temporary licensed snapshot on enrichment.other (TTL metadata inside fields)
+                policy = (
+                    "RESERVED_LAST_KNOWN"
+                    if from_memory
+                    else "TEMPORARY_LICENSED"
+                )
                 existing.other = Provenanced(
                     value={
                         "attom": {
                             "ok": True,
                             "state": attom_res.get("state"),
-                            "fields": attom_res.get("fields"),
+                            "fields": fields,
                             "data_confidence": attom_res.get("data_confidence"),
                             "improved": attom_res.get("improved"),
-                            "persistencePolicy": "TEMPORARY_LICENSED",
+                            "from_memory": from_memory,
+                            "saved_at": attom_res.get("saved_at"),
+                            "persistencePolicy": policy,
                         }
                     },
                     knowledge_state=KnowledgeState.KNOWN,
-                    confidence=0.85,
-                    source="ATTOM",
+                    confidence=0.85 if not from_memory else 0.8,
+                    source="ATTOM:MEMORY" if from_memory else "ATTOM",
                     retrieved_at=datetime.now(timezone.utc),
                 )
             else:
-                existing.other = Provenanced(
-                    value={"attom": {"ok": False, "state": attom_res.get("state"), "error": attom_res.get("error")}},
-                    knowledge_state=KnowledgeState.TEMPORARILY_UNAVAILABLE,
-                    confidence=0.2,
-                    source="ATTOM",
-                    retrieved_at=datetime.now(timezone.utc),
-                )
+                # NEVER overwrite successful IQ with a live failure (expired key, auth, circuit).
+                kept = prior_attom_ok(existing.other)
+                if kept:
+                    attom_patch = attom_fields_to_enrichment_patch(kept.get("fields") or {})
+                    value = dict(existing.other.value or {}) if existing.other else {}
+                    attom_blob = dict(value.get("attom") or kept)
+                    attom_blob["live_refresh"] = {
+                        "ok": False,
+                        "state": attom_res.get("state"),
+                        "error": attom_res.get("error"),
+                        "at": datetime.now(timezone.utc).isoformat(),
+                    }
+                    attom_blob["persistencePolicy"] = "RESERVED_LAST_KNOWN"
+                    value["attom"] = attom_blob
+                    existing.other = Provenanced(
+                        value=value,
+                        knowledge_state=KnowledgeState.KNOWN,
+                        confidence=getattr(existing.other, "confidence", None) or 0.8,
+                        source=getattr(existing.other, "source", None) or "ATTOM:MEMORY",
+                        retrieved_at=getattr(existing.other, "retrieved_at", None)
+                        or datetime.now(timezone.utc),
+                    )
+                else:
+                    existing.other = Provenanced(
+                        value={
+                            "attom": {
+                                "ok": False,
+                                "state": attom_res.get("state"),
+                                "error": attom_res.get("error"),
+                            }
+                        },
+                        knowledge_state=KnowledgeState.TEMPORARILY_UNAVAILABLE,
+                        confidence=0.2,
+                        source="ATTOM",
+                        retrieved_at=datetime.now(timezone.utc),
+                    )
         except Exception as exc:  # noqa: BLE001
             log.warning("attom_analyze_hook_failed", error_type=type(exc).__name__)
+            # Still apply reserved IQ to scoring if present after an unexpected hook failure.
+            try:
+                from landsignal.services.property_providers.pipeline import (
+                    attom_fields_to_enrichment_patch,
+                    prior_attom_ok,
+                )
+
+                kept = prior_attom_ok(existing.other)
+                if kept and not attom_patch:
+                    attom_patch = attom_fields_to_enrichment_patch(kept.get("fields") or {})
+            except Exception:
+                pass
+    elif not fast:
+        # Live ATTOM disabled — still surface reserved memory so nothing changes after key loss.
+        try:
+            from landsignal.services.property_providers.pipeline import (
+                attom_fields_to_enrichment_patch,
+                load_attom_snapshot,
+                prior_attom_ok,
+            )
+
+            kept = prior_attom_ok(existing.other)
+            if not kept:
+                snap = load_attom_snapshot(str(parcel_id))
+                if snap and snap.get("fields"):
+                    kept = {"ok": True, "fields": snap["fields"], "from_memory": True}
+            if kept:
+                attom_patch = attom_fields_to_enrichment_patch(kept.get("fields") or {})
+                if not prior_attom_ok(existing.other):
+                    existing.other = Provenanced(
+                        value={
+                            "attom": {
+                                "ok": True,
+                                "state": "RESERVED_MEMORY",
+                                "fields": kept.get("fields"),
+                                "from_memory": True,
+                                "persistencePolicy": "RESERVED_LAST_KNOWN",
+                            }
+                        },
+                        knowledge_state=KnowledgeState.KNOWN,
+                        confidence=0.8,
+                        source="ATTOM:MEMORY",
+                        retrieved_at=datetime.now(timezone.utc),
+                    )
+        except Exception:
+            pass
 
     soil_n = (existing.soil.normalized or existing.soil.value or {}) if existing.soil else {}
     flood_n = (existing.flood.normalized or existing.flood.value or {}) if existing.flood else {}
