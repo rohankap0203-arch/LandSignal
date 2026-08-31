@@ -6993,6 +6993,7 @@ a.acquire-block:hover {
 
 .land-alerts-loader.is-solo-scan .land-alerts-loader-copy {
   margin-top: 0.35rem;
+  text-align: center;
 }
 
 .la-solo-horizon {
@@ -7203,10 +7204,6 @@ a.acquire-block:hover {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.18);
   animation: la-solo-beam 2s ease-in-out infinite;
-}
-
-.land-alerts-loader.is-solo-scan .land-alerts-loader-copy {
-  text-align: center;
 }
 
 .land-alerts-loader.is-solo-scan .land-alerts-loader-title {
