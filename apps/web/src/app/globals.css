@@ -7232,7 +7232,7 @@ a.acquire-block:hover {
   display: inline-block;
   min-width: 1.35em;
   text-align: left;
-  color: var(--ink);
+  color: var(--brand);
 }
 
 .land-alerts-loader.is-solo-scan .land-alerts-loader-ellipsis::after {
