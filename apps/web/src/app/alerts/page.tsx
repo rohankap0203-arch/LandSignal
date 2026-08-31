@@ -426,14 +426,19 @@ function MatchCard({
           aria-expanded={flipped}
           aria-label={`Flip card for ${row.property_name}`}
         >
-          <div
-            className={`land-alert-card-media${row.imagery_url ? "" : " land-alert-card-media-fallback"}`}
-            aria-hidden
-          >
-            {row.imagery_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={row.imagery_url} alt="" loading="lazy" decoding="async" />
-            ) : null}
+          <div className="land-alert-card-media" aria-hidden>
+            <picture>
+              <source srcSet="/brand/land-alert-aerial.webp" type="image/webp" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/brand/land-alert-aerial.jpg"
+                alt=""
+                width={960}
+                height={300}
+                decoding="async"
+                fetchPriority="low"
+              />
+            </picture>
             <div className="land-alert-card-media-wash" />
             <div className="land-alert-card-media-fade" />
           </div>
@@ -970,7 +975,7 @@ export default function LandAlertsPage() {
 
   if (saving) {
     return (
-      <div className="land-alerts-page space-y-4">
+      <div className="land-alerts-page land-alerts-page-loading space-y-2">
         <div className="land-alerts-topbar">
           <span className="land-alerts-back is-disabled" aria-disabled="true">
             ← Back

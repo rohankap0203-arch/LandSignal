@@ -6969,8 +6969,11 @@ a.acquire-block:hover {
 }
 
 /* Solo magnifying-glass lot scanner — GPU-friendly, stable nodes */
-.land-alerts-loader.is-solo-scan {
+.land-alerts-loader.is-solo-scan,
+.land-alerts-loader.is-matching.is-solo-scan {
   max-width: 44rem;
+  margin: 0.1rem auto 0;
+  padding: 0.45rem 0.9rem 0.55rem;
   background:
     radial-gradient(circle at 50% 28%, rgba(255, 255, 255, 0.07), transparent 48%),
     var(--bg-elevated);
@@ -6979,13 +6982,17 @@ a.acquire-block:hover {
 .la-solo-stage {
   position: relative;
   height: 22rem;
-  margin: 0.15rem 0 0.85rem;
+  margin: 0;
   border-radius: 20px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: linear-gradient(180deg, #1a1d21 0%, #121417 55%, #0e1012 100%);
   contain: layout paint;
   transform: translateZ(0);
+}
+
+.land-alerts-loader.is-solo-scan .land-alerts-loader-copy {
+  margin-top: 0.35rem;
 }
 
 .la-solo-horizon {
@@ -7510,11 +7517,12 @@ a.acquire-block:hover {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center 42%;
   display: block;
-  /* Pull satellite toward faded rural pasture — softer, less urban-hard */
-  filter: saturate(0.58) contrast(0.9) brightness(1.08) sepia(0.32) hue-rotate(26deg);
-  transform: scale(1.05);
-  opacity: 0.88;
+  /* Soft pastoral cast over the shared artificial aerial */
+  filter: saturate(0.72) contrast(0.94) brightness(1.04) sepia(0.18) hue-rotate(18deg);
+  transform: scale(1.02);
+  opacity: 0.95;
 }
 
 .land-alert-card-media-wash {
