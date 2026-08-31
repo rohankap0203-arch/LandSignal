@@ -176,7 +176,7 @@ export function LandAlertsLoader({
             glassMood === "pass" ? " is-no" : ""
           }`}
         >
-          <MagnifierIcon size={64} />
+          <MagnifierIcon size={48} />
           <span className="la-solo-glass-beam" />
         </div>
       </div>
