@@ -371,16 +371,19 @@ select {
 }
 
 .used-by-logos {
-  display: flex;
-  flex-wrap: wrap;
+  /* 3 columns → 5 logos land on exactly 2 rows (3 + 2) */
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
   align-items: center;
   justify-content: center;
-  gap: 1.25rem 3.5rem;
+  justify-items: center;
+  column-gap: 2.15rem;
+  row-gap: 1.05rem;
   margin: 0;
   padding: 0;
   list-style: none;
   width: 100%;
-  max-width: 62rem;
+  max-width: 58rem;
 }
 
 .used-by-logo {
@@ -403,41 +406,43 @@ select {
   object-fit: contain;
 }
 
-/* Square brand marks read smaller — give them more height */
+/* Square LW — compact horizontal footprint so row 1 fits 3 logos */
 .used-by-logo--landwatch {
-  height: 3.15rem;
+  height: 2.65rem;
+  margin-inline: -0.4rem;
 }
 
 .used-by-logo--landwatch img {
-  max-width: 3.15rem;
+  max-width: 2.65rem;
 }
 
 .used-by-logo--landcom {
-  height: 3.25rem;
+  height: 3rem;
 }
 
 .used-by-logo--landcom img {
-  max-width: 15.5rem;
+  max-width: 13.5rem;
 }
 
 .used-by-logo--zillow {
-  height: 1.8rem;
+  height: 1.7rem;
 }
 
 .used-by-logo--realtorcom {
-  height: 2.25rem;
+  height: 2.1rem;
 }
 
 .used-by-logo--realtorcom img {
-  max-width: 12.5rem;
+  max-width: 11rem;
 }
 
+/* Dome-above GovDeals lockup */
 .used-by-logo--govdeals {
-  height: 2.35rem;
+  height: 3.2rem;
 }
 
 .used-by-logo--govdeals img {
-  max-width: 11.5rem;
+  max-width: 9.5rem;
 }
 
 .used-by-logo:hover {
@@ -486,7 +491,9 @@ select {
   }
 
   .used-by-logos {
-    gap: 1.05rem 2.15rem;
+    grid-template-columns: repeat(2, max-content);
+    column-gap: 1.35rem;
+    row-gap: 0.95rem;
   }
 
   .used-by-logo {
@@ -494,27 +501,28 @@ select {
   }
 
   .used-by-logo--landwatch {
-    height: 2.65rem;
+    height: 2.35rem;
+    margin-inline: -0.3rem;
   }
 
   .used-by-logo--landwatch img {
-    max-width: 2.65rem;
+    max-width: 2.35rem;
   }
 
   .used-by-logo--govdeals {
-    height: 2rem;
+    height: 2.8rem;
   }
 
   .used-by-logo--govdeals img {
-    max-width: 9.5rem;
+    max-width: 8.25rem;
   }
 
   .used-by-logo--landcom {
-    height: 2.75rem;
+    height: 2.55rem;
   }
 
   .used-by-logo--landcom img {
-    max-width: 13rem;
+    max-width: 11.5rem;
   }
 
   .used-by-logo img {

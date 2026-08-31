@@ -35,11 +35,11 @@ const LOGOS = [
   {
     name: "GovDeals",
     href: "https://www.govdeals.com",
-    // Classic lockup: capitol building behind "Gov"
+    // Official-style lockup: capitol dome above GovDeals wordmark
     src: "/brands/govdeals.png",
     srcDark: "/brands/govdeals-dark.png",
-    width: 641,
-    height: 194,
+    width: 447,
+    height: 233,
   },
 ] as const;
 
