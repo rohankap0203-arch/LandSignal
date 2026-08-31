@@ -49,10 +49,8 @@ function makeLot(id: number): LotCard {
 function LotFace({ lot }: { lot: LotCard }) {
   return (
     <>
-      <div className="la-solo-lot-id">{lot.idLabel}</div>
       <div className="la-solo-lot-state">{lot.state}</div>
       <div className="la-solo-lot-acres">{lot.acres}</div>
-      <div className="la-solo-lot-price">{lot.price}</div>
     </>
   );
 }
@@ -64,7 +62,7 @@ const PHASES = [
   "Building match set",
 ] as const;
 
-const QUEUE_LEN = 3;
+const QUEUE_LEN = 1;
 const STEP_MS = 1100;
 const EXIT_MS = 560;
 
@@ -147,8 +145,8 @@ export function LandAlertsLoader({
   }
 
   return (
-    <div className="land-alerts-loader is-matching is-solo-scan" role="status" aria-live="polite">
-      <div className="la-solo-stage" aria-hidden>
+    <div className="land-loader compact land-alerts-solo" role="status" aria-live="polite">
+      <div className="land-loader-stage la-solo-stage" aria-hidden>
         <div className="la-solo-horizon" />
 
         <div className="la-solo-lots">
@@ -176,18 +174,19 @@ export function LandAlertsLoader({
             glassMood === "pass" ? " is-no" : ""
           }`}
         >
-          <MagnifierIcon size={64} />
+          <MagnifierIcon size={28} />
           <span className="la-solo-glass-beam" />
         </div>
+        <div className="land-scan" />
       </div>
 
-      <div className="land-alerts-loader-copy">
-        <div className="display text-xl font-semibold land-alerts-loader-title">
+      <div className="land-loader-copy">
+        <div className="display text-xl font-semibold text-[var(--ink)] land-alerts-loader-title">
           <span>{headline}</span>
           <span className="land-alerts-loader-ellipsis" aria-hidden />
         </div>
         <p className="mt-1 text-sm text-[var(--muted)]">{shownDetail}</p>
-        <div className="land-alerts-loader-dots" aria-hidden>
+        <div className="land-loader-dots" aria-hidden>
           <span />
           <span />
           <span />
