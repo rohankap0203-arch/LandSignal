@@ -7075,13 +7075,13 @@ a.acquire-block:hover {
 .la-solo-stage::after {
   content: "";
   position: absolute;
-  left: 22%;
-  right: 22%;
-  bottom: 0.28rem;
-  height: 0.35rem;
+  left: 28%;
+  right: 28%;
+  bottom: 0.22rem;
+  height: 0.28rem;
   border-radius: 999px;
   background: rgba(90, 200, 140, 0.28);
-  opacity: 0.7;
+  opacity: 0.65;
   z-index: 5;
   pointer-events: none;
 }
@@ -7089,39 +7089,34 @@ a.acquire-block:hover {
 .la-solo-lot {
   position: absolute;
   left: 50%;
-  top: 56%;
-  width: 4.85rem;
-  padding: 0.28rem 0.34rem 0.26rem;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  top: 52%;
+  width: 3.35rem;
+  padding: 0.28rem 0.32rem 0.26rem;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   color: #f7f8f9;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.28);
-  transform: translate3d(-50%, calc(-50% + var(--slot) * 6px), 0)
-    scale(calc(1 - var(--slot) * 0.08));
-  opacity: calc(1 - var(--slot) * 0.16);
-  transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1), opacity 280ms ease;
-  z-index: calc(20 - var(--slot));
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.28);
+  transform: translate3d(-50%, -50%, 0);
+  opacity: 1;
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 240ms ease;
+  z-index: 20;
   backface-visibility: hidden;
+  text-align: center;
 }
 
 .la-solo-lot.slot-0 {
-  border-color: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.32);
+  border-color: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
 .la-solo-lot-id {
-  font-size: 0.46rem;
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.72;
-  font-variant-numeric: tabular-nums;
+  display: none;
 }
 
 .la-solo-lot-state {
-  margin-top: 0.1rem;
-  font-size: 0.5rem;
+  margin-top: 0;
+  font-size: 0.48rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -7129,22 +7124,20 @@ a.acquire-block:hover {
 }
 
 .la-solo-lot-acres {
-  margin-top: 0.08rem;
-  font-size: 0.72rem;
+  margin-top: 0.1rem;
+  font-size: 0.68rem;
   font-weight: 650;
-  line-height: 1.1;
+  line-height: 1.05;
   color: #fff;
 }
 
 .la-solo-lot-price {
-  margin-top: 0.06rem;
-  font-size: 0.58rem;
-  opacity: 0.8;
+  display: none;
 }
 
 .la-solo-lot.is-exit {
   left: 50%;
-  top: 54%;
+  top: 52%;
   z-index: 40;
   --slot: 0;
   transition: none;
@@ -7162,16 +7155,16 @@ a.acquire-block:hover {
 
 .la-solo-stamp {
   position: absolute;
-  right: 0.35rem;
-  top: 0.35rem;
+  right: -0.15rem;
+  top: -0.2rem;
   border-radius: 999px;
   display: grid;
   place-items: center;
-  font-size: 0.58rem;
+  font-size: 0.48rem;
   font-weight: 750;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   line-height: 1;
-  padding: 0.22rem 0.4rem;
+  padding: 0.14rem 0.28rem;
   border: 1px solid rgba(255, 255, 255, 0.35);
   background: rgba(0, 0, 0, 0.35);
   color: #fff;
@@ -7194,7 +7187,7 @@ a.acquire-block:hover {
   left: 50%;
   top: 46%;
   color: #ffffff;
-  transform: translate3d(-42%, -58%, 0) scale(0.78);
+  transform: translate3d(-42%, -58%, 0) scale(0.7);
   animation: la-solo-glass-hunt 3.2s ease-in-out infinite;
   z-index: 30;
   pointer-events: none;

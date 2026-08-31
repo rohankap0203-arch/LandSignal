@@ -49,10 +49,8 @@ function makeLot(id: number): LotCard {
 function LotFace({ lot }: { lot: LotCard }) {
   return (
     <>
-      <div className="la-solo-lot-id">{lot.idLabel}</div>
       <div className="la-solo-lot-state">{lot.state}</div>
       <div className="la-solo-lot-acres">{lot.acres}</div>
-      <div className="la-solo-lot-price">{lot.price}</div>
     </>
   );
 }
@@ -64,7 +62,7 @@ const PHASES = [
   "Building match set",
 ] as const;
 
-const QUEUE_LEN = 3;
+const QUEUE_LEN = 1;
 const STEP_MS = 1100;
 const EXIT_MS = 560;
 
@@ -176,7 +174,7 @@ export function LandAlertsLoader({
             glassMood === "pass" ? " is-no" : ""
           }`}
         >
-          <MagnifierIcon size={36} />
+          <MagnifierIcon size={28} />
           <span className="la-solo-glass-beam" />
         </div>
         <div className="land-scan" />
