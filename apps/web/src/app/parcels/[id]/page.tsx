@@ -289,7 +289,7 @@ export default function ParcelIntelligencePage() {
     <div className="intel-page space-y-5">
       <div className="intel-page-nav">
         <Link
-          href={fromAlerts ? "/alerts" : "/"}
+          href={fromAlerts ? "/alerts?view=matches" : "/"}
           className="text-sm text-[var(--muted)] hover:text-[var(--brand)]"
         >
           {fromAlerts ? "← Back to Land Alerts" : "← Back to results"}

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
 import { HelpTip } from "@/components/filter-field";
@@ -553,6 +554,8 @@ function MatchCard({
 }
 
 export default function LandAlertsPage() {
+  const searchParams = useSearchParams();
+  const openMatches = searchParams.get("view") === "matches";
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
@@ -593,8 +596,8 @@ export default function LandAlertsPage() {
         setProfileId(String(p.id));
         setPaused(Boolean(p.paused));
         setHasProfile(true);
-        // Always land on the acquisition parameters page when opening Land Alerts.
-        setEditing(true);
+        // Prefer matches when returning from a parcel report; otherwise open the form.
+        setEditing(!openMatches);
         const nextBudgetMin = prefs.budget_min != null ? String(prefs.budget_min) : "";
         const nextBudgetMax = prefs.budget_max != null ? String(prefs.budget_max) : "";
         const nextAcresMin = prefs.acres_min != null ? String(prefs.acres_min) : "";
@@ -658,11 +661,16 @@ export default function LandAlertsPage() {
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Could not load Land Alerts");
     }
-  }, []);
+  }, [openMatches]);
 
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+
+  // If the URL asks for matches after hydrate already ran, flip out of the editor.
+  useEffect(() => {
+    if (openMatches && hasProfile) setEditing(false);
+  }, [openMatches, hasProfile]);
 
   const visible = useMemo(() => {
     if (tab === "saved") {
