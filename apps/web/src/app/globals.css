@@ -6958,9 +6958,12 @@ a.acquire-block:hover {
   }
 }
 
-/* Solo magnifying-glass lot scanner (save → matches) */
+/* Solo magnifying-glass lot scanner (save → matches) — white / tech tone */
 .land-alerts-loader.is-solo-scan {
   max-width: 38rem;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(255, 255, 255, 0.07), transparent 48%),
+    var(--bg-elevated);
 }
 
 .la-solo-stage {
@@ -6969,10 +6972,10 @@ a.acquire-block:hover {
   margin: 0.2rem 0 1.1rem;
   border-radius: 18px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--brand) 24%, var(--line));
+  border: 1px solid rgba(255, 255, 255, 0.18);
   background:
-    radial-gradient(circle at 50% 18%, color-mix(in srgb, var(--brand) 18%, transparent), transparent 42%),
-    linear-gradient(180deg, #163528 0%, #0f241c 55%, #1a2a22 100%);
+    radial-gradient(circle at 50% 12%, rgba(255, 255, 255, 0.12), transparent 40%),
+    linear-gradient(180deg, #1a1d21 0%, #121417 55%, #0e1012 100%);
 }
 
 .la-solo-horizon {
@@ -6982,15 +6985,57 @@ a.acquire-block:hover {
     repeating-linear-gradient(
       90deg,
       transparent 0 18px,
-      rgba(255, 255, 255, 0.035) 18px 19px
+      rgba(255, 255, 255, 0.04) 18px 19px
     ),
     repeating-linear-gradient(
       0deg,
       transparent 0 18px,
-      rgba(255, 255, 255, 0.03) 18px 19px
+      rgba(255, 255, 255, 0.035) 18px 19px
     );
-  opacity: 0.7;
+  opacity: 0.85;
   pointer-events: none;
+}
+
+.la-solo-hud {
+  position: absolute;
+  top: 0.7rem;
+  left: 0.75rem;
+  right: 0.75rem;
+  z-index: 26;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.la-solo-hud-chip,
+.la-solo-hud-status {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  padding: 0.28rem 0.65rem;
+}
+
+.la-solo-hud-status.is-pending {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.la-solo-hud-status.is-match {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.la-solo-hud-status.is-pass {
+  color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .la-solo-lots {
@@ -7002,14 +7047,14 @@ a.acquire-block:hover {
 .la-solo-lot {
   position: absolute;
   left: 50%;
-  top: 42%;
-  width: 6.4rem;
+  top: 46%;
+  width: 7rem;
   padding: 0.55rem 0.6rem 0.5rem;
   border-radius: 12px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  color: #f4faf6;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.07));
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #f7f8f9;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
   transform: translate(-50%, -50%) scale(calc(1 - var(--slot) * 0.08))
     translateY(calc(var(--slot) * 18px)) translateX(calc(var(--slot) * 10px));
   opacity: calc(1 - var(--slot) * 0.16);
@@ -7022,40 +7067,54 @@ a.acquire-block:hover {
 }
 
 .la-solo-lot.slot-0 {
-  outline: 2px solid color-mix(in srgb, var(--brand) 55%, white);
+  outline: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 12px 28px rgba(0, 0, 0, 0.4);
+}
+
+.la-solo-lot-id {
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.72;
+  font-variant-numeric: tabular-nums;
 }
 
 .la-solo-lot-state {
+  margin-top: 0.28rem;
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  opacity: 0.8;
+  opacity: 0.88;
 }
 
 .la-solo-lot-acres {
-  margin-top: 0.2rem;
+  margin-top: 0.18rem;
   font-size: 1.05rem;
   font-weight: 650;
   line-height: 1.1;
+  color: #fff;
 }
 
 .la-solo-lot-price {
   margin-top: 0.15rem;
   font-size: 0.78rem;
-  opacity: 0.85;
+  opacity: 0.8;
 }
 
 .la-solo-lot.is-match {
-  border-color: rgba(90, 200, 140, 0.85);
-  background: linear-gradient(180deg, rgba(70, 180, 120, 0.38), rgba(40, 120, 80, 0.28));
+  border-color: rgba(255, 255, 255, 0.7);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.1));
   transform: translate(42%, -78%) scale(0.92) rotate(6deg);
   opacity: 0;
 }
 
 .la-solo-lot.is-pass {
-  border-color: rgba(220, 110, 100, 0.75);
-  background: linear-gradient(180deg, rgba(180, 70, 60, 0.32), rgba(90, 40, 36, 0.22));
+  border-color: rgba(255, 255, 255, 0.25);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
   transform: translate(-130%, -20%) scale(0.86) rotate(-8deg);
   opacity: 0;
 }
@@ -7064,45 +7123,49 @@ a.acquire-block:hover {
   position: absolute;
   right: 0.35rem;
   top: 0.35rem;
-  width: 1.35rem;
-  height: 1.35rem;
   border-radius: 999px;
   display: grid;
   place-items: center;
-  font-size: 0.78rem;
-  font-weight: 700;
+  font-size: 0.58rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
   line-height: 1;
+  padding: 0.22rem 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
 }
 
 .la-solo-stamp.is-match {
-  background: rgba(72, 190, 120, 0.95);
-  color: #062214;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  border-color: #fff;
 }
 
 .la-solo-stamp.is-pass {
-  background: rgba(210, 90, 80, 0.95);
-  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .la-solo-glass {
   position: absolute;
   left: 50%;
   top: 34%;
-  color: #f7faf8;
+  color: #ffffff;
   transform: translate(-42%, -58%);
-  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.4));
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.45));
   animation: la-solo-glass-hunt 2.4s ease-in-out infinite;
   z-index: 30;
   pointer-events: none;
 }
 
 .la-solo-glass.is-yes {
-  color: #8fe0b0;
+  color: #fff;
   animation: la-solo-glass-yes 0.45s ease-out;
 }
 
 .la-solo-glass.is-no {
-  color: #f0a39a;
+  color: rgba(255, 255, 255, 0.72);
   animation: la-solo-glass-no 0.45s ease-out;
 }
 
@@ -7113,45 +7176,16 @@ a.acquire-block:hover {
   width: 38%;
   height: 38%;
   border-radius: 999px;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.28), transparent 70%);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.32), transparent 70%);
   animation: la-solo-beam 1.6s ease-in-out infinite;
 }
 
-.la-solo-counters {
-  position: absolute;
-  left: 0.75rem;
-  right: 0.75rem;
-  bottom: 0.7rem;
-  display: flex;
-  justify-content: center;
-  gap: 0.85rem;
-  flex-wrap: wrap;
-  z-index: 25;
+.land-alerts-loader.is-solo-scan .land-alerts-loader-ellipsis {
+  color: rgba(255, 255, 255, 0.9);
 }
 
-.la-solo-counters span {
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: rgba(244, 250, 246, 0.78);
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  padding: 0.28rem 0.65rem;
-}
-
-.la-solo-counters strong {
-  font-variant-numeric: tabular-nums;
-  margin-right: 0.2rem;
-  color: #fff;
-}
-
-.la-solo-counters .is-yes strong {
-  color: #9aecc0;
-}
-
-.la-solo-counters .is-no strong {
-  color: #f0b0a8;
+.land-alerts-loader.is-solo-scan .land-alerts-loader-dots span {
+  background: rgba(255, 255, 255, 0.75);
 }
 
 @keyframes la-solo-glass-hunt {
@@ -7211,7 +7245,6 @@ a.acquire-block:hover {
     transition: none !important;
   }
 }
-
 
 .land-alert-flip {
   perspective: 1400px;

@@ -561,7 +561,6 @@ export default function LandAlertsPage() {
   const [matches, setMatches] = useState<LandAlertMatchCard[]>([]);
   const [counts, setCounts] = useState({ new: 0, unseen: 0, viewed: 0, total: 0 });
   const [tab, setTab] = useState<"matches" | "saved">("matches");
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [inAppAlerts, setInAppAlerts] = useState<Record<string, unknown>[]>([]);
@@ -582,7 +581,7 @@ export default function LandAlertsPage() {
   }, [profileId]);
 
   const hydrate = useCallback(async () => {
-    setLoading(true);
+    // Form paints immediately — hydrate prefs/matches in the background.
     try {
       const data = await landsignalApi.landAlertProfile();
       if (data.has_profile && data.profile) {
@@ -657,8 +656,6 @@ export default function LandAlertsPage() {
       setInAppAlerts(dedupeRecentLandAlerts(alerts || []).slice(0, 12));
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Could not load Land Alerts");
-    } finally {
-      setLoading(false);
     }
   }, []);
 
@@ -947,29 +944,12 @@ export default function LandAlertsPage() {
           <span className="land-alerts-back is-disabled" aria-disabled="true">
             ← Back
           </span>
-          <div className="land-alerts-live" title="Matching your land profile">
-            <LiveMagnifier size={28} label="Matching live" />
-            <span>Matching live</span>
+          <div className="land-alerts-live is-neutral" title="Running filter pass">
+            <LiveMagnifier size={28} label="Filter pass" />
+            <span>Filter pass</span>
           </div>
         </div>
         <LandAlertsLoader mode="matching" />
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="land-alerts-page space-y-4">
-        <div className="land-alerts-topbar">
-          <Link href="/" className="land-alerts-back">
-            ← Back
-          </Link>
-          <div className="land-alerts-live" title="LandSignal is scanning live">
-            <LiveMagnifier size={28} />
-            <span>Scanning live</span>
-          </div>
-        </div>
-        <LandAlertsLoader mode="boot" label="Opening acquisition profile" />
       </div>
     );
   }
