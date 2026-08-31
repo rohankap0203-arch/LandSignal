@@ -6273,6 +6273,11 @@ a.acquire-block:hover {
   width: fit-content;
 }
 
+.land-alerts-back.is-disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
 .land-alerts-back:hover {
   color: var(--ink);
 }
@@ -6291,6 +6296,16 @@ a.acquire-block:hover {
 .land-alerts-live span {
   color: var(--muted);
   letter-spacing: 0.06em;
+}
+
+.land-alerts-live.is-neutral,
+.land-alerts-live.is-neutral span {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+[data-theme="light"] .land-alerts-live.is-neutral,
+[data-theme="light"] .land-alerts-live.is-neutral span {
+  color: #1a1d21;
 }
 
 .land-alerts-hero {
@@ -6798,7 +6813,7 @@ a.acquire-block:hover {
   font-weight: 600;
 }
 
-/* Land Alerts boot radar */
+/* Land Alerts boot / matching — magnifying glasses over contour land (pin-loader cousin) */
 .land-alerts-loader {
   margin-top: 0.5rem;
   padding: 1.25rem 1rem 1.5rem;
@@ -6810,98 +6825,60 @@ a.acquire-block:hover {
   box-shadow: var(--shadow);
 }
 
+.land-alerts-loader.is-matching {
+  margin: 1.5rem auto 0;
+  max-width: 34rem;
+  padding: 1.6rem 1.15rem 1.75rem;
+}
+
 .land-alerts-loader-stage {
-  display: flex;
-  justify-content: center;
-  padding: 0.5rem 0 0.75rem;
-}
-
-.land-alerts-loader-radar {
   position: relative;
-  width: 168px;
-  height: 168px;
-  border-radius: 999px;
-  background:
-    radial-gradient(circle at center, color-mix(in srgb, var(--brand) 18%, transparent) 0 2px, transparent 3px),
-    repeating-radial-gradient(
-      circle at center,
-      transparent 0 18px,
-      color-mix(in srgb, var(--brand) 12%, transparent) 18px 19px
-    );
+  height: 11rem;
+  border-radius: 16px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--line));
+  margin: 0.15rem 0 1rem;
+  border: 1px solid color-mix(in srgb, var(--brand) 22%, var(--line));
 }
 
-.land-alerts-loader-ring {
-  position: absolute;
-  inset: 18%;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--brand) 22%, transparent);
-  opacity: 0.55;
+.land-alerts-loader.is-matching .land-alerts-loader-stage {
+  height: 13rem;
 }
 
-.land-alerts-loader-ring.r2 {
-  inset: 32%;
-}
-
-.land-alerts-loader-ring.r3 {
-  inset: 46%;
-}
-
-.land-alerts-loader-sweep {
+.land-alerts-loader-svg {
   position: absolute;
   inset: 0;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    color-mix(in srgb, var(--brand) 35%, transparent) 50deg,
-    transparent 70deg
+  width: 100%;
+  height: 100%;
+}
+
+.land-alerts-glass-field {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.land-alerts-scout-glass {
+  position: absolute;
+  color: #f4faf6;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.35));
+  transform: translate(-50%, -50%) scale(var(--glass-scale, 1));
+  animation-name: land-alerts-glass-bob;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+.land-alerts-scan {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--brand) 22%, transparent) 48%,
+    transparent 56%
   );
-  animation: land-alerts-sweep 2.2s linear infinite;
-  transform-origin: center;
-}
-
-.land-alerts-loader-blip {
-  position: absolute;
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--brand);
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 50%, transparent);
-  animation: land-alerts-blip 2.4s ease-out infinite;
-}
-
-.land-alerts-loader-blip.b1 {
-  left: 28%;
-  top: 34%;
-  animation-delay: 0.1s;
-}
-
-.land-alerts-loader-blip.b2 {
-  left: 62%;
-  top: 26%;
-  animation-delay: 0.7s;
-}
-
-.land-alerts-loader-blip.b3 {
-  left: 70%;
-  top: 58%;
-  animation-delay: 1.2s;
-}
-
-.land-alerts-loader-blip.b4 {
-  left: 38%;
-  top: 68%;
-  animation-delay: 1.7s;
-}
-
-.land-alerts-loader-glass {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  color: var(--brand);
-  filter: drop-shadow(0 2px 6px color-mix(in srgb, var(--brand) 35%, transparent));
-  animation: land-alerts-glass 2.8s ease-in-out infinite;
+  background-size: 100% 220%;
+  animation: land-alerts-scan-sweep 2.8s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .land-alerts-loader-copy {
@@ -6910,69 +6887,440 @@ a.acquire-block:hover {
   margin: 0 auto;
 }
 
-.land-alerts-loader-bar {
-  margin: 0.85rem auto 0;
-  width: min(220px, 70%);
-  height: 3px;
+.land-alerts-loader-title {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0;
+  min-height: 1.35em;
+}
+
+.land-alerts-loader-ellipsis {
+  display: inline-block;
+  min-width: 1.4em;
+  text-align: left;
+  letter-spacing: 0.05em;
+  color: var(--brand);
+  font-variant-numeric: tabular-nums;
+}
+
+.land-alerts-loader-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.85rem;
+}
+
+.land-alerts-loader-dots span {
+  width: 0.42rem;
+  height: 0.42rem;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--line) 80%, transparent);
-  overflow: hidden;
+  background: color-mix(in srgb, var(--brand) 70%, white);
+  animation: land-alerts-dot 1.15s ease-in-out infinite;
 }
 
-.land-alerts-loader-bar span {
-  display: block;
-  width: 42%;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--brand), color-mix(in srgb, var(--accent) 70%, var(--brand)));
-  animation: land-alerts-bar 1.35s ease-in-out infinite;
+.land-alerts-loader-dots span:nth-child(2) {
+  animation-delay: 0.18s;
 }
 
-@keyframes land-alerts-sweep {
-  to {
-    transform: rotate(360deg);
-  }
+.land-alerts-loader-dots span:nth-child(3) {
+  animation-delay: 0.36s;
 }
 
-@keyframes land-alerts-blip {
+@keyframes land-alerts-glass-bob {
   0%,
   100% {
-    transform: scale(0.85);
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 45%, transparent);
-    opacity: 0.75;
+    transform: translate(-50%, -42%) scale(var(--glass-scale, 1));
+    opacity: 0.55;
   }
-  50% {
-    transform: scale(1.15);
-    box-shadow: 0 0 0 8px transparent;
+  45% {
+    transform: translate(-50%, -62%) scale(calc(var(--glass-scale, 1) * 1.08));
     opacity: 1;
   }
 }
 
-@keyframes land-alerts-glass {
-  0%,
-  100% {
-    transform: translate(-35%, -20%) rotate(-12deg);
+@keyframes land-alerts-scan-sweep {
+  0% {
+    background-position: 0 -40%;
   }
-  50% {
-    transform: translate(-55%, -60%) rotate(8deg);
+  100% {
+    background-position: 0 140%;
   }
 }
 
-@keyframes land-alerts-bar {
-  0% {
-    transform: translateX(-120%);
-  }
+@keyframes land-alerts-dot {
+  0%,
   100% {
-    transform: translateX(280%);
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translateY(-4px);
+    opacity: 1;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .land-alerts-loader-sweep,
-  .land-alerts-loader-blip,
-  .land-alerts-loader-glass,
-  .land-alerts-loader-bar span {
-    animation: none;
+  .land-alerts-scout-glass,
+  .land-alerts-scan,
+  .land-alerts-loader-dots span {
+    animation: none !important;
+  }
+}
+
+/* Solo magnifying-glass lot scanner — GPU-friendly, stable nodes */
+.land-alerts-loader.is-solo-scan {
+  max-width: 38rem;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(255, 255, 255, 0.07), transparent 48%),
+    var(--bg-elevated);
+}
+
+.la-solo-stage {
+  position: relative;
+  height: 17.5rem;
+  margin: 0.2rem 0 1.1rem;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: linear-gradient(180deg, #1a1d21 0%, #121417 55%, #0e1012 100%);
+  contain: layout paint;
+  transform: translateZ(0);
+}
+
+.la-solo-horizon {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 20px 20px;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.la-solo-hud {
+  position: absolute;
+  top: 0.7rem;
+  left: 0.75rem;
+  right: 0.75rem;
+  z-index: 26;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.la-solo-hud-chip,
+.la-solo-hud-status {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  padding: 0.28rem 0.65rem;
+  transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.la-solo-hud-status.is-pending {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.la-solo-hud-status.is-match {
+  color: #d8ffe8;
+  border-color: rgba(90, 200, 140, 0.65);
+  background: rgba(60, 150, 100, 0.28);
+}
+
+.la-solo-hud-status.is-pass {
+  color: #ffd4ce;
+  border-color: rgba(230, 100, 90, 0.65);
+  background: rgba(160, 50, 45, 0.28);
+}
+
+.la-solo-lots {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.la-solo-stage::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 0.45rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: rgba(90, 200, 140, 0.28);
+  opacity: 0.75;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.la-solo-lot {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 7rem;
+  padding: 0.55rem 0.6rem 0.5rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #f7f8f9;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+  transform: translate3d(-50%, calc(-50% + var(--slot) * 16px), 0)
+    scale(calc(1 - var(--slot) * 0.07));
+  opacity: calc(1 - var(--slot) * 0.14);
+  transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1), opacity 280ms ease;
+  z-index: calc(20 - var(--slot));
+  backface-visibility: hidden;
+}
+
+.la-solo-lot.slot-0 {
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.34);
+}
+
+.la-solo-lot-id {
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.72;
+  font-variant-numeric: tabular-nums;
+}
+
+.la-solo-lot-state {
+  margin-top: 0.28rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.88;
+}
+
+.la-solo-lot-acres {
+  margin-top: 0.18rem;
+  font-size: 1.05rem;
+  font-weight: 650;
+  line-height: 1.1;
+  color: #fff;
+}
+
+.la-solo-lot-price {
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+  opacity: 0.8;
+}
+
+.la-solo-lot.is-exit {
+  left: 50%;
+  top: 46%;
+  z-index: 40;
+  --slot: 0;
+  transition: none;
+}
+
+.la-solo-lot.is-match {
+  outline: none;
+  animation: la-solo-file-down 0.55s cubic-bezier(0.22, 0.8, 0.28, 1) both;
+}
+
+.la-solo-lot.is-pass {
+  outline: none;
+  animation: la-solo-toss-left 0.52s cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.la-solo-stamp {
+  position: absolute;
+  right: 0.35rem;
+  top: 0.35rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 0.58rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  padding: 0.22rem 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+}
+
+.la-solo-stamp.is-match {
+  background: rgba(72, 190, 120, 0.95);
+  color: #062214;
+  border-color: rgba(180, 255, 210, 0.9);
+}
+
+.la-solo-stamp.is-pass {
+  background: rgba(210, 78, 70, 0.95);
+  color: #fff;
+  border-color: rgba(255, 180, 170, 0.85);
+}
+
+.la-solo-glass {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  color: #ffffff;
+  transform: translate3d(-42%, -58%, 0);
+  animation: la-solo-glass-hunt 3.2s ease-in-out infinite;
+  z-index: 30;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.la-solo-glass.is-yes {
+  color: #9aecc0;
+  animation: la-solo-glass-yes 0.4s ease-out both;
+}
+
+.la-solo-glass.is-no {
+  color: #f0a39a;
+  animation: la-solo-glass-no 0.4s ease-out both;
+}
+
+.la-solo-glass-beam {
+  position: absolute;
+  left: 18%;
+  top: 18%;
+  width: 38%;
+  height: 38%;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  animation: la-solo-beam 2s ease-in-out infinite;
+}
+
+.land-alerts-loader.is-solo-scan .land-alerts-loader-ellipsis {
+  display: inline-block;
+  min-width: 1.35em;
+  text-align: left;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.land-alerts-loader.is-solo-scan .land-alerts-loader-ellipsis::after {
+  content: "";
+  animation: la-solo-ellipsis 1.15s steps(4, end) infinite;
+}
+
+.land-alerts-loader.is-solo-scan .land-alerts-loader-dots span {
+  background: rgba(255, 255, 255, 0.75);
+}
+
+@keyframes la-solo-ellipsis {
+  0% {
+    content: "";
+  }
+  25% {
+    content: ".";
+  }
+  50% {
+    content: "..";
+  }
+  75%,
+  100% {
+    content: "...";
+  }
+}
+
+@keyframes la-solo-toss-left {
+  0% {
+    transform: translate3d(-50%, -50%, 0) scale(1) rotate(0deg);
+    opacity: 1;
+    border-color: rgba(230, 100, 90, 0.95);
+    background: rgba(180, 55, 50, 0.42);
+    box-shadow: 0 0 0 2px rgba(230, 90, 80, 0.4);
+  }
+  18% {
+    transform: translate3d(-56%, -58%, 0) scale(1.03) rotate(-8deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(-210%, -12%, 0) scale(0.82) rotate(-22deg);
+    opacity: 0;
+  }
+}
+
+@keyframes la-solo-file-down {
+  0% {
+    transform: translate3d(-50%, -50%, 0) scale(1) rotate(0deg);
+    opacity: 1;
+    border-color: rgba(90, 200, 140, 0.95);
+    background: rgba(60, 150, 100, 0.42);
+    box-shadow: 0 0 0 2px rgba(90, 200, 140, 0.38);
+  }
+  20% {
+    transform: translate3d(-50%, -56%, 0) scale(1.04);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(-50%, 72%, 0) scale(0.76);
+    opacity: 0;
+  }
+}
+
+@keyframes la-solo-glass-hunt {
+  0%,
+  100% {
+    transform: translate3d(-48%, -52%, 0) rotate(-6deg);
+  }
+  50% {
+    transform: translate3d(-40%, -60%, 0) rotate(3deg);
+  }
+}
+
+@keyframes la-solo-glass-yes {
+  0% {
+    transform: translate3d(-42%, -58%, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-42%, -46%, 0) scale(1.05);
+  }
+  100% {
+    transform: translate3d(-42%, -58%, 0) scale(1);
+  }
+}
+
+@keyframes la-solo-glass-no {
+  0% {
+    transform: translate3d(-42%, -58%, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-62%, -54%, 0) scale(0.96) rotate(-10deg);
+  }
+  100% {
+    transform: translate3d(-42%, -58%, 0) scale(1);
+  }
+}
+
+@keyframes la-solo-beam {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .la-solo-glass,
+  .la-solo-glass-beam,
+  .la-solo-lot,
+  .la-solo-lot.is-match,
+  .la-solo-lot.is-pass,
+  .land-alerts-loader.is-solo-scan .land-alerts-loader-ellipsis::after {
+    animation: none !important;
+    transition: none !important;
   }
 }
 

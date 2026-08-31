@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
 import { HelpTip } from "@/components/filter-field";
 import { LandAlertsLoader } from "@/components/land-alerts-loader";
@@ -362,7 +363,7 @@ function MatchCard({
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerPolygon, setViewerPolygon] = useState<number[][][] | null>(row.polygon ?? null);
   const flipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const href = row.deep_link || `/parcels/${row.parcel_id}`;
+  const href = `/parcels/${row.parcel_id}?from=alerts`;
   const canViewLand =
     row.has_boundary === true && row.latitude != null && row.longitude != null;
 
@@ -553,6 +554,8 @@ function MatchCard({
 }
 
 export default function LandAlertsPage() {
+  const searchParams = useSearchParams();
+  const openMatches = searchParams.get("view") === "matches";
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
@@ -561,14 +564,13 @@ export default function LandAlertsPage() {
   const [matches, setMatches] = useState<LandAlertMatchCard[]>([]);
   const [counts, setCounts] = useState({ new: 0, unseen: 0, viewed: 0, total: 0 });
   const [tab, setTab] = useState<"matches" | "saved">("matches");
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [visibleLimit, setVisibleLimit] = useState(20);
   const [inAppAlerts, setInAppAlerts] = useState<Record<string, unknown>[]>([]);
   /** Checked this session — grey in Matches; also listed under Saved */
   const [pendingSaved, setPendingSaved] = useState<Set<string>>(() => new Set());
   const [markAllActive, setMarkAllActive] = useState(false);
-  const [bootReady, setBootReady] = useState(false);
   /** Explicit custom panels — avoid forcing placeholder values that jump the layout/summary. */
   const [budgetCustomOpen, setBudgetCustomOpen] = useState(false);
   const [acresCustomOpen, setAcresCustomOpen] = useState(false);
@@ -583,7 +585,7 @@ export default function LandAlertsPage() {
   }, [profileId]);
 
   const hydrate = useCallback(async () => {
-    setLoading(true);
+    // Form paints immediately — hydrate prefs/matches in the background.
     try {
       const data = await landsignalApi.landAlertProfile();
       if (data.has_profile && data.profile) {
@@ -594,7 +596,8 @@ export default function LandAlertsPage() {
         setProfileId(String(p.id));
         setPaused(Boolean(p.paused));
         setHasProfile(true);
-        setEditing(false);
+        // Prefer matches when returning from a parcel report; otherwise open the form.
+        setEditing(!openMatches);
         const nextBudgetMin = prefs.budget_min != null ? String(prefs.budget_min) : "";
         const nextBudgetMax = prefs.budget_max != null ? String(prefs.budget_max) : "";
         const nextAcresMin = prefs.acres_min != null ? String(prefs.acres_min) : "";
@@ -657,20 +660,17 @@ export default function LandAlertsPage() {
       setInAppAlerts(dedupeRecentLandAlerts(alerts || []).slice(0, 12));
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Could not load Land Alerts");
-    } finally {
-      setLoading(false);
     }
-  }, []);
+  }, [openMatches]);
 
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
 
+  // If the URL asks for matches after hydrate already ran, flip out of the editor.
   useEffect(() => {
-    // Short boot cue — do not artificially delay the page for over a second
-    const t = window.setTimeout(() => setBootReady(true), 180);
-    return () => window.clearTimeout(t);
-  }, []);
+    if (openMatches && hasProfile) setEditing(false);
+  }, [openMatches, hasProfile]);
 
   const visible = useMemo(() => {
     if (tab === "saved") {
@@ -791,6 +791,11 @@ export default function LandAlertsPage() {
   async function saveProfile() {
     setSaving(true);
     setMsg("");
+    // Jump to matching screen immediately so the long score pass feels intentional.
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    const started = performance.now();
     try {
       const states = form.states
         .split(/[,;\s]+/)
@@ -829,25 +834,41 @@ export default function LandAlertsPage() {
         },
       };
       const res = await landsignalApi.upsertLandAlertProfile(body);
+      // Keep the solo glass scan on screen long enough to read — API is often <1s now.
+      const elapsed = performance.now() - started;
+      const minShowMs = 2400;
+      if (elapsed < minShowMs) {
+        await new Promise((r) => window.setTimeout(r, minShowMs - elapsed));
+      }
+      // Drop the loader first, then paint matches in a transition so the UI doesn't hitch.
+      setSaving(false);
       setProfileId(String(res.profile.id));
       setPaused(Boolean(res.profile.paused));
       setHasProfile(true);
       setEditing(false);
-      setMatches(res.matches || []);
-      setCounts({
-        new: res.new_count || 0,
-        unseen: (res.match_count || 0) - (res.new_count || 0),
-        viewed: 0,
-        total: res.match_count || 0,
-      });
-      await loadMatches();
-      setMsg(
-        `Profile saved. ${res.match_count} current matches from existing inventory. Monitoring continues in the background.`,
-      );
+      setPendingSaved(new Set());
+      setMarkAllActive(false);
+      setMsg("");
       setTab("matches");
+      setVisibleLimit(20);
+      startTransition(() => {
+        setMatches(res.matches || []);
+        setCounts({
+          new: res.new_count || 0,
+          unseen: Math.max(0, (res.match_count || 0) - (res.new_count || 0)),
+          viewed: 0,
+          total: res.match_count || 0,
+        });
+      });
+      // Reveal more cards after the first paint so the page stays responsive.
+      window.setTimeout(() => {
+        startTransition(() => setVisibleLimit(60));
+      }, 120);
+      window.setTimeout(() => {
+        startTransition(() => setVisibleLimit(100));
+      }, 320);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Could not save profile");
-    } finally {
       setSaving(false);
     }
   }
@@ -933,19 +954,19 @@ export default function LandAlertsPage() {
     else setStatesList([...new Set([...selectedStates, ...states])]);
   }
 
-  if (loading || !bootReady) {
+  if (saving) {
     return (
       <div className="land-alerts-page space-y-4">
         <div className="land-alerts-topbar">
-          <Link href="/" className="land-alerts-back">
+          <span className="land-alerts-back is-disabled" aria-disabled="true">
             ← Back
-          </Link>
-          <div className="land-alerts-live" title="LandSignal is scanning live">
-            <LiveMagnifier size={28} />
-            <span>Scanning live</span>
+          </span>
+          <div className="land-alerts-live is-neutral" title="Running filter pass">
+            <LiveMagnifier size={28} label="Filter pass" />
+            <span>Filter pass</span>
           </div>
         </div>
-        <LandAlertsLoader />
+        <LandAlertsLoader mode="matching" />
       </div>
     );
   }
@@ -972,43 +993,27 @@ export default function LandAlertsPage() {
         {hasProfile ? (
           <div className="land-alerts-hero-actions">
             <button type="button" className="btn btn-ghost" onClick={() => setEditing((e) => !e)}>
-              {editing ? "Close editor" : "Edit Preferences"}
+              {editing ? "View matches" : "Edit Preferences"}
             </button>
             <button type="button" className="btn btn-ghost" onClick={() => void togglePause()}>
               {paused ? "Resume Alerts" : "Pause Alerts"}
             </button>
-            <button
-              type="button"
-              className={`btn btn-ghost${showUndoMarkAll ? " is-mark-all-on" : ""}`}
-              disabled={!showUndoMarkAll && markAllTargetCount === 0}
-              onClick={() => void toggleMarkAllSeen()}
-              aria-pressed={showUndoMarkAll}
-            >
-              {showUndoMarkAll ? "Unsave all" : "Save all"}
-            </button>
+            {!editing ? (
+              <button
+                type="button"
+                className={`btn btn-ghost${showUndoMarkAll ? " is-mark-all-on" : ""}`}
+                disabled={!showUndoMarkAll && markAllTargetCount === 0}
+                onClick={() => void toggleMarkAllSeen()}
+                aria-pressed={showUndoMarkAll}
+              >
+                {showUndoMarkAll ? "Unsave all" : "Save all"}
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>
 
       {msg ? <div className="land-alerts-msg">{msg}</div> : null}
-
-      {hasProfile && !editing ? (
-        <div className="land-alerts-status panel p-4">
-          <div className="land-alerts-status-row">
-            <div>
-              <div className="display text-lg font-semibold">{form.name}</div>
-              <div className="text-sm text-[var(--muted)]">
-                {paused ? "Paused — not monitoring new listings" : "Active — monitoring continuously"}
-                {form.states ? ` · States: ${form.states.toUpperCase()}` : ""}
-                {form.budget_max ? ` · Budget up to $${Number(form.budget_max).toLocaleString()}` : ""}
-              </div>
-            </div>
-            <div className="land-alerts-new-count">
-              {counts.new > 0 ? `${counts.new} New Match${counts.new === 1 ? "" : "es"}` : "No new matches"}
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {editing ? (
         <section className="acq-profile panel">
@@ -1488,7 +1493,7 @@ export default function LandAlertsPage() {
         </section>
       ) : null}
 
-      {hasProfile ? (
+      {hasProfile && !editing ? (
         <section className="space-y-4">
           <div className="land-alerts-tabs">
             <button
@@ -1508,7 +1513,7 @@ export default function LandAlertsPage() {
           </div>
 
           <div className="space-y-3">
-            {visible.map((row) => (
+            {visible.slice(0, visibleLimit).map((row) => (
               <MatchCard
                 key={row.id}
                 row={row}
@@ -1516,6 +1521,15 @@ export default function LandAlertsPage() {
                 onToggleSeen={toggleSeen}
               />
             ))}
+            {visible.length > visibleLimit ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setVisibleLimit((n) => Math.min(visible.length, n + 40))}
+              >
+                Show more matches
+              </button>
+            ) : null}
             {!visible.length ? (
               <div className="panel empty-state p-6">
                 {tab === "saved"
@@ -1527,7 +1541,7 @@ export default function LandAlertsPage() {
         </section>
       ) : null}
 
-      {inAppAlerts.length ? (
+      {hasProfile && !editing && inAppAlerts.length ? (
         <section className="space-y-3">
           <h2 className="display text-xl font-semibold">Recent notifications</h2>
           {inAppAlerts.map((a) => {
