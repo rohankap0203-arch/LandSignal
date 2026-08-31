@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { ScoreBar } from "@/components/score-bar";
 import { landsignalApi } from "@/lib/api";
 

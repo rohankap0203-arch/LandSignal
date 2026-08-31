@@ -66,6 +66,19 @@ function displayLabel(
   return `${labels[0]} +${labels.length - 1}`;
 }
 
+/** Scroll an option inside the menu only — never call Element.scrollIntoView (that moves the page). */
+function scrollOptionIntoMenu(menu: HTMLElement, option: HTMLElement) {
+  const optionTop = option.offsetTop;
+  const optionBottom = optionTop + option.offsetHeight;
+  const viewTop = menu.scrollTop;
+  const viewBottom = viewTop + menu.clientHeight;
+  if (optionTop < viewTop) {
+    menu.scrollTop = optionTop;
+  } else if (optionBottom > viewBottom) {
+    menu.scrollTop = optionBottom - menu.clientHeight;
+  }
+}
+
 export function HeroSelect(props: HeroSelectProps) {
   const { options, ariaLabel, disabled } = props;
   const multi = Boolean(props.multi);
@@ -76,6 +89,7 @@ export function HeroSelect(props: HeroSelectProps) {
   const [activeIndex, setActiveIndex] = useState(-1);
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const wasOpenRef = useRef(false);
   const listId = useId();
 
   const selected = useMemo(
@@ -105,8 +119,17 @@ export function HeroSelect(props: HeroSelectProps) {
     };
   }, [open, close]);
 
+  // Only when the menu opens — not on every meta poll / value toggle (those re-created
+  // `options` arrays and used scrollIntoView, which yanked the page/menu back to the top).
   useLayoutEffect(() => {
-    if (!open) return;
+    if (!open) {
+      wasOpenRef.current = false;
+      return;
+    }
+    const justOpened = !wasOpenRef.current;
+    wasOpenRef.current = true;
+    if (!justOpened) return;
+
     const current = multi
       ? (values || []).find((v) => !isAnyValue(v)) || "Any"
       : value || "Any";
@@ -115,9 +138,10 @@ export function HeroSelect(props: HeroSelectProps) {
       options.findIndex((o) => o.value === current),
     );
     setActiveIndex(idx);
-    listRef.current?.focus({ preventScroll: true });
-    const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${idx}"]`);
-    el?.scrollIntoView({ block: "nearest" });
+    const menu = listRef.current;
+    menu?.focus({ preventScroll: true });
+    const el = menu?.querySelector<HTMLElement>(`[data-idx="${idx}"]`);
+    if (menu && el) scrollOptionIntoMenu(menu, el);
   }, [open, options, value, values, multi]);
 
   function emitSingle(next: string) {
@@ -156,18 +180,26 @@ export function HeroSelect(props: HeroSelectProps) {
 
   function onListKey(e: KeyboardEvent<HTMLUListElement>) {
     if (!options.length) return;
+    const move = (next: number) => {
+      setActiveIndex(next);
+      requestAnimationFrame(() => {
+        const menu = listRef.current;
+        const el = menu?.querySelector<HTMLElement>(`[data-idx="${next}"]`);
+        if (menu && el) scrollOptionIntoMenu(menu, el);
+      });
+    };
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex((i) => (i + 1) % options.length);
+      move((activeIndex + 1) % options.length);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIndex((i) => (i <= 0 ? options.length - 1 : i - 1));
+      move(activeIndex <= 0 ? options.length - 1 : activeIndex - 1);
     } else if (e.key === "Home") {
       e.preventDefault();
-      setActiveIndex(0);
+      move(0);
     } else if (e.key === "End") {
       e.preventDefault();
-      setActiveIndex(options.length - 1);
+      move(options.length - 1);
     } else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       const opt = options[activeIndex];

@@ -412,13 +412,13 @@ export default function ParcelIntelligencePage() {
             <div className="scroll-to-label">Scroll-to</div>
             <div className="scroll-to-row">
               {[
-                { id: "sec-bidding", label: "Bidding by price" },
-                { id: "sec-value", label: "Land value" },
+                { id: "sec-bidding", label: "Who’s still bidding" },
+                { id: "sec-value", label: "Land value path" },
                 { id: "sec-return", label: "Hold return" },
-                { id: "sec-catalyst", label: "Future scenarios" },
-                { id: "sec-why", label: "Why this land" },
-                { id: "sec-score", label: "Score parts" },
-                { id: "sec-land", label: "Land checks" },
+                { id: "sec-catalyst", label: "Future Scenario Engine" },
+                { id: "sec-why", label: "Scout edge" },
+                { id: "sec-score", label: "Score recipe" },
+                { id: "sec-land", label: "Ground truth" },
               ].map((s) => (
                 <button
                   key={s.id}
@@ -441,7 +441,6 @@ export default function ParcelIntelligencePage() {
             title={listing?.title as string}
             height={280}
             onExpand={() => setLandViewerOpen(true)}
-            onViewMap={() => setLandViewerOpen(true)}
           />
           <LandViewerModal
             open={landViewerOpen}
