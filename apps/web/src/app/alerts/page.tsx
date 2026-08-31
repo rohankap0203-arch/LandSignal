@@ -842,6 +842,7 @@ export default function LandAlertsPage() {
       setMarkAllActive(false);
       setMsg("");
       setTab("matches");
+      setVisibleLimit(20);
       startTransition(() => {
         setMatches(res.matches || []);
         setCounts({
@@ -851,6 +852,13 @@ export default function LandAlertsPage() {
           total: res.match_count || 0,
         });
       });
+      // Reveal more cards after the first paint so the page stays responsive.
+      window.setTimeout(() => {
+        startTransition(() => setVisibleLimit(60));
+      }, 120);
+      window.setTimeout(() => {
+        startTransition(() => setVisibleLimit(100));
+      }, 320);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Could not save profile");
       setSaving(false);
@@ -1497,7 +1505,7 @@ export default function LandAlertsPage() {
           </div>
 
           <div className="space-y-3">
-            {visible.map((row) => (
+            {visible.slice(0, visibleLimit).map((row) => (
               <MatchCard
                 key={row.id}
                 row={row}
@@ -1505,6 +1513,15 @@ export default function LandAlertsPage() {
                 onToggleSeen={toggleSeen}
               />
             ))}
+            {visible.length > visibleLimit ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setVisibleLimit((n) => Math.min(visible.length, n + 40))}
+              >
+                Show more matches
+              </button>
+            ) : null}
             {!visible.length ? (
               <div className="panel empty-state p-6">
                 {tab === "saved"
