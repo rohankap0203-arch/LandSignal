@@ -33,13 +33,13 @@ const LOGOS = [
     height: 160,
   },
   {
-    name: "BLM.gov",
-    href: "https://www.blm.gov",
-    src: "/brands/blm-gov.png",
-    // Dark-only: white seal silhouette (same square params as prior USA.gov slot)
-    srcDark: "/brands/blm-gov-dark.png",
-    width: 150,
-    height: 150,
+    name: "GovDeals",
+    href: "https://www.govdeals.com",
+    // Classic lockup: capitol building behind "Gov"
+    src: "/brands/govdeals.png",
+    srcDark: "/brands/govdeals-dark.png",
+    width: 641,
+    height: 194,
   },
 ] as const;
 

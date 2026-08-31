@@ -404,13 +404,11 @@ select {
 }
 
 /* Square brand marks read smaller — give them more height */
-.used-by-logo--landwatch,
-.used-by-logo--blmgov {
+.used-by-logo--landwatch {
   height: 3.15rem;
 }
 
-.used-by-logo--landwatch img,
-.used-by-logo--blmgov img {
+.used-by-logo--landwatch img {
   max-width: 3.15rem;
 }
 
@@ -434,6 +432,14 @@ select {
   max-width: 12.5rem;
 }
 
+.used-by-logo--govdeals {
+  height: 2.35rem;
+}
+
+.used-by-logo--govdeals img {
+  max-width: 11.5rem;
+}
+
 .used-by-logo:hover {
   opacity: 1;
   transform: translateY(-1px);
@@ -444,7 +450,7 @@ select {
   display: none;
 }
 
-/* Dark mode: white label + white-tone logos. LW / USA.gov use dedicated
+/* Dark mode: white label + white-tone logos. LW / GovDeals use dedicated
    dark assets (CSS invert flattens their internal detail / adds fringe). */
 [data-theme="dark"] .used-by-label {
   color: #ffffff;
@@ -454,17 +460,17 @@ select {
   opacity: 1;
 }
 
-[data-theme="dark"] .used-by-logo:not(.used-by-logo--landwatch):not(.used-by-logo--blmgov) img {
+[data-theme="dark"] .used-by-logo:not(.used-by-logo--landwatch):not(.used-by-logo--govdeals) img {
   filter: brightness(0) invert(1);
 }
 
 [data-theme="dark"] .used-by-logo--landwatch .used-by-logo-img--light,
-[data-theme="dark"] .used-by-logo--blmgov .used-by-logo-img--light {
+[data-theme="dark"] .used-by-logo--govdeals .used-by-logo-img--light {
   display: none;
 }
 
 [data-theme="dark"] .used-by-logo--landwatch .used-by-logo-img--dark,
-[data-theme="dark"] .used-by-logo--blmgov .used-by-logo-img--dark {
+[data-theme="dark"] .used-by-logo--govdeals .used-by-logo-img--dark {
   display: block;
   filter: none;
 }
@@ -487,14 +493,20 @@ select {
     height: 2.15rem;
   }
 
-  .used-by-logo--landwatch,
-  .used-by-logo--blmgov {
+  .used-by-logo--landwatch {
     height: 2.65rem;
   }
 
-  .used-by-logo--landwatch img,
-  .used-by-logo--blmgov img {
+  .used-by-logo--landwatch img {
     max-width: 2.65rem;
+  }
+
+  .used-by-logo--govdeals {
+    height: 2rem;
+  }
+
+  .used-by-logo--govdeals img {
+    max-width: 9.5rem;
   }
 
   .used-by-logo--landcom {
