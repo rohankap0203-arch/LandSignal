@@ -102,11 +102,11 @@ export function LandAlertsLoader({
           while (rest.length < 5) rest.push(makeLot(id++));
           return rest.map((lot, i) => (i === 0 ? { ...lot, verdict: "pending" } : lot));
         });
-      }, 520);
+      }, 640);
     };
 
     const first = window.setTimeout(step, 700);
-    const loop = window.setInterval(step, 1180);
+    const loop = window.setInterval(step, 1280);
     return () => {
       cancelled = true;
       window.clearTimeout(first);

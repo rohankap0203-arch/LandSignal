@@ -6298,6 +6298,16 @@ a.acquire-block:hover {
   letter-spacing: 0.06em;
 }
 
+.land-alerts-live.is-neutral,
+.land-alerts-live.is-neutral span {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+[data-theme="light"] .land-alerts-live.is-neutral,
+[data-theme="light"] .land-alerts-live.is-neutral span {
+  color: #1a1d21;
+}
+
 .land-alerts-hero {
   display: flex;
   flex-wrap: wrap;
