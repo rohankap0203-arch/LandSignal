@@ -405,12 +405,12 @@ select {
 
 /* Square brand marks read smaller — give them more height */
 .used-by-logo--landwatch,
-.used-by-logo--usagov {
+.used-by-logo--blmgov {
   height: 3.15rem;
 }
 
 .used-by-logo--landwatch img,
-.used-by-logo--usagov img {
+.used-by-logo--blmgov img {
   max-width: 3.15rem;
 }
 
@@ -454,17 +454,17 @@ select {
   opacity: 1;
 }
 
-[data-theme="dark"] .used-by-logo:not(.used-by-logo--landwatch):not(.used-by-logo--usagov) img {
+[data-theme="dark"] .used-by-logo:not(.used-by-logo--landwatch):not(.used-by-logo--blmgov) img {
   filter: brightness(0) invert(1);
 }
 
 [data-theme="dark"] .used-by-logo--landwatch .used-by-logo-img--light,
-[data-theme="dark"] .used-by-logo--usagov .used-by-logo-img--light {
+[data-theme="dark"] .used-by-logo--blmgov .used-by-logo-img--light {
   display: none;
 }
 
 [data-theme="dark"] .used-by-logo--landwatch .used-by-logo-img--dark,
-[data-theme="dark"] .used-by-logo--usagov .used-by-logo-img--dark {
+[data-theme="dark"] .used-by-logo--blmgov .used-by-logo-img--dark {
   display: block;
   filter: none;
 }
@@ -488,12 +488,12 @@ select {
   }
 
   .used-by-logo--landwatch,
-  .used-by-logo--usagov {
+  .used-by-logo--blmgov {
     height: 2.65rem;
   }
 
   .used-by-logo--landwatch img,
-  .used-by-logo--usagov img {
+  .used-by-logo--blmgov img {
     max-width: 2.65rem;
   }
 

@@ -33,11 +33,11 @@ const LOGOS = [
     height: 160,
   },
   {
-    name: "USA.gov",
-    href: "https://www.usa.gov",
-    src: "/brands/usa-gov.png",
-    // Dark-only: same seal with white disc + dark glyphs (invert hides star/gov)
-    srcDark: "/brands/usa-gov-dark.png",
+    name: "BLM.gov",
+    href: "https://www.blm.gov",
+    src: "/brands/blm-gov.png",
+    // Dark-only: white seal silhouette (same square params as prior USA.gov slot)
+    srcDark: "/brands/blm-gov-dark.png",
     width: 150,
     height: 150,
   },
