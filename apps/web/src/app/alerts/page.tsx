@@ -426,77 +426,120 @@ function MatchCard({
           aria-expanded={flipped}
           aria-label={`Flip card for ${row.property_name}`}
         >
-          <div className="land-alert-card-top">
-            <div className="land-alert-card-scores">
-              <span className="land-alert-match-pct">
-                {Math.round(row.preference_match_pct)}% Match
-              </span>
-              <span className="land-alert-ls-score">
-                {Math.round(row.landsignal_score)}/100 Score
-              </span>
+          {row.imagery_url ? (
+            <div className="land-alert-card-media" aria-hidden>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={row.imagery_url} alt="" loading="lazy" decoding="async" />
+              <div className="land-alert-card-media-fade" />
             </div>
-            <div className="land-alert-card-badges">
-              <label
-                className={`land-alert-checkseen${dimmed ? " on" : ""}`}
-                title="Save match — moves to Saved"
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => e.stopPropagation()}
-              >
-                <input
-                  type="checkbox"
-                  checked={dimmed}
-                  onChange={(e) => onToggleSeen(row.parcel_id, e.target.checked)}
-                  aria-label="Save match"
-                />
-                <span className="land-alert-checkseen-box" aria-hidden>
-                  {dimmed ? "✓" : ""}
+          ) : (
+            <div className="land-alert-card-media land-alert-card-media-fallback" aria-hidden>
+              <span className="land-alert-card-media-mark">LandSignal</span>
+              <div className="land-alert-card-media-fade" />
+            </div>
+          )}
+
+          <div className="land-alert-card-body">
+            <div className="land-alert-card-top">
+              <div className="land-alert-card-scores">
+                <span className="land-alert-match-pct">
+                  <em>{Math.round(row.preference_match_pct)}%</em> Match
                 </span>
-              </label>
-              {row.status === "new" && !dimmed ? <span className="land-alert-new">NEW</span> : null}
-              {row.update_kind && row.update_kind !== "new_listing" ? (
-                <span className="land-alert-update">{row.update_kind.replace(/_/g, " ")}</span>
-              ) : null}
+                <span className="land-alert-ls-score">
+                  Score <strong>{Math.round(row.landsignal_score)}</strong>
+                </span>
+              </div>
+              <div className="land-alert-card-badges">
+                <label
+                  className={`land-alert-checkseen${dimmed ? " on" : ""}`}
+                  title="Save match — moves to Saved"
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    checked={dimmed}
+                    onChange={(e) => onToggleSeen(row.parcel_id, e.target.checked)}
+                    aria-label="Save match"
+                  />
+                  <span className="land-alert-checkseen-box" aria-hidden>
+                    {dimmed ? "✓" : ""}
+                  </span>
+                </label>
+                {row.status === "new" && !dimmed ? <span className="land-alert-new">NEW</span> : null}
+                {row.update_kind && row.update_kind !== "new_listing" ? (
+                  <span className="land-alert-update">{row.update_kind.replace(/_/g, " ")}</span>
+                ) : null}
+              </div>
             </div>
-          </div>
-          <div className="land-alert-card-title">{row.property_name}</div>
-          <div className="land-alert-card-meta">
-            <span>{row.location || row.state || "—"}</span>
-            {row.asking_price_display ? <span>{row.asking_price_display}</span> : null}
-            {row.acres_display ? <span>{row.acres_display}</span> : null}
-            {row.price_per_acre_display ? <span>{row.price_per_acre_display}</span> : null}
-          </div>
-          {row.why_matched?.length ? (
-            <ul className="land-alert-why">
-              {row.why_matched.slice(0, 3).map((r) => (
-                <li key={r}>{r}</li>
-              ))}
-            </ul>
-          ) : null}
-          {row.watch_flags?.length ? (
-            <div className="land-alert-watch">
-              <strong>Watch:</strong> {row.watch_flags[0]}
+
+            <div className="land-alert-card-title">{row.property_name}</div>
+            <div className="land-alert-card-place">{row.location || row.state || "—"}</div>
+
+            {row.asking_price_display || row.acres_display || row.price_per_acre_display || row.land_type ? (
+              <div className="land-alert-card-stats" aria-label="Listing snapshot">
+                {row.asking_price_display ? (
+                  <div className="land-alert-stat">
+                    <span className="land-alert-stat-label">Ask</span>
+                    <span className="land-alert-stat-value">{row.asking_price_display}</span>
+                  </div>
+                ) : null}
+                {row.acres_display ? (
+                  <div className="land-alert-stat">
+                    <span className="land-alert-stat-label">Size</span>
+                    <span className="land-alert-stat-value">{row.acres_display}</span>
+                  </div>
+                ) : null}
+                {row.price_per_acre_display ? (
+                  <div className="land-alert-stat">
+                    <span className="land-alert-stat-label">Per acre</span>
+                    <span className="land-alert-stat-value">{row.price_per_acre_display}</span>
+                  </div>
+                ) : null}
+                {row.land_type ? (
+                  <div className="land-alert-stat">
+                    <span className="land-alert-stat-label">Type</span>
+                    <span className="land-alert-stat-value">{row.land_type}</span>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {row.why_matched?.length ? (
+              <ul className="land-alert-why">
+                {row.why_matched.slice(0, 3).map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            ) : null}
+            {row.watch_flags?.length ? (
+              <div className="land-alert-watch">
+                <strong>Watch</strong>
+                <span>{row.watch_flags[0]}</span>
+              </div>
+            ) : null}
+
+            <div
+              className="land-alert-view-land-wrap"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <ViewLandButton
+                disabled={!canViewLand}
+                onClick={() => setViewerOpen(true)}
+              />
             </div>
-          ) : null}
-          <div
-            className="land-alert-view-land-wrap"
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <ViewLandButton
-              disabled={!canViewLand}
-              onClick={() => setViewerOpen(true)}
-            />
+            <div
+              className="land-alert-front-actions"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <Link href={href} className="btn-intel">
+                Open full LandSignal report
+              </Link>
+            </div>
+            <div className="land-alert-flip-hint">Tap to flip</div>
           </div>
-          <div
-            className="land-alert-front-actions"
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <Link href={href} className="btn-intel">
-              Open full LandSignal report
-            </Link>
-          </div>
-          <div className="land-alert-flip-hint">Tap to flip</div>
         </article>
 
         <article
@@ -515,8 +558,8 @@ function MatchCard({
           <div className="land-alert-back-head">
             <p className="land-alert-back-kicker">Contact & next steps</p>
             <div className="land-alert-card-title">{row.property_name}</div>
+            <div className="land-alert-card-place">{row.location || row.state || "—"}</div>
             <div className="land-alert-card-meta">
-              <span>{row.location || row.state || "—"}</span>
               {row.asking_price_display ? <span>{row.asking_price_display}</span> : null}
               {row.acres_display ? <span>{row.acres_display}</span> : null}
             </div>
@@ -1512,7 +1555,7 @@ export default function LandAlertsPage() {
             </button>
           </div>
 
-          <div className="space-y-3">
+          <div className="land-alert-match-list">
             {visible.slice(0, visibleLimit).map((row) => (
               <MatchCard
                 key={row.id}
