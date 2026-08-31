@@ -6968,7 +6968,7 @@ a.acquire-block:hover {
   }
 }
 
-/* Solo magnifying-glass lot scanner (save → matches) — white / tech tone */
+/* Solo magnifying-glass lot scanner — GPU-friendly, stable nodes */
 .land-alerts-loader.is-solo-scan {
   max-width: 38rem;
   background:
@@ -6983,26 +6983,19 @@ a.acquire-block:hover {
   border-radius: 18px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.18);
-  background:
-    radial-gradient(circle at 50% 12%, rgba(255, 255, 255, 0.12), transparent 40%),
-    linear-gradient(180deg, #1a1d21 0%, #121417 55%, #0e1012 100%);
+  background: linear-gradient(180deg, #1a1d21 0%, #121417 55%, #0e1012 100%);
+  contain: layout paint;
+  transform: translateZ(0);
 }
 
 .la-solo-horizon {
   position: absolute;
   inset: 0;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      transparent 0 18px,
-      rgba(255, 255, 255, 0.04) 18px 19px
-    ),
-    repeating-linear-gradient(
-      0deg,
-      transparent 0 18px,
-      rgba(255, 255, 255, 0.035) 18px 19px
-    );
-  opacity: 0.85;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 20px 20px;
+  opacity: 0.55;
   pointer-events: none;
 }
 
@@ -7029,6 +7022,7 @@ a.acquire-block:hover {
   background: rgba(255, 255, 255, 0.06);
   border-radius: 999px;
   padding: 0.28rem 0.65rem;
+  transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
 }
 
 .la-solo-hud-status.is-pending {
@@ -7054,7 +7048,6 @@ a.acquire-block:hover {
   pointer-events: none;
 }
 
-/* Soft “filed” tray at the bottom for approved lots */
 .la-solo-stage::after {
   content: "";
   position: absolute;
@@ -7063,9 +7056,8 @@ a.acquire-block:hover {
   bottom: 0.45rem;
   height: 0.55rem;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(90, 200, 140, 0.35), rgba(90, 200, 140, 0.08));
-  box-shadow: 0 0 18px rgba(90, 200, 140, 0.2);
-  opacity: 0.7;
+  background: rgba(90, 200, 140, 0.28);
+  opacity: 0.75;
   z-index: 5;
   pointer-events: none;
 }
@@ -7077,27 +7069,21 @@ a.acquire-block:hover {
   width: 7rem;
   padding: 0.55rem 0.6rem 0.5rem;
   border-radius: 12px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.07));
+  background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.28);
   color: #f7f8f9;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
-  transform: translate(-50%, -50%) scale(calc(1 - var(--slot) * 0.08))
-    translateY(calc(var(--slot) * 18px)) translateX(calc(var(--slot) * 10px));
-  opacity: calc(1 - var(--slot) * 0.16);
-  transition:
-    transform 420ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 320ms ease,
-    border-color 240ms ease,
-    background 240ms ease;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+  transform: translate3d(-50%, calc(-50% + var(--slot) * 16px), 0)
+    scale(calc(1 - var(--slot) * 0.07));
+  opacity: calc(1 - var(--slot) * 0.14);
+  transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1), opacity 280ms ease;
   z-index: calc(20 - var(--slot));
-  will-change: transform, opacity;
+  backface-visibility: hidden;
 }
 
 .la-solo-lot.slot-0 {
-  outline: 1px solid rgba(255, 255, 255, 0.55);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.12),
-    0 12px 28px rgba(0, 0, 0, 0.4);
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.34);
 }
 
 .la-solo-lot-id {
@@ -7132,18 +7118,22 @@ a.acquire-block:hover {
   opacity: 0.8;
 }
 
-/* KEEP — green flash, then file / deposit downward into the tray */
-.la-solo-lot.is-match {
+.la-solo-lot.is-exit {
+  left: 50%;
+  top: 46%;
   z-index: 40;
-  outline: none;
-  animation: la-solo-file-down 0.62s cubic-bezier(0.22, 0.82, 0.28, 1) forwards;
+  --slot: 0;
+  transition: none;
 }
 
-/* SKIP — red flash, then hard toss left off-stage */
-.la-solo-lot.is-pass {
-  z-index: 40;
+.la-solo-lot.is-match {
   outline: none;
-  animation: la-solo-toss-left 0.58s cubic-bezier(0.18, 0.7, 0.25, 1) forwards;
+  animation: la-solo-file-down 0.55s cubic-bezier(0.22, 0.8, 0.28, 1) both;
+}
+
+.la-solo-lot.is-pass {
+  outline: none;
+  animation: la-solo-toss-left 0.52s cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
 .la-solo-stamp {
@@ -7180,21 +7170,21 @@ a.acquire-block:hover {
   left: 50%;
   top: 34%;
   color: #ffffff;
-  transform: translate(-42%, -58%);
-  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.45));
-  animation: la-solo-glass-hunt 2.4s ease-in-out infinite;
+  transform: translate3d(-42%, -58%, 0);
+  animation: la-solo-glass-hunt 3.2s ease-in-out infinite;
   z-index: 30;
   pointer-events: none;
+  will-change: transform;
 }
 
 .la-solo-glass.is-yes {
   color: #9aecc0;
-  animation: la-solo-glass-yes 0.45s ease-out;
+  animation: la-solo-glass-yes 0.4s ease-out both;
 }
 
 .la-solo-glass.is-no {
   color: #f0a39a;
-  animation: la-solo-glass-no 0.45s ease-out;
+  animation: la-solo-glass-no 0.4s ease-out both;
 }
 
 .la-solo-glass-beam {
@@ -7204,120 +7194,121 @@ a.acquire-block:hover {
   width: 38%;
   height: 38%;
   border-radius: 999px;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.32), transparent 70%);
-  animation: la-solo-beam 1.6s ease-in-out infinite;
+  background: rgba(255, 255, 255, 0.18);
+  animation: la-solo-beam 2s ease-in-out infinite;
 }
 
 .land-alerts-loader.is-solo-scan .land-alerts-loader-ellipsis {
-  color: rgba(255, 255, 255, 0.9);
+  display: inline-block;
+  min-width: 1.35em;
+  text-align: left;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.land-alerts-loader.is-solo-scan .land-alerts-loader-ellipsis::after {
+  content: "";
+  animation: la-solo-ellipsis 1.15s steps(4, end) infinite;
 }
 
 .land-alerts-loader.is-solo-scan .land-alerts-loader-dots span {
   background: rgba(255, 255, 255, 0.75);
 }
 
+@keyframes la-solo-ellipsis {
+  0% {
+    content: "";
+  }
+  25% {
+    content: ".";
+  }
+  50% {
+    content: "..";
+  }
+  75%,
+  100% {
+    content: "...";
+  }
+}
+
 @keyframes la-solo-toss-left {
   0% {
-    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    transform: translate3d(-50%, -50%, 0) scale(1) rotate(0deg);
     opacity: 1;
     border-color: rgba(230, 100, 90, 0.95);
-    background: linear-gradient(180deg, rgba(210, 70, 60, 0.55), rgba(120, 35, 30, 0.4));
-    box-shadow:
-      0 0 0 2px rgba(230, 90, 80, 0.55),
-      0 12px 28px rgba(0, 0, 0, 0.4);
+    background: rgba(180, 55, 50, 0.42);
+    box-shadow: 0 0 0 2px rgba(230, 90, 80, 0.4);
   }
-  22% {
-    transform: translate(-58%, -62%) scale(1.04) rotate(-12deg);
+  18% {
+    transform: translate3d(-56%, -58%, 0) scale(1.03) rotate(-8deg);
     opacity: 1;
-    border-color: rgba(255, 120, 110, 1);
-    box-shadow:
-      0 0 0 3px rgba(230, 90, 80, 0.45),
-      0 0 24px rgba(230, 80, 70, 0.45);
   }
   100% {
-    transform: translate(-220%, -18%) scale(0.78) rotate(-28deg);
+    transform: translate3d(-210%, -12%, 0) scale(0.82) rotate(-22deg);
     opacity: 0;
-    border-color: rgba(230, 100, 90, 0.5);
-    background: linear-gradient(180deg, rgba(180, 55, 50, 0.35), rgba(90, 30, 28, 0.2));
   }
 }
 
 @keyframes la-solo-file-down {
   0% {
-    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    transform: translate3d(-50%, -50%, 0) scale(1) rotate(0deg);
     opacity: 1;
     border-color: rgba(90, 200, 140, 0.95);
-    background: linear-gradient(180deg, rgba(70, 180, 120, 0.5), rgba(40, 110, 75, 0.35));
-    box-shadow:
-      0 0 0 2px rgba(90, 200, 140, 0.5),
-      0 12px 28px rgba(0, 0, 0, 0.35);
+    background: rgba(60, 150, 100, 0.42);
+    box-shadow: 0 0 0 2px rgba(90, 200, 140, 0.38);
   }
-  28% {
-    transform: translate(-50%, -58%) scale(1.05) rotate(2deg);
+  20% {
+    transform: translate3d(-50%, -56%, 0) scale(1.04);
     opacity: 1;
-    border-color: rgba(140, 230, 180, 1);
-    box-shadow:
-      0 0 0 3px rgba(90, 200, 140, 0.4),
-      0 0 26px rgba(90, 200, 140, 0.4);
-  }
-  62% {
-    transform: translate(-50%, 18%) scale(0.9) rotate(0deg);
-    opacity: 0.95;
   }
   100% {
-    transform: translate(-50%, 78%) scale(0.72) rotate(0deg);
+    transform: translate3d(-50%, 72%, 0) scale(0.76);
     opacity: 0;
-    border-color: rgba(90, 200, 140, 0.45);
-    background: linear-gradient(180deg, rgba(70, 180, 120, 0.28), rgba(40, 110, 75, 0.18));
   }
 }
 
 @keyframes la-solo-glass-hunt {
   0%,
   100% {
-    transform: translate(-48%, -52%) rotate(-8deg);
+    transform: translate3d(-48%, -52%, 0) rotate(-6deg);
   }
-  35% {
-    transform: translate(-36%, -64%) rotate(4deg);
-  }
-  70% {
-    transform: translate(-54%, -46%) rotate(-2deg);
+  50% {
+    transform: translate3d(-40%, -60%, 0) rotate(3deg);
   }
 }
 
 @keyframes la-solo-glass-yes {
   0% {
-    transform: translate(-42%, -58%) scale(1);
+    transform: translate3d(-42%, -58%, 0) scale(1);
   }
   50% {
-    transform: translate(-42%, -42%) scale(1.06);
+    transform: translate3d(-42%, -46%, 0) scale(1.05);
   }
   100% {
-    transform: translate(-42%, -58%) scale(1);
+    transform: translate3d(-42%, -58%, 0) scale(1);
   }
 }
 
 @keyframes la-solo-glass-no {
   0% {
-    transform: translate(-42%, -58%) scale(1);
+    transform: translate3d(-42%, -58%, 0) scale(1);
   }
   50% {
-    transform: translate(-68%, -52%) scale(0.94) rotate(-14deg);
+    transform: translate3d(-62%, -54%, 0) scale(0.96) rotate(-10deg);
   }
   100% {
-    transform: translate(-42%, -58%) scale(1);
+    transform: translate3d(-42%, -58%, 0) scale(1);
   }
 }
 
 @keyframes la-solo-beam {
   0%,
   100% {
-    opacity: 0.35;
-    transform: scale(0.9);
+    opacity: 0.3;
+    transform: scale(0.92);
   }
   50% {
-    opacity: 0.85;
-    transform: scale(1.08);
+    opacity: 0.7;
+    transform: scale(1.05);
   }
 }
 
@@ -7326,7 +7317,8 @@ a.acquire-block:hover {
   .la-solo-glass-beam,
   .la-solo-lot,
   .la-solo-lot.is-match,
-  .la-solo-lot.is-pass {
+  .la-solo-lot.is-pass,
+  .land-alerts-loader.is-solo-scan .land-alerts-loader-ellipsis::after {
     animation: none !important;
     transition: none !important;
   }

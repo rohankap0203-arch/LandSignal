@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type LotVerdict = "pending" | "match" | "pass";
 
@@ -10,8 +10,9 @@ type LotCard = {
   acres: string;
   price: string;
   idLabel: string;
-  verdict: LotVerdict;
 };
+
+type ExitLot = LotCard & { verdict: "match" | "pass" };
 
 const STATES = ["FL", "TX", "GA", "NC", "AZ", "CO", "OR", "TN", "VA", "OK", "NM", "MT"];
 const ACRES = ["4.2 ac", "12 ac", "28 ac", "5.5 ac", "41 ac", "9 ac", "18 ac", "63 ac", "3.1 ac", "22 ac"];
@@ -35,15 +36,25 @@ function MagnifierIcon({ size = 64 }: { size?: number }) {
   );
 }
 
-function makeLot(id: number, verdict: LotVerdict = "pending"): LotCard {
+function makeLot(id: number): LotCard {
   return {
     id,
     state: STATES[id % STATES.length],
     acres: ACRES[id % ACRES.length],
     price: PRICES[id % PRICES.length],
     idLabel: `LOT-${String(1000 + (id % 9000)).padStart(4, "0")}`,
-    verdict,
   };
+}
+
+function LotFace({ lot }: { lot: LotCard }) {
+  return (
+    <>
+      <div className="la-solo-lot-id">{lot.idLabel}</div>
+      <div className="la-solo-lot-state">{lot.state}</div>
+      <div className="la-solo-lot-acres">{lot.acres}</div>
+      <div className="la-solo-lot-price">{lot.price}</div>
+    </>
+  );
 }
 
 const PHASES = [
@@ -52,6 +63,10 @@ const PHASES = [
   "Scoring preference fit",
   "Building match set",
 ] as const;
+
+const QUEUE_LEN = 3;
+const STEP_MS = 1100;
+const EXIT_MS = 560;
 
 /** Solo magnifying-glass scan — inspects lots, keeps fits, dismisses the rest. */
 export function LandAlertsLoader({
@@ -63,58 +78,64 @@ export function LandAlertsLoader({
   detail?: string;
   mode?: "boot" | "matching";
 }) {
-  const [dots, setDots] = useState(1);
   const [phase, setPhase] = useState(0);
-  const [tick, setTick] = useState(0);
-  const [lots, setLots] = useState<LotCard[]>(() => [0, 1, 2, 3, 4].map((i) => makeLot(i)));
-
-  useEffect(() => {
-    const t = window.setInterval(() => setDots((d) => (d % 3) + 1), 380);
-    return () => window.clearInterval(t);
-  }, []);
+  const [queue, setQueue] = useState<LotCard[]>(() =>
+    Array.from({ length: QUEUE_LEN }, (_, i) => makeLot(i)),
+  );
+  const [exitLot, setExitLot] = useState<ExitLot | null>(null);
+  const [glassMood, setGlassMood] = useState<LotVerdict>("pending");
+  const nextId = useRef(QUEUE_LEN);
+  const busy = useRef(false);
 
   useEffect(() => {
     if (mode !== "matching") return;
-    const t = window.setInterval(() => setPhase((p) => (p + 1) % PHASES.length), 1500);
+    const t = window.setInterval(() => setPhase((p) => (p + 1) % PHASES.length), 1800);
     return () => window.clearInterval(t);
   }, [mode]);
 
   useEffect(() => {
     if (mode !== "matching") return;
     let cancelled = false;
-    let id = 5;
+    let timer = 0;
 
     const step = () => {
-      if (cancelled) return;
+      if (cancelled || busy.current) return;
+      busy.current = true;
       const keep = Math.random() < 0.42;
-      setLots((prev) =>
-        prev.map((lot, i) => {
-          if (i !== 0 || lot.verdict !== "pending") return lot;
-          return { ...lot, verdict: keep ? "match" : "pass" };
-        }),
-      );
-      setTick((n) => n + 1);
+
+      setQueue((prev) => {
+        const [front, ...rest] = prev;
+        if (!front) {
+          busy.current = false;
+          return prev;
+        }
+        const verdict = keep ? "match" : "pass";
+        setExitLot({ ...front, verdict });
+        setGlassMood(verdict);
+        const refill = [...rest];
+        while (refill.length < QUEUE_LEN) {
+          refill.push(makeLot(nextId.current++));
+        }
+        return refill;
+      });
 
       window.setTimeout(() => {
         if (cancelled) return;
-        setLots((prev) => {
-          const rest = prev.slice(1);
-          while (rest.length < 5) rest.push(makeLot(id++));
-          return rest.map((lot, i) => (i === 0 ? { ...lot, verdict: "pending" } : lot));
-        });
-      }, 640);
+        setExitLot(null);
+        setGlassMood("pending");
+        busy.current = false;
+      }, EXIT_MS);
     };
 
-    const first = window.setTimeout(step, 700);
-    const loop = window.setInterval(step, 1280);
+    const first = window.setTimeout(step, 480);
+    timer = window.setInterval(step, STEP_MS);
     return () => {
       cancelled = true;
       window.clearTimeout(first);
-      window.clearInterval(loop);
+      window.clearInterval(timer);
     };
   }, [mode]);
 
-  const ellipsis = ".".repeat(dots);
   const headline = label || (mode === "matching" ? PHASES[phase] : "Land Alerts");
   const shownDetail =
     detail ||
@@ -122,9 +143,8 @@ export function LandAlertsLoader({
       ? "Running your acquisition filters against live public parcels."
       : "Preparing your profile");
 
-  const active = useMemo(() => lots[0], [lots]);
   const statusWord =
-    active?.verdict === "match" ? "KEEP" : active?.verdict === "pass" ? "SKIP" : "SCAN";
+    glassMood === "match" ? "KEEP" : glassMood === "pass" ? "SKIP" : "SCAN";
 
   if (mode === "boot") {
     return null;
@@ -136,31 +156,35 @@ export function LandAlertsLoader({
         <div className="la-solo-horizon" />
         <div className="la-solo-hud">
           <span className="la-solo-hud-chip">FILTER PASS</span>
-          <span className={`la-solo-hud-status is-${active?.verdict || "pending"}`}>{statusWord}</span>
+          <span className={`la-solo-hud-status is-${glassMood}`}>{statusWord}</span>
         </div>
+
         <div className="la-solo-lots">
-          {lots.map((lot, i) => (
+          {queue.map((lot, i) => (
             <div
-              key={`${lot.id}-${lot.verdict}-${tick}-${i}`}
-              className={`la-solo-lot slot-${i} is-${lot.verdict}`}
+              key={lot.id}
+              className={`la-solo-lot slot-${i} is-pending`}
               style={{ ["--slot" as string]: String(i) }}
             >
-              <div className="la-solo-lot-id">{lot.idLabel}</div>
-              <div className="la-solo-lot-state">{lot.state}</div>
-              <div className="la-solo-lot-acres">{lot.acres}</div>
-              <div className="la-solo-lot-price">{lot.price}</div>
-              {lot.verdict === "match" ? <span className="la-solo-stamp is-match">KEEP</span> : null}
-              {lot.verdict === "pass" ? <span className="la-solo-stamp is-pass">SKIP</span> : null}
+              <LotFace lot={lot} />
             </div>
           ))}
+          {exitLot ? (
+            <div key={`exit-${exitLot.id}`} className={`la-solo-lot is-exit is-${exitLot.verdict}`}>
+              <LotFace lot={exitLot} />
+              <span className={`la-solo-stamp is-${exitLot.verdict}`}>
+                {exitLot.verdict === "match" ? "KEEP" : "SKIP"}
+              </span>
+            </div>
+          ) : null}
         </div>
 
         <div
-          className={`la-solo-glass${active?.verdict === "match" ? " is-yes" : ""}${
-            active?.verdict === "pass" ? " is-no" : ""
+          className={`la-solo-glass${glassMood === "match" ? " is-yes" : ""}${
+            glassMood === "pass" ? " is-no" : ""
           }`}
         >
-          <MagnifierIcon size={78} />
+          <MagnifierIcon size={72} />
           <span className="la-solo-glass-beam" />
         </div>
       </div>
@@ -168,9 +192,7 @@ export function LandAlertsLoader({
       <div className="land-alerts-loader-copy">
         <div className="display text-xl font-semibold land-alerts-loader-title">
           <span>{headline}</span>
-          <span className="land-alerts-loader-ellipsis" aria-hidden>
-            {ellipsis}
-          </span>
+          <span className="land-alerts-loader-ellipsis" aria-hidden />
         </div>
         <p className="mt-1 text-sm text-[var(--muted)]">{shownDetail}</p>
         <div className="land-alerts-loader-dots" aria-hidden>
