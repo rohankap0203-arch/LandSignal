@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { isUuid } from "@/lib/local-users";
 
-const API_ORIGIN = process.env.LANDSIGNAL_API_ORIGIN || "http://127.0.0.1:8000";
+const API_ORIGINS = [
+  process.env.LANDSIGNAL_API_ORIGIN,
+  "http://127.0.0.1:8000",
+  "http://localhost:8000",
+].filter((v, i, arr): v is string => Boolean(v) && arr.indexOf(v) === i);
 
 /** Headers that must not be forwarded (request or response). */
 const HOP_BY_HOP = new Set([
@@ -18,12 +24,15 @@ const HOP_BY_HOP = new Set([
   // ("Failed to fetch") — which Show matches used to surface as a connection error.
   "content-encoding",
   "accept-encoding",
+  // Never let the browser spoof account identity — only the Auth.js session may set this.
+  "x-landsignal-user-id",
+  "x-landsignal-user-email",
 ]);
 
 async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   const { path } = await ctx.params;
   const incoming = new URL(req.url);
-  const target = `${API_ORIGIN}/v1/${path.map(encodeURIComponent).join("/")}${incoming.search}`;
+  const suffix = `/v1/${path.map(encodeURIComponent).join("/")}${incoming.search}`;
 
   const headers = new Headers();
   req.headers.forEach((value, key) => {
@@ -32,11 +41,25 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
   // Ask upstream for identity encoding so we never re-label a decoded body as gzip.
   headers.set("accept-encoding", "identity");
 
+  try {
+    const session = await auth();
+    const userId = session?.user?.id ? String(session.user.id) : "";
+    if (userId && isUuid(userId)) {
+      headers.set("X-LandSignal-User-Id", userId);
+      if (session?.user?.email) {
+        headers.set("X-LandSignal-User-Email", String(session.user.email));
+      }
+    }
+  } catch {
+    /* anonymous browse still works without a session */
+  }
+
   const init: RequestInit & { duplex?: "half" } = {
     method: req.method,
     headers,
     cache: "no-store",
     redirect: "manual",
+    signal: req.signal,
   };
 
   if (req.method !== "GET" && req.method !== "HEAD") {
@@ -44,27 +67,35 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
     init.duplex = "half";
   }
 
-  try {
-    const upstream = await fetch(target, init);
-    const body = await upstream.arrayBuffer();
-    const outHeaders = new Headers();
-    upstream.headers.forEach((value, key) => {
-      if (!HOP_BY_HOP.has(key.toLowerCase())) outHeaders.set(key, value);
-    });
-    return new NextResponse(body, {
-      status: upstream.status,
-      statusText: upstream.statusText,
-      headers: outHeaders,
-    });
-  } catch {
-    return NextResponse.json(
-      {
-        detail:
-          "LandSignal API is not reachable on port 8000. Start it with `npm run dev:api`, then try Show matches again.",
-      },
-      { status: 503 },
-    );
+  let lastError: unknown;
+  for (const origin of API_ORIGINS) {
+    try {
+      const upstream = await fetch(`${origin}${suffix}`, init);
+      const body = await upstream.arrayBuffer();
+      const outHeaders = new Headers();
+      upstream.headers.forEach((value, key) => {
+        if (!HOP_BY_HOP.has(key.toLowerCase())) outHeaders.set(key, value);
+      });
+      return new NextResponse(body, {
+        status: upstream.status,
+        statusText: upstream.statusText,
+        headers: outHeaders,
+      });
+    } catch (err) {
+      lastError = err;
+    }
   }
+
+  const cause =
+    lastError instanceof Error ? lastError.message : typeof lastError === "string" ? lastError : "";
+  return NextResponse.json(
+    {
+      detail:
+        "LandSignal API on port 8000 is not responding. Hard-refresh the port-3000 preview after the API restarts, then try Show matches again." +
+        (cause ? ` (${cause})` : ""),
+    },
+    { status: 503 },
+  );
 }
 
 export const GET = proxy;

@@ -48,6 +48,17 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000/v1
       NEXT_PUBLIC_MAPBOX_TOKEN: ${NEXT_PUBLIC_MAPBOX_TOKEN:-}
+      LANDSIGNAL_API_ORIGIN: http://api:8000
+      AUTH_SECRET: ${AUTH_SECRET:-landsignal-dev-auth-secret-change-me}
+      AUTH_URL: ${AUTH_URL:-}
+      AUTH_DEMO_OAUTH: ${AUTH_DEMO_OAUTH:-true}
+      AUTH_TRUST_HOST: "true"
+      AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID:-}
+      AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET:-}
+      AUTH_APPLE_ID: ${AUTH_APPLE_ID:-}
+      AUTH_APPLE_SECRET: ${AUTH_APPLE_SECRET:-}
+    volumes:
+      - web_accounts:/app/.data
     ports:
       - "3000:3000"
     depends_on:
@@ -55,3 +66,4 @@ services:
 
 volumes:
   pgdata:
+  web_accounts:

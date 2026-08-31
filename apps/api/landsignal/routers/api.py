@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+
+from landsignal.auth_user import optional_user_id, require_user_id
 
 from landsignal.models import (
     AlertRuleCreate,
@@ -1277,7 +1279,7 @@ async def search_meta() -> dict[str, Any]:
 
 
 @router.get("/parcels/{parcel_id}")
-async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
+async def parcel_detail(parcel_id: UUID, user_id: UUID | None = Depends(optional_user_id)) -> dict[str, Any]:
     from landsignal.services.humanize import (
         human_access,
         human_dd_items,
@@ -1297,9 +1299,10 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         raise HTTPException(404, "Parcel not found")
     # Opening a parcel marks Land Alert matches as viewed (persists across sessions)
     try:
-        from landsignal.services.land_alerts import DEMO_USER_ID, mark_match_viewed
+        from landsignal.services.land_alerts import mark_match_viewed
 
-        mark_match_viewed(store, DEMO_USER_ID, parcel_id)
+        if user_id is not None:
+            mark_match_viewed(store, user_id, parcel_id)
     except Exception:  # noqa: BLE001
         pass
 
@@ -1521,8 +1524,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         scenarios_human=scenarios_human,
         dd_guided=dd_guided,
     )
-    user = UUID("00000000-0000-4000-8000-000000000002")
-    watched = parcel_id in store.watchlists.get(user, set())
+    watched = bool(user_id and parcel_id in store.watchlists.get(user_id, set()))
 
     # XY clearing chart: price (x) vs remaining buyer competition (y)
     model_v = float(score.estimated_value_usd or 0) if score else 0.0
@@ -1850,22 +1852,27 @@ async def list_alerts() -> list:
 
 
 @router.get("/land-alerts/profiles")
-async def list_land_alert_profiles() -> list[dict[str, Any]]:
-    from landsignal.services.land_alerts import DEMO_USER_ID
-
+async def list_land_alert_profiles(user_id: UUID | None = Depends(optional_user_id)) -> list[dict[str, Any]]:
+    if user_id is None:
+        return []
     store = get_store(get_settings().demo_seed)
-    rows = [p for p in store.land_alert_profiles.values() if p.user_id == DEMO_USER_ID]
+    rows = [p for p in store.land_alert_profiles.values() if p.user_id == user_id]
     rows.sort(key=lambda p: p.updated_at, reverse=True)
     return [p.model_dump(mode="json") for p in rows]
 
 
 @router.get("/land-alerts/profile")
-async def get_land_alert_profile() -> dict[str, Any]:
-    """Primary profile for the demo user (first active, or empty template)."""
-    from landsignal.services.land_alerts import DEMO_USER_ID
-
+async def get_land_alert_profile(user_id: UUID | None = Depends(optional_user_id)) -> dict[str, Any]:
+    """Primary Land Alert profile for the signed-in user (empty when anonymous)."""
+    if user_id is None:
+        return {
+            "profile": None,
+            "has_profile": False,
+            "notify": LandAlertNotify().model_dump(mode="json"),
+            "preferences": {},
+        }
     store = get_store(get_settings().demo_seed)
-    rows = [p for p in store.land_alert_profiles.values() if p.user_id == DEMO_USER_ID]
+    rows = [p for p in store.land_alert_profiles.values() if p.user_id == user_id]
     rows.sort(key=lambda p: p.updated_at, reverse=True)
     if not rows:
         return {
@@ -1884,16 +1891,18 @@ async def get_land_alert_profile() -> dict[str, Any]:
 
 
 @router.put("/land-alerts/profile")
-async def upsert_land_alert_profile(body: LandAlertProfileUpsert) -> dict[str, Any]:
+async def upsert_land_alert_profile(
+    body: LandAlertProfileUpsert,
+    user_id: UUID = Depends(require_user_id),
+) -> dict[str, Any]:
     from landsignal.services.land_alerts import (
-        DEMO_USER_ID,
         filter_mappable_matches,
         match_card,
         upsert_profile,
     )
 
     store = get_store(get_settings().demo_seed)
-    profile, matches = upsert_profile(store, body, DEMO_USER_ID)
+    profile, matches = upsert_profile(store, body, user_id)
     viewable = filter_mappable_matches(store, matches)
     cards = [match_card(store, m) for m in viewable]
     cards.sort(key=lambda c: (-(c.get("preference_match_pct") or 0), -(c.get("landsignal_score") or 0)))
@@ -1907,24 +1916,24 @@ async def upsert_land_alert_profile(body: LandAlertProfileUpsert) -> dict[str, A
 
 
 @router.post("/land-alerts/profile/{profile_id}/pause")
-async def pause_land_alert(profile_id: UUID) -> dict[str, Any]:
-    from landsignal.services.land_alerts import DEMO_USER_ID, set_paused
+async def pause_land_alert(profile_id: UUID, user_id: UUID = Depends(require_user_id)) -> dict[str, Any]:
+    from landsignal.services.land_alerts import set_paused
 
     store = get_store(get_settings().demo_seed)
     try:
-        profile = set_paused(store, profile_id, True, DEMO_USER_ID)
+        profile = set_paused(store, profile_id, True, user_id)
     except KeyError:
         raise HTTPException(404, "Land Alert profile not found") from None
     return {"profile": profile.model_dump(mode="json")}
 
 
 @router.post("/land-alerts/profile/{profile_id}/resume")
-async def resume_land_alert(profile_id: UUID) -> dict[str, Any]:
-    from landsignal.services.land_alerts import DEMO_USER_ID, rescan_profile, set_paused
+async def resume_land_alert(profile_id: UUID, user_id: UUID = Depends(require_user_id)) -> dict[str, Any]:
+    from landsignal.services.land_alerts import rescan_profile, set_paused
 
     store = get_store(get_settings().demo_seed)
     try:
-        profile = set_paused(store, profile_id, False, DEMO_USER_ID)
+        profile = set_paused(store, profile_id, False, user_id)
     except KeyError:
         raise HTTPException(404, "Land Alert profile not found") from None
     matches = rescan_profile(store, profile, origin="existing_inventory")
@@ -1932,16 +1941,21 @@ async def resume_land_alert(profile_id: UUID) -> dict[str, Any]:
 
 
 @router.get("/land-alerts/matches")
-async def list_land_alert_matches(profile_id: UUID | None = None, status: str | None = None) -> dict[str, Any]:
+async def list_land_alert_matches(
+    profile_id: UUID | None = None,
+    status: str | None = None,
+    user_id: UUID | None = Depends(optional_user_id),
+) -> dict[str, Any]:
     from landsignal.services.land_alerts import (
-        DEMO_USER_ID,
         filter_mappable_matches,
         match_card,
         matches_for_user,
     )
 
+    if user_id is None:
+        return {"matches": [], "counts": {"new": 0, "unseen": 0, "viewed": 0, "total": 0}}
     store = get_store(get_settings().demo_seed)
-    all_rows = filter_mappable_matches(store, matches_for_user(store, DEMO_USER_ID, profile_id))
+    all_rows = filter_mappable_matches(store, matches_for_user(store, user_id, profile_id))
     rows = [m for m in all_rows if m.status == status] if status else all_rows
     cards = [match_card(store, m) for m in rows]
     return {
@@ -2006,56 +2020,64 @@ async def parcel_nearby_landmarks(parcel_id: UUID, kind: str) -> dict[str, Any]:
 
 
 @router.post("/land-alerts/matches/{parcel_id}/viewed")
-async def mark_land_alert_viewed(parcel_id: UUID) -> dict[str, Any]:
-    from landsignal.services.land_alerts import DEMO_USER_ID, mark_match_viewed
+async def mark_land_alert_viewed(parcel_id: UUID, user_id: UUID = Depends(require_user_id)) -> dict[str, Any]:
+    from landsignal.services.land_alerts import mark_match_viewed
     from landsignal.store import persist_store
 
     store = get_store(get_settings().demo_seed)
-    n = mark_match_viewed(store, DEMO_USER_ID, parcel_id)
+    n = mark_match_viewed(store, user_id, parcel_id)
     persist_store(store)
     return {"updated": n}
 
 
 @router.delete("/land-alerts/matches/{parcel_id}/viewed")
-async def unmark_land_alert_viewed(parcel_id: UUID) -> dict[str, Any]:
-    from landsignal.services.land_alerts import DEMO_USER_ID, mark_match_unviewed
+async def unmark_land_alert_viewed(parcel_id: UUID, user_id: UUID = Depends(require_user_id)) -> dict[str, Any]:
+    from landsignal.services.land_alerts import mark_match_unviewed
     from landsignal.store import persist_store
 
     store = get_store(get_settings().demo_seed)
-    n = mark_match_unviewed(store, DEMO_USER_ID, parcel_id)
+    n = mark_match_unviewed(store, user_id, parcel_id)
     persist_store(store)
     return {"updated": n}
 
 
 @router.post("/land-alerts/mark-all-seen")
-async def mark_all_land_alerts_seen(profile_id: UUID | None = None) -> dict[str, Any]:
-    from landsignal.services.land_alerts import DEMO_USER_ID, mark_all_seen
+async def mark_all_land_alerts_seen(
+    profile_id: UUID | None = None,
+    user_id: UUID = Depends(require_user_id),
+) -> dict[str, Any]:
+    from landsignal.services.land_alerts import mark_all_seen
     from landsignal.store import persist_store
 
     store = get_store(get_settings().demo_seed)
-    n = mark_all_seen(store, DEMO_USER_ID, profile_id)
+    n = mark_all_seen(store, user_id, profile_id)
     persist_store(store)
     return {"updated": n}
 
 
 @router.post("/land-alerts/mark-all-unseen")
-async def mark_all_land_alerts_unseen(profile_id: UUID | None = None) -> dict[str, Any]:
-    from landsignal.services.land_alerts import DEMO_USER_ID, mark_all_unseen
+async def mark_all_land_alerts_unseen(
+    profile_id: UUID | None = None,
+    user_id: UUID = Depends(require_user_id),
+) -> dict[str, Any]:
+    from landsignal.services.land_alerts import mark_all_unseen
     from landsignal.store import persist_store
 
     store = get_store(get_settings().demo_seed)
-    n = mark_all_unseen(store, DEMO_USER_ID, profile_id)
+    n = mark_all_unseen(store, user_id, profile_id)
     persist_store(store)
     return {"updated": n}
 
 
 @router.put("/land-alerts/notify")
-async def update_land_alert_notify(body: LandAlertNotify) -> dict[str, Any]:
-    from landsignal.services.land_alerts import DEMO_USER_ID
+async def update_land_alert_notify(
+    body: LandAlertNotify,
+    user_id: UUID = Depends(require_user_id),
+) -> dict[str, Any]:
     from landsignal.store import persist_store
 
     store = get_store(get_settings().demo_seed)
-    rows = [p for p in store.land_alert_profiles.values() if p.user_id == DEMO_USER_ID]
+    rows = [p for p in store.land_alert_profiles.values() if p.user_id == user_id]
     if not rows:
         raise HTTPException(404, "Create a Land Alert profile first")
     rows.sort(key=lambda p: p.updated_at, reverse=True)
@@ -2066,16 +2088,15 @@ async def update_land_alert_notify(body: LandAlertNotify) -> dict[str, Any]:
 
 
 @router.post("/land-alerts/rescan")
-async def rescan_land_alerts() -> dict[str, Any]:
+async def rescan_land_alerts(user_id: UUID = Depends(require_user_id)) -> dict[str, Any]:
     from landsignal.services.land_alerts import (
-        DEMO_USER_ID,
         filter_mappable_matches,
         match_card,
         rescan_profile,
     )
 
     store = get_store(get_settings().demo_seed)
-    profiles = [p for p in store.land_alert_profiles.values() if p.user_id == DEMO_USER_ID and not p.paused]
+    profiles = [p for p in store.land_alert_profiles.values() if p.user_id == user_id and not p.paused]
     all_matches = []
     for p in profiles:
         all_matches.extend(rescan_profile(store, p, origin="existing_inventory"))
@@ -2096,14 +2117,13 @@ async def put_profile(body: InvestorProfileUpdate) -> dict[str, Any]:
 
 
 @router.post("/parcels/{parcel_id}/watch")
-async def watch(parcel_id: UUID) -> dict[str, Any]:
+async def watch(parcel_id: UUID, user_id: UUID = Depends(require_user_id)) -> dict[str, Any]:
     store = get_store(get_settings().demo_seed)
     if parcel_id not in store.parcels:
         raise HTTPException(404, "Parcel not found")
     if store.latest_score(parcel_id) is None:
         await analyze_parcel(store, parcel_id, fast=True)
-    user = UUID("00000000-0000-4000-8000-000000000002")
-    store.watchlists.setdefault(user, set()).add(parcel_id)
+    store.watchlists.setdefault(user_id, set()).add(parcel_id)
     score = store.latest_score(parcel_id)
     listing = store.listing_for_parcel(parcel_id)
     snap = {
@@ -2132,20 +2152,24 @@ async def watch(parcel_id: UUID) -> dict[str, Any]:
 
 
 @router.delete("/parcels/{parcel_id}/watch")
-async def unwatch(parcel_id: UUID) -> dict[str, Any]:
+async def unwatch(parcel_id: UUID, user_id: UUID = Depends(require_user_id)) -> dict[str, Any]:
     store = get_store(get_settings().demo_seed)
-    user = UUID("00000000-0000-4000-8000-000000000002")
-    store.watchlists.setdefault(user, set()).discard(parcel_id)
+    store.watchlists.setdefault(user_id, set()).discard(parcel_id)
     store.watch_snapshots.pop(parcel_id, None)
     return {"watched": False, "parcel_id": parcel_id}
 
 
 @router.get("/watchlist")
-async def watchlist() -> dict[str, Any]:
+async def watchlist(user_id: UUID | None = Depends(optional_user_id)) -> dict[str, Any]:
     store = get_store(get_settings().demo_seed)
-    user = UUID("00000000-0000-4000-8000-000000000002")
     items = []
-    for pid in sorted(store.watchlists.get(user, set()), key=str):
+    if user_id is None:
+        return {
+            "items": [],
+            "notify_email": store.investor_profile.get("notify_email") or "",
+            "watchlist_email_updates": bool(store.investor_profile.get("watchlist_email_updates")),
+        }
+    for pid in sorted(store.watchlists.get(user_id, set()), key=str):
         parcel = store.parcels.get(pid)
         listing = store.listing_for_parcel(pid)
         score = store.latest_score(pid)

@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { AcquireRail, type OutreachPlaybook } from "@/components/acquire-rail";
 import { LandLoader } from "@/components/land-loader";
 import { LandViewerModal } from "@/components/land-viewer-modal";
@@ -88,6 +89,8 @@ function WatchEyeButton({
 
 export default function ParcelIntelligencePage() {
   const params = useParams<{ id: string }>();
+  const { data: session, status: authStatus } = useSession();
+  const signedIn = Boolean(session?.user?.id);
   const [data, setData] = useState<AnyRec | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [watched, setWatched] = useState(false);
@@ -179,6 +182,11 @@ export default function ParcelIntelligencePage() {
   const findLink = links.find((l) => l.kind === "lookup") || null;
 
   async function toggleWatch() {
+    if (authStatus === "loading") return;
+    if (!signedIn) {
+      window.location.href = `/login?mode=signup&callbackUrl=${encodeURIComponent(`/parcels/${params.id}`)}`;
+      return;
+    }
     try {
       if (watched) {
         await landsignalApi.unwatch(params.id);

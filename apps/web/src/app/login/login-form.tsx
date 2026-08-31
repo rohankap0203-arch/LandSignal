@@ -47,6 +47,7 @@ export function LoginForm({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState(
     authError ? "Sign-in was cancelled or failed. Try again." : "",
@@ -59,34 +60,59 @@ export function LoginForm({
   const subtitle = useMemo(
     () =>
       mode === "signup"
-        ? "Save Land Alerts, watchlists, and acquisition preferences across devices."
+        ? "Save Land Alerts, watchlists, and acquisition preferences to your account."
         : "Sign in to pick up your matches, saved land, and alert profile.",
     [mode],
   );
+
+  async function finishSession() {
+    router.push(callbackUrl);
+    router.refresh();
+  }
 
   async function onEmailSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
     setBusy("credentials");
     try {
+      if (mode === "signup") {
+        if (!name.trim()) {
+          setError("Enter your name.");
+          return;
+        }
+        if (password !== confirm) {
+          setError("Passwords do not match.");
+          return;
+        }
+        const reg = await fetch("/api/account/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password, name }),
+        });
+        const payload = (await reg.json().catch(() => ({}))) as { detail?: string };
+        if (!reg.ok) {
+          setError(payload.detail || "Could not create that account.");
+          return;
+        }
+      }
+
       const res = await signIn("credentials", {
         email,
         password,
         name,
-        mode,
+        mode: "signin",
         redirect: false,
         callbackUrl,
       });
       if (res?.error) {
         setError(
           mode === "signup"
-            ? "Could not create that account. Try a different email or sign in."
+            ? "Account created, but sign-in failed. Try signing in."
             : "Incorrect email or password.",
         );
         return;
       }
-      router.push(callbackUrl);
-      router.refresh();
+      await finishSession();
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -100,11 +126,9 @@ export function LoginForm({
     try {
       const live = provider === "google" ? googleLive : appleLive;
       if (live) {
-        // Real OAuth — full redirect to Google / Apple
         await signIn(provider, { callbackUrl, redirect: true });
         return;
       }
-      // Local social session (no vendor secrets configured in this environment)
       const res = await signIn(provider, {
         redirect: false,
         callbackUrl,
@@ -115,8 +139,7 @@ export function LoginForm({
         setError(`Could not continue with ${provider === "google" ? "Google" : "Apple"}.`);
         return;
       }
-      router.push(callbackUrl);
-      router.refresh();
+      await finishSession();
     } catch {
       setError(`Could not continue with ${provider === "google" ? "Google" : "Apple"}.`);
     } finally {
@@ -196,6 +219,7 @@ export function LoginForm({
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="name"
                 placeholder="Your name"
+                required
               />
             </label>
           ) : null}
@@ -222,6 +246,20 @@ export function LoginForm({
               placeholder={mode === "signup" ? "At least 8 characters" : "Your password"}
             />
           </label>
+          {mode === "signup" ? (
+            <label className="auth-field">
+              <span>Confirm password</span>
+              <input
+                type="password"
+                required
+                minLength={8}
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                autoComplete="new-password"
+                placeholder="Re-enter password"
+              />
+            </label>
+          ) : null}
 
           {error ? <div className="auth-error">{error}</div> : null}
 

@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { ScoreBar } from "@/components/score-bar";
 import { landsignalApi } from "@/lib/api";
 
@@ -20,6 +22,8 @@ type WatchItem = {
 };
 
 export default function WatchlistPage() {
+  const { data: session, status: authStatus } = useSession();
+  const signedIn = Boolean(session?.user?.id);
   const [items, setItems] = useState<WatchItem[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -56,10 +60,27 @@ export default function WatchlistPage() {
         </button>
       </div>
 
+      {authStatus !== "loading" && !signedIn ? (
+        <div className="panel p-5 space-y-3">
+          <div className="display text-lg font-semibold">Sign in to keep a personal watchlist</div>
+          <p className="text-sm text-[var(--muted)]">
+            Create an account so watched parcels stay on your profile.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/login?mode=signup&callbackUrl=%2Fwatchlist" className="btn btn-dark">
+              Create account
+            </Link>
+            <Link href="/login?callbackUrl=%2Fwatchlist" className="btn btn-ghost">
+              Sign in
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
       {error && <div className="panel p-4 text-[var(--danger)]">{error}</div>}
       {loading && <div className="text-[var(--muted)]">Loading watchlist…</div>}
 
-      {!loading && !items.length && (
+      {!loading && !items.length && signedIn && (
         <div className="panel empty-state">
           <div className="display text-2xl">Nothing watched yet</div>
           <p className="mx-auto mt-2 max-w-lg">
@@ -71,7 +92,6 @@ export default function WatchlistPage() {
           </Link>
         </div>
       )}
-
       <div className="grid gap-4">
         {items.map((item) => (
           <article key={item.parcel_id} className="panel p-5">
