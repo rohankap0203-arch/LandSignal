@@ -375,13 +375,13 @@ select {
   flex-wrap: wrap;
   align-items: center; /* vertically center logo marks in the row */
   justify-content: center;
-  column-gap: 1.85rem;
-  row-gap: 1rem;
+  column-gap: 2.65rem;
+  row-gap: 1.15rem;
   margin: 0;
   padding: 0;
   list-style: none;
   width: 100%;
-  max-width: 52rem; /* keeps the strip to two rows */
+  max-width: 56rem; /* keeps the strip to two rows with wider gaps */
 }
 
 .used-by-logo {
@@ -416,7 +416,7 @@ select {
   max-height: 2.55rem;
   max-width: 2.55rem;
   /* Sit a touch below the shared letter centerline */
-  transform: translateY(0.18rem);
+  transform: translateY(0.32rem);
 }
 
 .used-by-logo--landcom img {
@@ -487,8 +487,8 @@ select {
   }
 
   .used-by-logos {
-    column-gap: 1.2rem;
-    row-gap: 0.9rem;
+    column-gap: 1.75rem;
+    row-gap: 1rem;
     max-width: 100%;
   }
 
@@ -504,7 +504,7 @@ select {
   .used-by-logo--landwatch img {
     max-height: 2.25rem;
     max-width: 2.25rem;
-    transform: translateY(0.14rem);
+    transform: translateY(0.24rem);
   }
 
   .used-by-logo--landcom img {
