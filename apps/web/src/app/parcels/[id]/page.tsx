@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AcquireRail, type OutreachPlaybook } from "@/components/acquire-rail";
 import { LandLoader } from "@/components/land-loader";
@@ -120,6 +120,8 @@ function RefreshIntelButton({
 
 export default function ParcelIntelligencePage() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const fromAlerts = searchParams.get("from") === "alerts";
   const [data, setData] = useState<AnyRec | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [watched, setWatched] = useState(false);
@@ -286,11 +288,16 @@ export default function ParcelIntelligencePage() {
   return (
     <div className="intel-page space-y-5">
       <div className="intel-page-nav">
-        <Link href="/" className="text-sm text-[var(--muted)] hover:text-[var(--brand)]">
-          ← Back to results
+        <Link
+          href={fromAlerts ? "/alerts" : "/"}
+          className="text-sm text-[var(--muted)] hover:text-[var(--brand)]"
+        >
+          {fromAlerts ? "← Back to Land Alerts" : "← Back to results"}
         </Link>
         <div className="intel-page-nav-actions">
-          <RefreshIntelButton refreshing={refreshing} onRefresh={() => void refreshIntelligence()} />
+          {fromAlerts ? null : (
+            <RefreshIntelButton refreshing={refreshing} onRefresh={() => void refreshIntelligence()} />
+          )}
           <Link href="/watchlist" className="text-sm text-[var(--muted)] hover:text-[var(--brand)]">
             Open watchlist
           </Link>

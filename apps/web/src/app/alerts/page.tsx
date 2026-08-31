@@ -362,7 +362,7 @@ function MatchCard({
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerPolygon, setViewerPolygon] = useState<number[][][] | null>(row.polygon ?? null);
   const flipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const href = row.deep_link || `/parcels/${row.parcel_id}`;
+  const href = `/parcels/${row.parcel_id}?from=alerts`;
   const canViewLand =
     row.has_boundary === true && row.latitude != null && row.longitude != null;
 
