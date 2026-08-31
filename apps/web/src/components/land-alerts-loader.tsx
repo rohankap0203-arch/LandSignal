@@ -85,7 +85,9 @@ export function LandAlertsLoader({
   const [exitLot, setExitLot] = useState<ExitLot | null>(null);
   const [glassMood, setGlassMood] = useState<LotVerdict>("pending");
   const nextId = useRef(QUEUE_LEN);
+  const queueRef = useRef(queue);
   const busy = useRef(false);
+  queueRef.current = queue;
 
   useEffect(() => {
     if (mode !== "matching") return;
@@ -100,24 +102,21 @@ export function LandAlertsLoader({
 
     const step = () => {
       if (cancelled || busy.current) return;
+      const [front, ...rest] = queueRef.current;
+      if (!front) return;
       busy.current = true;
-      const keep = Math.random() < 0.42;
 
-      setQueue((prev) => {
-        const [front, ...rest] = prev;
-        if (!front) {
-          busy.current = false;
-          return prev;
-        }
-        const verdict = keep ? "match" : "pass";
-        setExitLot({ ...front, verdict });
-        setGlassMood(verdict);
-        const refill = [...rest];
-        while (refill.length < QUEUE_LEN) {
-          refill.push(makeLot(nextId.current++));
-        }
-        return refill;
-      });
+      const keep = Math.random() < 0.42;
+      const verdict: "match" | "pass" = keep ? "match" : "pass";
+      const refill = [...rest];
+      while (refill.length < QUEUE_LEN) {
+        refill.push(makeLot(nextId.current++));
+      }
+
+      setExitLot({ ...front, verdict });
+      setGlassMood(verdict);
+      setQueue(refill);
+      queueRef.current = refill;
 
       window.setTimeout(() => {
         if (cancelled) return;
