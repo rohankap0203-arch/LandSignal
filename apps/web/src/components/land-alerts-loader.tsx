@@ -142,9 +142,6 @@ export function LandAlertsLoader({
       ? "Running your acquisition filters against live public parcels."
       : "Preparing your profile");
 
-  const statusWord =
-    glassMood === "match" ? "KEEP" : glassMood === "pass" ? "SKIP" : "SCAN";
-
   if (mode === "boot") {
     return null;
   }
@@ -155,7 +152,6 @@ export function LandAlertsLoader({
         <div className="la-solo-horizon" />
         <div className="la-solo-hud">
           <span className="la-solo-hud-chip">FILTER PASS</span>
-          <span className={`la-solo-hud-status is-${glassMood}`}>{statusWord}</span>
         </div>
 
         <div className="la-solo-lots">

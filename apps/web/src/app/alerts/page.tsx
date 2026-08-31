@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
 import { HelpTip } from "@/components/filter-field";
 import { LandAlertsLoader } from "@/components/land-alerts-loader";
@@ -563,6 +563,7 @@ export default function LandAlertsPage() {
   const [tab, setTab] = useState<"matches" | "saved">("matches");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [visibleLimit, setVisibleLimit] = useState(20);
   const [inAppAlerts, setInAppAlerts] = useState<Record<string, unknown>[]>([]);
   /** Checked this session — grey in Matches; also listed under Saved */
   const [pendingSaved, setPendingSaved] = useState<Set<string>>(() => new Set());
@@ -827,31 +828,31 @@ export default function LandAlertsPage() {
       const res = await landsignalApi.upsertLandAlertProfile(body);
       // Keep the solo glass scan on screen long enough to read — API is often <1s now.
       const elapsed = performance.now() - started;
-      const minShowMs = 2800;
+      const minShowMs = 2400;
       if (elapsed < minShowMs) {
         await new Promise((r) => window.setTimeout(r, minShowMs - elapsed));
       }
+      // Drop the loader first, then paint matches in a transition so the UI doesn't hitch.
+      setSaving(false);
       setProfileId(String(res.profile.id));
       setPaused(Boolean(res.profile.paused));
       setHasProfile(true);
       setEditing(false);
-      setMatches(res.matches || []);
-      setCounts({
-        new: res.new_count || 0,
-        unseen: Math.max(0, (res.match_count || 0) - (res.new_count || 0)),
-        viewed: 0,
-        total: res.match_count || 0,
-      });
       setPendingSaved(new Set());
       setMarkAllActive(false);
-      // Upsert already returns ranked matches — skip a second /matches round-trip.
-      setMsg(
-        `Profile saved. ${res.match_count} current matches from existing inventory. Monitoring continues in the background.`,
-      );
+      setMsg("");
       setTab("matches");
+      startTransition(() => {
+        setMatches(res.matches || []);
+        setCounts({
+          new: res.new_count || 0,
+          unseen: Math.max(0, (res.match_count || 0) - (res.new_count || 0)),
+          viewed: 0,
+          total: res.match_count || 0,
+        });
+      });
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Could not save profile");
-    } finally {
       setSaving(false);
     }
   }
@@ -997,24 +998,6 @@ export default function LandAlertsPage() {
       </div>
 
       {msg ? <div className="land-alerts-msg">{msg}</div> : null}
-
-      {hasProfile && !editing ? (
-        <div className="land-alerts-status panel p-4">
-          <div className="land-alerts-status-row">
-            <div>
-              <div className="display text-lg font-semibold">{form.name}</div>
-              <div className="text-sm text-[var(--muted)]">
-                {paused ? "Paused — not monitoring new listings" : "Active — monitoring continuously"}
-                {form.states ? ` · States: ${form.states.toUpperCase()}` : ""}
-                {form.budget_max ? ` · Budget up to $${Number(form.budget_max).toLocaleString()}` : ""}
-              </div>
-            </div>
-            <div className="land-alerts-new-count">
-              {counts.new > 0 ? `${counts.new} New Match${counts.new === 1 ? "" : "es"}` : "No new matches"}
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {editing ? (
         <section className="acq-profile panel">
