@@ -6968,13 +6968,12 @@ a.acquire-block:hover {
   }
 }
 
-/* Land Alerts solo scan — same outer box as LandLoader (“Building land intelligence…”) */
+/* Land Alerts solo scan — compact LandLoader footprint (96px visual) */
 .land-loader.land-alerts-solo .la-solo-stage {
-  height: 150px;
+  height: 96px;
   margin: 0;
   border: 0;
   border-radius: 0;
-  /* Same land cast as LandLoader stage — not empty black bars */
   background:
     linear-gradient(
       135deg,
@@ -7090,15 +7089,15 @@ a.acquire-block:hover {
 .la-solo-lot {
   position: absolute;
   left: 50%;
-  top: 54%;
-  width: 6.1rem;
-  padding: 0.38rem 0.45rem 0.34rem;
-  border-radius: 10px;
+  top: 56%;
+  width: 4.85rem;
+  padding: 0.28rem 0.34rem 0.26rem;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.28);
   color: #f7f8f9;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.28);
-  transform: translate3d(-50%, calc(-50% + var(--slot) * 9px), 0)
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.28);
+  transform: translate3d(-50%, calc(-50% + var(--slot) * 6px), 0)
     scale(calc(1 - var(--slot) * 0.08));
   opacity: calc(1 - var(--slot) * 0.16);
   transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1), opacity 280ms ease;
@@ -7112,34 +7111,34 @@ a.acquire-block:hover {
 }
 
 .la-solo-lot-id {
-  font-size: 0.52rem;
+  font-size: 0.46rem;
   font-weight: 650;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   opacity: 0.72;
   font-variant-numeric: tabular-nums;
 }
 
 .la-solo-lot-state {
-  margin-top: 0.18rem;
-  font-size: 0.58rem;
+  margin-top: 0.1rem;
+  font-size: 0.5rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   opacity: 0.88;
 }
 
 .la-solo-lot-acres {
-  margin-top: 0.12rem;
-  font-size: 0.88rem;
+  margin-top: 0.08rem;
+  font-size: 0.72rem;
   font-weight: 650;
   line-height: 1.1;
   color: #fff;
 }
 
 .la-solo-lot-price {
-  margin-top: 0.1rem;
-  font-size: 0.68rem;
+  margin-top: 0.06rem;
+  font-size: 0.58rem;
   opacity: 0.8;
 }
 
@@ -7193,9 +7192,9 @@ a.acquire-block:hover {
 .la-solo-glass {
   position: absolute;
   left: 50%;
-  top: 44%;
+  top: 46%;
   color: #ffffff;
-  transform: translate3d(-42%, -58%, 0) scale(0.88);
+  transform: translate3d(-42%, -58%, 0) scale(0.78);
   animation: la-solo-glass-hunt 3.2s ease-in-out infinite;
   z-index: 30;
   pointer-events: none;
@@ -7299,34 +7298,34 @@ a.acquire-block:hover {
 @keyframes la-solo-glass-hunt {
   0%,
   100% {
-    transform: translate3d(-48%, -52%, 0) scale(0.88) rotate(-6deg);
+    transform: translate3d(-48%, -52%, 0) scale(0.78) rotate(-6deg);
   }
   50% {
-    transform: translate3d(-40%, -60%, 0) scale(0.88) rotate(3deg);
+    transform: translate3d(-40%, -60%, 0) scale(0.78) rotate(3deg);
   }
 }
 
 @keyframes la-solo-glass-yes {
   0% {
-    transform: translate3d(-42%, -58%, 0) scale(0.88);
+    transform: translate3d(-42%, -58%, 0) scale(0.78);
   }
   50% {
-    transform: translate3d(-42%, -46%, 0) scale(0.94);
+    transform: translate3d(-42%, -46%, 0) scale(0.84);
   }
   100% {
-    transform: translate3d(-42%, -58%, 0) scale(0.88);
+    transform: translate3d(-42%, -58%, 0) scale(0.78);
   }
 }
 
 @keyframes la-solo-glass-no {
   0% {
-    transform: translate3d(-42%, -58%, 0) scale(0.88);
+    transform: translate3d(-42%, -58%, 0) scale(0.78);
   }
   50% {
-    transform: translate3d(-62%, -54%, 0) scale(0.82) rotate(-10deg);
+    transform: translate3d(-62%, -54%, 0) scale(0.72) rotate(-10deg);
   }
   100% {
-    transform: translate3d(-42%, -58%, 0) scale(0.88);
+    transform: translate3d(-42%, -58%, 0) scale(0.78);
   }
 }
 
