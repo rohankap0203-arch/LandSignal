@@ -975,7 +975,15 @@ export default function LandAlertsPage() {
 
   if (saving) {
     return (
-      <div className="land-alerts-page">
+      <div className="land-alerts-page land-alerts-page-loading space-y-2">
+        <div className="land-alerts-topbar">
+          <span className="land-alerts-back is-disabled" aria-disabled="true">
+            ← Back
+          </span>
+          <div className="land-alerts-live is-neutral" title="Matching land">
+            <LiveMagnifier size={28} label="Matching land" />
+          </div>
+        </div>
         <LandAlertsLoader mode="matching" />
       </div>
     );
