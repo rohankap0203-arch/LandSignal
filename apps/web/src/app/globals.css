@@ -413,9 +413,10 @@ select {
 }
 
 .used-by-logo--landwatch img {
-  /* Match wordmark x-height of neighbors, not full row */
-  max-height: 2.15rem;
-  max-width: 2.15rem;
+  max-height: 2.55rem;
+  max-width: 2.55rem;
+  /* Sit a touch below the shared letter centerline */
+  transform: translateY(0.18rem);
 }
 
 .used-by-logo--landcom img {
@@ -501,8 +502,9 @@ select {
   }
 
   .used-by-logo--landwatch img {
-    max-height: 1.9rem;
-    max-width: 1.9rem;
+    max-height: 2.25rem;
+    max-width: 2.25rem;
+    transform: translateY(0.14rem);
   }
 
   .used-by-logo--landcom img {
