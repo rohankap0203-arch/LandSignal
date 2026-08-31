@@ -7867,16 +7867,17 @@ a.acquire-block:hover {
 .land-alert-card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.2rem 0.55rem;
+  align-items: baseline;
+  gap: 0.15rem 0;
   margin-top: 0.08rem;
   font-size: 0.78rem;
   color: var(--muted);
 }
 
-.land-alert-card-meta span + span::before {
+.land-alert-card-meta span:not(:first-child)::before {
   content: "·";
-  margin-right: 0.55rem;
-  color: color-mix(in srgb, var(--muted) 70%, transparent);
+  margin: 0 0.4rem;
+  color: color-mix(in srgb, var(--muted) 65%, transparent);
 }
 
 .land-alert-why {
