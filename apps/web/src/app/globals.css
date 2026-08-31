@@ -7544,18 +7544,21 @@ a.acquire-block:hover {
   }
 }
 
-html.dark .land-alert-card,
-:root.dark .land-alert-card {
+[data-theme="dark"] .land-alert-card {
   box-shadow:
     0 1px 0 color-mix(in srgb, #fff 6%, transparent),
     0 12px 28px color-mix(in srgb, #000 35%, transparent);
 }
 
-html.dark .land-alert-flip:not(.is-animating):not(.is-dimmed):hover .land-alert-card-front,
-:root.dark .land-alert-flip:not(.is-animating):not(.is-dimmed):hover .land-alert-card-front {
+[data-theme="dark"] .land-alert-flip:not(.is-animating):not(.is-dimmed):hover .land-alert-card-front {
   box-shadow:
     0 1px 0 color-mix(in srgb, #fff 8%, transparent),
     0 16px 36px color-mix(in srgb, #000 42%, transparent);
+}
+
+[data-theme="dark"] .land-alert-match-pct {
+  color: #0d1411;
+  border-color: color-mix(in srgb, var(--brand) 55%, #0d1411);
 }
 
 .land-alert-back-head {
