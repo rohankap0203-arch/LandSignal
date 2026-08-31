@@ -575,6 +575,30 @@ def load_persisted_store(store: MemoryStore) -> int:
             store.alert_rules[r.id] = r
         except Exception:
             continue
+    # Prefer newer lightweight land-alert sidecar when present (avoids waiting on fat dump).
+    try:
+        side = Path("/tmp/landsignal_land_alerts.json")
+        if side.exists():
+            side_payload = json.loads(side.read_text(encoding="utf-8"))
+            for raw in side_payload.get("land_alert_profiles") or []:
+                try:
+                    p = LandAlertProfile.model_validate(raw)
+                    store.land_alert_profiles[p.id] = p
+                except Exception:
+                    continue
+            for raw in side_payload.get("land_alert_matches") or []:
+                try:
+                    m = LandAlertMatch.model_validate(raw)
+                    store.land_alert_matches[f"{m.profile_id}:{m.parcel_id}"] = m
+                except Exception:
+                    continue
+            for raw in side_payload.get("alerts") or []:
+                try:
+                    store.alerts.append(AlertRecord.model_validate(raw))
+                except Exception:
+                    continue
+    except Exception:
+        pass
     return n
 
 

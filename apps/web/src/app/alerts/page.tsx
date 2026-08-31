@@ -791,6 +791,10 @@ export default function LandAlertsPage() {
   async function saveProfile() {
     setSaving(true);
     setMsg("");
+    // Jump to matching screen immediately so the long score pass feels intentional.
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
     try {
       const states = form.states
         .split(/[,;\s]+/)
@@ -836,11 +840,13 @@ export default function LandAlertsPage() {
       setMatches(res.matches || []);
       setCounts({
         new: res.new_count || 0,
-        unseen: (res.match_count || 0) - (res.new_count || 0),
+        unseen: Math.max(0, (res.match_count || 0) - (res.new_count || 0)),
         viewed: 0,
         total: res.match_count || 0,
       });
-      await loadMatches();
+      setPendingSaved(new Set());
+      setMarkAllActive(false);
+      // Upsert already returns ranked matches — skip a second /matches round-trip.
       setMsg(
         `Profile saved. ${res.match_count} current matches from existing inventory. Monitoring continues in the background.`,
       );
@@ -933,6 +939,23 @@ export default function LandAlertsPage() {
     else setStatesList([...new Set([...selectedStates, ...states])]);
   }
 
+  if (saving) {
+    return (
+      <div className="land-alerts-page space-y-4">
+        <div className="land-alerts-topbar">
+          <span className="land-alerts-back is-disabled" aria-disabled="true">
+            ← Back
+          </span>
+          <div className="land-alerts-live" title="Matching your land profile">
+            <LiveMagnifier size={28} label="Matching live" />
+            <span>Matching live</span>
+          </div>
+        </div>
+        <LandAlertsLoader mode="matching" />
+      </div>
+    );
+  }
+
   if (loading || !bootReady) {
     return (
       <div className="land-alerts-page space-y-4">
@@ -945,7 +968,7 @@ export default function LandAlertsPage() {
             <span>Scanning live</span>
           </div>
         </div>
-        <LandAlertsLoader />
+        <LandAlertsLoader mode="boot" />
       </div>
     );
   }

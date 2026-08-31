@@ -472,19 +472,32 @@ def rescan_profile(store: MemoryStore, profile: LandAlertProfile, *, origin: str
     out: list[LandAlertMatch] = []
     if profile.paused or not profile.active:
         return out
-    # Index by state first when profile has state constraints
     prefs = _prefs(profile)
     wanted = _state_codes(list(prefs.get("states") or []))
     st_mode = _mode(prefs, "states_mode", "must" if wanted else "flexible")
+    se = {"nc", "sc", "tn", "ga", "va", "al", "ky", "wv"}
+    soft_se = bool(wanted and st_mode == "must" and (wanted & se))
+
+    kept_keys: set[str] = set()
     for parcel in store.parcels.values():
-        if wanted and st_mode == "must" and _norm(parcel.state) not in wanted:
-            # Still allow soft SE neighbors via score_parcel — skip only hard far misses for speed
-            se = {"nc", "sc", "tn", "ga", "va", "al", "ky", "wv"}
-            if not (_norm(parcel.state) in se and wanted & se):
+        st = _norm(parcel.state)
+        if wanted and st_mode == "must" and st not in wanted:
+            # Soft-score SE neighbors only when the profile already targets the SE.
+            if not (soft_se and st in se):
                 continue
+        # Cards require a real mappable parcel — skip pin-only / demo before scoring.
+        if not _parcel_is_mappable(parcel):
+            continue
         m = upsert_match(store, profile, parcel, origin=origin)
         if m:
             out.append(m)
+            kept_keys.add(_match_key(profile.id, parcel.id))
+
+    # Drop stale matches for this profile that no longer qualify.
+    for key in list(store.land_alert_matches.keys()):
+        m = store.land_alert_matches.get(key)
+        if m and m.profile_id == profile.id and key not in kept_keys:
+            store.land_alert_matches.pop(key, None)
     return out
 
 
@@ -934,13 +947,31 @@ def upsert_profile(
 
     store.land_alert_profiles[profile.id] = profile
     matches = rescan_profile(store, profile, origin=origin)
+    # Do NOT rewrite the full inventory dump here — that file is hundreds of MB and
+    # made "Save Land Alerts" feel stuck for ~10s. Profiles/matches stay in memory;
+    # a tiny sidecar keeps them across API reloads without touching parcel geometry.
     try:
-        from landsignal.store import persist_store
-
-        persist_store(store)
+        _persist_land_alert_sidecar(store)
     except Exception:  # noqa: BLE001
         pass
     return profile, matches
+
+
+def _persist_land_alert_sidecar(store: MemoryStore) -> None:
+    import json
+    from pathlib import Path
+
+    path = Path("/tmp/landsignal_land_alerts.json")
+    payload = {
+        "land_alert_profiles": [p.model_dump(mode="json") for p in store.land_alert_profiles.values()],
+        "land_alert_matches": [m.model_dump(mode="json") for m in store.land_alert_matches.values()],
+        "alerts": [
+            a.model_dump(mode="json")
+            for a in store.alerts
+            if getattr(a, "severity", None) == "LAND_ALERT"
+        ][:500],
+    }
+    path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
 
 
 def set_paused(store: MemoryStore, profile_id: UUID, paused: bool, user_id: UUID = DEMO_USER_ID) -> LandAlertProfile:

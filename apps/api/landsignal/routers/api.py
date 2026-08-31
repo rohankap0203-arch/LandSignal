@@ -2221,13 +2221,17 @@ async def upsert_land_alert_profile(body: LandAlertProfileUpsert) -> dict[str, A
     store = get_store(get_settings().demo_seed)
     profile, matches = upsert_profile(store, body, DEMO_USER_ID)
     viewable = filter_mappable_matches(store, matches)
-    cards = [match_card(store, m) for m in viewable]
-    cards.sort(key=lambda c: (-(c.get("preference_match_pct") or 0), -(c.get("landsignal_score") or 0)))
+    viewable.sort(
+        key=lambda m: (-(m.preference_match_pct or 0), -(m.landsignal_score or 0)),
+    )
+    # Build presentation cards only for the page — not every match in inventory.
+    top = viewable[:100]
+    cards = [match_card(store, m) for m in top]
     return {
         "profile": profile.model_dump(mode="json"),
         "match_count": len(viewable),
         "new_count": sum(1 for m in viewable if m.status == "new"),
-        "matches": cards[:100],
+        "matches": cards,
         "note": "Matches recalculated against existing inventory. Preference changes do not create 'new listing' notifications.",
     }
 
