@@ -7075,8 +7075,8 @@ a.acquire-block:hover {
 .la-solo-stage::after {
   content: "";
   position: absolute;
-  left: 28%;
-  right: 28%;
+  left: 22%;
+  right: 22%;
   bottom: 0.22rem;
   height: 0.28rem;
   border-radius: 999px;
