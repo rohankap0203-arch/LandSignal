@@ -24,15 +24,6 @@ const LOGOS = [
     height: 190,
   },
   {
-    name: "LandWatch",
-    href: "https://www.landwatch.com",
-    src: "/brands/landwatch.png",
-    // Dark-only: white LW without plate/fringe (CSS invert makes a weird outline)
-    srcDark: "/brands/landwatch-dark.png",
-    width: 160,
-    height: 160,
-  },
-  {
     name: "GovDeals",
     href: "https://www.govdeals.com",
     // Official-style lockup: capitol dome above GovDeals wordmark
@@ -40,6 +31,15 @@ const LOGOS = [
     srcDark: "/brands/govdeals-dark.png",
     width: 447,
     height: 233,
+  },
+  {
+    name: "LandWatch",
+    href: "https://www.landwatch.com",
+    src: "/brands/landwatch.png",
+    // Dark-only: white LW without plate/fringe (CSS invert makes a weird outline)
+    srcDark: "/brands/landwatch-dark.png",
+    width: 160,
+    height: 160,
   },
 ] as const;
 

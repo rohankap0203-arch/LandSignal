@@ -371,26 +371,25 @@ select {
 }
 
 .used-by-logos {
-  /* 3 columns → 5 logos land on exactly 2 rows (3 + 2) */
-  display: grid;
-  grid-template-columns: repeat(3, max-content);
-  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center; /* vertically center logo marks in the row */
   justify-content: center;
-  justify-items: center;
-  column-gap: 2.15rem;
-  row-gap: 1.05rem;
+  column-gap: 1.85rem;
+  row-gap: 1rem;
   margin: 0;
   padding: 0;
   list-style: none;
   width: 100%;
-  max-width: 58rem;
+  max-width: 52rem; /* keeps the strip to two rows */
 }
 
 .used-by-logo {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 2.55rem;
+  /* Shared row height so letterforms sit on one vertical center line */
+  height: 3.25rem;
   text-decoration: none;
   opacity: 0.92;
   transition:
@@ -400,49 +399,45 @@ select {
 
 .used-by-logo img {
   display: block;
-  height: 100%;
+  height: auto;
+  max-height: 100%;
   width: auto;
   max-width: 10.5rem;
   object-fit: contain;
+  object-position: center;
 }
 
-/* Square LW — compact horizontal footprint so row 1 fits 3 logos */
+/* Square LW — compact horizontal footprint */
 .used-by-logo--landwatch {
-  height: 2.65rem;
   margin-inline: -0.4rem;
 }
 
 .used-by-logo--landwatch img {
-  max-width: 2.65rem;
-}
-
-.used-by-logo--landcom {
-  height: 3rem;
+  /* Match wordmark x-height of neighbors, not full row */
+  max-height: 2.15rem;
+  max-width: 2.15rem;
 }
 
 .used-by-logo--landcom img {
+  max-height: 2.35rem;
   max-width: 13.5rem;
 }
 
-.used-by-logo--zillow {
-  height: 1.7rem;
-}
-
-.used-by-logo--realtorcom {
-  height: 2.1rem;
+.used-by-logo--zillow img {
+  max-height: 1.55rem;
+  max-width: 8.5rem;
 }
 
 .used-by-logo--realtorcom img {
+  max-height: 1.75rem;
   max-width: 11rem;
 }
 
-/* Dome-above GovDeals lockup */
-.used-by-logo--govdeals {
-  height: 3.2rem;
-}
-
+/* Dome sits above the shared letter centerline; nudge so “GovDeals” text aligns */
 .used-by-logo--govdeals img {
+  max-height: 3.15rem;
   max-width: 9.5rem;
+  transform: translateY(-0.28rem);
 }
 
 .used-by-logo:hover {
@@ -491,38 +486,42 @@ select {
   }
 
   .used-by-logos {
-    grid-template-columns: repeat(2, max-content);
-    column-gap: 1.35rem;
-    row-gap: 0.95rem;
+    column-gap: 1.2rem;
+    row-gap: 0.9rem;
+    max-width: 100%;
   }
 
+  /* Keep one shared row height so marks stay vertically centered */
   .used-by-logo {
-    height: 2.15rem;
+    height: 2.7rem;
   }
 
   .used-by-logo--landwatch {
-    height: 2.35rem;
-    margin-inline: -0.3rem;
+    margin-inline: -0.25rem;
   }
 
   .used-by-logo--landwatch img {
-    max-width: 2.35rem;
-  }
-
-  .used-by-logo--govdeals {
-    height: 2.8rem;
-  }
-
-  .used-by-logo--govdeals img {
-    max-width: 8.25rem;
-  }
-
-  .used-by-logo--landcom {
-    height: 2.55rem;
+    max-height: 1.9rem;
+    max-width: 1.9rem;
   }
 
   .used-by-logo--landcom img {
+    max-height: 2.15rem;
     max-width: 11.5rem;
+  }
+
+  .used-by-logo--zillow img {
+    max-height: 1.35rem;
+  }
+
+  .used-by-logo--realtorcom img {
+    max-height: 1.55rem;
+  }
+
+  .used-by-logo--govdeals img {
+    max-height: 2.55rem;
+    max-width: 8.25rem;
+    transform: translateY(-0.2rem);
   }
 
   .used-by-logo img {
