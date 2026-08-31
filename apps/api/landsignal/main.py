@@ -42,6 +42,19 @@ async def startup() -> None:
     store = get_store(settings.demo_seed)
     store.rebuild_listing_index()
     try:
+        from landsignal.services.property_providers.pipeline import load_all_attom_snapshots
+
+        reserved = len(load_all_attom_snapshots())
+        log.info(
+            "startup_inventory_memory",
+            parcels=len(store.parcels),
+            listings=len(store.listings),
+            enrichments=len(store.enrichments),
+            attom_reserved=reserved,
+        )
+    except Exception:
+        pass
+    try:
         from landsignal.services.land_gate import purge_non_land_from_store
         from landsignal.store import persist_store
 
