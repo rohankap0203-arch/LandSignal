@@ -6968,36 +6968,49 @@ a.acquire-block:hover {
   }
 }
 
-/* Solo magnifying-glass lot scanner — sized like site LandLoader (150px stage) */
-.land-alerts-loader.is-solo-scan,
-.land-alerts-loader.is-matching.is-solo-scan {
-  max-width: none;
-  width: 100%;
-  margin: 18px 0 8px;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow);
-}
-
-.la-solo-stage {
-  position: relative;
+/* Land Alerts solo scan — same outer box as LandLoader (“Building land intelligence…”) */
+.land-loader.land-alerts-solo .la-solo-stage {
   height: 150px;
   margin: 0;
-  border-radius: 0;
-  overflow: hidden;
   border: 0;
-  background: linear-gradient(180deg, #1a1d21 0%, #121417 55%, #0e1012 100%);
+  border-radius: 0;
+  /* Same land cast as LandLoader stage — not empty black bars */
+  background:
+    linear-gradient(
+      135deg,
+      rgba(31, 107, 79, 0.55) 0%,
+      rgba(15, 61, 46, 0.42) 55%,
+      rgba(196, 92, 38, 0.32) 100%
+    ),
+    #14201c;
+  overflow: hidden;
+  position: relative;
   contain: layout paint;
   transform: translateZ(0);
 }
 
-.land-alerts-loader.is-solo-scan .land-alerts-loader-copy {
-  margin-top: 0;
-  padding: 14px 18px 16px;
+.land-loader.land-alerts-solo .la-solo-horizon {
+  opacity: 0.35;
+}
+
+.land-loader.land-alerts-solo .land-alerts-loader-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  min-height: 1.35em;
+}
+
+.land-loader.land-alerts-solo .land-alerts-loader-ellipsis {
+  display: inline-block;
+  min-width: 1.35em;
   text-align: left;
+  letter-spacing: 0.05em;
+  color: var(--brand);
+}
+
+.land-loader.land-alerts-solo .land-alerts-loader-ellipsis::after {
+  content: "";
+  animation: la-solo-ellipsis 1.15s steps(4, end) infinite;
 }
 
 .la-solo-horizon {

@@ -147,8 +147,8 @@ export function LandAlertsLoader({
   }
 
   return (
-    <div className="land-alerts-loader is-matching is-solo-scan" role="status" aria-live="polite">
-      <div className="la-solo-stage" aria-hidden>
+    <div className="land-loader land-alerts-solo" role="status" aria-live="polite">
+      <div className="land-loader-stage la-solo-stage" aria-hidden>
         <div className="la-solo-horizon" />
 
         <div className="la-solo-lots">
@@ -176,18 +176,19 @@ export function LandAlertsLoader({
             glassMood === "pass" ? " is-no" : ""
           }`}
         >
-          <MagnifierIcon size={48} />
+          <MagnifierIcon size={44} />
           <span className="la-solo-glass-beam" />
         </div>
+        <div className="land-scan" />
       </div>
 
-      <div className="land-alerts-loader-copy">
-        <div className="display text-xl font-semibold land-alerts-loader-title">
+      <div className="land-loader-copy">
+        <div className="display text-xl font-semibold text-[var(--ink)] land-alerts-loader-title">
           <span>{headline}</span>
           <span className="land-alerts-loader-ellipsis" aria-hidden />
         </div>
         <p className="mt-1 text-sm text-[var(--muted)]">{shownDetail}</p>
-        <div className="land-alerts-loader-dots" aria-hidden>
+        <div className="land-loader-dots" aria-hidden>
           <span />
           <span />
           <span />
