@@ -7407,17 +7407,61 @@ a.acquire-block:hover {
 }
 
 .land-alert-card {
+  --la-card-edge: color-mix(in srgb, var(--line) 72%, var(--ink) 10%);
+  --la-card-edge-deep: color-mix(in srgb, var(--ink) 28%, var(--line));
+  position: relative;
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel, var(--bg-elevated));
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel, var(--bg-elevated)) 88%, #e8efe4) 0%,
+      var(--panel, var(--bg-elevated)) 38%,
+      color-mix(in srgb, var(--panel, var(--bg-elevated)) 94%, var(--ink) 3%) 100%
+    ) padding-box,
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--line) 70%, transparent) 0%,
+      color-mix(in srgb, var(--line) 85%, var(--brand) 8%) 42%,
+      var(--la-card-edge-deep) 58%,
+      color-mix(in srgb, var(--ink) 38%, var(--line)) 100%
+    ) border-box;
   box-sizing: border-box;
   overflow: hidden;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 70%, transparent),
+    0 6px 18px color-mix(in srgb, var(--ink) 7%, transparent),
+    0 14px 28px -12px color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+/* Soft ticket foot — darker bottom rim without growing the card */
+.land-alert-card::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 48%;
+  border-radius: 0 0 11px 11px;
+  pointer-events: none;
+  box-shadow:
+    inset 0 -1.5px 0 color-mix(in srgb, var(--ink) 26%, transparent),
+    inset 1.5px 0 0 color-mix(in srgb, var(--ink) 16%, transparent),
+    inset -1.5px 0 0 color-mix(in srgb, var(--ink) 16%, transparent);
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--ink) 3.5%, transparent) 100%
+  );
+  z-index: 2;
 }
 
 .land-alert-flip:not(.is-animating):not(.is-dimmed):hover .land-alert-card-front {
-  border-color: color-mix(in srgb, var(--brand) 28%, var(--line));
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 75%, transparent),
+    0 8px 22px color-mix(in srgb, var(--ink) 9%, transparent),
+    0 18px 34px -12px color-mix(in srgb, var(--ink) 16%, transparent);
 }
 
 /* Stack faces in one cell so height = taller face; nothing gets clipped */
@@ -7440,7 +7484,7 @@ a.acquire-block:hover {
 
 .land-alert-card-media {
   position: relative;
-  height: 3.6rem;
+  height: 3.55rem;
   flex: 0 0 auto;
   overflow: hidden;
   /* Soft pastoral field when imagery is missing */
@@ -7456,9 +7500,9 @@ a.acquire-block:hover {
   object-fit: cover;
   display: block;
   /* Pull satellite toward faded rural pasture — softer, less urban-hard */
-  filter: saturate(0.62) contrast(0.92) brightness(1.06) sepia(0.28) hue-rotate(28deg);
-  transform: scale(1.04);
-  opacity: 0.9;
+  filter: saturate(0.58) contrast(0.9) brightness(1.08) sepia(0.32) hue-rotate(26deg);
+  transform: scale(1.05);
+  opacity: 0.88;
 }
 
 .land-alert-card-media-wash {
@@ -7472,7 +7516,7 @@ a.acquire-block:hover {
       rgba(176, 158, 110, 0.18) 45%,
       rgba(72, 102, 70, 0.28) 100%
     ),
-    radial-gradient(120% 90% at 50% 120%, rgba(246, 243, 238, 0.35), transparent 55%);
+    radial-gradient(120% 90% at 50% 120%, rgba(246, 243, 238, 0.4), transparent 55%);
   mix-blend-mode: soft-light;
 }
 
@@ -7495,24 +7539,37 @@ a.acquire-block:hover {
 .land-alert-card-media-fade {
   position: absolute;
   inset: auto 0 0;
-  height: 1.85rem;
+  height: 2rem;
   background: linear-gradient(
     180deg,
     transparent 0%,
-    color-mix(in srgb, var(--panel, var(--bg-elevated)) 92%, transparent) 100%
+    color-mix(in srgb, var(--panel, var(--bg-elevated)) 55%, transparent) 55%,
+    color-mix(in srgb, var(--panel, var(--bg-elevated)) 96%, transparent) 100%
   );
   pointer-events: none;
 }
 
 .land-alert-card-body {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.22rem;
-  padding: 0.55rem 0.65rem 0.5rem;
+  gap: 0.2rem;
+  padding: 0.45rem 0.7rem 0.55rem;
   flex: 1 1 auto;
+  margin-top: -0.55rem;
+}
+
+/* Compact action foot — reads as the card’s lower deck */
+.land-alert-card-front .land-alert-view-land-wrap {
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 10%, var(--line));
 }
 
 .land-alert-card-back {
+  position: relative;
+  z-index: 1;
   overflow: visible;
   padding: 0.7rem 0.7rem 0.55rem;
   gap: 0.45rem;
@@ -7520,8 +7577,23 @@ a.acquire-block:hover {
 
 .land-alert-flip.is-new .land-alert-card-front,
 .land-alert-flip.is-new .land-alert-card-back {
-  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
-  box-shadow: inset 3px 0 0 var(--brand);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel, var(--bg-elevated)) 88%, #e8efe4) 0%,
+      var(--panel, var(--bg-elevated)) 38%,
+      color-mix(in srgb, var(--panel, var(--bg-elevated)) 94%, var(--ink) 3%) 100%
+    ) padding-box,
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--brand) 35%, var(--line)) 0%,
+      color-mix(in srgb, var(--brand) 22%, var(--line)) 42%,
+      color-mix(in srgb, var(--ink) 42%, var(--brand)) 100%
+    ) border-box;
+  box-shadow:
+    inset 3px 0 0 var(--brand),
+    0 1px 0 color-mix(in srgb, #fff 70%, transparent),
+    0 6px 18px color-mix(in srgb, var(--ink) 7%, transparent);
 }
 
 .land-alert-flip-hint {
@@ -7533,11 +7605,40 @@ a.acquire-block:hover {
   letter-spacing: 0.02em;
   line-height: 1;
   text-align: right;
+  opacity: 0.75;
 }
 
 .land-alert-match-list {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.8rem;
+}
+
+[data-theme="dark"] .land-alert-card {
+  --la-card-edge-deep: color-mix(in srgb, #000 55%, var(--line));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-elevated) 92%, #24352c) 0%,
+      var(--panel, var(--bg-elevated)) 40%,
+      color-mix(in srgb, var(--bg-elevated) 88%, #000) 100%
+    ) padding-box,
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--line) 80%, transparent) 0%,
+      color-mix(in srgb, var(--line) 90%, var(--brand) 10%) 42%,
+      color-mix(in srgb, #000 50%, var(--line)) 100%
+    ) border-box;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 6%, transparent),
+    0 10px 24px color-mix(in srgb, #000 32%, transparent);
+}
+
+[data-theme="dark"] .land-alert-card::after {
+  box-shadow:
+    inset 0 -1.5px 0 color-mix(in srgb, #000 55%, transparent),
+    inset 1.5px 0 0 color-mix(in srgb, #000 35%, transparent),
+    inset -1.5px 0 0 color-mix(in srgb, #000 35%, transparent);
+  background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.18) 100%);
 }
 
 [data-theme="dark"] .land-alert-card-media img {
@@ -7693,23 +7794,33 @@ a.acquire-block:hover {
   justify-content: space-between;
   gap: 0.35rem;
   margin-top: 0;
-  margin-bottom: 0.15rem;
+  margin-bottom: 0.1rem;
+  align-items: center;
 }
 
 .land-alert-card-scores {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
-  font-size: 0.82rem;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  align-items: center;
 }
 
 .land-alert-match-pct {
-  font-weight: 650;
+  font-weight: 700;
   color: var(--brand);
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--line));
+  background: color-mix(in srgb, var(--panel, var(--bg-elevated)) 72%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent);
 }
 
 .land-alert-ls-score {
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .land-alert-card-badges {
@@ -7756,25 +7867,31 @@ a.acquire-block:hover {
 .land-alert-card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.2rem 0.6rem;
-  margin-top: 0.12rem;
-  font-size: 0.8rem;
+  gap: 0.2rem 0.55rem;
+  margin-top: 0.08rem;
+  font-size: 0.78rem;
   color: var(--muted);
 }
 
+.land-alert-card-meta span + span::before {
+  content: "·";
+  margin-right: 0.55rem;
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+
 .land-alert-why {
-  margin: 0.2rem 0 0;
+  margin: 0.15rem 0 0;
   padding-left: 0.9rem;
   font-size: 0.72rem;
   color: var(--ink);
   line-height: 1.3;
   display: grid;
-  gap: 0.2rem;
+  gap: 0.18rem;
 }
 
 .land-alert-watch {
-  margin-top: 0.15rem;
-  margin-bottom: 0.35rem;
+  margin-top: 0.12rem;
+  margin-bottom: 0.2rem;
   font-size: 0.72rem;
   color: color-mix(in srgb, #a65b1a 80%, var(--ink));
   line-height: 1.25;
@@ -7784,7 +7901,7 @@ a.acquire-block:hover {
   display: flex;
   justify-content: stretch;
   width: 100%;
-  margin: 0.45rem 0 0.1rem;
+  margin: 0.35rem 0 0.08rem;
   transform: none;
 }
 
