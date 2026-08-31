@@ -1,124 +1,202 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-/** Sparse magnifying-glass field — same role as LandLoader map pins, for alert matching. */
-const GLASSES: { left: string; top: string; delay: string; duration: string; scale: number }[] = [
-  { left: "16%", top: "58%", delay: "0s", duration: "4.1s", scale: 1 },
-  { left: "38%", top: "32%", delay: "1.2s", duration: "4.5s", scale: 0.92 },
-  { left: "58%", top: "62%", delay: "2.4s", duration: "4.3s", scale: 1.08 },
-  { left: "74%", top: "36%", delay: "0.7s", duration: "4.7s", scale: 0.86 },
-  { left: "86%", top: "54%", delay: "1.9s", duration: "4.4s", scale: 0.95 },
-];
+type LotVerdict = "pending" | "match" | "pass";
 
-function MagnifierIcon() {
+type LotCard = {
+  id: number;
+  state: string;
+  acres: string;
+  price: string;
+  verdict: LotVerdict;
+};
+
+const STATES = ["FL", "TX", "GA", "NC", "AZ", "CO", "OR", "TN", "VA", "OK", "NM", "MT"];
+const ACRES = ["4.2 ac", "12 ac", "28 ac", "5.5 ac", "41 ac", "9 ac", "18 ac", "63 ac", "3.1 ac", "22 ac"];
+const PRICES = ["$48k", "$120k", "$86k", "$210k", "$64k", "$175k", "$95k", "$310k", "$39k", "$142k"];
+
+function MagnifierIcon({ size = 64 }: { size?: number }) {
   return (
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
-      <circle cx="10.5" cy="10.5" r="6.25" fill="none" stroke="currentColor" strokeWidth="2" />
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden className="la-solo-glass-svg">
+      <circle cx="10.5" cy="10.5" r="6.25" fill="rgba(244,250,246,0.12)" stroke="currentColor" strokeWidth="1.85" />
+      <circle cx="10.5" cy="10.5" r="3.4" fill="none" stroke="currentColor" strokeWidth="1.1" opacity="0.45" />
       <line
-        x1="15.2"
-        y1="15.2"
-        x2="20.5"
-        y2="20.5"
+        x1="15.15"
+        y1="15.15"
+        x2="21"
+        y2="21"
         stroke="currentColor"
-        strokeWidth="2.25"
+        strokeWidth="2.4"
         strokeLinecap="round"
       />
     </svg>
   );
 }
 
+function makeLot(id: number, verdict: LotVerdict = "pending"): LotCard {
+  return {
+    id,
+    state: STATES[id % STATES.length],
+    acres: ACRES[id % ACRES.length],
+    price: PRICES[id % PRICES.length],
+    verdict,
+  };
+}
+
 const PHASES = [
-  "Saving your land profile",
-  "Scanning live inventory",
-  "Matching acres, price & states",
-  "Ranking the strongest fits",
+  "Scanning land lots",
+  "Checking acres & price",
+  "Scoring against your profile",
+  "Approving the strong fits",
 ] as const;
 
+/** Solo magnifying-glass scan — inspects lots, approves some, passes others. */
 export function LandAlertsLoader({
   label,
-  detail = "Matching live inventory to your acquisition profile",
-  mode = "boot",
+  detail,
+  mode = "matching",
 }: {
   label?: string;
   detail?: string;
-  /** boot = short page open; matching = save → results transition */
   mode?: "boot" | "matching";
 }) {
-  const [phase, setPhase] = useState(0);
   const [dots, setDots] = useState(1);
+  const [phase, setPhase] = useState(0);
+  const [tick, setTick] = useState(0);
+  const [matched, setMatched] = useState(0);
+  const [passed, setPassed] = useState(0);
+  const [lots, setLots] = useState<LotCard[]>(() =>
+    [0, 1, 2, 3, 4].map((i) => makeLot(i, i === 0 ? "pending" : "pending")),
+  );
 
   useEffect(() => {
-    const dotTimer = window.setInterval(() => {
-      setDots((d) => (d % 3) + 1);
-    }, 420);
-    return () => window.clearInterval(dotTimer);
+    const t = window.setInterval(() => setDots((d) => (d % 3) + 1), 380);
+    return () => window.clearInterval(t);
   }, []);
 
   useEffect(() => {
     if (mode !== "matching") return;
-    const t = window.setInterval(() => {
-      setPhase((p) => (p + 1) % PHASES.length);
-    }, 1600);
+    const t = window.setInterval(() => setPhase((p) => (p + 1) % PHASES.length), 1500);
     return () => window.clearInterval(t);
   }, [mode]);
 
+  // Advance the conveyor: inspect current front lot → match or pass → slide next in.
+  useEffect(() => {
+    if (mode !== "matching") return;
+    let cancelled = false;
+    let id = 5;
+    let localMatched = 0;
+    let localPassed = 0;
+
+    const step = () => {
+      if (cancelled) return;
+      // Decide on the active (first pending) lot — ~45% match for a lively mix.
+      const approve = Math.random() < 0.45;
+      setLots((prev) => {
+        const next = prev.map((lot, i) => {
+          if (i !== 0 || lot.verdict !== "pending") return lot;
+          return { ...lot, verdict: approve ? "match" : "pass" };
+        });
+        return next;
+      });
+      if (approve) {
+        localMatched += 1;
+        setMatched(localMatched);
+      } else {
+        localPassed += 1;
+        setPassed(localPassed);
+      }
+      setTick((n) => n + 1);
+
+      window.setTimeout(() => {
+        if (cancelled) return;
+        setLots((prev) => {
+          const rest = prev.slice(1);
+          while (rest.length < 5) {
+            rest.push(makeLot(id++));
+          }
+          return rest.map((lot, i) => (i === 0 ? { ...lot, verdict: "pending" } : lot));
+        });
+      }, 520);
+    };
+
+    // First inspect after glass settles, then keep cycling.
+    const first = window.setTimeout(step, 700);
+    const loop = window.setInterval(step, 1180);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(first);
+      window.clearInterval(loop);
+    };
+  }, [mode]);
+
   const ellipsis = ".".repeat(dots);
-  const headline =
-    label ||
-    (mode === "matching" ? PHASES[phase] : "Scanning your land alerts");
+  const headline = label || (mode === "matching" ? PHASES[phase] : "Opening Land Alerts");
   const shownDetail =
-    mode === "matching"
-      ? "Hang tight — we’ll open your matches as soon as scoring finishes."
-      : detail;
+    detail ||
+    (mode === "matching"
+      ? "One glass over the inventory — strong fits get approved, the rest get passed."
+      : "Loading your acquisition profile");
+
+  const scanned = matched + passed;
+
+  const active = useMemo(() => lots[0], [lots]);
+
+  if (mode === "boot") {
+    return (
+      <div className="land-alerts-loader" role="status" aria-live="polite">
+        <div className="land-alerts-loader-copy">
+          <div className="display text-xl font-semibold land-alerts-loader-title">
+            <span>{headline}</span>
+            <span className="land-alerts-loader-ellipsis" aria-hidden>
+              {ellipsis}
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-[var(--muted)]">{shownDetail}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div
-      className={`land-alerts-loader${mode === "matching" ? " is-matching" : ""}`}
-      role="status"
-      aria-live="polite"
-    >
-      <div className="land-alerts-loader-stage" aria-hidden>
-        <svg className="land-alerts-loader-svg" viewBox="0 0 360 160" preserveAspectRatio="none">
-          <defs>
-            <linearGradient id="alertLandGrad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="rgba(31,107,79,0.5)" />
-              <stop offset="55%" stopColor="rgba(15,61,46,0.32)" />
-              <stop offset="100%" stopColor="rgba(196,92,38,0.3)" />
-            </linearGradient>
-          </defs>
-          <rect width="360" height="160" fill="url(#alertLandGrad)" />
-          {[42, 58, 74, 90, 106, 122].map((y, i) => (
-            <path
-              key={y}
-              className="land-contour"
-              style={{ animationDelay: `${i * 0.18}s` }}
-              d={`M0 ${y} C 60 ${y - 14}, 120 ${y + 12}, 180 ${y - 6} S 300 ${y + 10}, 360 ${y - 4}`}
-              fill="none"
-              stroke="rgba(255,255,255,0.28)"
-              strokeWidth="1.4"
-            />
-          ))}
-        </svg>
-        <div className="land-alerts-glass-field">
-          {GLASSES.map((g, i) => (
-            <span
-              key={i}
-              className="land-alerts-scout-glass"
-              style={{
-                left: g.left,
-                top: g.top,
-                animationDelay: g.delay,
-                animationDuration: g.duration,
-                ["--glass-scale" as string]: String(g.scale),
-              }}
+    <div className="land-alerts-loader is-matching is-solo-scan" role="status" aria-live="polite">
+      <div className="la-solo-stage" aria-hidden>
+        <div className="la-solo-horizon" />
+        <div className="la-solo-lots">
+          {lots.map((lot, i) => (
+            <div
+              key={`${lot.id}-${lot.verdict}-${tick}-${i}`}
+              className={`la-solo-lot slot-${i} is-${lot.verdict}`}
+              style={{ ["--slot" as string]: String(i) }}
             >
-              <MagnifierIcon />
-            </span>
+              <div className="la-solo-lot-state">{lot.state}</div>
+              <div className="la-solo-lot-acres">{lot.acres}</div>
+              <div className="la-solo-lot-price">{lot.price}</div>
+              {lot.verdict === "match" ? <span className="la-solo-stamp is-match">✓</span> : null}
+              {lot.verdict === "pass" ? <span className="la-solo-stamp is-pass">✕</span> : null}
+            </div>
           ))}
         </div>
-        <div className="land-alerts-scan" />
+
+        <div className={`la-solo-glass${active?.verdict === "match" ? " is-yes" : ""}${active?.verdict === "pass" ? " is-no" : ""}`}>
+          <MagnifierIcon size={78} />
+          <span className="la-solo-glass-beam" />
+        </div>
+
+        <div className="la-solo-counters">
+          <span>
+            <strong>{scanned}</strong> scanned
+          </span>
+          <span className="is-yes">
+            <strong>{matched}</strong> approved
+          </span>
+          <span className="is-no">
+            <strong>{passed}</strong> passed
+          </span>
+        </div>
       </div>
+
       <div className="land-alerts-loader-copy">
         <div className="display text-xl font-semibold land-alerts-loader-title">
           <span>{headline}</span>

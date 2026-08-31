@@ -568,7 +568,6 @@ export default function LandAlertsPage() {
   /** Checked this session — grey in Matches; also listed under Saved */
   const [pendingSaved, setPendingSaved] = useState<Set<string>>(() => new Set());
   const [markAllActive, setMarkAllActive] = useState(false);
-  const [bootReady, setBootReady] = useState(false);
   /** Explicit custom panels — avoid forcing placeholder values that jump the layout/summary. */
   const [budgetCustomOpen, setBudgetCustomOpen] = useState(false);
   const [acresCustomOpen, setAcresCustomOpen] = useState(false);
@@ -594,7 +593,8 @@ export default function LandAlertsPage() {
         setProfileId(String(p.id));
         setPaused(Boolean(p.paused));
         setHasProfile(true);
-        setEditing(false);
+        // Always land on the acquisition parameters page when opening Land Alerts.
+        setEditing(true);
         const nextBudgetMin = prefs.budget_min != null ? String(prefs.budget_min) : "";
         const nextBudgetMax = prefs.budget_max != null ? String(prefs.budget_max) : "";
         const nextAcresMin = prefs.acres_min != null ? String(prefs.acres_min) : "";
@@ -665,12 +665,6 @@ export default function LandAlertsPage() {
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
-
-  useEffect(() => {
-    // Short boot cue — do not artificially delay the page for over a second
-    const t = window.setTimeout(() => setBootReady(true), 180);
-    return () => window.clearTimeout(t);
-  }, []);
 
   const visible = useMemo(() => {
     if (tab === "saved") {
@@ -795,6 +789,7 @@ export default function LandAlertsPage() {
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
+    const started = performance.now();
     try {
       const states = form.states
         .split(/[,;\s]+/)
@@ -833,6 +828,12 @@ export default function LandAlertsPage() {
         },
       };
       const res = await landsignalApi.upsertLandAlertProfile(body);
+      // Keep the solo glass scan on screen long enough to read — API is often <1s now.
+      const elapsed = performance.now() - started;
+      const minShowMs = 2800;
+      if (elapsed < minShowMs) {
+        await new Promise((r) => window.setTimeout(r, minShowMs - elapsed));
+      }
       setProfileId(String(res.profile.id));
       setPaused(Boolean(res.profile.paused));
       setHasProfile(true);
@@ -956,7 +957,7 @@ export default function LandAlertsPage() {
     );
   }
 
-  if (loading || !bootReady) {
+  if (loading) {
     return (
       <div className="land-alerts-page space-y-4">
         <div className="land-alerts-topbar">
@@ -968,7 +969,7 @@ export default function LandAlertsPage() {
             <span>Scanning live</span>
           </div>
         </div>
-        <LandAlertsLoader mode="boot" />
+        <LandAlertsLoader mode="boot" label="Opening acquisition profile" />
       </div>
     );
   }
@@ -995,20 +996,22 @@ export default function LandAlertsPage() {
         {hasProfile ? (
           <div className="land-alerts-hero-actions">
             <button type="button" className="btn btn-ghost" onClick={() => setEditing((e) => !e)}>
-              {editing ? "Close editor" : "Edit Preferences"}
+              {editing ? "View matches" : "Edit Preferences"}
             </button>
             <button type="button" className="btn btn-ghost" onClick={() => void togglePause()}>
               {paused ? "Resume Alerts" : "Pause Alerts"}
             </button>
-            <button
-              type="button"
-              className={`btn btn-ghost${showUndoMarkAll ? " is-mark-all-on" : ""}`}
-              disabled={!showUndoMarkAll && markAllTargetCount === 0}
-              onClick={() => void toggleMarkAllSeen()}
-              aria-pressed={showUndoMarkAll}
-            >
-              {showUndoMarkAll ? "Unsave all" : "Save all"}
-            </button>
+            {!editing ? (
+              <button
+                type="button"
+                className={`btn btn-ghost${showUndoMarkAll ? " is-mark-all-on" : ""}`}
+                disabled={!showUndoMarkAll && markAllTargetCount === 0}
+                onClick={() => void toggleMarkAllSeen()}
+                aria-pressed={showUndoMarkAll}
+              >
+                {showUndoMarkAll ? "Unsave all" : "Save all"}
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -1511,7 +1514,7 @@ export default function LandAlertsPage() {
         </section>
       ) : null}
 
-      {hasProfile ? (
+      {hasProfile && !editing ? (
         <section className="space-y-4">
           <div className="land-alerts-tabs">
             <button
@@ -1550,7 +1553,7 @@ export default function LandAlertsPage() {
         </section>
       ) : null}
 
-      {inAppAlerts.length ? (
+      {hasProfile && !editing && inAppAlerts.length ? (
         <section className="space-y-3">
           <h2 className="display text-xl font-semibold">Recent notifications</h2>
           {inAppAlerts.map((a) => {
