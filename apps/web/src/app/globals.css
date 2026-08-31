@@ -416,7 +416,7 @@ select {
   max-height: 3rem;
   max-width: 3rem;
   /* Sit a touch below the shared letter centerline */
-  transform: translateY(0.32rem);
+  transform: translateY(0.48rem);
 }
 
 .used-by-logo--landcom img {
@@ -504,7 +504,7 @@ select {
   .used-by-logo--landwatch img {
     max-height: 2.65rem;
     max-width: 2.65rem;
-    transform: translateY(0.24rem);
+    transform: translateY(0.36rem);
   }
 
   .used-by-logo--landcom img {
