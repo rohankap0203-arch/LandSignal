@@ -1114,10 +1114,10 @@ def _imagery_url(lat: float | None, lon: float | None, acres: float | None = Non
     """Esri World Imagery snapshot centered on the parcel (no Mapbox required)."""
     if lat is None or lon is None:
         return None
-    # Wider frame for larger tracts; keep tight for small lots
-    pad = 0.008
+    # Wider rural frame — show surrounding pasture/fields, not a tight urban crop.
+    pad = 0.012
     if acres is not None and acres > 0:
-        pad = max(0.0035, min(0.035, (float(acres) ** 0.5) * 0.0012))
+        pad = max(0.006, min(0.045, (float(acres) ** 0.5) * 0.0016))
     return (
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export"
         f"?bbox={lon - pad},{lat - pad},{lon + pad},{lat + pad}"
