@@ -100,22 +100,51 @@ def _range_score(
     mode: str,
     label: str,
     unit: str = "",
-) -> tuple[float, str | None, bool]:
-    if value is None or (lo is None and hi is None):
-        return 100.0, None, False
-    lo_v = float(lo) if lo is not None else float(value)
-    hi_v = float(hi) if hi is not None else float(value)
+) -> tuple[float, str | None, bool, bool]:
+    """Return (score, reason, is_watch, hard_fail).
+
+    Modes:
+    - must: outside the band hard-fails (no soft fudge)
+    - prefer: outside by >15% of span hard-fails; mild miss is watched
+    - flexible: soft distance penalty only
+    """
+    if lo is None and hi is None:
+        return 100.0, None, False, False
+    if value is None:
+        # Can't verify the constraint — treat as fail for must/prefer, soft for flexible.
+        if mode == "flexible":
+            return 55.0, f"{label}: not listed — can't verify against your band", True, False
+        return 0.0, f"{label}: not listed — required for your {mode} filter", True, True
+    lo_v = float(lo) if lo is not None else float("-inf")
+    hi_v = float(hi) if hi is not None else float("inf")
     if lo_v <= value <= hi_v:
-        return 100.0, f"{label}: {value:g}{unit} within preferred {lo_v:g}–{hi_v:g}{unit}", False
-    span = max(hi_v - lo_v, 1.0)
+        band = f"{lo_v:g}–{hi_v:g}" if lo is not None and hi is not None else (
+            f"≥{lo_v:g}" if lo is not None else f"≤{hi_v:g}"
+        )
+        return 100.0, f"{label}: {value:g}{unit} within {band}{unit}", False, False
+
+    # Finite span for distance when one side is open-ended.
+    if lo is not None and hi is not None:
+        span = max(hi_v - lo_v, 1.0)
+    elif lo is not None:
+        span = max(abs(lo_v) * 0.25, 1.0)
+    else:
+        span = max(abs(hi_v) * 0.25, 1.0)
     dist = ((lo_v - value) / span) if value < lo_v else ((value - hi_v) / span)
+
     if mode == "must":
-        if dist <= 0.08:
-            return 70.0, f"{label}: {value:g}{unit} slightly outside must-have {lo_v:g}–{hi_v:g}{unit}", True
-        return 0.0, f"{label}: {value:g}{unit} outside must-have {lo_v:g}–{hi_v:g}{unit}", True
-    if mode == "flexible":
-        return _clamp(100 - dist * 35), f"{label}: {value:g}{unit} vs preferred {lo_v:g}–{hi_v:g}{unit}", dist > 0.25
-    return _clamp(100 - dist * 55), f"{label}: {value:g}{unit} vs preferred {lo_v:g}–{hi_v:g}{unit}", dist > 0.15
+        return 0.0, f"{label}: {value:g}{unit} outside must-have band", True, True
+    if mode == "prefer":
+        if dist > 0.15:
+            return 0.0, f"{label}: {value:g}{unit} too far outside preferred band", True, True
+        return 62.0, f"{label}: {value:g}{unit} slightly outside preferred band", True, False
+    # flexible
+    return (
+        _clamp(100 - dist * 40),
+        f"{label}: {value:g}{unit} vs flexible band",
+        dist > 0.25,
+        False,
+    )
 
 
 def score_parcel_against_profile(
@@ -139,68 +168,75 @@ def score_parcel_against_profile(
     watches: list[str] = []
     hard_fail = False
 
-    # States
+    # States — must/prefer = exact selected only (no neighbor fudge). Flexible soft-scores others.
     states = list(prefs.get("states") or [])
     st_mode = _mode(prefs, "states_mode", "must" if states else "flexible")
     if states:
         wanted = _state_codes(states)
         st = _norm(parcel.state)
+        se = {"nc", "sc", "tn", "ga", "va", "al", "ky", "wv"}
         if st in wanted:
-            weights.append((2.2, 100.0))
-            reasons.append(f"Within your preferred {parcel.state} region")
+            weights.append((2.4, 100.0))
+            reasons.append(f"In your selected state ({parcel.state})")
+        elif st_mode in ("must", "prefer"):
+            weights.append((2.4, 0.0))
+            watches.append(f"Outside selected states ({parcel.state or 'n/a'})")
+            hard_fail = True
+        elif st in se and wanted & se:
+            weights.append((1.6, 52.0))
+            watches.append(f"Near your flexible states ({parcel.state}) — not selected")
         else:
-            se = {"nc", "sc", "tn", "ga", "va", "al", "ky", "wv"}
-            if st in se and wanted & se:
-                weights.append((2.2, 55.0))
-                watches.append(f"Near your preferred region ({parcel.state})")
-            else:
-                weights.append((2.2, 0.0))
-                watches.append(f"Outside preferred states ({parcel.state or 'n/a'})")
-                if st_mode == "must":
-                    hard_fail = True
+            weights.append((1.6, 22.0))
+            watches.append(f"Outside preferred states ({parcel.state or 'n/a'})")
 
-    # Budget
+    # Budget — honor min AND max; unpriced fails must/prefer.
     budget_min = prefs.get("budget_min")
     budget_max = prefs.get("budget_max")
     budget_mode = _mode(prefs, "budget_mode", "prefer")
-    b_score, b_reason, b_watch = _range_score(ask, None, budget_max, budget_mode, "Price")
+    b_score, b_reason, b_watch, b_fail = _range_score(
+        ask, budget_min, budget_max, budget_mode, "Price", unit=""
+    )
+    if b_fail:
+        hard_fail = True
     if budget_max is not None and ask is not None and ask <= float(budget_max):
         under = float(budget_max) - ask
         if under >= 1000:
-            reasons.append(f"${under:,.0f} below your target acquisition budget")
+            reasons.append(f"${under:,.0f} under your max budget")
         else:
-            reasons.append(f"${ask:,.0f} within your acquisition budget")
+            reasons.append(f"${ask:,.0f} within your budget")
     elif b_reason:
         (watches if b_watch else reasons).append(b_reason)
-    if budget_min is not None and ask is not None and ask < float(budget_min) * 0.4:
-        watches.append("Asking price is far below your typical ticket size — verify condition / title")
-    if budget_mode == "must" and b_score < 40:
-        hard_fail = True
-    weights.append((2.0 if budget_max is not None else 0.4, b_score))
+    if budget_min is not None and ask is not None and ask < float(budget_min) * 0.35:
+        watches.append("Asking is far below your usual ticket — verify condition / title")
+    weights.append((2.2 if (budget_min is not None or budget_max is not None) else 0.35, b_score))
 
     # Acreage
     acres_min = prefs.get("acres_min")
     acres_max = prefs.get("acres_max")
     acres_mode = _mode(prefs, "acres_mode", "prefer")
-    a_score, a_reason, a_watch = _range_score(
+    a_score, a_reason, a_watch, a_fail = _range_score(
         parcel.acreage, acres_min, acres_max, acres_mode, "Acreage", unit=" acres"
     )
+    if a_fail:
+        hard_fail = True
     if a_reason:
         (watches if a_watch else reasons).append(a_reason)
-    if acres_mode == "must" and a_score < 40:
-        hard_fail = True
-    weights.append((1.8 if (acres_min is not None or acres_max is not None) else 0.3, a_score))
+    weights.append((2.0 if (acres_min is not None or acres_max is not None) else 0.3, a_score))
 
     # Price / acre
     ppa_min = prefs.get("price_per_acre_min")
     ppa_max = prefs.get("price_per_acre_max")
-    if ppa is not None and (ppa_min is not None or ppa_max is not None):
-        p_score, p_reason, p_watch = _range_score(ppa, ppa_min, ppa_max, "prefer", "Price/acre", unit="/ac")
+    if ppa_min is not None or ppa_max is not None:
+        p_score, p_reason, p_watch, p_fail = _range_score(
+            ppa, ppa_min, ppa_max, "prefer", "Price/acre", unit="/ac"
+        )
+        if p_fail:
+            hard_fail = True
         weights.append((1.2, p_score))
         if p_reason:
             (watches if p_watch else reasons).append(p_reason)
 
-    # Land types / use
+    # Land types / use — if user picked types, require a real hit (not vague "vacant").
     land_types = [_norm(x) for x in (prefs.get("land_types") or []) if x]
     if land_types:
         blob = " ".join(
@@ -212,20 +248,18 @@ def score_parcel_against_profile(
             ]
         )
         if any(t in blob for t in land_types):
-            weights.append((1.4, 100.0))
+            weights.append((1.5, 100.0))
             reasons.append(f"Land type aligns ({parcel.land_use or 'land'})")
-        elif any(k in blob for k in ("vacant", "raw", "ag", "farm", "rural", "land")):
-            weights.append((1.4, 72.0))
-            reasons.append("General land use is close to your preferred types")
         else:
-            weights.append((1.4, 40.0))
-            watches.append("Land type differs from preferred types")
+            weights.append((1.5, 28.0))
+            watches.append("Land type doesn't match your selected types")
+            hard_fail = True
 
-    # Strategies
+    # Strategies — picked strategies should actually fit, not just be adjacent.
     strategies = [_norm(x).replace(" ", "_") for x in (prefs.get("strategies") or []) if x]
     if strategies and score:
         best = _norm(score.best_strategy.value if score.best_strategy else "")
-        strat_scores = { _norm(k): float(v) for k, v in (score.strategy_scores or {}).items() }
+        strat_scores = {_norm(k): float(v) for k, v in (score.strategy_scores or {}).items()}
         hit = None
         for s in strategies:
             aliases = {
@@ -243,15 +277,16 @@ def score_parcel_against_profile(
                 "energy": "energy",
             }
             key = aliases.get(s, s)
-            if best == key or (strat_scores.get(key, 0) >= 55):
+            if best == key or (strat_scores.get(key, 0) >= 60):
                 hit = key
                 break
         if hit:
-            weights.append((1.6, 92.0))
-            reasons.append(f"Matches your {hit.replace('_', ' ')} strategy")
+            weights.append((1.7, 94.0))
+            reasons.append(f"Fits your {hit.replace('_', ' ')} strategy")
         else:
-            weights.append((1.6, 48.0))
-            watches.append("Strategy fit is adjacent — scored softly")
+            weights.append((1.7, 28.0))
+            watches.append("Doesn't clearly fit your selected strategies")
+            hard_fail = True
 
     # Interests (bonus)
     interests = prefs.get("interests") or {}
@@ -291,46 +326,47 @@ def score_parcel_against_profile(
                 weights.append((1.0, 88.0))
                 reasons.append("Strong road-access characteristics")
             else:
-                weights.append((1.0, 55.0))
-                watches.append("Road access not fully confirmed in open data")
+                weights.append((1.0, 45.0))
+                watches.append("Road access not confirmed in open data")
 
-    # Risk comfort
+    # Risk comfort — over the cap is a hard miss (don't waste diligence time).
     max_risk = _norm(prefs.get("max_risk"))
     if score and max_risk:
         cap = {"low": 35, "moderate": 55, "high": 75, "very_high": 100}.get(max_risk, 55)
         if score.risk <= cap:
-            weights.append((0.8, 90.0))
+            weights.append((0.9, 92.0))
         else:
-            weights.append((0.8, 42.0))
-            watches.append(f"Risk score ({score.risk:.0f}) above your comfort band")
+            weights.append((0.9, 25.0))
+            watches.append(f"Risk ({score.risk:.0f}) above your comfort band")
+            hard_fail = True
 
     # Hold period soft
     hold_min = prefs.get("hold_years_min")
     hold_max = prefs.get("hold_years_max")
     if score and (hold_min is not None or hold_max is not None):
-        # LAND_BANK / long hold strategies align with longer holds
         if score.best_strategy and score.best_strategy.value in ("LAND_BANK", "TIMBER", "FARMLAND"):
             reasons.append("Holding profile aligns with longer-term land strategies")
-            weights.append((0.6, 85.0))
+            weights.append((0.55, 85.0))
         else:
-            weights.append((0.6, 60.0))
+            weights.append((0.55, 58.0))
 
     active = [(w, s) for w, s in weights if w > 0]
     if not active:
-        pref = 70.0 + min(20.0, ls_score / 5)
+        # Empty profile → still require a real opportunity floor later.
+        pref = 62.0 + min(18.0, ls_score / 6)
     else:
         pref = sum(w * s for w, s in active) / sum(w for w, _ in active)
     pref = _clamp(pref + bonus)
 
-    # Exceptional opportunity can lift a near-miss (soft discovery, not rigid filters)
-    if ls_score >= 85 and pref >= 45:
-        pref = _clamp(pref + 8)
-        reasons.append("Exceptional LandSignal opportunity characteristics")
-    elif ls_score >= 75 and pref >= 50:
-        pref = _clamp(pref + 4)
+    # Small lift only for already-strong preference fits — never rescue hard fails.
+    if not hard_fail and ls_score >= 85 and pref >= 68:
+        pref = _clamp(pref + 5)
+        reasons.append("Strong LandSignal opportunity characteristics")
+    elif not hard_fail and ls_score >= 78 and pref >= 72:
+        pref = _clamp(pref + 3)
 
-    if hard_fail and pref > 35:
-        pref = min(pref, 35.0)
+    if hard_fail:
+        pref = min(pref, 32.0)
 
     # Dynamic acquisition intel (always useful under Watch)
     intel: list[str] = []
@@ -385,7 +421,18 @@ def score_parcel_against_profile(
             seen.add(line)
             clean_intel.append(line)
 
-    qualifies = (not hard_fail and pref >= 55) or (pref >= 70 and ls_score >= 65)
+    # Worth the user's time: must clear hard filters, strong preference fit,
+    # and enough opportunity that they'd actually open the file.
+    notify = profile.notify or LandAlertNotify()
+    sens = _norm(notify.sensitivity) or "strong"
+    pref_floor = {"exceptional": 88.0, "strong": 75.0, "all": 68.0}.get(sens, 75.0)
+    opp_floor = {"exceptional": 70.0, "strong": 55.0, "all": 48.0}.get(sens, 55.0)
+    qualifies = (
+        (not hard_fail)
+        and pref >= pref_floor
+        and ls_score >= opp_floor
+        and (bool(clean_reasons) or pref >= pref_floor + 8)
+    )
     return {
         "preference_match_pct": round(pref, 1),
         "landsignal_score": round(ls_score, 1),
@@ -394,6 +441,7 @@ def score_parcel_against_profile(
         "intel_notes": clean_intel[:5],
         "qualifies": qualifies,
         "hard_fail": hard_fail,
+        "worth_score": round(0.58 * pref + 0.42 * ls_score, 1),
     }
 
 
@@ -475,16 +523,13 @@ def rescan_profile(store: MemoryStore, profile: LandAlertProfile, *, origin: str
     prefs = _prefs(profile)
     wanted = _state_codes(list(prefs.get("states") or []))
     st_mode = _mode(prefs, "states_mode", "must" if wanted else "flexible")
-    se = {"nc", "sc", "tn", "ga", "va", "al", "ky", "wv"}
-    soft_se = bool(wanted and st_mode == "must" and (wanted & se))
 
     kept_keys: set[str] = set()
     for parcel in store.parcels.values():
         st = _norm(parcel.state)
-        if wanted and st_mode == "must" and st not in wanted:
-            # Soft-score SE neighbors only when the profile already targets the SE.
-            if not (soft_se and st in se):
-                continue
+        # Must/prefer: only scan selected states. Flexible may scan broader inventory.
+        if wanted and st not in wanted and st_mode in ("must", "prefer"):
+            continue
         # Cards require a real mappable parcel — skip pin-only / demo before scoring.
         if not _parcel_is_mappable(parcel):
             continue
@@ -498,6 +543,8 @@ def rescan_profile(store: MemoryStore, profile: LandAlertProfile, *, origin: str
         m = store.land_alert_matches.get(key)
         if m and m.profile_id == profile.id and key not in kept_keys:
             store.land_alert_matches.pop(key, None)
+    # Surface the strongest "worth checking" fits first.
+    out.sort(key=lambda m: (-(0.58 * m.preference_match_pct + 0.42 * m.landsignal_score), -m.preference_match_pct))
     return out
 
 
@@ -676,7 +723,7 @@ def curate_land_alert_feed(store: MemoryStore) -> list[AlertRecord]:
                 continue
             if profile_id and str(match.profile_id) != profile_id:
                 continue
-            if match.qualified_for_alert and match.preference_match_pct >= 55:
+            if match.qualified_for_alert and match.preference_match_pct >= 68:
                 live = True
                 break
         if not live:
@@ -780,7 +827,7 @@ def _maybe_notify(
     # No pin-only / boundary-less parcels in the notification feed.
     if not _parcel_is_mappable(parcel):
         return
-    if not match.qualified_for_alert or match.preference_match_pct < 55:
+    if not match.qualified_for_alert or match.preference_match_pct < 68:
         return
     # Full legitimacy gate: never re-emit the same parcel if history already has it
     # (covers match drop/recreate cycles that reset match.notified).
