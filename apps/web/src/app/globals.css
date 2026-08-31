@@ -7211,14 +7211,15 @@ a.acquire-block:hover {
 }
 
 .land-alerts-loader.is-solo-scan .land-alerts-loader-title {
-  font-size: 1.15rem;
+  font-size: 1.25rem;
+  color: var(--ink);
 }
 
 .land-alerts-loader.is-solo-scan .land-alerts-loader-ellipsis {
   display: inline-block;
   min-width: 1.35em;
   text-align: left;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
 }
 
 .land-alerts-loader.is-solo-scan .land-alerts-loader-ellipsis::after {
@@ -7227,7 +7228,7 @@ a.acquire-block:hover {
 }
 
 .land-alerts-loader.is-solo-scan .land-alerts-loader-dots span {
-  background: rgba(255, 255, 255, 0.75);
+  background: color-mix(in srgb, var(--brand) 65%, var(--ink));
 }
 
 @keyframes la-solo-ellipsis {
