@@ -34,16 +34,43 @@ interface EnrichmentProvider<T> {
 | Source | Phase 1 | Access | Notes |
 |---|---|---|---|
 | Manual parcel / URL entry | **Implemented** | Free | Always available |
+| Universal Listing URL Intelligence | **Implemented** | Free | User-pasted Zillow/Land.com/etc URL → extract → identity → existing `analyze_parcel` report (not bulk scrape) |
 | CSV import | **Implemented** | Free | Broker exports, internal sheets |
 | Demo fixtures | Dev-only | Free | Labeled `DEMO`; never shown as live feed |
-| RESO/MLS web API | Stub | **Paid / licensed** via MLS/board or aggregator | Highly regional |
-| Land.com / LandWatch / LandAndFarm | Stub | **Paid / partnership** | No unauthorized scraping |
-| Crexi / LoopNet | Stub | **Paid API / license** | More CRE than ag |
+| BLM LPAD | **Implemented** | Free | Federal western disposal tracts |
+| County tax-sale / land-bank GIS | **Implemented** | Free | Spot counties nationwide |
+| Municipal / TxDOT surplus GIS | **Implemented** | Free | Surplus / excess land |
+| Statewide vacant/ag cadastral screens | **Implemented** | Free | 50-state ArcGIS vacant/ag layers |
+| Extra free vacant feeds | **Implemented** | Free | CT vacant CAMA, LA County vacant, Broward vacant, Rochester vacant, Cuyahoga vacant, ASLD trust |
+| RESO/MLS web API | Stub | **Paid / licensed** via MLS/board or aggregator | Homes-heavy; land thin |
+| Land.com / LandWatch / LandAndFarm | Stub | **Paid / partnership** | Best for **active land-for-sale** |
+| ATTOM property API | Stub | **Paid / 30-day trial** | Nationwide parcel attributes, not a land marketplace |
+| Crexi / LoopNet | Stub | **Paid API / license** | Commercial / development land |
 | Broker feeds | Stub | Contractual | Per-broker CSV/SFTP |
-| Auction platforms | Stub | Mixed | Terms vary |
-| County tax-sale feeds | Stub | Often public, nonstandard | High defect rate |
 
 If credentials missing → API returns `status: NOT_CONFIGURED` (never synthetic listings from that provider).
+
+### How to acquire land-only (not homes) marketplace data
+
+1. **Land.com family (best product fit)**  
+   - Contact Landmark Interactive / Land.com partnerships or API sales (not a public self-serve free API).  
+   - Tell them you need **acreage / vacant / farm / ranch / recreational land listings**, nationwide or multi-state, with price + acres + geo.  
+   - Env once licensed: `LAND_COM_API_KEY`.
+
+2. **ATTOM (best free-trial backbone)**  
+   - Sign up: https://api.developer.attomdata.com/signup → 30-day trial key under Account → Applications.  
+   - Use for APN / assessments / property characteristics nationwide.  
+   - Env: `ATTOM_API_KEY` (adapter still pending full ingest).
+
+3. **Crexi** — commercial & development sites via partner API (`CREXI_API_KEY`).
+
+4. **MLS / Bridge / RESO** — only if you have a broker + IDX agreements; mostly houses, sparse land.
+
+5. **Do not scrape** Land.com / Zillow / Redfin / MLS sites — violates terms and is not a durable inventory path.
+
+### Free path (what LandSignal runs today)
+
+Refresh live inventory pulls BLM + public tax/surplus + statewide vacant GIS + the extra free feeds above. These are **cadastral / surplus screens**, not guaranteed active asking-price land listings.
 
 ---
 

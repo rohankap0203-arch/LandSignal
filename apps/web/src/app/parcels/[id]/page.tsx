@@ -177,6 +177,8 @@ export default function ParcelIntelligencePage() {
     links.find((l) => l.kind === "contact" && String(l.url).startsWith("tel:"))?.label ||
     null;
   const findLink = links.find((l) => l.kind === "lookup") || null;
+  const imported = (data.imported_listing as AnyRec | null) || null;
+  const dataConflicts = (data.data_conflicts as AnyRec[]) || [];
 
   async function toggleWatch() {
     try {
@@ -216,6 +218,35 @@ export default function ParcelIntelligencePage() {
               </span>
             </div>
           </div>
+          {imported ? (
+            <div className="imported-listing-banner mt-3">
+              <div className="imported-listing-meta">
+                <span className="imported-listing-label">Imported Listing</span>
+                {imported.domain ? (
+                  <span className="imported-listing-source">
+                    Source: {String(imported.domain)}
+                  </span>
+                ) : null}
+              </div>
+              {imported.view_original || imported.source_url ? (
+                <a
+                  href={String(imported.view_original || imported.source_url)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="imported-listing-link"
+                >
+                  View Original Listing
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+          {dataConflicts.length > 0 ? (
+            <div className="data-conflict-banner mt-3">
+              {dataConflicts.slice(0, 3).map((c, i) => (
+                <p key={i}>{String(c.message || "Data discrepancy detected.")}</p>
+              ))}
+            </div>
+          ) : null}
           <h1 className="display mt-3 text-3xl font-semibold leading-tight break-words">
             {pageTitle}
           </h1>
@@ -310,7 +341,13 @@ export default function ParcelIntelligencePage() {
                 { id: "sec-why", label: "Why this land" },
                 { id: "sec-score", label: "Score parts" },
                 { id: "sec-land", label: "Land checks" },
-              ].map((s) => (
+              ]
+                .filter((s) => {
+                  if (s.id !== "sec-bidding") return true;
+                  const pts = ((cockpit.chart as AnyRec)?.points as unknown[]) || [];
+                  return pts.length > 0 || Boolean(cockpit.has_chart);
+                })
+                .map((s) => (
                 <button
                   key={s.id}
                   type="button"
@@ -329,6 +366,7 @@ export default function ParcelIntelligencePage() {
             latitude={parcel.latitude as number}
             longitude={parcel.longitude as number}
             polygon={parcel.polygon as number[][][]}
+            acres={parcel.acreage != null ? Number(parcel.acreage) : null}
             title={listing?.title as string}
             height={280}
             onExpand={() => setLandViewerOpen(true)}
@@ -340,14 +378,17 @@ export default function ParcelIntelligencePage() {
             title={String(listing?.title || "Parcel")}
             location={[parcel.county, parcel.state].filter(Boolean).join(", ") || null}
             acresDisplay={
-              parcel.acres != null && Number.isFinite(Number(parcel.acres))
-                ? `${Number(parcel.acres).toLocaleString(undefined, { maximumFractionDigits: 2 })} ac`
+              parcel.acreage != null && Number.isFinite(Number(parcel.acreage))
+                ? `${Number(parcel.acreage).toLocaleString(undefined, { maximumFractionDigits: 2 })} ac`
                 : null
             }
+            acres={parcel.acreage != null ? Number(parcel.acreage) : null}
             priceDisplay={
-              listing?.asking_price != null
-                ? `$${Number(listing.asking_price).toLocaleString()}`
-                : null
+              listing?.asking_price_usd != null
+                ? `$${Number(listing.asking_price_usd).toLocaleString()}`
+                : listing?.asking_price != null
+                  ? `$${Number(listing.asking_price).toLocaleString()}`
+                  : null
             }
             latitude={parcel.latitude as number}
             longitude={parcel.longitude as number}
@@ -477,9 +518,12 @@ export default function ParcelIntelligencePage() {
         </div>
       </section>
 
-      <section id="sec-bidding" className="panel p-5 scroll-mt-20">
-        <SignalCockpit cockpit={cockpit} />
-      </section>
+      {((((cockpit.chart as AnyRec)?.points as unknown[]) || []).length > 0 ||
+        Boolean(cockpit.has_chart)) && (
+        <section id="sec-bidding" className="panel p-5 scroll-mt-20">
+          <SignalCockpit cockpit={cockpit} />
+        </section>
+      )}
 
       <section id="sec-value" className="panel p-5 scroll-mt-20">
         <PriceTrajectory

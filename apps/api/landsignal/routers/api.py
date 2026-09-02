@@ -12,6 +12,8 @@ from landsignal.models import (
     InvestorProfileUpdate,
     LandAlertNotify,
     LandAlertProfileUpsert,
+    ListingUrlAnalyzeRequest,
+    ListingUrlIngestRequest,
     ManualIngestRequest,
     ProviderInfo,
     ProviderStatus,
@@ -181,6 +183,37 @@ async def ingest_manual(body: ManualIngestRequest) -> dict[str, Any]:
         "alerts_triggered": len(alerts),
         "land_alert_matches": len(land_matches),
     }
+
+
+@router.post("/ingest/from-url")
+async def ingest_from_url(body: ListingUrlIngestRequest) -> dict[str, Any]:
+    """Parse one user-pasted listing URL into a draft for confirm → /ingest/manual.
+
+    Does not bulk-import Land.com/Zillow inventory. If the site blocks bots, returns
+    a partial draft and asks the user to fill missing fields.
+    """
+    from landsignal.services.listing_url import fetch_listing_url
+
+    return await fetch_listing_url(body.url)
+
+
+@router.post("/ingest/from-url/analyze")
+async def ingest_from_url_analyze(body: ListingUrlAnalyzeRequest) -> dict[str, Any]:
+    """Universal Listing URL Intelligence Engine.
+
+    URL → extract → identity → canonical parcel → existing analyze_parcel →
+    standard intelligence report. Never fabricates fields; may ask for material
+    corrections before writing.
+    """
+    from landsignal.services.url_intelligence import analyze_listing_url
+
+    store = get_store(get_settings().demo_seed)
+    return await analyze_listing_url(
+        store,
+        body.url,
+        corrections=body.corrections,
+        force_refresh=body.force_refresh,
+    )
 
 
 @router.post("/ingest/csv")
@@ -1530,19 +1563,45 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
     settle_v = float((auction_path or {}).get("expected_settle_usd") or 0)
     settle_lo = float((auction_path or {}).get("settle_low_usd") or settle_v)
     settle_hi = float((auction_path or {}).get("settle_high_usd") or settle_v)
+    ask_v = float(ask or 0)
+    if model_v <= 0 and isinstance(price, dict):
+        for key in ("estimated_value_usd", "model_value_usd", "value_usd", "mark_usd"):
+            try:
+                cand = float(price.get(key) or 0)
+            except (TypeError, ValueError):
+                cand = 0.0
+            if cand > 0:
+                model_v = cand
+                break
+    if model_v <= 0 and ask_v > 0:
+        # Listing ask becomes the value anchor when comps haven't produced a model yet
+        model_v = ask_v
+
     if auction_path and opener_v > 0 and model_v > 0:
-            chart_points = [
+        chart_points = [
             {"x": opener_v, "y": 100, "label": "Start", "note": "Published starting bid — almost every bidder is still in"},
             {"x": settle_lo, "y": 72, "label": "Soft day", "note": "Quiet auction — finishes on the low side"},
             {"x": settle_v, "y": 48, "label": "Likely finish", "note": "Typical contested finish for this kind of sale"},
             {"x": settle_hi, "y": 28, "label": "Hot day", "note": "Busy auction — price climbs higher"},
             {"x": model_v, "y": 12, "label": "Our value", "note": "What we think the land is worth — few tax-sale buyers pay full retail"},
         ]
+    elif ask_v > 0 and model_v > 0 and abs(ask_v - model_v) / max(model_v, 1) > 0.04:
+        # Brokered / marketplace listing with both ask and a value read
+        lo = min(ask_v, model_v)
+        hi = max(ask_v, model_v)
+        chart_points = [
+            {"x": lo * 0.85, "y": 88, "label": "Aggressive", "note": "Deep bid — most shoppers still browsing"},
+            {"x": lo, "y": 62, "label": "Value side", "note": "Closer to our read of fair value"},
+            {"x": (lo + hi) / 2, "y": 40, "label": "Mid", "note": "Where negotiated deals often clear"},
+            {"x": ask_v, "y": 22, "label": "Ask", "note": "Published asking price"},
+            {"x": hi * 1.05 if hi == model_v else hi, "y": 10, "label": "Stretch", "note": "Few buyers remain at a premium to ask/value"},
+        ]
     elif model_v > 0:
         chart_points = [
             {"x": model_v * 0.55, "y": 80, "label": "Deep discount", "note": "Where distressed / process buyers often land"},
             {"x": model_v * 0.75, "y": 45, "label": "Negotiated", "note": "Common brokered or surplus outcome"},
-            {"x": model_v, "y": 18, "label": "Our value", "note": "Our estimated full value for this land"},
+            {"x": model_v, "y": 18, "label": "Our value" if ask_v <= 0 else "Ask / value", "note": "Anchor price for this file"},
+            {"x": model_v * 1.12, "y": 8, "label": "Retail+", "note": "Competition thins sharply above the anchor"},
         ]
     else:
         chart_points = []
@@ -1560,6 +1619,7 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
             "y_label": "Buyers still competing (%)",
             "points": chart_points,
         },
+        "has_chart": bool(chart_points),
         "opportunity": score.opportunity if score else None,
         "risk": score.risk if score else None,
         "confidence": score.confidence if score else None,
@@ -1702,6 +1762,31 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         market_trajectory=market_trajectory if isinstance(market_trajectory, dict) else None,
     )
 
+    imported_listing = None
+    conflicts_out: list[Any] = []
+    url_confidence = None
+    if listing and isinstance(listing.raw, dict):
+        ui = listing.raw.get("url_intelligence")
+        if isinstance(ui, dict):
+            imported_listing = ui.get("imported_listing") or {
+                "label": "Imported Listing",
+                "domain": (listing.source_url or "").split("/")[2] if listing.source_url else None,
+                "source_url": listing.source_url,
+                "view_original": listing.source_url,
+            }
+            conflicts_out = list(ui.get("conflicts") or [])
+            url_confidence = ui.get("confidence")
+        elif listing.provider_id == "listing_url" and listing.source_url:
+            from urllib.parse import urlparse
+
+            host = urlparse(listing.source_url).hostname or "listing site"
+            imported_listing = {
+                "label": "Imported Listing",
+                "domain": host,
+                "source_url": listing.source_url,
+                "view_original": listing.source_url,
+            }
+
     return {
         "parcel": parcel,
         "listing": listing,
@@ -1723,12 +1808,15 @@ async def parcel_detail(parcel_id: UUID) -> dict[str, Any]:
         "outreach": outreach,
         "catalyst_engine": catalyst_engine,
         "rating_breakdown": rating_breakdown(score, parcel=parcel, listing=listing) if score else [],
-        "score_explained": brief.get("score_story")
+        "score_explained": (brief.get("score_story") if isinstance(brief, dict) else None)
         or {
             "landsignal": "Overall opportunity score from 0–100 after weighing price, land quality, future uses, and risk.",
             "risk": "Higher means more things that can go wrong on the map checks (flood, wetlands, missing data).",
             "confidence": "How complete the file is. Thin files score lower on purpose — this is not a quality grade.",
         },
+        "imported_listing": imported_listing,
+        "data_conflicts": conflicts_out,
+        "url_confidence": url_confidence,
         "watched": watched,
         "disclaimer": "Screening intelligence only — not an appraisal, legal opinion, or purchase authorization.",
         "mapbox_status": "CONFIGURED" if get_settings().mapbox_token else "NOT_CONFIGURED",

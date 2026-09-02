@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { PARCEL_OUTLINE, resolveMapPolygon } from "@/lib/parcel-outline";
 
 function FullscreenIcon() {
   return (
@@ -20,6 +21,8 @@ type Props = {
   latitude?: number | null;
   longitude?: number | null;
   polygon?: number[][][] | null;
+  /** Used to draw an approximate orange footprint when true polygon is missing */
+  acres?: number | null;
   title?: string;
   height?: number;
   /** Hide caption; denser chrome for embed in cards */
@@ -37,6 +40,7 @@ export function ParcelMap({
   latitude,
   longitude,
   polygon,
+  acres,
   title,
   height = 360,
   compact = false,
@@ -100,21 +104,36 @@ export function ParcelMap({
         },
       ).addTo(map);
 
-      if (polygon?.[0]?.length) {
-        const latlngs = polygon[0].map(([lon, lat]) => [lat, lon] as [number, number]);
+      const resolved = resolveMapPolygon(polygon, latitude, longitude, acres);
+      const drawPoly = resolved.polygon;
+      if (drawPoly?.[0]?.length) {
+        const latlngs = drawPoly[0].map(([lon, lat]) => [lat, lon] as [number, number]);
         const layer = L.polygon(latlngs, {
-          color: "#d6a243",
-          weight: 2,
-          fillColor: "#d6a243",
-          fillOpacity: 0.25,
+          ...PARCEL_OUTLINE,
+          weight: resolved.approximate ? 2.25 : 2,
+          dashArray: resolved.approximate ? "6 4" : undefined,
         }).addTo(map);
         map.fitBounds(layer.getBounds(), {
           padding: compact ? [10, 10] : [24, 24],
           maxZoom: compact ? 17 : 18,
         });
-        if (title) layer.bindPopup(title);
+        if (title) {
+          layer.bindPopup(
+            resolved.approximate
+              ? `${title}<br/><span style="opacity:.75">Approx. footprint from acreage</span>`
+              : title,
+          );
+        }
       } else if (latitude != null && longitude != null) {
-        L.marker([latitude, longitude]).addTo(map).bindPopup(title || "Parcel");
+        // Orange pin instead of default blue when we have no footprint yet
+        const icon = L.divIcon({
+          className: "parcel-orange-pin",
+          html: `<span class="parcel-orange-pin-dot"></span>`,
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+        });
+        L.marker([latitude, longitude], { icon }).addTo(map).bindPopup(title || "Parcel");
+        map.setView([latitude, longitude], compact ? 14 : 15);
       }
 
       const bump = () => map?.invalidateSize({ animate: false });
@@ -135,7 +154,7 @@ export function ParcelMap({
       }
       mapRef.current = null;
     };
-  }, [latitude, longitude, polygon, title, compact, scrollWheelZoom]);
+  }, [latitude, longitude, polygon, acres, title, compact, scrollWheelZoom]);
 
   useEffect(() => {
     const map = mapRef.current;

@@ -58,6 +58,8 @@ class MemoryStore:
         self._listing_id_by_parcel: dict[UUID, UUID] = {}
         # O(1) (provider_id, external_id) → listing — required for 100k+ discovers
         self._listing_id_by_external: dict[tuple[str, str], UUID] = {}
+        # canonical listing URL → last ingest metadata (avoid redundant reprocessing)
+        self.url_ingest_cache: dict[str, dict[str, Any]] = {}
 
     def seed_demo(self) -> None:
         """Deterministic DEMO fixtures for UI walkthrough — never labeled as live feeds."""
