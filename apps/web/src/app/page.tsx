@@ -655,6 +655,9 @@ export default function SearchPage() {
                 {loading ? "Searching…" : "Show matches"}
               </button>
             </div>
+            <Link href="/ingest" className="btn btn-secondary filter-action-analyze-url">
+              Analyze a listing URL
+            </Link>
           </div>
           {meta?.inventory_count != null && (
             <div className="filter-inventory-note">

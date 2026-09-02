@@ -8,6 +8,7 @@ import { MapPinMark } from "@/components/map-pin-mark";
 
 const NAV = [
   { href: "/", label: "Search" },
+  { href: "/ingest", label: "Analyze URL" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/alerts", label: "Land Alerts" },
 ];

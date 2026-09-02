@@ -378,6 +378,16 @@ export const landsignalApi = {
     api("/investor-profile", { method: "PUT", body: JSON.stringify(body) }),
   ingestManual: (body: Record<string, unknown>) =>
     api("/ingest/manual", { method: "POST", body: JSON.stringify(body) }),
+  ingestFromUrl: (url: string) =>
+    api<{
+      ok: boolean;
+      error?: string | null;
+      draft?: Record<string, unknown>;
+      missing?: string[];
+      fetch_status?: string;
+      note?: string | null;
+      source_host?: string;
+    }>("/ingest/from-url", { method: "POST", body: JSON.stringify({ url }) }),
   analyze: (id: string) => api(`/parcels/${id}/analyze`, { method: "POST" }),
   watch: (id: string) => api<Record<string, unknown>>(`/parcels/${id}/watch`, { method: "POST" }),
   unwatch: (id: string) => api<Record<string, unknown>>(`/parcels/${id}/watch`, { method: "DELETE" }),

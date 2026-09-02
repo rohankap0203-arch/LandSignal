@@ -12,6 +12,7 @@ from landsignal.models import (
     InvestorProfileUpdate,
     LandAlertNotify,
     LandAlertProfileUpsert,
+    ListingUrlIngestRequest,
     ManualIngestRequest,
     ProviderInfo,
     ProviderStatus,
@@ -181,6 +182,18 @@ async def ingest_manual(body: ManualIngestRequest) -> dict[str, Any]:
         "alerts_triggered": len(alerts),
         "land_alert_matches": len(land_matches),
     }
+
+
+@router.post("/ingest/from-url")
+async def ingest_from_url(body: ListingUrlIngestRequest) -> dict[str, Any]:
+    """Parse one user-pasted listing URL into a draft for confirm → /ingest/manual.
+
+    Does not bulk-import Land.com/Zillow inventory. If the site blocks bots, returns
+    a partial draft and asks the user to fill missing fields.
+    """
+    from landsignal.services.listing_url import fetch_listing_url
+
+    return await fetch_listing_url(body.url)
 
 
 @router.post("/ingest/csv")
