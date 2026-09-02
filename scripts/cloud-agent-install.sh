@@ -8,10 +8,10 @@ echo "[landsignal-install] ensuring Python venv tooling"
 if ! python3 -c "import ensurepip" 2>/dev/null; then
   if command -v sudo >/dev/null 2>&1; then
     sudo apt-get update -qq
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3.12-venv python3-pip
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3.12-venv python3-pip curl
   else
     apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3.12-venv python3-pip
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3.12-venv python3-pip curl
   fi
 fi
 
@@ -24,5 +24,9 @@ if [[ ! -x apps/api/.venv/bin/python ]]; then
 fi
 apps/api/.venv/bin/pip install -U pip -q
 apps/api/.venv/bin/pip install -e "apps/api[dev]" -q
+
+# Smoke that imports work (fail install early if broken)
+apps/api/.venv/bin/python -c "import fastapi, uvicorn; import landsignal.main" >/dev/null
+test -d apps/web/node_modules/next
 
 echo "[landsignal-install] done"
