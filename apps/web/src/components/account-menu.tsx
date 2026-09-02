@@ -28,13 +28,13 @@ export function AccountMenu() {
 
   return (
     <div className="account-menu account-menu-user">
-      <div className="account-avatar" title={data.user.email || label} aria-hidden>
+      <Link href="/account" className="account-avatar" title={data.user.email || label} aria-label="Open account">
         {initial}
-      </div>
-      <div className="account-user-meta">
+      </Link>
+      <Link href="/account" className="account-user-meta">
         <span className="account-user-name">{label}</span>
         {data.user.email ? <span className="account-user-email">{data.user.email}</span> : null}
-      </div>
+      </Link>
       <button
         type="button"
         className="btn btn-ghost text-sm account-signout"

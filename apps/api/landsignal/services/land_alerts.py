@@ -18,12 +18,11 @@ from landsignal.models import (
     ParcelRecord,
     ScoreRecord,
 )
+from landsignal.auth_user import DEMO_USER_ID
 from landsignal.settings import Settings, get_settings
 from landsignal.store import MemoryStore
 
 log = structlog.get_logger()
-
-DEMO_USER_ID = UUID("00000000-0000-4000-8000-000000000002")
 
 
 def _utcnow() -> datetime:

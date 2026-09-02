@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSession } from "next-auth/react";
 import { AcquireRail } from "@/components/acquire-rail";
 import { HelpTip } from "@/components/filter-field";
 import { LandAlertsLoader } from "@/components/land-alerts-loader";
@@ -552,6 +553,8 @@ function MatchCard({
 }
 
 export default function LandAlertsPage() {
+  const { data: session, status: authStatus } = useSession();
+  const signedIn = Boolean(session?.user?.id);
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
@@ -788,6 +791,11 @@ export default function LandAlertsPage() {
   }
 
   async function saveProfile() {
+    if (authStatus === "loading") return;
+    if (!signedIn) {
+      window.location.href = `/login?mode=signup&callbackUrl=${encodeURIComponent("/alerts")}`;
+      return;
+    }
     setSaving(true);
     setMsg("");
     try {
@@ -990,6 +998,23 @@ export default function LandAlertsPage() {
       </div>
 
       {msg ? <div className="land-alerts-msg">{msg}</div> : null}
+
+      {authStatus !== "loading" && !signedIn ? (
+        <div className="land-alerts-auth-gate panel p-4">
+          <div className="display text-lg font-semibold">Sign in to save your Land Alerts</div>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Create an account so preferences, matches, and saved parcels stay on your profile.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link href="/login?mode=signup&callbackUrl=%2Falerts" className="btn btn-dark">
+              Create account
+            </Link>
+            <Link href="/login?callbackUrl=%2Falerts" className="btn btn-ghost">
+              Sign in
+            </Link>
+          </div>
+        </div>
+      ) : null}
 
       {hasProfile && !editing ? (
         <div className="land-alerts-status panel p-4">
@@ -1476,7 +1501,13 @@ export default function LandAlertsPage() {
 
           <div className="acq-actions">
             <button type="button" className="btn btn-dark" disabled={saving} onClick={() => void saveProfile()}>
-              {saving ? "Saving & matching…" : hasProfile ? "Save & recalculate matches" : "Start Land Alerts"}
+              {saving
+                ? "Saving & matching…"
+                : !signedIn
+                  ? "Sign in to start Land Alerts"
+                  : hasProfile
+                    ? "Save & recalculate matches"
+                    : "Start Land Alerts"}
             </button>
             {hasProfile ? (
               <button type="button" className="btn btn-ghost" onClick={() => setEditing(false)}>

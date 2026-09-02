@@ -6892,6 +6892,7 @@ a.acquire-block:hover {
   font-size: 0.85rem;
   font-weight: 700;
   flex: 0 0 auto;
+  text-decoration: none;
 }
 
 .account-user-meta {
@@ -6899,6 +6900,42 @@ a.acquire-block:hover {
   flex-direction: column;
   line-height: 1.15;
   max-width: 10rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.account-page .account-card {
+  max-width: 36rem;
+}
+
+.account-card-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.account-card-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.account-card-value {
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.account-card-value.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  word-break: break-all;
+}
+
+.land-alerts-auth-gate {
+  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--line));
+  background: color-mix(in srgb, var(--brand) 6%, var(--bg-elevated));
 }
 
 .account-signout {
