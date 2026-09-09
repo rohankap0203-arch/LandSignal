@@ -264,13 +264,30 @@ export default function SearchPage() {
         }
         const total = metaNow?.inventory_count ?? kept.length;
         const filterLabel = describeHardFilters(filters);
-        setStatus(
-          kept.length
-            ? `Filters: ${filterLabel} · showing ${kept.length.toLocaleString()} matches` +
-                (dropped ? ` · ${dropped} out-of-band dropped` : "") +
-                ` · ${total.toLocaleString()} live parcels indexed`
-            : `No parcels match ${filterLabel}. Widen price/acres/state, or Reset to Any, then Show matches again.`,
-        );
+        const selectedState = (filters.state || "").trim().toUpperCase();
+        const byState = (metaNow as { inventory_by_state?: Record<string, number> } | null)
+          ?.inventory_by_state;
+        const stateCount =
+          selectedState && selectedState !== "ANY" && byState
+            ? Number(byState[selectedState] || 0)
+            : total;
+        if (!kept.length && selectedState && selectedState !== "ANY" && stateCount <= 0) {
+          // Cold state — kick a focused index and tell the user to retry shortly.
+          void landsignalApi.discover(12000, 0.1, false, selectedState, true).catch(() => null);
+          setStatus(
+            `Indexing live ${selectedState} inventory now — tap Show matches again in a few seconds. Filters stay hard (${filterLabel}).`,
+          );
+        } else {
+          setStatus(
+            kept.length
+              ? `Filters: ${filterLabel} · showing ${kept.length.toLocaleString()} matches` +
+                  (dropped ? ` · ${dropped} out-of-band dropped` : "") +
+                  ` · ${total.toLocaleString()} live parcels indexed`
+              : total <= 0
+                ? `Live inventory is still empty — Refresh live inventory, then Show matches. Filters: ${filterLabel}.`
+                : `No parcels match ${filterLabel} yet. Tap Show matches again while inventory indexes, or widen price/acres.`,
+          );
+        }
         // Re-align after results paint
         requestAnimationFrame(() => {
           document.getElementById("search-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -326,7 +343,7 @@ export default function SearchPage() {
     setScanning(true);
     setStatus("Inventory refresh started in the background. Click Show matches when you want results.");
     try {
-      await landsignalApi.discover(500000, 0.1, false, undefined, true);
+      await landsignalApi.discover(50000, 0.1, false, undefined, true);
       const nextMeta = await landsignalApi.searchMeta();
       setMeta({
         ...SEARCH_META_FALLBACK,
