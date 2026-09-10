@@ -362,19 +362,19 @@ async def _pull_state_listings(
     tax = PublicTaxSaleProvider()
     surplus = PublicSurplusProvider()
     wired = max(1, len(states))
-    # Paint mode: small budget so every missing state can join the map quickly.
+    # Paint mode: enough per state to leave real Show Matches, still fast nationwide.
     if paint:
-        tax_limit = max(100, min(limit, 600))
-        tax_min = max(100, min(min_per_state, tax_limit))
-        blm_limit = min(800, max(100, tax_limit))
-        surplus_limit = min(200, max(50, tax_limit // 3))
+        tax_limit = max(200, min(limit, 1200))
+        tax_min = max(200, min(min_per_state, tax_limit))
+        blm_limit = min(1500, max(200, tax_limit))
+        surplus_limit = min(400, max(50, tax_limit // 3))
         tax_offset = 0
     else:
         tax_limit = max(limit, min_per_state * wired)
-        tax_limit = min(1_000_000, max(500, tax_limit))
+        tax_limit = min(1_000_000, max(800, tax_limit))
         tax_min = min_per_state
-        blm_limit = min(30000, max(2000, min_per_state * 2))
-        surplus_limit = min(2000, max(100, min_per_state // 2))
+        blm_limit = min(40000, max(3000, min_per_state * 2))
+        surplus_limit = min(3000, max(150, min_per_state // 2))
         # Skip the already-painted head window so deepen ingests new parcels.
         tax_offset = max(0, int(page_offset or 0))
 
@@ -495,7 +495,7 @@ async def discover_opportunities(
     wave_size = 4
     # Hard cap per state so a dead ArcGIS endpoint cannot stall the nationwide walk.
     # Deepen passes need enough time for statewide vacant GIS pages (~2–3k/state).
-    state_wall_clock_s = 240.0
+    state_wall_clock_s = 320.0
     log.info(
         "discover_coverage_queue",
         states=len(state_queue),
@@ -508,7 +508,7 @@ async def discover_opportunities(
     async def _run_one_state(
         st: str, *, include_optional: bool, paint: bool, existing_n: int = 0
     ) -> dict[str, Any]:
-        pull_limit = min(per_state_limit, 1500) if paint else per_state_limit
+        pull_limit = min(per_state_limit, 2500) if paint else per_state_limit
         pull_min = min(min_per_state, pull_limit) if paint else min_per_state
         # Deepen past the paint head so ArcGIS offset pages return unseen parcels.
         page_offset = 0 if paint else max(0, int(existing_n or 0))
@@ -641,11 +641,10 @@ async def discover_opportunities(
         if stopped_early:
             break
 
-    # Keep deepening in the same job until every state hits the floor (or memory/limit).
-    # User expectation: inventory features apply to the FULL nationwide book (~138k+),
-    # not a thin first-paint pass.
+    # Keep deepening until every state hits the ~4k floor (~204k nationwide)
+    # or we hit memory / import budget.
     deepen_passes = 0
-    while not stopped_early and deepen_passes < 8:
+    while not stopped_early and deepen_passes < 24:
         by_now = _inventory_by_state(store)
         gaps = [st for st in state_queue if by_now.get(st, 0) < min_per_state]
         if not gaps:
@@ -660,6 +659,7 @@ async def discover_opportunities(
             gaps=len(gaps),
             sample=gaps[:12],
             remaining=remaining,
+            min_per_state=min_per_state,
             **snapshot(),
         )
         for i in range(0, len(gaps), wave_size):
@@ -691,7 +691,8 @@ async def discover_opportunities(
                 if not listings:
                     continue
                 need = max(0, min_per_state - int(live_counts.get(st, 0) or 0))
-                state_limit = max(50, min(need + 100, remaining, per_state_limit))
+                # Ask for a fat page past the current head so deepen actually grows.
+                state_limit = max(200, min(max(need, 800), remaining, per_state_limit))
                 batch = await _ingest_and_score(
                     store, settings, listings, limit=state_limit, fast=fast
                 )

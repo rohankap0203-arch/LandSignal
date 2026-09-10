@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     # Use POST /v1/discover (background) when you want to grow inventory.
     auto_discover_on_startup: bool = False
     discover_limit: int = 1_000_000
-    # ~2k × 50 states ≈ 100k inventory target from public GIS / BLM / surplus.
-    discover_min_per_state: int = 2700
+    # ~4k × 51 ≈ 204k legitimate public GIS / BLM / surplus listings nationwide.
+    discover_min_per_state: int = 4000
     discover_min_acres: float = 0.1
     # Always-on Land Alerts monitor (seconds between discovery cycles; respects source rate limits)
     # Default OFF — the monitor re-runs discover and was a top OOM trigger on cloud agents.

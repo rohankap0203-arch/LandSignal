@@ -369,10 +369,10 @@ export default function SearchPage() {
         hold_years: live.hold_years?.length ? live.hold_years : SEARCH_META_FALLBACK.hold_years,
       });
       const count = live.inventory_count ?? 0;
-      // Keep deepening toward the nationwide floor (~138k) in the background.
-      if (!discoverKicked && count < 100_000) {
+      // Keep deepening toward the ~200k nationwide floor in the background.
+      if (!discoverKicked && count < 200_000) {
         discoverKicked = true;
-        void landsignalApi.discover(500000, 0.1, false, undefined, true).catch(() => {
+        void landsignalApi.discover(750000, 0.1, false, undefined, true).catch(() => {
           discoverKicked = false;
         });
       }
@@ -408,7 +408,7 @@ export default function SearchPage() {
     setScanning(true);
     setStatus("Inventory refresh started in the background. Click Show matches when you want results.");
     try {
-      await landsignalApi.discover(500000, 0.1, false, undefined, true);
+      await landsignalApi.discover(750000, 0.1, false, undefined, true);
       const nextMeta = await landsignalApi.searchMeta();
       setMeta({
         ...SEARCH_META_FALLBACK,
