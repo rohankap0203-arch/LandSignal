@@ -147,6 +147,11 @@ export function inventoryCaption(
     };
   }
 
+  // Only show "gathering" once we know inventory is truly empty — not before meta loads.
+  if (meta?.inventory_count == null && !Object.keys(byState).length) {
+    return null;
+  }
+
   if (total <= 0) {
     const detail = "Gathering listings across the country…";
     return { count: 0, countLabel: null, detail, text: detail };
