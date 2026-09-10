@@ -2657,6 +2657,11 @@ async def _fetch_arcgis_objectid_shards(
 
     Plain resultOffset on ~1M vacant rows is slow/biased; CO_NO predicates 400 on FL_Parcels.
     OBJECTID windows are fast and fan out across the cadastral.
+
+    Deepen/surplus passes historically passed live inventory counts as start_offset.
+    Applying that as resultOffset *inside each OID window* returns empty pages once
+    the count exceeds matches-per-shard (~hundreds). Rotate which OID bands we prefer
+    instead, and only nudge resultOffset by a small page-sized amount.
     """
     if target <= 0:
         return []
@@ -2664,6 +2669,13 @@ async def _fetch_arcgis_objectid_shards(
     shard_count = 56
     shard_span = max(80_000, (max_oid // shard_count) + 1)
     ranges = [(lo, min(lo + shard_span, max_oid + 1)) for lo in range(1, max_oid + 1, shard_span)]
+    # Rotate OID windows on deepen so we don't keep re-reading the same head shards.
+    if start_offset and ranges:
+        rotate = (max(0, int(start_offset)) // 400) % len(ranges)
+        if rotate:
+            ranges = ranges[rotate:] + ranges[:rotate]
+    # Tiny within-shard nudge only — never inventory_count as resultOffset.
+    page_nudge = min(300, max(0, int(start_offset or 0) % 400)) if start_offset else 0
     per_shard = max(50, (target // max(1, len(ranges))) + 40)
     # Keep concurrency modest — this ArcGIS host 504s when hammered.
     sem = asyncio.Semaphore(10)
@@ -2677,7 +2689,7 @@ async def _fetch_arcgis_objectid_shards(
                         client,
                         src,
                         target=per_shard,
-                        start_offset=start_offset,
+                        start_offset=page_nudge,
                         where=where,
                     )
                 except Exception as exc:  # noqa: BLE001
@@ -2712,7 +2724,7 @@ async def _fetch_arcgis_objectid_shards(
         return out[:target]
     log.warning("public_tax_oid_shard_empty_fallback", source=src.source_id)
     return await _fetch_arcgis_pages(
-        client, src, target=target, start_offset=start_offset
+        client, src, target=target, start_offset=page_nudge
     )
 
 
