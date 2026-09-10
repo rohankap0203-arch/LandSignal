@@ -603,7 +603,7 @@ async def discover_opportunities(
                 continue
 
             # First-pass paint for brand-new states: thicker batch so coverage + depth
-            # land together; later gap-fill deepens toward min_per_state (~2700 → ~138k).
+            # land together; later gap-fill deepens toward min_per_state (~4000 → ~200k).
             state_limit = per_state_limit
             if live_counts.get(st, 0) <= 0:
                 state_limit = min(per_state_limit, 1500)
