@@ -369,9 +369,10 @@ export default function SearchPage() {
         hold_years: live.hold_years?.length ? live.hold_years : SEARCH_META_FALLBACK.hold_years,
       });
       const count = live.inventory_count ?? 0;
-      if (!discoverKicked && count < 50) {
+      // Keep deepening toward the nationwide floor (~138k) in the background.
+      if (!discoverKicked && count < 100_000) {
         discoverKicked = true;
-        void landsignalApi.discover(120000, 0.1, false, undefined, true).catch(() => {
+        void landsignalApi.discover(500000, 0.1, false, undefined, true).catch(() => {
           discoverKicked = false;
         });
       }
@@ -415,7 +416,7 @@ export default function SearchPage() {
         states: nextMeta.states?.length ? nextMeta.states : SEARCH_META_FALLBACK.states,
       });
       setStatus(
-        `Inventory refresh running · ${nextMeta.inventory_count?.toLocaleString() ?? 0} parcels indexed so far. Click Show matches to search.`,
+        `Refreshing listings · ${nextMeta.inventory_count?.toLocaleString() ?? 0} so far. Tap Show matches anytime.`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Scan failed");
@@ -743,14 +744,21 @@ export default function SearchPage() {
               >
                 {scanning ? "Refreshing" : "Refresh live inventory"}
               </button>
-              <button
-                type="button"
-                className="btn btn-primary filter-action-reset"
-                onClick={() => void runSearch()}
-                disabled={loading}
-              >
-                {loading ? "Searching…" : "Show matches"}
-              </button>
+              <div className="filter-show-matches">
+                <button
+                  type="button"
+                  className="btn btn-primary filter-action-reset"
+                  onClick={() => void runSearch()}
+                  disabled={loading}
+                >
+                  {loading ? "Searching…" : "Show matches"}
+                </button>
+                {typeof meta?.inventory_count === "number" && meta.inventory_count > 0 ? (
+                  <p className="filter-inventory-note" aria-live="polite">
+                    <strong>{meta.inventory_count.toLocaleString("en-US")}</strong> listings
+                  </p>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>

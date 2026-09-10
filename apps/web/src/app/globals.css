@@ -1266,16 +1266,49 @@ select {
 }
 
 .filter-inventory-note {
-  font-size: 0.875rem;
-  line-height: 1.35;
-  color: rgba(247, 250, 248, 0.82);
-  margin-top: 10px;
+  margin: 0;
+  padding: 0 2px;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  color: rgba(247, 250, 248, 0.72);
+  text-align: center;
 }
 
 .filter-inventory-note strong {
-  color: #e8fff3;
-  font-weight: 700;
+  color: #f7faf8;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
+}
+
+.filter-show-matches {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  min-width: 0;
+}
+
+.filter-show-matches > .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+@media (min-width: 721px) {
+  .filter-show-matches {
+    flex: 0 0 auto;
+    min-width: 10.5rem;
+  }
+}
+
+@media (max-width: 720px) {
+  .filter-show-matches {
+    width: 100%;
+  }
+
+  .filter-show-matches > .btn {
+    width: 100%;
+  }
 }
 
 .shell-brand {
