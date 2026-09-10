@@ -302,6 +302,112 @@ def _normalize_states(state: str | None) -> list[str] | None:
     return codes or None
 
 
+# States currently being filled by Show-matches auto-index (dedupe overlapping requests).
+_STATE_FILL_IN_FLIGHT: set[str] = set()
+
+
+def _live_inventory_by_state(store: Any) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for p in store.parcels.values():
+        if p.is_demo or not p.state:
+            continue
+        st = (p.state or "").upper()
+        counts[st] = counts.get(st, 0) + 1
+    return counts
+
+
+async def _ensure_states_indexed(
+    store: Any,
+    state_codes: list[str] | None,
+    *,
+    sync_fill: bool,
+) -> bool:
+    """If selected states have no live inventory, index them so Show matches isn't empty.
+
+    Returns True when a sync fill ran (caller should re-query candidates).
+    """
+    import asyncio
+
+    if not state_codes:
+        # No state filter — if the whole store is empty, kick a bounded nationwide fill.
+        live = sum(1 for p in store.parcels.values() if not p.is_demo)
+        if live > 0:
+            return False
+        missing = ["NATIONWIDE"]
+        target_states: list[str] | None = None
+    else:
+        by_state = _live_inventory_by_state(store)
+        missing = [s for s in state_codes if by_state.get(s, 0) <= 0]
+        target_states = missing or None
+        if not missing:
+            return False
+
+    to_start = [s for s in missing if s not in _STATE_FILL_IN_FLIGHT]
+    if not to_start and not sync_fill:
+        return False
+
+    for s in missing:
+        _STATE_FILL_IN_FLIGHT.add(s)
+
+    async def _run_fill(*, limit: int) -> None:
+        try:
+            settings = get_settings()
+            await discover_opportunities(
+                store,
+                settings,
+                limit=limit,
+                min_acres=settings.discover_min_acres,
+                states=target_states,
+                fast=True,
+            )
+            try:
+                from landsignal.store import persist_store
+
+                persist_store(store)
+            except Exception:
+                pass
+        except Exception as exc:  # noqa: BLE001
+            import structlog
+
+            structlog.get_logger().warning(
+                "radar_auto_discover_failed",
+                states=missing,
+                error=str(exc)[:240],
+            )
+        finally:
+            for s in missing:
+                _STATE_FILL_IN_FLIGHT.discard(s)
+
+    if sync_fill:
+        # Short synchronous top-up so the first Show matches click for a cold state
+        # can return real parcels instead of an empty set.
+        try:
+            await asyncio.wait_for(
+                _run_fill(limit=2500 if target_states else 4000),
+                timeout=55,
+            )
+            return True
+        except Exception as exc:  # noqa: BLE001
+            import structlog
+
+            structlog.get_logger().warning(
+                "radar_sync_fill_failed",
+                states=missing,
+                error=str(exc)[:240],
+            )
+            # Fall through to background so indexing continues after the request returns.
+            if any(s in _STATE_FILL_IN_FLIGHT for s in missing):
+                return False
+            for s in missing:
+                _STATE_FILL_IN_FLIGHT.add(s)
+            asyncio.create_task(_run_fill(limit=8000 if target_states else 20000))
+            return False
+
+    if to_start:
+        asyncio.create_task(_run_fill(limit=8000 if target_states else 20000))
+    return False
+
+
 def _parse_strategies(strategy: str | None) -> list[str]:
     """Accept a single strategy or comma-separated multi-select (ranking preference)."""
     if not strategy or strategy.upper() in ("ANY", "CUSTOM", ""):
@@ -403,11 +509,14 @@ async def radar(
 ) -> list[RadarRow]:
     """Search results with investor filters. Pass nothing / omit for Any.
 
-    Selected state / region / price / acres are hard filters.
+    Selected state / region / price / acres are hard filters by default.
     Strategy and hold period never shrink the match set — they only re-rank
     opportunity / fit so preferred strategies and hold lengths float higher.
-    broaden=True is opt-in only: if the exact set is empty it may loosen region
-    or market channel — never price, acres, or state.
+    broaden=True (client default): if the exact set is empty it loosens region /
+    channel, then widens price/acres slightly, then falls back to best available
+    land inside the selected state — never invents parcels or crosses state lines.
+    Cold states with zero inventory are auto-indexed so Show matches is never
+    empty just because that state has not been discovered yet.
     """
     from landsignal.geo_meta import region_matches
     from landsignal.scoring.engine import personalized_score
@@ -424,6 +533,8 @@ async def radar(
 
     # Prefer explicit `state`; accept `states` as a synonym so filters never silently drop.
     state_codes = _normalize_states(state or states)
+    # Cold-start / sparse coverage: index missing states so filters still return real land.
+    await _ensure_states_indexed(store, state_codes, sync_fill=bool(broaden))
     strategy_prefs = _parse_strategies(strategy)
     if hold_years is not None:
         hold_years = max(1, min(500, int(hold_years)))
@@ -1272,7 +1383,6 @@ async def search_meta() -> dict[str, Any]:
         for st, n in by_state.items()
         if n < payload["inventory_min_per_state_target"]
     )
-    return payload
     return payload
 
 

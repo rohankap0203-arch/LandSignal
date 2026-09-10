@@ -288,7 +288,8 @@ async def discover_opportunities(
             inventory=inv_now,
             concurrency=score_conc,
         )
-        if inv_now >= 50_000 and i > 0 and (i // chunk) % 8 == 0:
+        # Persist early + often so Cloud Agent restarts don't wipe partial nationwide inventory.
+        if scored > 0 and (i == 0 or (i // chunk) % 3 == 0):
             try:
                 from landsignal.store import persist_store
 

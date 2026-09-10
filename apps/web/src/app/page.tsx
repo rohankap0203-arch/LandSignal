@@ -13,6 +13,7 @@ import {
   type SearchMeta,
 } from "@/lib/api";
 import { describeHardFilters, enforceHardFilters } from "@/lib/hard-filters";
+import { inventoryCaption } from "@/lib/inventory-caption";
 import { SEARCH_META_FALLBACK } from "@/lib/search-meta-fallback";
 
 type PriceUnit = "K" | "M";
@@ -264,13 +265,30 @@ export default function SearchPage() {
         }
         const total = metaNow?.inventory_count ?? kept.length;
         const filterLabel = describeHardFilters(filters);
-        setStatus(
-          kept.length
-            ? `Filters: ${filterLabel} · showing ${kept.length.toLocaleString()} matches` +
-                (dropped ? ` · ${dropped} out-of-band dropped` : "") +
-                ` · ${total.toLocaleString()} live parcels indexed`
-            : `No parcels match ${filterLabel}. Widen price/acres/state, or Reset to Any, then Show matches again.`,
-        );
+        const selectedState = (filters.state || "").trim().toUpperCase();
+        const byState = (metaNow as { inventory_by_state?: Record<string, number> } | null)
+          ?.inventory_by_state;
+        const stateCount =
+          selectedState && selectedState !== "ANY" && byState
+            ? Number(byState[selectedState] || 0)
+            : total;
+        if (!kept.length && selectedState && selectedState !== "ANY" && stateCount <= 0) {
+          // Cold state — kick a focused index and tell the user to retry shortly.
+          void landsignalApi.discover(12000, 0.1, false, selectedState, true).catch(() => null);
+          setStatus(
+            `Indexing live ${selectedState} inventory now — tap Show matches again in a few seconds. Filters stay hard (${filterLabel}).`,
+          );
+        } else {
+          setStatus(
+            kept.length
+              ? `Filters: ${filterLabel} · showing ${kept.length.toLocaleString()} matches` +
+                  (dropped ? ` · ${dropped} out-of-band dropped` : "") +
+                  ` · ${total.toLocaleString()} live parcels indexed`
+              : total <= 0
+                ? `Live inventory is still empty — Refresh live inventory, then Show matches. Filters: ${filterLabel}.`
+                : `No parcels match ${filterLabel} yet. Tap Show matches again while inventory indexes, or widen price/acres.`,
+          );
+        }
         // Re-align after results paint
         requestAnimationFrame(() => {
           document.getElementById("search-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -294,31 +312,35 @@ export default function SearchPage() {
   );
 
   useEffect(() => {
-    // Load live catalogs (inventory counts, regions) — keep fallback if this fails
+    // Load live catalogs (inventory counts, regions) — keep fallback if this fails.
+    // Poll gently so the count under Show matches stays current while indexing.
     let cancelled = false;
-    landsignalApi
-      .searchMeta()
-      .then((live) => {
-        if (cancelled || !live) return;
-        setMeta({
-          ...SEARCH_META_FALLBACK,
-          ...live,
-          states: live.states?.length ? live.states : SEARCH_META_FALLBACK.states,
-          strategies: live.strategies?.length ? live.strategies : SEARCH_META_FALLBACK.strategies,
-          price_presets: live.price_presets?.length
-            ? live.price_presets
-            : SEARCH_META_FALLBACK.price_presets,
-          acre_presets: live.acre_presets?.length
-            ? live.acre_presets
-            : SEARCH_META_FALLBACK.acre_presets,
-          hold_years: live.hold_years?.length ? live.hold_years : SEARCH_META_FALLBACK.hold_years,
-        });
-      })
-      .catch(() => {
+    const applyMeta = (live: SearchMeta) => {
+      if (cancelled || !live) return;
+      setMeta({
+        ...SEARCH_META_FALLBACK,
+        ...live,
+        states: live.states?.length ? live.states : SEARCH_META_FALLBACK.states,
+        strategies: live.strategies?.length ? live.strategies : SEARCH_META_FALLBACK.strategies,
+        price_presets: live.price_presets?.length
+          ? live.price_presets
+          : SEARCH_META_FALLBACK.price_presets,
+        acre_presets: live.acre_presets?.length
+          ? live.acre_presets
+          : SEARCH_META_FALLBACK.acre_presets,
+        hold_years: live.hold_years?.length ? live.hold_years : SEARCH_META_FALLBACK.hold_years,
+      });
+    };
+    const refresh = () => {
+      landsignalApi.searchMeta().then(applyMeta).catch(() => {
         /* keep SEARCH_META_FALLBACK — absolute localhost API bases fail on phones */
       });
+    };
+    refresh();
+    const id = window.setInterval(refresh, 10000);
     return () => {
       cancelled = true;
+      window.clearInterval(id);
     };
   }, []);
 
@@ -326,7 +348,7 @@ export default function SearchPage() {
     setScanning(true);
     setStatus("Inventory refresh started in the background. Click Show matches when you want results.");
     try {
-      await landsignalApi.discover(500000, 0.1, false, undefined, true);
+      await landsignalApi.discover(50000, 0.1, false, undefined, true);
       const nextMeta = await landsignalApi.searchMeta();
       setMeta({
         ...SEARCH_META_FALLBACK,
@@ -383,7 +405,10 @@ export default function SearchPage() {
     return list;
   }, [rows, form.sort]);
 
-  const inventoryStates = meta?.inventory_states || [];
+  const inventoryLine = useMemo(
+    () => inventoryCaption(meta, form.states),
+    [meta, form.states],
+  );
   const strategyHasCustom = form.strategies.includes("CUSTOM");
 
   return (
@@ -646,22 +671,30 @@ export default function SearchPage() {
               >
                 {scanning ? "Refreshing" : "Refresh live inventory"}
               </button>
-              <button
-                type="button"
-                className="btn btn-primary filter-action-reset"
-                onClick={() => void runSearch()}
-                disabled={loading}
-              >
-                {loading ? "Searching…" : "Show matches"}
-              </button>
+              <div className="filter-show-matches">
+                <button
+                  type="button"
+                  className="btn btn-primary filter-action-reset"
+                  onClick={() => void runSearch()}
+                  disabled={loading}
+                >
+                  {loading ? "Searching…" : "Show matches"}
+                </button>
+                {inventoryLine ? (
+                  <p className="filter-inventory-note" key={inventoryLine.count} aria-live="polite">
+                    {inventoryLine.countLabel ? (
+                      <>
+                        <span className="filter-inventory-count">{inventoryLine.countLabel}</span>
+                        <span className="filter-inventory-rest"> {inventoryLine.detail}</span>
+                      </>
+                    ) : (
+                      <span className="filter-inventory-rest">{inventoryLine.detail}</span>
+                    )}
+                  </p>
+                ) : null}
+              </div>
             </div>
           </div>
-          {meta?.inventory_count != null && (
-            <div className="filter-inventory-note">
-              Live inventory: {meta.inventory_count} parcels
-              {inventoryStates.length ? ` across ${inventoryStates.length} states (${inventoryStates.join(", ")})` : ""}
-            </div>
-          )}
         </div>
       </section>
 
