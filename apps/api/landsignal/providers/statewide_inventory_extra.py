@@ -569,13 +569,31 @@ def _norm_ga_gwinnett(raw: dict) -> dict | None:
         default_county="Gwinnett",
         county_keys=(),
         pid_keys=("PIN", "RPIN", "OBJECTID"),
-        acre_keys=(),
+        acre_keys=("LEGALAC",),
         land_keys=("LANDVAL1",),
         bldg_keys=("DWLGVAL1",),
         owner_keys=("OWNER1",),
-        min_ac=0.25,
-        label="parcel",
+        min_ac=1.0,
+        label="vacant",
         source_url="https://www.gwinnettcounty.com/",
+    )
+
+
+def _norm_ga_dekalb_vacant(raw: dict) -> dict | None:
+    return _vacant_from_fields(
+        raw,
+        source_key="ga_dekalb",
+        state="GA",
+        default_county="DeKalb",
+        county_keys=(),
+        pid_keys=("PARCELID", "LOWPARCELID", "OBJECTID"),
+        acre_keys=("ACREAGE",),
+        land_keys=("CNTASSDVAL", "LNDVALUE"),
+        bldg_keys=("BLDGAREA",),
+        owner_keys=("OWNERNME1",),
+        min_ac=1.0,
+        label="vacant",
+        source_url="https://www.dekalbcountyga.gov/",
     )
 
 
@@ -1092,13 +1110,27 @@ SOURCES: list[ArcgisMarketSource] = [
     ),
     _src(
         "ga_gwinnett_parcels",
-        "Gwinnett County GA Parcels",
+        "Gwinnett County GA Vacant Land",
         "https://services3.arcgis.com/RfpmnkSAQleRbndX/arcgis/rest/services/Property_and_Tax/FeatureServer/3/query",
         "GA",
         _norm_ga_gwinnett,
-        where="(DWLGVAL1 IS NULL OR DWLGVAL1=0) AND LANDVAL1>0",
+        # LANDVAL1 / DWLGVAL1 / LEGALAC are often strings — avoid numeric WHERE 400s.
+        where=(
+            "DWLGVAL1='0' AND LANDVAL1 IS NOT NULL AND LANDVAL1<>'0' AND LANDVAL1<>''"
+        ),
         shard=True,
         objectid_max=500_000,
+        page_size=1000,
+    ),
+    _src(
+        "ga_dekalb_vacant",
+        "DeKalb County GA Vacant Land (1ac+)",
+        "https://dcgis.dekalbcountyga.gov/hosted/rest/services/Parcels/MapServer/0/query",
+        "GA",
+        _norm_ga_dekalb_vacant,
+        where="ACREAGE>=1 AND ACREAGE<=2500 AND (BLDGAREA=0 OR BLDGAREA IS NULL)",
+        shard=True,
+        objectid_max=300_000,
         page_size=1000,
     ),
     _src(

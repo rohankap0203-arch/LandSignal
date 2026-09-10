@@ -208,6 +208,8 @@ async def _ingest_and_score(
     limit: int,
     fast: bool,
 ) -> dict[str, Any]:
+    from landsignal.models import ScoreRecord, Signal
+    from landsignal.scoring.engine import ALGORITHM_VERSION, WEIGHT_VERSION
     from landsignal.services.memory_guard import (
         should_stop_heavy_work,
         should_throttle,
@@ -230,6 +232,7 @@ async def _ingest_and_score(
     new_parcel_ids: set[UUID] = set()
     price_drop_ids: set[UUID] = set()
     price_up_ids: set[UUID] = set()
+    stubbed = 0
     for raw in diversified:
         existing = store.listing_by_external(raw.get("provider_id"), raw.get("external_id"))
         if existing:
@@ -259,6 +262,47 @@ async def _ingest_and_score(
         parcel_ids.append(parcel.id)
         to_score.append(parcel.id)
         new_parcel_ids.add(parcel.id)
+
+    # Fast nationwide discover: stub-score every new parcel so Show Matches can
+    # list them immediately. Full live analyze still runs on parcel open.
+    # Without this, scoring a 20k CA batch blocked thin-state deepen for many minutes.
+    if fast:
+        for pid in to_score:
+            if store.latest_score(pid) is not None:
+                continue
+            listing = store.listing_for_parcel(pid)
+            store.scores.setdefault(pid, []).append(
+                ScoreRecord(
+                    parcel_id=pid,
+                    listing_id=listing.id if listing else None,
+                    algorithm_version=ALGORITHM_VERSION,
+                    weight_version=WEIGHT_VERSION,
+                    opportunity=48.0,
+                    risk=45.0,
+                    confidence=28.0,
+                    asymmetry=0.0,
+                    signal=Signal.WATCH,
+                    deal_readiness=35.0,
+                    explanations=[
+                        "Bulk-indexed from public GIS. Open the parcel for full live analysis."
+                    ],
+                    why_interesting=["Public cadastral inventory with real assessor geometry."],
+                    input_hash="discover_stub_v1",
+                    input_snapshot={"stub": True},
+                )
+            )
+            stubbed += 1
+        trim_score_lists(store, keep=1)
+        return {
+            "imported": len(new_parcel_ids),
+            "refreshed": refreshed,
+            "scored": stubbed,
+            "parcel_ids": [str(p) for p in parcel_ids[:50]],
+            "stopped_early": False,
+            "stop_reason": "",
+            "stubbed": True,
+            "memory": snapshot(),
+        }
 
     inv_now = sum(1 for p in store.parcels.values() if not p.is_demo)
     # Concurrency collapses under memory pressure — never 24-wide on a 15Gi VM.
@@ -328,21 +372,15 @@ async def _ingest_and_score(
             concurrency=score_conc,
             **snapshot(),
         )
-        if inv_now >= 20_000 and i > 0 and (i // chunk) % 6 == 0:
-            try:
-                from landsignal.store import persist_store
-
-                persist_store(store)
-            except Exception as exc:  # noqa: BLE001
-                log.warning("discover_mid_persist_failed", error=str(exc)[:200])
 
     return {
         "imported": len(new_parcel_ids),
         "refreshed": refreshed,
         "scored": scored,
-        "parcel_ids": [str(x) for x in list(set(parcel_ids))[:50]],
+        "parcel_ids": [str(p) for p in parcel_ids[:50]],
         "stopped_early": stopped_early,
         "stop_reason": stop_reason,
+        "memory": snapshot(),
     }
 
 
@@ -490,9 +528,9 @@ async def discover_opportunities(
 
     from landsignal.services.memory_guard import should_stop_heavy_work, snapshot
 
-    # Pull a couple gap states at once (GIS I/O bound), then ingest/score one-by-one
-    # so we paint the 50-state map fast without exploding RSS or waiting on one hung feed.
-    wave_size = 4
+    # Pull several gap states at once (GIS I/O bound), then ingest quickly with stub
+    # scores so every thin state gets depth — not just the first fat GIS state.
+    wave_size = 8
     # Hard cap per state so a dead ArcGIS endpoint cannot stall the nationwide walk.
     # Deepen passes need enough time for statewide vacant GIS pages (~2–3k/state).
     state_wall_clock_s = 320.0
@@ -642,11 +680,14 @@ async def discover_opportunities(
             break
 
     # Keep deepening until every state hits the ~4k floor (~204k nationwide)
-    # or we hit memory / import budget.
+    # or we hit memory / import budget. Always serve the thinnest states first.
     deepen_passes = 0
-    while not stopped_early and deepen_passes < 24:
+    while not stopped_early and deepen_passes < 36:
         by_now = _inventory_by_state(store)
-        gaps = [st for st in state_queue if by_now.get(st, 0) < min_per_state]
+        gaps = sorted(
+            (st for st in state_queue if by_now.get(st, 0) < min_per_state),
+            key=lambda st: (int(by_now.get(st, 0) or 0), st),
+        )
         if not gaps:
             break
         remaining = max(0, int(limit) - imported - refreshed)
@@ -692,7 +733,7 @@ async def discover_opportunities(
                     continue
                 need = max(0, min_per_state - int(live_counts.get(st, 0) or 0))
                 # Ask for a fat page past the current head so deepen actually grows.
-                state_limit = max(200, min(max(need, 800), remaining, per_state_limit))
+                state_limit = max(400, min(max(need, 1500), remaining, per_state_limit))
                 batch = await _ingest_and_score(
                     store, settings, listings, limit=state_limit, fast=fast
                 )
@@ -716,19 +757,19 @@ async def discover_opportunities(
             if stopped_early:
                 break
 
-    # Surplus fill: thin states often stall on weak county feeds. Keep pulling from
-    # proven high-yield GIS states (and remaining gaps) until we approach ~200k
-    # legitimate listings nationwide — without inventing rows.
+    # Surplus fill: after every state has had deepen attempts, grow ALL states that
+    # still have headroom — thinnest first — until ~200k nationwide. Never let one
+    # fat state (e.g. CA) monopolize the wave while MS/GA/OH stay near zero.
     target_total = max(
         min_per_state * 51,
         int(getattr(settings, "discover_target_total", 200_000) or 200_000),
     )
     max_per_state = max(
         min_per_state,
-        int(getattr(settings, "discover_max_per_state", 25_000) or 25_000),
+        int(getattr(settings, "discover_max_per_state", 12_000) or 12_000),
     )
     surplus_passes = 0
-    while not stopped_early and surplus_passes < 16:
+    while not stopped_early and surplus_passes < 24:
         by_now = _inventory_by_state(store)
         inv_now = sum(1 for p in store.parcels.values() if not p.is_demo)
         if inv_now >= target_total:
@@ -737,13 +778,11 @@ async def discover_opportunities(
         if remaining < 100:
             break
         need_total = target_total - inv_now
-        gaps = [st for st in state_queue if by_now.get(st, 0) < min_per_state]
-        rich = sorted(
+        # Thinnest-first across every state still under the per-state ceiling.
+        wave_pool = sorted(
             (st for st in state_queue if by_now.get(st, 0) < max_per_state),
-            key=lambda st: (-int(by_now.get(st, 0) or 0), st),
-        )
-        # Gaps first (coverage), then richest growers that still have headroom.
-        wave_pool = list(dict.fromkeys(gaps + rich))[:16]
+            key=lambda st: (int(by_now.get(st, 0) or 0), st),
+        )[:32]
         if not wave_pool:
             break
         surplus_passes += 1
@@ -753,7 +792,7 @@ async def discover_opportunities(
             inventory=inv_now,
             target_total=target_total,
             need_total=need_total,
-            wave=wave_pool[:12],
+            wave=wave_pool[:16],
             remaining=remaining,
             **snapshot(),
         )
@@ -790,9 +829,10 @@ async def discover_opportunities(
                     continue
                 inv_live = sum(1 for p in store.parcels.values() if not p.is_demo)
                 need_now = max(0, target_total - inv_live)
+                # Equal-ish chunks so 8 thin states each grow instead of one eating 6k.
                 state_limit = max(
-                    200,
-                    min(headroom, need_now, remaining, 6000, per_state_limit * 2),
+                    300,
+                    min(headroom, need_now // max(1, len(wave)), remaining, 2500),
                 )
                 if state_limit < 50:
                     continue
