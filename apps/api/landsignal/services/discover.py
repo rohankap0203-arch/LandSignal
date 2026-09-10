@@ -716,6 +716,111 @@ async def discover_opportunities(
             if stopped_early:
                 break
 
+    # Surplus fill: thin states often stall on weak county feeds. Keep pulling from
+    # proven high-yield GIS states (and remaining gaps) until we approach ~200k
+    # legitimate listings nationwide — without inventing rows.
+    target_total = max(
+        min_per_state * 51,
+        int(getattr(settings, "discover_target_total", 200_000) or 200_000),
+    )
+    max_per_state = max(
+        min_per_state,
+        int(getattr(settings, "discover_max_per_state", 25_000) or 25_000),
+    )
+    surplus_passes = 0
+    while not stopped_early and surplus_passes < 16:
+        by_now = _inventory_by_state(store)
+        inv_now = sum(1 for p in store.parcels.values() if not p.is_demo)
+        if inv_now >= target_total:
+            break
+        remaining = max(0, int(limit) - imported - refreshed)
+        if remaining < 100:
+            break
+        need_total = target_total - inv_now
+        gaps = [st for st in state_queue if by_now.get(st, 0) < min_per_state]
+        rich = sorted(
+            (st for st in state_queue if by_now.get(st, 0) < max_per_state),
+            key=lambda st: (-int(by_now.get(st, 0) or 0), st),
+        )
+        # Gaps first (coverage), then richest growers that still have headroom.
+        wave_pool = list(dict.fromkeys(gaps + rich))[:16]
+        if not wave_pool:
+            break
+        surplus_passes += 1
+        log.info(
+            "discover_surplus_pass",
+            pass_n=surplus_passes,
+            inventory=inv_now,
+            target_total=target_total,
+            need_total=need_total,
+            wave=wave_pool[:12],
+            remaining=remaining,
+            **snapshot(),
+        )
+        for i in range(0, len(wave_pool), wave_size):
+            stop, reason = should_stop_heavy_work()
+            if stop:
+                stopped_early = True
+                stop_reason = reason
+                errors.append(f"memory_guard: paused surplus ({reason})")
+                break
+            wave = wave_pool[i : i + wave_size]
+            live_counts = _inventory_by_state(store)
+            pulled = await asyncio.gather(
+                *[
+                    _run_one_state(
+                        st,
+                        include_optional=True,
+                        paint=False,
+                        existing_n=int(live_counts.get(st, 0) or 0),
+                    )
+                    for st in wave
+                ]
+            )
+            for item in pulled:
+                st = item["state"]
+                for k, v in (item.get("counts") or {}).items():
+                    source_counts[k] = source_counts.get(k, 0) + v
+                errors.extend(item.get("errors") or [])
+                listings = item.get("listings") or []
+                if not listings:
+                    continue
+                headroom = max(0, max_per_state - int(live_counts.get(st, 0) or 0))
+                if headroom < 50:
+                    continue
+                inv_live = sum(1 for p in store.parcels.values() if not p.is_demo)
+                need_now = max(0, target_total - inv_live)
+                state_limit = max(
+                    200,
+                    min(headroom, need_now, remaining, 6000, per_state_limit * 2),
+                )
+                if state_limit < 50:
+                    continue
+                batch = await _ingest_and_score(
+                    store, settings, listings, limit=state_limit, fast=fast
+                )
+                imported += int(batch.get("imported") or 0)
+                refreshed += int(batch.get("refreshed") or 0)
+                scored += int(batch.get("scored") or 0)
+                sample_ids.extend(batch.get("parcel_ids") or [])
+                if st not in states_done:
+                    states_done.append(st)
+                try:
+                    from landsignal.store import persist_store
+
+                    persist_store(store)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("discover_surplus_persist_failed", state=st, error=str(exc)[:200])
+                if batch.get("stopped_early"):
+                    stopped_early = True
+                    stop_reason = str(batch.get("stop_reason") or stop_reason)
+                    break
+                remaining = max(0, int(limit) - imported - refreshed)
+                if sum(1 for p in store.parcels.values() if not p.is_demo) >= target_total:
+                    break
+            if stopped_early or sum(1 for p in store.parcels.values() if not p.is_demo) >= target_total:
+                break
+
     by_state = _inventory_by_state(store)
     return {
         "imported": imported,
@@ -729,6 +834,7 @@ async def discover_opportunities(
         "states_scanned": state_queue,
         "states_done": states_done,
         "deepen_passes": deepen_passes,
+        "surplus_passes": surplus_passes,
         "inventory_total": sum(1 for p in store.parcels.values() if not p.is_demo),
         "inventory_states": len(by_state),
         "inventory_by_state": dict(sorted(by_state.items())),
@@ -737,10 +843,12 @@ async def discover_opportunities(
         "memory": snapshot(),
         "note": (
             "Coverage-first nationwide index: gap states (0 / below floor) are filled before "
-            "deepening states already at the per-state target. "
+            "deepening states already at the per-state target, then surplus-fill toward "
+            f"~{target_total:,} total from rich public GIS feeds. "
             f"{sum(source_counts.values())} raw rows considered; {refreshed} existing rows refreshed. "
             f"{len(by_state)} states currently in live inventory. "
-            f"Deepen passes={deepen_passes}; floor={min_per_state}/state (~{min_per_state * 51} nationwide). "
+            f"Deepen passes={deepen_passes}; surplus passes={surplus_passes}; "
+            f"floor={min_per_state}/state (cap {max_per_state}). "
             "ATTOM enriches parcel intelligence on analyze; it does not invent for-sale listings."
             + (f" Paused early to protect VM memory: {stop_reason}." if stopped_early else "")
         ),

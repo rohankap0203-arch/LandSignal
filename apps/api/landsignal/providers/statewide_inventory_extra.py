@@ -374,6 +374,33 @@ def _norm_ca_sb_vacant(raw: dict) -> dict | None:
     )
 
 
+def _norm_ca_la_vacant(raw: dict) -> dict | None:
+    props = _props(raw)
+    use_code = str(props.get("UseCode") or "").upper()
+    use_desc = str(props.get("UseDescription") or "").upper()
+    # Skip non-market / water / government shells that share the vacant 'V' suffix.
+    if use_code in {"870V", "880V", "8800"} or any(
+        tok in use_desc for tok in ("RIVER", "LAKE", "GOVERNMENT", "RIGHT OF WAY", "STREET")
+    ):
+        return None
+    if not use_code.endswith("V"):
+        return None
+    return _vacant_from_fields(
+        raw,
+        source_key="ca_la",
+        state="CA",
+        default_county="Los Angeles",
+        county_keys=(),
+        pid_keys=("AIN", "APN", "OBJECTID"),
+        acre_keys=(),  # acreage from polygon (Shape.STArea filter in WHERE)
+        land_keys=("Roll_LandValue",),
+        bldg_keys=("Roll_ImpValue",),
+        owner_keys=("OwnerName", "Owner"),
+        min_ac=1.0,
+        source_url="https://portal.assessor.lacounty.gov/",
+    )
+
+
 def _norm_ok_okc(raw: dict) -> dict | None:
     return _vacant_from_fields(
         raw,
@@ -959,9 +986,30 @@ SOURCES: list[ArcgisMarketSource] = [
         "https://services.arcgis.com/aA3snZwJfFkVyDuP/arcgis/rest/services/Parcels_for_San_Bernardino_County/FeatureServer/0/query",
         "CA",
         _norm_ca_sb_vacant,
-        where="ImprovementValue=0 AND Acreage>=1 AND Acreage<=2500 AND LandValue>0",
+        # LandValue / ImprovementValue are STRING fields (often "4,594,686") — numeric
+        # comparisons 400 the whole query and left CA stuck at ~2 listings.
+        where=(
+            "Acreage>=1 AND Acreage<=2500 AND ImprovementValue='0' "
+            "AND AssessDescription LIKE '%Vacant%' "
+            "AND LandValue IS NOT NULL AND LandValue<>'0' AND LandValue<>''"
+        ),
         shard=True,
         objectid_max=1_500_000,
+        page_size=1000,
+    ),
+    _src(
+        "ca_la_vacant",
+        "Los Angeles CA Vacant Land (1ac+)",
+        "https://public.gis.lacounty.gov/public/rest/services/LACounty_Cache/LACounty_Parcel/MapServer/0/query",
+        "CA",
+        _norm_ca_la_vacant,
+        # UseCode suffix V = vacant; Shape.STArea is sqft (43560 ≈ 1 acre).
+        where=(
+            "UseCode LIKE '%V' AND Roll_ImpValue=0 AND Roll_LandValue>=500 "
+            "AND Shape.STArea()>=43560 AND Shape.STArea()<=108900000"
+        ),
+        shard=True,
+        objectid_max=3_000_000,
         page_size=1000,
     ),
     _src(

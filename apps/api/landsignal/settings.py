@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     discover_limit: int = 1_000_000
     # ~4k × 51 ≈ 204k legitimate public GIS / BLM / surplus listings nationwide.
     discover_min_per_state: int = 4000
+    # Hard nationwide target — surplus-fill rich GIS states when thin ones stall.
+    discover_target_total: int = 200_000
+    # Cap per state during surplus fill so one county cannot monopolize the book.
+    discover_max_per_state: int = 25_000
     discover_min_acres: float = 0.1
     # Always-on Land Alerts monitor (seconds between discovery cycles; respects source rate limits)
     # Default OFF — the monitor re-runs discover and was a top OOM trigger on cloud agents.

@@ -319,6 +319,12 @@ def _fnum(v: Any) -> float | None:
     try:
         if v is None or v == "":
             return None
+        if isinstance(v, str):
+            # County assessor feeds often store currency as "4,594,686".
+            cleaned = v.replace(",", "").replace("$", "").strip()
+            if not cleaned:
+                return None
+            return float(cleaned)
         return float(v)
     except Exception:
         return None
