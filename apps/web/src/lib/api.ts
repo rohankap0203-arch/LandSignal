@@ -214,6 +214,9 @@ export type SearchMeta = {
   tooltips?: Record<string, { title: string; body: string }>;
   inventory_states?: string[];
   inventory_count?: number;
+  inventory_by_state?: Record<string, number>;
+  inventory_min_per_state_target?: number;
+  inventory_states_below_target?: string[];
   allows_custom?: string[];
 };
 
