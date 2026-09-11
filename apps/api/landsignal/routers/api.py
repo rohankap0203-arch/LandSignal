@@ -479,9 +479,8 @@ async def radar(
     Selected state / region / price / acres are hard filters by default.
     Strategy and hold period never shrink the match set — they only re-rank
     opportunity / fit so preferred strategies and hold lengths float higher.
-    broaden=True (client default): loosen region/channel first; if still empty,
-    widen price/acres slightly, then fall back to best available land inside the
-    selected state — never invents parcels or crosses state lines.
+    broaden=True: may loosen region/channel only when the exact set is empty.
+    State, price, acres, and strategy stay hard — never widened or cleared.
     """
     from landsignal.geo_meta import region_matches
     from landsignal.scoring.engine import personalized_score
@@ -808,13 +807,24 @@ async def radar(
                         ):
                             hit_any = True
                             break
+                        hints = {
+                            "FARMLAND": ("farm", "agricultur", "pasture", "cropland", " ag ", "ranch", "cattle"),
+                            "DEVELOPMENT": ("develop", "subdivision", "entitled", "zoning", "plat"),
+                            "LAND_BANK": ("land bank", "hold", "assemble", "speculative"),
+                            "RECREATIONAL": ("hunt", "recreat", "cabin", "camp", "timber recreation"),
+                            "ENERGY": ("solar", "wind", "energy", "mineral", "oil", "gas lease"),
+                            "TIMBER": ("timber", "forest", "pine", "hardwood", "logging"),
+                            "IMPROVED_PROPERTY": ("home", "house", "cottage", "cabin", "dwelling"),
+                        }.get(s_up, ())
+                        if hints and any(h in blob for h in hints):
+                            hit_any = True
+                            break
                     elif pref.lower() in blob or s_up.lower().replace("_", " ") in blob:
                         hit_any = True
                         break
                 if not hit_any:
-                    # Land strategies never hide other land — only re-rank.
-                    # Property-on-site already hard-gated above.
-                    strategy_soft_miss = True
+                    # Strategy is a hard filter (score match or title/description hints).
+                    continue
             if min_score is not None and score.opportunity < min_score:
                 continue
             if max_risk is not None and score.risk > max_risk:
@@ -1316,7 +1326,8 @@ async def radar(
     gate_min_acres, gate_max_acres = min_acres, max_acres
     gate_require_region = bool(region)
 
-    # Soft broaden first: region / market channel.
+    # broaden=true may soften region / market channel only.
+    # Price, acres, and state stay absolute — never widen or clear them.
     if broaden and not cands:
         cands = collect_cands(apply_region=False, apply_strict_channel=True)
         if cands:
@@ -1330,63 +1341,6 @@ async def radar(
             gate_require_region = False
             broaden_reason = (
                 "Loosened market channel a bit so you still get matches inside your other filters."
-            )
-    # Then widen price/acres slightly so extreme preset combos still return real land.
-    if broaden and not cands and (min_price is not None or max_price is not None):
-        lo = (min_price * 0.65) if min_price is not None else None
-        hi = (max_price * 1.35) if max_price is not None else None
-        cands = collect_cands(
-            apply_region=False,
-            apply_strict_channel=False,
-            price_lo=lo,
-            price_hi=hi,
-        )
-        if cands:
-            gate_min_price, gate_max_price = lo, hi
-            gate_require_region = False
-            broaden_reason = (
-                "Widened budget ~35% so you still get legitimate priced land near your range."
-            )
-    if broaden and not cands and (min_acres is not None or max_acres is not None):
-        lo = (min_acres * 0.7) if min_acres is not None else None
-        hi = (max_acres * 1.4) if max_acres is not None else None
-        cands = collect_cands(
-            apply_region=False,
-            apply_strict_channel=False,
-            price_lo=(min_price * 0.65) if min_price is not None else min_price,
-            price_hi=(max_price * 1.35) if max_price is not None else max_price,
-            ac_lo=lo,
-            ac_hi=hi,
-            allow_unknown_price=True,
-        )
-        if cands:
-            gate_min_acres, gate_max_acres = lo, hi
-            if min_price is not None:
-                gate_min_price = min_price * 0.65
-            if max_price is not None:
-                gate_max_price = max_price * 1.35
-            gate_require_region = False
-            broaden_reason = (
-                "Widened acreage a bit so you still get real parcels near your size screen."
-            )
-    if broaden and not cands and state_codes:
-        cands = collect_cands(
-            apply_region=False,
-            apply_strict_channel=False,
-            price_lo=0,
-            price_hi=10_000_000_000,
-            ac_lo=0.01,
-            ac_hi=100_000,
-            allow_unknown_price=True,
-            allow_unknown_acres=True,
-        )
-        if cands:
-            gate_min_price, gate_max_price = None, None
-            gate_min_acres, gate_max_acres = None, None
-            gate_require_region = False
-            broaden_reason = (
-                "Showing best available land in your selected state — "
-                "exact price/acre combo had no hits yet while inventory is still indexing."
             )
 
     ranked = _sort_cands(cands, sort)

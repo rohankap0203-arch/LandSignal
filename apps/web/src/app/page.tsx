@@ -287,9 +287,8 @@ export default function SearchPage() {
         unpriced_mode: "include",
         include_unpriced: true,
         sort: f.sort,
-        // Prefer returning real land: server widens soft knobs only when exact set is empty.
-        // State stays hard; strategy/hold never hide rows.
-        broaden: true,
+        // Strict mode: every selected filter must match. Empty set stays empty.
+        broaden: false,
       };
     },
     [meta],
@@ -335,7 +334,7 @@ export default function SearchPage() {
         if (!Array.isArray(data)) {
           throw new Error("Search returned an unexpected response. Try Show matches again.");
         }
-        // Client hard gate for state / region / acres / price — strategy & hold never drop rows.
+        // Client hard gate for state / region / acres / price — drop anything outside the band.
         const { kept, dropped } = enforceHardFilters(data, filters);
         setRows(kept);
         // Stop the Surveying spinner as soon as matches arrive — meta refresh is secondary.

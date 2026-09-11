@@ -33,11 +33,9 @@ function regionPasses(row: RadarRow, region?: string | null): boolean {
 }
 
 /**
- * Hard gate for search results.
- * - State is always hard (supports multi-select "FL,TX").
- * - When broaden=true (default), acres/price/region trust the API never-empty cascade.
- * - When broaden=false, acres/price/region are strict client-side too.
- * - Strategy + hold never drop rows.
+ * Hard gate for search results — every active filter must match.
+ * State, region, acres, and price are always enforced client-side.
+ * Strategy / hold are enforced by the API; hold remains ranking-only.
  */
 export function rowPassesHardFilters(row: RadarRow, filters: SearchFilters): boolean {
   const stateRaw = (filters.state || "").trim().toUpperCase();
@@ -60,9 +58,10 @@ export function rowPassesHardFilters(row: RadarRow, filters: SearchFilters): boo
       if (!rowState || !wanted.has(rowState)) return false;
     }
   }
-  if (filters.broaden !== false) return true;
   if (!regionPasses(row, filters.region)) return false;
   if (!inHardBand(row.acres, filters.min_acres, filters.max_acres)) return false;
+  // Budget band uses the row's public/assessed ask the API already resolved.
+  // Missing ask fails closed when a price bound is set.
   if (!inHardBand(row.ask, filters.min_price, filters.max_price)) return false;
   return true;
 }
@@ -221,7 +220,6 @@ export function explainEmptySearch(opts: EmptyExplainOpts): EmptySearchExplanati
   }
 
   if (rawRows.length > 0 && keptCount === 0) {
-    const broaden = filters.broaden !== false;
     let failState = 0;
     let failRegion = 0;
     let failAcres = 0;
@@ -247,16 +245,16 @@ export function explainEmptySearch(opts: EmptyExplainOpts): EmptySearchExplanati
       mark("State", "blocker");
     }
     if (failRegion) {
-      if (!broaden) hard.push({ label: "Region", n: failRegion });
-      mark("Region", broaden ? "tight" : "blocker");
+      hard.push({ label: "Region", n: failRegion });
+      mark("Region", "blocker");
     }
     if (failAcres) {
-      if (!broaden) hard.push({ label: "Acres", n: failAcres });
-      mark("Acres", broaden ? "tight" : "blocker");
+      hard.push({ label: "Acres", n: failAcres });
+      mark("Acres", "blocker");
     }
     if (failPrice) {
-      if (!broaden) hard.push({ label: "Price", n: failPrice });
-      mark("Price", broaden ? "tight" : "blocker");
+      hard.push({ label: "Price", n: failPrice });
+      mark("Price", "blocker");
     }
     const ranked = (
       hard.length ? hard : factors.filter((f) => f.role !== "context").map((f) => ({ label: f.label, n: 1 }))

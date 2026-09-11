@@ -246,8 +246,8 @@ async def test_budget_uses_assessed_land_when_unpriced(isolated_store):
 
 
 @pytest.mark.asyncio
-async def test_strategy_filter_ranks_not_hides(isolated_store):
-    """Strategy preference re-ranks opportunity — never shrinks the match set."""
+async def test_strategy_filter_hard_matches_only(isolated_store):
+    """Strategy is a hard filter — non-matching strategies are dropped."""
     _seed_scored_parcel(
         isolated_store,
         state="FL",
@@ -283,11 +283,9 @@ async def test_strategy_filter_ranks_not_hides(isolated_store):
         )
     assert r.status_code == 200
     rows = r.json()
-    # Fixture seeds other FL 20+ ac parcels — strategy must not hide them.
-    assert len(rows) >= 2
-    assert any(row.get("best_strategy") == "ENERGY" for row in rows)
-    assert any(row.get("best_strategy") == "FARMLAND" for row in rows)
-    assert rows[0]["best_strategy"] == "ENERGY"
+    assert rows
+    assert all(row.get("best_strategy") == "ENERGY" for row in rows)
+    assert not any(row.get("best_strategy") == "FARMLAND" for row in rows)
     assert all((row.get("acres") or 0) >= 20 for row in rows)
 
 
