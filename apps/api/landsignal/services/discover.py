@@ -267,10 +267,14 @@ async def _ingest_and_score(
     # list them immediately. Full live analyze still runs on parcel open.
     # Without this, scoring a 20k CA batch blocked thin-state deepen for many minutes.
     if fast:
+        from landsignal.services.analyze import screening_estimate_usd
+
         for pid in to_score:
             if store.latest_score(pid) is not None:
                 continue
             listing = store.listing_for_parcel(pid)
+            parcel = store.parcels.get(pid)
+            screen_est = screening_estimate_usd(parcel, listing) if parcel else None
             store.scores.setdefault(pid, []).append(
                 ScoreRecord(
                     parcel_id=pid,
@@ -283,12 +287,13 @@ async def _ingest_and_score(
                     asymmetry=0.0,
                     signal=Signal.WATCH,
                     deal_readiness=35.0,
+                    estimated_value_usd=screen_est,
                     explanations=[
                         "Bulk-indexed from public GIS. Open the parcel for full live analysis."
                     ],
                     why_interesting=["Public cadastral inventory with real assessor geometry."],
                     input_hash="discover_stub_v1",
-                    input_snapshot={"stub": True},
+                    input_snapshot={"stub": True, "screening_estimate": True},
                 )
             )
             stubbed += 1

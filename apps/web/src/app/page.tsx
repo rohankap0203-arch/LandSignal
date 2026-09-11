@@ -338,6 +338,8 @@ export default function SearchPage() {
         // Client hard gate for state / region / acres / price — strategy & hold never drop rows.
         const { kept, dropped } = enforceHardFilters(data, filters);
         setRows(kept);
+        // Stop the Surveying spinner as soon as matches arrive — meta refresh is secondary.
+        setLoading(false);
         const metaNow = await landsignalApi.searchMeta().catch(() => null);
         if (metaNow) {
           setMeta({
