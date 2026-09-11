@@ -25,7 +25,6 @@ function regionPasses(row: RadarRow, region?: string | null): boolean {
   if (hay.includes(needle)) return true;
   const token = needle.replace(/\s+county\b/g, "").trim();
   if (token && hay.includes(token)) return true;
-  // Word overlap for macro labels ("Hill Country", "Phoenix metro…")
   const words = needle
     .replace(/[\/\-]/g, " ")
     .split(/\s+/)
@@ -36,8 +35,7 @@ function regionPasses(row: RadarRow, region?: string | null): boolean {
 /**
  * Hard gate for search results.
  * - State is always hard (supports multi-select "FL,TX").
- * - When broaden=true (default), acres/price/region trust the API's never-empty cascade
- *   (API may widen ~35% or fall back inside the state) so legitimate land still shows.
+ * - When broaden=true (default), acres/price/region trust the API never-empty cascade.
  * - When broaden=false, acres/price/region are strict client-side too.
  * - Strategy + hold never drop rows.
  */
@@ -62,11 +60,7 @@ export function rowPassesHardFilters(row: RadarRow, filters: SearchFilters): boo
       if (!rowState || !wanted.has(rowState)) return false;
     }
   }
-  const broaden = filters.broaden !== false;
-  if (broaden) {
-    // Trust API effective bands — only reject clear wrong-state rows.
-    return true;
-  }
+  if (filters.broaden !== false) return true;
   if (!regionPasses(row, filters.region)) return false;
   if (!inHardBand(row.acres, filters.min_acres, filters.max_acres)) return false;
   if (!inHardBand(row.ask, filters.min_price, filters.max_price)) return false;
@@ -107,11 +101,12 @@ function wantedStates(filters: SearchFilters): string[] {
 
 function acresLabel(filters: SearchFilters): string | null {
   if (filters.min_acres == null && filters.max_acres == null) return null;
+  const fmt = (n: number) => n.toLocaleString();
   if (filters.min_acres != null && filters.max_acres != null) {
-    return `${filters.min_acres}–${filters.max_acres} ac`;
+    return `${fmt(filters.min_acres)}–${fmt(filters.max_acres)} ac`;
   }
-  if (filters.min_acres != null) return `${filters.min_acres}+ ac`;
-  return `≤ ${filters.max_acres} ac`;
+  if (filters.min_acres != null) return `${fmt(filters.min_acres)}+ ac`;
+  return `≤ ${fmt(filters.max_acres!)} ac`;
 }
 
 function priceLabel(filters: SearchFilters): string | null {
@@ -133,40 +128,50 @@ export function describeHardFilters(filters: SearchFilters): string {
   if (acres) bits.push(acres);
   const price = priceLabel(filters);
   if (price) bits.push(price);
-  // Strategy / hold are ranking-only — omit from hard-filter summary.
   return bits.length ? bits.join(" · ") : "Any filters";
 }
 
 export type EmptySearchFactor = {
-  /** Short chip label, e.g. "Acres" */
   label: string;
-  /** Human value, e.g. "500–5,000 ac" */
   value: string;
-  /** How this factor contributed to the empty set */
   role: "blocker" | "tight" | "context";
 };
 
 export type EmptySearchExplanation = {
+  /** ≤ ~12 words */
   headline: string;
   summary: string;
   factors: EmptySearchFactor[];
+  /** Short clash, e.g. "Acres + Price" */
   conflict?: string;
+  /** At most one short tip */
   suggestions: string[];
 };
 
 type EmptyExplainOpts = {
   filters: SearchFilters;
-  /** Rows returned by the API before the client hard gate. */
   rawRows?: RadarRow[];
   keptCount: number;
   inventoryCount?: number | null;
   inventoryByState?: Record<string, number> | null;
 };
 
-/**
- * Build a plain-English diagnosis for an empty Scouted opportunities result.
- * Prefers measurable blockers (no inventory in state, hard-gate drops) over generic copy.
- */
+function compact(
+  headline: string,
+  conflict: string | undefined,
+  factors: EmptySearchFactor[],
+  tip?: string,
+): EmptySearchExplanation {
+  return {
+    headline,
+    summary: headline,
+    factors,
+    conflict,
+    suggestions: tip ? [tip] : [],
+  };
+}
+
+/** 5-second empty-result diagnosis: short headline, clash, one tip. */
 export function explainEmptySearch(opts: EmptyExplainOpts): EmptySearchExplanation {
   const { filters, keptCount } = opts;
   const rawRows = opts.rawRows || [];
@@ -176,84 +181,36 @@ export function explainEmptySearch(opts: EmptyExplainOpts): EmptySearchExplanati
   const region = (filters.region || "").trim();
   const acres = acresLabel(filters);
   const price = priceLabel(filters);
-  const strategies = (filters.strategy || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s && s !== "Any");
 
   const factors: EmptySearchFactor[] = [];
-  if (states.length) {
-    factors.push({ label: "State", value: states.join(", "), role: "context" });
-  }
-  if (region && region !== "Any") {
-    factors.push({ label: "Region", value: region, role: "context" });
-  }
+  if (states.length) factors.push({ label: "State", value: states.join(", "), role: "context" });
+  if (region && region !== "Any") factors.push({ label: "Region", value: region, role: "context" });
   if (acres) factors.push({ label: "Acres", value: acres, role: "context" });
   if (price) factors.push({ label: "Price", value: price, role: "context" });
-  if (strategies.length) {
-    factors.push({
-      label: "Strategy",
-      value: strategies.join(", "),
-      role: "context",
-    });
-  }
-  if (filters.hold_years != null) {
-    factors.push({
-      label: "Hold",
-      value: `${filters.hold_years} yr`,
-      role: "context",
-    });
-  }
 
-  const suggestions: string[] = [];
   const mark = (label: string, role: EmptySearchFactor["role"]) => {
     const hit = factors.find((f) => f.label === label);
     if (hit) hit.role = role;
   };
 
-  // 1) Empty live book
   if (inventoryCount === 0) {
-    return {
-      headline: "Live inventory is empty right now",
-      summary:
-        "There are no parcels loaded in this session yet, so every filter combination returns zero.",
-      factors,
-      conflict: "Inventory has not finished loading — filters never got a chance to match.",
-      suggestions: [
-        "Click Refresh live inventory and wait for the parcel count to climb",
-        "Then tap Show matches again",
-      ],
-    };
+    return compact("Inventory still loading", "No parcels loaded", factors, "Refresh live inventory");
   }
 
-  // 2) Selected states missing from inventory
   if (states.length && inventoryCount != null && inventoryCount > 0) {
     const missing = states.filter((st) => !inventoryByState[st] || inventoryByState[st] <= 0);
     if (missing.length === states.length) {
-      missing.forEach(() => mark("State", "blocker"));
-      return {
-        headline: "No live parcels for the state you picked",
-        summary: `Live inventory does not currently include ${missing.join(", ")}. LandSignal never fills empty states with other states.`,
+      mark("State", "blocker");
+      return compact(
+        `No parcels in ${missing.join(", ")}`,
+        "State",
         factors,
-        conflict: `${missing.join(", ")} × your other filters never ran — the state itself has no indexed parcels.`,
-        suggestions: [
-          "Reset State to Any, or pick a covered state from the list",
-          "Refresh live inventory, then search again",
-        ],
-      };
-    }
-    if (missing.length) {
-      mark("State", "tight");
-      suggestions.push(
-        `${missing.join(", ")} has no live parcels — drop it or refresh inventory`,
+        "Pick a covered state",
       );
     }
   }
 
-  // 3) API returned candidates but client hard-gate wiped them
   if (rawRows.length > 0 && keptCount === 0) {
-    // Client default broaden=true: only State is a hard drop. Region/acres/price
-    // are informational "tight" signals unless broaden was turned off.
     const broaden = filters.broaden !== false;
     let failState = 0;
     let failRegion = 0;
@@ -274,153 +231,80 @@ export function explainEmptySearch(opts: EmptyExplainOpts): EmptySearchExplanati
       if (!inHardBand(row.ask, filters.min_price, filters.max_price)) failPrice += 1;
     }
 
-    const blockers: Array<{ label: string; n: number; tip: string; hard: boolean }> = [];
+    const hard: Array<{ label: string; n: number }> = [];
     if (failState) {
-      blockers.push({
-        label: "State",
-        n: failState,
-        tip: "Results came back outside the state(s) you selected",
-        hard: true,
-      });
+      hard.push({ label: "State", n: failState });
       mark("State", "blocker");
     }
     if (failRegion) {
-      blockers.push({
-        label: "Region",
-        n: failRegion,
-        tip: "Parcels did not match the region / county label",
-        hard: !broaden,
-      });
+      if (!broaden) hard.push({ label: "Region", n: failRegion });
       mark("Region", broaden ? "tight" : "blocker");
     }
     if (failAcres) {
-      blockers.push({
-        label: "Acres",
-        n: failAcres,
-        tip: "Acreage fell outside your min/max band",
-        hard: !broaden,
-      });
+      if (!broaden) hard.push({ label: "Acres", n: failAcres });
       mark("Acres", broaden ? "tight" : "blocker");
     }
     if (failPrice) {
-      blockers.push({
-        label: "Price",
-        n: failPrice,
-        tip: "Asking price fell outside your min/max band",
-        hard: !broaden,
-      });
+      if (!broaden) hard.push({ label: "Price", n: failPrice });
       mark("Price", broaden ? "tight" : "blocker");
     }
-
-    const hardBlockers = blockers.filter((b) => b.hard).sort((a, b) => b.n - a.n);
-    const ranked = (hardBlockers.length ? hardBlockers : blockers).sort((a, b) => b.n - a.n);
-    const top = ranked.slice(0, 2);
-    const conflict =
-      top.length > 1
-        ? `${top.map((b) => b.label).join(" + ")} together eliminated every candidate (${rawRows.length} came back from search).`
-        : top.length === 1
-          ? `${top[0].label} eliminated every candidate (${rawRows.length} came back from search).`
-          : `${rawRows.length} parcels came back, but none survived your hard filters.`;
-
-    if (failAcres) suggestions.push("Widen the acreage band (lower min or raise max)");
-    if (failPrice) suggestions.push("Widen the price band (raise max price or clear min)");
-    if (failRegion) suggestions.push("Set Region to Any, or pick a broader region label");
-    if (failState) suggestions.push("Add another state, or set State to Any");
-    if (strategies.length || filters.hold_years != null) {
-      suggestions.push("Strategy and hold only re-rank — they do not hide parcels");
-    }
-
-    return {
-      headline: "Filters conflicted with the parcels that came back",
-      summary: top.map((b) => b.tip).join(". ") || "Hard filters removed every result.",
-      factors,
-      conflict,
-      suggestions: suggestions.slice(0, 4),
-    };
+    const ranked = (
+      hard.length ? hard : factors.filter((f) => f.role !== "context").map((f) => ({ label: f.label, n: 1 }))
+    )
+      .sort((a, b) => b.n - a.n)
+      .slice(0, 2);
+    const clash = ranked.map((b) => b.label).join(" + ") || "Filters";
+    const tip = failPrice
+      ? "Raise max price"
+      : failAcres
+        ? "Widen acres"
+        : failRegion
+          ? "Set Region to Any"
+          : failState
+            ? "Add a state or set Any"
+            : "Widen the tightest filter";
+    return compact("Filters wiped every result", clash, factors, tip);
   }
 
-  // 4) API itself returned nothing — diagnose from active filter combo
   const coveredInState =
-    states.length > 0
-      ? states
-          .filter((st) => (inventoryByState[st] || 0) > 0)
-          .map((st) => `${st} (${(inventoryByState[st] || 0).toLocaleString()})`)
-      : [];
+    states.length > 0 ? states.filter((st) => (inventoryByState[st] || 0) > 0) : [];
   const activeHard = factors.filter((f) =>
     ["State", "Region", "Acres", "Price"].includes(f.label),
   );
+
   if (activeHard.length >= 2) {
     activeHard.forEach((f) => {
       f.role = "tight";
     });
-    const names = activeHard.map((f) => f.label);
     if (acres && price) {
       mark("Acres", "blocker");
       mark("Price", "blocker");
-      suggestions.push("Raise max price, or lower minimum acres");
-      suggestions.push("Search one band at a time (price OR acres) to see which unlocks results");
     }
-    if (states.length && region && region !== "Any") {
-      mark("Region", "blocker");
-      suggestions.push("Try Region = Any inside the same state");
-    }
-    if (states.length && (acres || price)) {
-      suggestions.push("Keep the state, clear price or acres, then narrow again");
-    }
-    const bookNote = coveredInState.length
-      ? ` Live book still has ${coveredInState.join(", ")} — the combo above is the miss.`
-      : "";
-    return {
-      headline: "This filter combination has no live matches",
-      summary: `Nothing satisfied ${activeHard.map((f) => f.value).join(" · ")}.${bookNote}`,
-      factors,
-      conflict: `${names.join(" + ")} do not overlap in the current live book.`,
-      suggestions: suggestions.length
-        ? suggestions.slice(0, 4)
-        : ["Reset the tightest filter to Any, then Show matches again"],
-    };
+    if (states.length && region && region !== "Any") mark("Region", "blocker");
+    const blockers = factors.filter((f) => f.role === "blocker");
+    const clash = (blockers.length ? blockers : activeHard).map((f) => f.label).join(" + ");
+    const tip =
+      acres && price
+        ? "Raise max price or lower min acres"
+        : region && region !== "Any"
+          ? "Set Region to Any"
+          : "Clear the tightest filter";
+    return compact("No overlap for this combo", clash, factors, tip);
   }
 
   if (activeHard.length === 1) {
     const only = activeHard[0];
-    // State alone + live parcels in that state: the state is not the wipe reason.
     if (only.label === "State" && coveredInState.length) {
-      mark("State", "context");
-      return {
-        headline: `No matches inside ${states.join(", ")} for this search`,
-        summary: `Live book still has ${coveredInState.join(", ")}, but nothing came back for the current query.`,
+      return compact(
+        `Nothing matched in ${states.join(", ")}`,
+        "Search miss",
         factors,
-        conflict:
-          "State inventory exists — the empty set is from this search pass, not a missing state.",
-        suggestions: [
-          "Tap Show matches again, or Refresh live inventory first",
-          "Add a looser acreage or price band, then narrow",
-          "Or try Top opportunities nationwide",
-        ],
-      };
+        "Loosen acres/price",
+      );
     }
     mark(only.label, "blocker");
-    return {
-      headline: `No parcels match ${only.label.toLowerCase()} = ${only.value}`,
-      summary: "That single hard filter wiped the result set against live inventory.",
-      factors,
-      conflict: `${only.label} is the disconnect.`,
-      suggestions: [
-        `Clear or widen ${only.label}`,
-        "Or Reset to Any, then re-apply filters one at a time",
-      ],
-    };
+    return compact(`${only.label} = ${only.value} → 0`, only.label, factors, `Widen ${only.label}`);
   }
 
-  return {
-    headline: "No exact matches for these filters",
-    summary:
-      "Live inventory has parcels, but none lined up with the current search. LandSignal will not silently weaken your filters.",
-    factors,
-    suggestions: [
-      "Expand acreage or raise max price",
-      "Search a neighboring region or set Region to Any",
-      "Reset to Any, then Show matches again",
-    ],
-  };
+  return compact("No matches for these filters", undefined, factors, "Widen acres or price");
 }

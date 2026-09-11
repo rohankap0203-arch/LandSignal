@@ -168,7 +168,7 @@ async def discover(
             "fast": fast,
             "inventory_now": sum(1 for p in store.parcels.values() if not p.is_demo),
             "note": (
-                "Nationwide scan started toward the full book (~5000/state ≈ 255k+). "
+                "Nationwide scan started toward the full book (~5k/state floor, ~520k target). "
                 "Real GIS outlines bake into every parcel after ingest — not on-demand only."
             ),
         }

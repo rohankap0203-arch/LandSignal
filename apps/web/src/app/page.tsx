@@ -366,8 +366,8 @@ export default function SearchPage() {
           setEmptyExplanation(why);
           setStatus(
             why.conflict
-              ? `${why.headline} — ${why.conflict}`
-              : `No parcels match ${filterLabel}. Widen price/acres/state, or Reset to Any, then Show matches again.`,
+              ? `${why.conflict}: ${why.headline}`
+              : why.headline || `No match for ${filterLabel}`,
           );
         }
       } catch (e) {
@@ -929,12 +929,15 @@ export default function SearchPage() {
       )}
 
       {!loading && hasSearched && !rows.length ? (
-        <>
+        <div className="empty-filter-reason" role="status" aria-live="polite">
           {emptyExplanation ? (
-            <div className="empty-filter-reason" role="status" aria-live="polite">
-              <p className="empty-filter-reason-kicker">Why no matches</p>
-              <h3 className="empty-filter-reason-headline">{emptyExplanation.headline}</h3>
-              <p className="empty-filter-reason-summary">{emptyExplanation.summary}</p>
+            <>
+              <p className="empty-filter-reason-line">
+                <span className="empty-filter-reason-why">Why</span>
+                {emptyExplanation.conflict
+                  ? `${emptyExplanation.conflict} — ${emptyExplanation.headline}`
+                  : emptyExplanation.headline}
+              </p>
               {emptyExplanation.factors.length ? (
                 <ul className="empty-filter-reason-factors">
                   {emptyExplanation.factors.map((factor) => (
@@ -948,29 +951,17 @@ export default function SearchPage() {
                   ))}
                 </ul>
               ) : null}
-              {emptyExplanation.conflict ? (
-                <p className="empty-filter-reason-conflict">
-                  <span className="empty-filter-reason-conflict-label">Disconnect</span>
-                  {emptyExplanation.conflict}
-                </p>
+              {emptyExplanation.suggestions[0] ? (
+                <p className="empty-filter-reason-fix">Try {emptyExplanation.suggestions[0]}</p>
               ) : null}
-              {emptyExplanation.suggestions.length ? (
-                <ul className="empty-filter-reason-tips">
-                  {emptyExplanation.suggestions.map((tip) => (
-                    <li key={tip}>{tip}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ) : null}
-          <div className="panel empty-state">
-            <div className="display text-2xl text-[var(--ink)]">No exact matches found</div>
-            <p className="mx-auto mt-2 max-w-lg">
-              LandSignal will not silently weaken your filters. Adjust the disconnect above, then tap
-              Show matches again.
+            </>
+          ) : (
+            <p className="empty-filter-reason-line">
+              <span className="empty-filter-reason-why">Why</span>
+              No exact matches for these filters
             </p>
-          </div>
-        </>
+          )}
+        </div>
       ) : null}
 
       {!loading && (
