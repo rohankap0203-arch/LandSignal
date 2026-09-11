@@ -1283,27 +1283,42 @@ select {
 
 .filter-inventory-breakdown {
   position: relative;
-  z-index: 50;
+  z-index: 80;
   display: flex;
   justify-content: center;
   width: 100%;
   overflow: visible;
+  pointer-events: auto;
+  isolation: isolate;
 }
 
 .filter-show-matches,
 .filter-actions,
 .filter-actions-primary,
+.filter-actions-secondary,
 .filter-panel {
   overflow: visible;
+  position: relative;
+  z-index: 5;
 }
 
 .filter-inventory-note-btn {
   appearance: none;
+  position: relative;
+  z-index: 81;
   border: 0;
   background: transparent;
   cursor: pointer;
+  pointer-events: auto;
   font: inherit;
   color: inherit;
+  /* Larger hit target — the label alone was easy to miss under adjacent controls */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: 0.35rem 0.65rem;
+  margin: 0;
   text-decoration: underline;
   text-decoration-color: rgba(247, 250, 248, 0.28);
   text-underline-offset: 3px;

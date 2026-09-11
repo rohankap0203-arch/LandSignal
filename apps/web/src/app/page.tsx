@@ -186,28 +186,24 @@ export default function SearchPage() {
 
   useEffect(() => {
     if (!inventoryBreakdownOpen) return;
-    // Defer so the opening click cannot immediately close the popup.
+    const onPointer = (event: PointerEvent) => {
+      const root = inventoryBreakdownRef.current;
+      if (root && !root.contains(event.target as Node)) {
+        setInventoryBreakdownOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setInventoryBreakdownOpen(false);
+    };
+    // Defer past the opening pointerup so we do not instantly re-close.
     const timer = window.setTimeout(() => {
-      const onPointer = (event: MouseEvent) => {
-        const root = inventoryBreakdownRef.current;
-        if (root && !root.contains(event.target as Node)) {
-          setInventoryBreakdownOpen(false);
-        }
-      };
-      const onKey = (event: KeyboardEvent) => {
-        if (event.key === "Escape") setInventoryBreakdownOpen(false);
-      };
-      document.addEventListener("mousedown", onPointer);
+      document.addEventListener("pointerup", onPointer, true);
       document.addEventListener("keydown", onKey);
-      cleanup = () => {
-        document.removeEventListener("mousedown", onPointer);
-        document.removeEventListener("keydown", onKey);
-      };
-    }, 0);
-    let cleanup: (() => void) | undefined;
+    }, 50);
     return () => {
       window.clearTimeout(timer);
-      cleanup?.();
+      document.removeEventListener("pointerup", onPointer, true);
+      document.removeEventListener("keydown", onKey);
     };
   }, [inventoryBreakdownOpen]);
 
@@ -813,22 +809,28 @@ export default function SearchPage() {
                   {loading ? "Searching…" : "Show matches"}
                 </button>
                 {typeof meta?.inventory_count === "number" && meta.inventory_count > 0 ? (
-                  <div
-                    className="filter-inventory-breakdown"
-                    ref={inventoryBreakdownRef}
-                    onMouseDown={(event) => event.stopPropagation()}
-                  >
+                  <div className="filter-inventory-breakdown" ref={inventoryBreakdownRef}>
                     <button
                       type="button"
+                      data-testid="inventory-by-state-trigger"
                       className="filter-inventory-note filter-inventory-note-btn"
                       aria-live="polite"
                       aria-expanded={inventoryBreakdownOpen}
                       aria-controls="inventory-by-state-popup"
-                      onMouseDown={(event) => event.stopPropagation()}
-                      onClick={(event) => {
-                        event.preventDefault();
+                      aria-haspopup="dialog"
+                      title="Listings by state"
+                      onPointerUp={(event) => {
+                        // pointerup is more reliable than click when capture-phase
+                        // listeners elsewhere swallow the synthetic click.
+                        if (event.button !== 0) return;
                         event.stopPropagation();
                         setInventoryBreakdownOpen((open) => !open);
+                      }}
+                      onClick={(event) => {
+                        // Keyboard / accessibility activation still uses click.
+                        if (event.detail === 0) {
+                          setInventoryBreakdownOpen((open) => !open);
+                        }
                       }}
                     >
                       <strong>{meta.inventory_count.toLocaleString("en-US")}</strong> listings
