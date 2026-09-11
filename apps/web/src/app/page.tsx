@@ -13,7 +13,7 @@ import {
   type SearchFilters,
   type SearchMeta,
 } from "@/lib/api";
-import { describeHardFilters, enforceHardFilters } from "@/lib/hard-filters";
+import { describeHardFilters, enforceHardFilters, explainEmptySearch, type EmptySearchExplanation } from "@/lib/hard-filters";
 import { SEARCH_META_FALLBACK } from "@/lib/search-meta-fallback";
 
 type PriceUnit = "K" | "M";
@@ -179,6 +179,7 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [emptyExplanation, setEmptyExplanation] = useState<EmptySearchExplanation | null>(null);
   const [inventoryBreakdownOpen, setInventoryBreakdownOpen] = useState(false);
   const inventoryBreakdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -322,6 +323,7 @@ export default function SearchPage() {
       setError(null);
       setHasSearched(true);
       setRows([]);
+      setEmptyExplanation(null);
       // Step 1: on click, scroll so Used-by logos are on screen while Surveying matches loads.
       requestAnimationFrame(() => {
         scrollToUsedByStrip("smooth");
@@ -346,13 +348,28 @@ export default function SearchPage() {
         }
         const total = metaNow?.inventory_count ?? kept.length;
         const filterLabel = describeHardFilters(filters);
-        setStatus(
-          kept.length
-            ? `Filters: ${filterLabel} · showing ${kept.length.toLocaleString()} matches` +
-                (dropped ? ` · ${dropped} out-of-band dropped` : "") +
-                ` · ${total.toLocaleString()} live parcels indexed`
-            : `No parcels match ${filterLabel}. Widen price/acres/state, or Reset to Any, then Show matches again.`,
-        );
+        if (kept.length) {
+          setEmptyExplanation(null);
+          setStatus(
+            `Filters: ${filterLabel} · showing ${kept.length.toLocaleString()} matches` +
+              (dropped ? ` · ${dropped} out-of-band dropped` : "") +
+              ` · ${total.toLocaleString()} live parcels indexed`,
+          );
+        } else {
+          const why = explainEmptySearch({
+            filters,
+            rawRows: data,
+            keptCount: kept.length,
+            inventoryCount: metaNow?.inventory_count ?? meta.inventory_count ?? null,
+            inventoryByState: metaNow?.inventory_by_state ?? meta.inventory_by_state ?? null,
+          });
+          setEmptyExplanation(why);
+          setStatus(
+            why.conflict
+              ? `${why.headline} — ${why.conflict}`
+              : `No parcels match ${filterLabel}. Widen price/acres/state, or Reset to Any, then Show matches again.`,
+          );
+        }
       } catch (e) {
         const raw = e instanceof Error ? e.message : "Search failed";
         const friendly = /not reachable on port 8000|could not reach the LandSignal API|ECONNREFUSED|fetch failed/i.test(
@@ -368,6 +385,7 @@ export default function SearchPage() {
                 : raw;
         setError(friendly);
         setStatus(null);
+        setEmptyExplanation(null);
       } finally {
         setLoading(false);
       }
@@ -833,6 +851,8 @@ export default function SearchPage() {
                         className="filter-inventory-popup"
                         role="dialog"
                         aria-label="Listings by state"
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onPointerDown={(event) => event.stopPropagation()}
                       >
                         <ul className="filter-inventory-popup-list">
                           {inventoryStateRows.map((row) => (
@@ -908,43 +928,50 @@ export default function SearchPage() {
         </div>
       )}
 
-      {!loading && hasSearched && !rows.length && (
-        <div className="panel empty-state">
-          <div className="display text-2xl text-[var(--ink)]">No exact matches found</div>
-          <p className="mx-auto mt-2 max-w-lg">
-            {(() => {
-              const picked = selectedStates(form.states);
-              const live = new Set(inventoryStates || []);
-              const missing = picked.filter((c) => live.size > 0 && !live.has(c));
-              if ((meta?.inventory_count ?? 0) === 0) {
-                return (
-                  <>
-                    Live inventory is empty in this session. Click{" "}
-                    <strong>Refresh live inventory</strong>, wait for the parcel count to climb, then
-                    Show matches again. Hard filters were not changed.
-                  </>
-                );
-              }
-              if (missing.length) {
-                return (
-                  <>
-                    No live inventory indexed for{" "}
-                    <strong>{missing.join(", ")}</strong> — we never fill with other states. Reset to
-                    Any, pick a covered state, or refresh inventory.
-                  </>
-                );
-              }
-              return (
-                <>
-                  Nothing satisfies these hard filters (state, region, price, acres). Suggestions you
-                  can choose: expand acreage slightly, raise max price, or search a neighboring
-                  county/region. LandSignal will not silently weaken your filters.
-                </>
-              );
-            })()}
-          </p>
-        </div>
-      )}
+      {!loading && hasSearched && !rows.length ? (
+        <>
+          {emptyExplanation ? (
+            <div className="empty-filter-reason" role="status" aria-live="polite">
+              <p className="empty-filter-reason-kicker">Why no matches</p>
+              <h3 className="empty-filter-reason-headline">{emptyExplanation.headline}</h3>
+              <p className="empty-filter-reason-summary">{emptyExplanation.summary}</p>
+              {emptyExplanation.factors.length ? (
+                <ul className="empty-filter-reason-factors">
+                  {emptyExplanation.factors.map((factor) => (
+                    <li
+                      key={`${factor.label}-${factor.value}`}
+                      className={`empty-filter-reason-factor is-${factor.role}`}
+                    >
+                      <span className="empty-filter-reason-factor-label">{factor.label}</span>
+                      <span className="empty-filter-reason-factor-value">{factor.value}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {emptyExplanation.conflict ? (
+                <p className="empty-filter-reason-conflict">
+                  <span className="empty-filter-reason-conflict-label">Disconnect</span>
+                  {emptyExplanation.conflict}
+                </p>
+              ) : null}
+              {emptyExplanation.suggestions.length ? (
+                <ul className="empty-filter-reason-tips">
+                  {emptyExplanation.suggestions.map((tip) => (
+                    <li key={tip}>{tip}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="panel empty-state">
+            <div className="display text-2xl text-[var(--ink)]">No exact matches found</div>
+            <p className="mx-auto mt-2 max-w-lg">
+              LandSignal will not silently weaken your filters. Adjust the disconnect above, then tap
+              Show matches again.
+            </p>
+          </div>
+        </>
+      ) : null}
 
       {!loading && (
         <div className="results-grid">
