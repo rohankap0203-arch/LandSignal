@@ -1281,6 +1281,156 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
+.filter-inventory-breakdown {
+  position: relative;
+  z-index: 80;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  overflow: visible;
+  pointer-events: auto;
+  isolation: isolate;
+}
+
+.filter-show-matches,
+.filter-actions,
+.filter-actions-primary,
+.filter-actions-secondary,
+.filter-panel {
+  overflow: visible;
+  position: relative;
+  z-index: 5;
+}
+
+.filter-inventory-note-btn {
+  appearance: none;
+  position: relative;
+  z-index: 81;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  font: inherit;
+  color: inherit;
+  /* Larger hit target — the label alone was easy to miss under adjacent controls */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: 0.35rem 0.65rem;
+  margin: 0;
+  text-decoration: underline;
+  text-decoration-color: rgba(247, 250, 248, 0.28);
+  text-underline-offset: 3px;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+.filter-inventory-note-btn:hover,
+.filter-inventory-note-btn[aria-expanded="true"] {
+  color: #f7faf8;
+  text-decoration-color: rgba(247, 250, 248, 0.55);
+}
+
+.filter-inventory-popup {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  z-index: 60;
+  width: min(220px, calc(100vw - 2rem));
+  max-height: min(320px, 55vh);
+  overflow: hidden;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(14, 22, 18, 0.96);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(10px);
+}
+
+.filter-inventory-popup-list {
+  margin: 0;
+  padding: 6px 2px 6px 0;
+  max-height: min(320px, 55vh);
+  overflow-y: auto;
+  list-style: none;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(247, 250, 248, 0.12) transparent;
+  transition: scrollbar-color 160ms ease;
+}
+
+.filter-inventory-popup-list:hover,
+.filter-inventory-popup-list:focus-within {
+  scrollbar-color: rgba(247, 250, 248, 0.32) transparent;
+}
+
+.filter-inventory-popup-list::-webkit-scrollbar {
+  width: 3px;
+}
+
+.filter-inventory-popup-list::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 8px 0;
+}
+
+.filter-inventory-popup-list::-webkit-scrollbar-thumb {
+  background: rgba(247, 250, 248, 0.1);
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  transition: background 160ms ease;
+}
+
+.filter-inventory-popup-list:hover::-webkit-scrollbar-thumb,
+.filter-inventory-popup-list:focus-within::-webkit-scrollbar-thumb {
+  background: rgba(247, 250, 248, 0.28);
+  background-clip: padding-box;
+}
+
+.filter-inventory-popup-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(143, 208, 176, 0.5);
+  background-clip: padding-box;
+}
+
+.filter-inventory-popup-list::-webkit-scrollbar-thumb:active {
+  background: rgba(143, 208, 176, 0.7);
+  background-clip: padding-box;
+}
+
+.filter-inventory-popup-list::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.filter-inventory-popup-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 12px;
+  font-size: 0.75rem;
+  line-height: 1.25;
+  color: rgba(247, 250, 248, 0.78);
+}
+
+.filter-inventory-popup-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.filter-inventory-popup-state {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-inventory-popup-count {
+  flex: 0 0 auto;
+  color: #f7faf8;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
 .filter-show-matches {
   display: flex;
   flex-direction: column;

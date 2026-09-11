@@ -91,7 +91,16 @@ def _vacant_from_fields(
     if acreage is None:
         return None
     land_val = next((_fnum(props.get(k)) for k in land_keys if _fnum(props.get(k)) is not None), None)
-    pid = next((props.get(k) for k in pid_keys if props.get(k) is not None), None)
+    # Skip falsy ids (PPIN=0 / "") so we fall through to a real parcel key / OBJECTID.
+    # Hinds MS historically collapsed ~11k vacant rows onto external_id "ms_hinds:0".
+    pid = next(
+        (
+            props.get(k)
+            for k in pid_keys
+            if props.get(k) is not None and str(props.get(k)).strip() not in ("", "0")
+        ),
+        None,
+    )
     county = str(next((props.get(k) for k in county_keys if props.get(k)), default_county)).title()
     return _row(
         source_key=source_key,
@@ -236,7 +245,7 @@ def _norm_me_unorganized(raw: dict) -> dict | None:
         bldg_keys=(),
         owner_keys=("GRANTEE",),
         require_zero_bldg=False,
-        min_ac=5.0,
+        min_ac=1.0,
         label="timber/rural",
         source_url="https://www.maine.gov/revenuervices/",
     )
@@ -522,14 +531,50 @@ def _norm_ms_hinds(raw: dict) -> dict | None:
         source_key="ms_hinds",
         state="MS",
         default_county="Hinds",
-        county_keys=(),
-        pid_keys=("PPIN", "OBJECTID"),
+        county_keys=("CNTYNAME",),
+        # PPIN is 0 on most Hinds rows — use PARNO / OBJECTID so ids stay unique.
+        pid_keys=("PARNO", "ALTPARNO", "OBJECTID", "PPIN"),
         acre_keys=("GISACRES", "TAXACRES"),
         land_keys=("LANDVAL",),
         bldg_keys=("IMPVAL1", "IMPVAL2"),
         owner_keys=("OWNNAME",),
         min_ac=1.0,
         source_url="https://www.hindscountyms.com/",
+    )
+
+
+def _norm_ms_statewide(raw: dict) -> dict | None:
+    return _vacant_from_fields(
+        raw,
+        source_key="ms_state",
+        state="MS",
+        default_county="Mississippi",
+        county_keys=("CNTYNAME", "CNTYFIPS"),
+        pid_keys=("PARNO", "ALTPARNO", "PPIN", "OBJECTID"),
+        acre_keys=("GISACRES", "TAXACRES", "TOTAL_AC"),
+        land_keys=("LANDVAL",),
+        bldg_keys=("IMPVAL1", "IMPVAL2"),
+        owner_keys=("OWNNAME",),
+        min_ac=1.0,
+        source_url="https://maris.mississippi.edu/",
+    )
+
+
+def _norm_mn_open_vacant(raw: dict) -> dict | None:
+    # MnGeo compiled open parcels — field names are lowercase on the FeatureServer.
+    return _vacant_from_fields(
+        raw,
+        source_key="mn_open",
+        state="MN",
+        default_county="Minnesota",
+        county_keys=("co_name", "CO_NAME", "county_name"),
+        pid_keys=("state_pin", "county_pin", "STATE_PIN", "COUNTY_PIN", "objectid", "OBJECTID"),
+        acre_keys=("acres_poly", "acres_deed", "ACRES_POLY", "ACRES_DEED"),
+        land_keys=("emv_land", "EMV_LAND"),
+        bldg_keys=("emv_bldg", "EMV_BLDG"),
+        owner_keys=("owner_name", "OWNER_NAME"),
+        min_ac=1.0,
+        source_url="https://gisdata.mn.gov/dataset/plan-parcels-open",
     )
 
 
@@ -942,11 +987,13 @@ SOURCES: list[ArcgisMarketSource] = [
     ),
     _src(
         "me_ut_rural",
-        "Maine Unorganized Territory (5ac+)",
+        "Maine Unorganized Territory (1ac+)",
         "https://gis.maine.gov/mapservices/rest/services/mrs/Maine_Parcels_Unorganized_Territory/MapServer/0/query",
         "ME",
         _norm_me_unorganized,
-        where="TOTACRES>=5 AND TOTACRES<=2500",
+        where="TOTACRES>=1 AND TOTACRES<=2500",
+        shard=True,
+        objectid_max=100_000,
         page_size=1000,
     ),
     _src(
@@ -1068,6 +1115,8 @@ SOURCES: list[ArcgisMarketSource] = [
         "WY",
         _norm_wy_sheridan,
         where="ACRES>=1 AND ACRES<=2500",
+        shard=True,
+        objectid_max=100_000,
         page_size=1000,
     ),
     _src(
@@ -1089,12 +1138,39 @@ SOURCES: list[ArcgisMarketSource] = [
         page_size=1000,
     ),
     _src(
+        "ms_statewide_vacant",
+        "Mississippi Statewide Vacant Land (1ac+)",
+        "https://mgis19.mdeq.ms.gov/arcgis/rest/services/GeologyParcelAndFloodGIS/Parcels_Statewide_2023/FeatureServer/3/query",
+        "MS",
+        _norm_ms_statewide,
+        # ~578k vacant 1ac+ statewide — enough headroom for ≥5k/state filter coverage.
+        # Plain paging (no OID shard fan-out): this host times out under 56-way shards
+        # during nationwide discover and left MS stuck at 1 listing.
+        where="(IMPVAL1 IS NULL OR IMPVAL1=0) AND GISACRES>=1 AND GISACRES<=2500 AND LANDVAL>0",
+        shard=False,
+        page_size=1000,
+    ),
+    _src(
         "ms_hinds_vacant",
         "Hinds County MS Vacant Land (1ac+)",
         "https://opcgis.deq.state.ms.us/opcgis/rest/services/Government/HINDS_PARCELS/MapServer/0/query",
         "MS",
         _norm_ms_hinds,
+        # ~11.5k vacant 1ac+ — plain pages are enough to clear the 5k floor.
         where="(IMPVAL1 IS NULL OR IMPVAL1=0) AND GISACRES>=1 AND GISACRES<=2500 AND LANDVAL>0",
+        shard=False,
+        page_size=1000,
+    ),
+    _src(
+        "mn_open_vacant",
+        "Minnesota Open Vacant Land (1ac+)",
+        "https://enterprise.gisdata.mn.gov/aghost/rest/services/us_mn_state_mngeo/plan_parcels_open/FeatureServer/1/query",
+        "MN",
+        _norm_mn_open_vacant,
+        # ~262k vacant 1ac+ in MnGeo compiled open counties.
+        # Skip OID shards — host is slow under concurrent nationwide discover.
+        where="(emv_bldg=0 OR emv_bldg IS NULL) AND acres_poly>=1 AND acres_poly<=2500 AND emv_land>0",
+        shard=False,
         page_size=1000,
     ),
     _src(
@@ -1171,7 +1247,7 @@ SOURCES: list[ArcgisMarketSource] = [
         "PA",
         _norm_pa_pasda,
         where="1=1",
-        shard=False,
+        shard=True,
         objectid_max=5_000_000,
         page_size=500,
     ),

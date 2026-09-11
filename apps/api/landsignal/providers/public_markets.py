@@ -47,7 +47,8 @@ _US_STATE_CODES = frozenset(
 # Per-source / per-state wall clocks so one hung ArcGIS host cannot stall the 50-state map.
 # Deepen passes need longer budgets so OID shards can reach fresh parcels past the paint head.
 _SOURCE_FETCH_TIMEOUT_S = 90.0
-_STATE_FETCH_TIMEOUT_S = 150.0
+# Thin/slow cadastral hosts (MS, MN, …) need headroom during nationwide waves.
+_STATE_FETCH_TIMEOUT_S = 210.0
 _HTTP_RETRY_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 
@@ -2137,7 +2138,9 @@ SOURCES: list[ArcgisMarketSource] = [
         "OH",
         "Mahoning",
         _norm_mahoning,
-        where="ACRES>=0.2",
+        where="1=1",
+        shard_by_objectid=True,
+        objectid_max=50_000,
     ),
     ArcgisMarketSource(
         "toledo_oh_forsale",
@@ -2146,6 +2149,9 @@ SOURCES: list[ArcgisMarketSource] = [
         "OH",
         "Lucas",
         _norm_toledo_forsale,
+        where="1=1",
+        shard_by_objectid=True,
+        objectid_max=50_000,
     ),
     ArcgisMarketSource(
         "gadsden_al_landbank",

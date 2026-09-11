@@ -641,7 +641,7 @@ async def discover_opportunities(
                 continue
 
             # First-pass paint for brand-new states: thicker batch so coverage + depth
-            # land together; later gap-fill deepens toward min_per_state (~4000 → ~200k).
+            # land together; later gap-fill deepens toward min_per_state (~5000 → ~255k).
             state_limit = per_state_limit
             if live_counts.get(st, 0) <= 0:
                 state_limit = min(per_state_limit, 1500)
@@ -758,15 +758,15 @@ async def discover_opportunities(
                 break
 
     # Surplus fill: after every state has had deepen attempts, grow ALL states that
-    # still have headroom — thinnest first — until ~200k nationwide. Never let one
+    # still have headroom — thinnest first — until ~255k nationwide. Never let one
     # fat state (e.g. CA) monopolize the wave while MS/GA/OH stay near zero.
     target_total = max(
         min_per_state * 51,
-        int(getattr(settings, "discover_target_total", 200_000) or 200_000),
+        int(getattr(settings, "discover_target_total", 255_000) or 255_000),
     )
     max_per_state = max(
         min_per_state,
-        int(getattr(settings, "discover_max_per_state", 12_000) or 12_000),
+        int(getattr(settings, "discover_max_per_state", 15_000) or 15_000),
     )
     surplus_passes = 0
     while not stopped_early and surplus_passes < 24:
