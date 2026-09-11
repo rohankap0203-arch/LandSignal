@@ -382,14 +382,31 @@ export function explainEmptySearch(opts: EmptyExplainOpts): EmptySearchExplanati
   }
 
   if (activeHard.length === 1) {
-    mark(activeHard[0].label, "blocker");
+    const only = activeHard[0];
+    // State alone + live parcels in that state: the state is not the wipe reason.
+    if (only.label === "State" && coveredInState.length) {
+      mark("State", "context");
+      return {
+        headline: `No matches inside ${states.join(", ")} for this search`,
+        summary: `Live book still has ${coveredInState.join(", ")}, but nothing came back for the current query.`,
+        factors,
+        conflict:
+          "State inventory exists — the empty set is from this search pass, not a missing state.",
+        suggestions: [
+          "Tap Show matches again, or Refresh live inventory first",
+          "Add a looser acreage or price band, then narrow",
+          "Or try Top opportunities nationwide",
+        ],
+      };
+    }
+    mark(only.label, "blocker");
     return {
-      headline: `No parcels match ${activeHard[0].label.toLowerCase()} = ${activeHard[0].value}`,
+      headline: `No parcels match ${only.label.toLowerCase()} = ${only.value}`,
       summary: "That single hard filter wiped the result set against live inventory.",
       factors,
-      conflict: `${activeHard[0].label} is the disconnect.`,
+      conflict: `${only.label} is the disconnect.`,
       suggestions: [
-        `Clear or widen ${activeHard[0].label}`,
+        `Clear or widen ${only.label}`,
         "Or Reset to Any, then re-apply filters one at a time",
       ],
     };
