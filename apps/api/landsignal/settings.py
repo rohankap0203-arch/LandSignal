@@ -35,8 +35,9 @@ class Settings(BaseSettings):
     # after restarts (memory store) instead of capping around ~2.5k parcels.
     land_alerts_discover_limit: int = 1_000_000
     # Hard RSS ceiling (MB) for discover/rescore — leave headroom for web + agent.
-    hard_rss_mb: int = 7500
-    soft_rss_mb: int = 6000
+    # ~300k+ parcels needs more headroom so thin-state deepen is not starved.
+    hard_rss_mb: int = 8500
+    soft_rss_mb: int = 7200
     http_timeout_seconds: float = 20.0
     mapbox_token: str | None = None
     smtp_url: str | None = None
