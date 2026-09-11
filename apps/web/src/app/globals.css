@@ -1325,35 +1325,57 @@ select {
 
 .filter-inventory-popup-list {
   margin: 0;
-  padding: 6px 0;
+  padding: 6px 2px 6px 0;
   max-height: min(320px, 55vh);
   overflow-y: auto;
   list-style: none;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
-  scrollbar-color: rgba(247, 250, 248, 0.35) transparent;
+  scrollbar-color: rgba(247, 250, 248, 0.12) transparent;
+  transition: scrollbar-color 160ms ease;
+}
+
+.filter-inventory-popup-list:hover,
+.filter-inventory-popup-list:focus-within {
+  scrollbar-color: rgba(247, 250, 248, 0.32) transparent;
 }
 
 .filter-inventory-popup-list::-webkit-scrollbar {
-  width: 4px;
+  width: 3px;
 }
 
 .filter-inventory-popup-list::-webkit-scrollbar-track {
   background: transparent;
-  margin: 6px 0;
+  margin: 8px 0;
 }
 
 .filter-inventory-popup-list::-webkit-scrollbar-thumb {
-  background: rgba(247, 250, 248, 0.28);
+  background: rgba(247, 250, 248, 0.1);
   border-radius: 999px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  transition: background 160ms ease;
+}
+
+.filter-inventory-popup-list:hover::-webkit-scrollbar-thumb,
+.filter-inventory-popup-list:focus-within::-webkit-scrollbar-thumb {
+  background: rgba(247, 250, 248, 0.28);
+  background-clip: padding-box;
 }
 
 .filter-inventory-popup-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(247, 250, 248, 0.48);
+  background: rgba(143, 208, 176, 0.5);
+  background-clip: padding-box;
 }
 
 .filter-inventory-popup-list::-webkit-scrollbar-thumb:active {
-  background: rgba(247, 250, 248, 0.62);
+  background: rgba(143, 208, 176, 0.7);
+  background-clip: padding-box;
+}
+
+.filter-inventory-popup-list::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .filter-inventory-popup-row {
