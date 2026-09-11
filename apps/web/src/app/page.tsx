@@ -186,23 +186,27 @@ export default function SearchPage() {
 
   useEffect(() => {
     if (!inventoryBreakdownOpen) return;
-    const onPointer = (event: PointerEvent) => {
+    const onDocMouseDown = (event: MouseEvent) => {
       const root = inventoryBreakdownRef.current;
-      if (root && !root.contains(event.target as Node)) {
-        setInventoryBreakdownOpen(false);
-      }
+      const target = event.target;
+      if (!(target instanceof Node) || !root) return;
+      // Scrollbar / overlay hits can report targets outside the scrollport;
+      // also accept closest() so inside interactions never dismiss the menu.
+      if (root.contains(target)) return;
+      if (target instanceof Element && target.closest(".filter-inventory-breakdown")) return;
+      setInventoryBreakdownOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setInventoryBreakdownOpen(false);
     };
-    // Defer past the opening pointerup so we do not instantly re-close.
+    // Bubble mousedown (not capture pointerup) so scrolling/dragging inside stays open.
     const timer = window.setTimeout(() => {
-      document.addEventListener("pointerup", onPointer, true);
+      document.addEventListener("mousedown", onDocMouseDown);
       document.addEventListener("keydown", onKey);
-    }, 50);
+    }, 0);
     return () => {
       window.clearTimeout(timer);
-      document.removeEventListener("pointerup", onPointer, true);
+      document.removeEventListener("mousedown", onDocMouseDown);
       document.removeEventListener("keydown", onKey);
     };
   }, [inventoryBreakdownOpen]);
