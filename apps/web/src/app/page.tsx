@@ -186,20 +186,28 @@ export default function SearchPage() {
 
   useEffect(() => {
     if (!inventoryBreakdownOpen) return;
-    const onPointer = (event: MouseEvent) => {
-      const root = inventoryBreakdownRef.current;
-      if (root && !root.contains(event.target as Node)) {
-        setInventoryBreakdownOpen(false);
-      }
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setInventoryBreakdownOpen(false);
-    };
-    document.addEventListener("mousedown", onPointer);
-    document.addEventListener("keydown", onKey);
+    // Defer so the opening click cannot immediately close the popup.
+    const timer = window.setTimeout(() => {
+      const onPointer = (event: MouseEvent) => {
+        const root = inventoryBreakdownRef.current;
+        if (root && !root.contains(event.target as Node)) {
+          setInventoryBreakdownOpen(false);
+        }
+      };
+      const onKey = (event: KeyboardEvent) => {
+        if (event.key === "Escape") setInventoryBreakdownOpen(false);
+      };
+      document.addEventListener("mousedown", onPointer);
+      document.addEventListener("keydown", onKey);
+      cleanup = () => {
+        document.removeEventListener("mousedown", onPointer);
+        document.removeEventListener("keydown", onKey);
+      };
+    }, 0);
+    let cleanup: (() => void) | undefined;
     return () => {
-      document.removeEventListener("mousedown", onPointer);
-      document.removeEventListener("keydown", onKey);
+      window.clearTimeout(timer);
+      cleanup?.();
     };
   }, [inventoryBreakdownOpen]);
 
@@ -805,14 +813,23 @@ export default function SearchPage() {
                   {loading ? "Searching…" : "Show matches"}
                 </button>
                 {typeof meta?.inventory_count === "number" && meta.inventory_count > 0 ? (
-                  <div className="filter-inventory-breakdown" ref={inventoryBreakdownRef}>
+                  <div
+                    className="filter-inventory-breakdown"
+                    ref={inventoryBreakdownRef}
+                    onMouseDown={(event) => event.stopPropagation()}
+                  >
                     <button
                       type="button"
                       className="filter-inventory-note filter-inventory-note-btn"
                       aria-live="polite"
                       aria-expanded={inventoryBreakdownOpen}
                       aria-controls="inventory-by-state-popup"
-                      onClick={() => setInventoryBreakdownOpen((open) => !open)}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setInventoryBreakdownOpen((open) => !open);
+                      }}
                     >
                       <strong>{meta.inventory_count.toLocaleString("en-US")}</strong> listings
                     </button>

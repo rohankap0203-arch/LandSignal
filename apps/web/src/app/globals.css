@@ -1283,9 +1283,18 @@ select {
 
 .filter-inventory-breakdown {
   position: relative;
+  z-index: 50;
   display: flex;
   justify-content: center;
   width: 100%;
+  overflow: visible;
+}
+
+.filter-show-matches,
+.filter-actions,
+.filter-actions-primary,
+.filter-panel {
+  overflow: visible;
 }
 
 .filter-inventory-note-btn {
@@ -1311,7 +1320,7 @@ select {
   position: absolute;
   top: calc(100% + 8px);
   left: 50%;
-  z-index: 40;
+  z-index: 60;
   width: min(220px, calc(100vw - 2rem));
   max-height: min(320px, 55vh);
   overflow: hidden;
