@@ -236,7 +236,7 @@ def _norm_me_unorganized(raw: dict) -> dict | None:
         bldg_keys=(),
         owner_keys=("GRANTEE",),
         require_zero_bldg=False,
-        min_ac=5.0,
+        min_ac=1.0,
         label="timber/rural",
         source_url="https://www.maine.gov/revenuervices/",
     )
@@ -942,11 +942,13 @@ SOURCES: list[ArcgisMarketSource] = [
     ),
     _src(
         "me_ut_rural",
-        "Maine Unorganized Territory (5ac+)",
+        "Maine Unorganized Territory (1ac+)",
         "https://gis.maine.gov/mapservices/rest/services/mrs/Maine_Parcels_Unorganized_Territory/MapServer/0/query",
         "ME",
         _norm_me_unorganized,
-        where="TOTACRES>=5 AND TOTACRES<=2500",
+        where="TOTACRES>=1 AND TOTACRES<=2500",
+        shard=True,
+        objectid_max=100_000,
         page_size=1000,
     ),
     _src(
@@ -1068,6 +1070,8 @@ SOURCES: list[ArcgisMarketSource] = [
         "WY",
         _norm_wy_sheridan,
         where="ACRES>=1 AND ACRES<=2500",
+        shard=True,
+        objectid_max=100_000,
         page_size=1000,
     ),
     _src(
@@ -1094,7 +1098,10 @@ SOURCES: list[ArcgisMarketSource] = [
         "https://opcgis.deq.state.ms.us/opcgis/rest/services/Government/HINDS_PARCELS/MapServer/0/query",
         "MS",
         _norm_ms_hinds,
+        # ~11.5k vacant 1ac+ rows — shard so deepen can actually pull past the first page.
         where="(IMPVAL1 IS NULL OR IMPVAL1=0) AND GISACRES>=1 AND GISACRES<=2500 AND LANDVAL>0",
+        shard=True,
+        objectid_max=400_000,
         page_size=1000,
     ),
     _src(
@@ -1171,7 +1178,7 @@ SOURCES: list[ArcgisMarketSource] = [
         "PA",
         _norm_pa_pasda,
         where="1=1",
-        shard=False,
+        shard=True,
         objectid_max=5_000_000,
         page_size=500,
     ),

@@ -482,11 +482,8 @@ def _norm_ia_parcels_ag(raw: dict) -> dict | None:
 
 
 def _norm_ky_industrial_vacant(raw: dict) -> dict | None:
-    """Kentucky Cabinet for Economic Development vacant industrial site tracts."""
+    """Kentucky Cabinet for Economic Development industrial site tracts (1ac+)."""
     props = _props(raw)
-    status = str(props.get("STATUS") or "").strip().lower()
-    if "vacant" not in status:
-        return None
     preferred = _fnum(props.get("ACRES")) or _fnum(props.get("TRACRES"))
     geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
     acreage = _bounded_acres(preferred, geom_acres, min_ac=1.0)
@@ -495,12 +492,13 @@ def _norm_ky_industrial_vacant(raw: dict) -> dict | None:
     pid = props.get("SITE_ID") or props.get("SITETR_ID") or props.get("OBJECTID_1") or props.get("OBJECTID")
     label = (props.get("TRACTLBL1") or props.get("TRACTTXT") or "Kentucky").strip()
     county = label.split(",")[0].strip().title() if label else "Kentucky"
+    status = str(props.get("STATUS") or "").strip()
     return {
         "provider_id": "public_vacant_gis",
         "external_id": f"ky_edis:{pid}",
-        "title": f"Kentucky vacant site · {acreage:.1f} ac · {county}",
+        "title": f"Kentucky site · {acreage:.1f} ac · {county}",
         "description": (
-            f"Kentucky EDIS industrial site tract (STATUS={props.get('STATUS')}). "
+            f"Kentucky EDIS industrial site tract (STATUS={status or 'n/a'}). "
             f"Site={props.get('SITE_ID')}. Public GIS — not MLS/Zillow."
         ),
         "asking_price_usd": None,
@@ -740,10 +738,14 @@ SOURCES: list[ArcgisMarketSource] = [
         "https://services3.arcgis.com/3FL1kr7L4LvwA2Kb/arcgis/rest/services/Connecticut_CAMA_and_Parcel_Layer/FeatureServer/0/query",
         "CT",
         _norm_ct_parcels_vacant,
+        # Assessed_Building is often NULL (not 0) on vacant — `=0` alone matched 0 rows.
         where=(
-            "Assessed_Building=0 AND Land_Acres>=1 AND Land_Acres<=2500 AND "
+            "Land_Acres>=1 AND Land_Acres<=2500 AND "
+            "(Assessed_Building IS NULL OR Assessed_Building=0) AND "
             "(State_Use LIKE '100%' OR State_Use_Description LIKE '%Vacant%')"
         ),
+        shard=True,
+        objectid_max=1_500_000,
         page_size=1000,
         out_fields=(
             "OBJECTID,Link,Location,State_Use,State_Use_Description,Land_Acres,"
@@ -763,11 +765,12 @@ SOURCES: list[ArcgisMarketSource] = [
     ),
     _src(
         "ky_edis_vacant",
-        "Kentucky EDIS Vacant Industrial Sites (1ac+)",
+        "Kentucky EDIS Industrial Sites (1ac+)",
         "https://kygisserver.ky.gov/arcgis/rest/services/WGS84WM_Services/Ky_Industrial_Site_Tracts_WGS84WM/MapServer/0/query",
         "KY",
         _norm_ky_industrial_vacant,
-        where="STATUS LIKE '%vacant%' AND ACRES>=1",
+        # Layer is only ~3.5k rows total — pull the full 1ac+ book, not just STATUS=vacant.
+        where="ACRES>=1",
         page_size=1000,
         out_fields="OBJECTID,OBJECTID_1,SITE_ID,SITETR_ID,STATUS,ACRES,TRACRES,TRACTLBL1,TRACTTXT",
     ),

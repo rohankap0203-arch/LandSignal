@@ -2137,7 +2137,9 @@ SOURCES: list[ArcgisMarketSource] = [
         "OH",
         "Mahoning",
         _norm_mahoning,
-        where="ACRES>=0.2",
+        where="1=1",
+        shard_by_objectid=True,
+        objectid_max=50_000,
     ),
     ArcgisMarketSource(
         "toledo_oh_forsale",
@@ -2146,6 +2148,9 @@ SOURCES: list[ArcgisMarketSource] = [
         "OH",
         "Lucas",
         _norm_toledo_forsale,
+        where="1=1",
+        shard_by_objectid=True,
+        objectid_max=50_000,
     ),
     ArcgisMarketSource(
         "gadsden_al_landbank",

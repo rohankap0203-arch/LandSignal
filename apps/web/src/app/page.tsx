@@ -80,6 +80,34 @@ function selectedStates(labels: string[]): string[] {
   return labels.map(stateCode).filter((c) => c && c !== "Any");
 }
 
+type StateListingRow = { code: string; name: string; count: number };
+
+function stateListingRows(meta: SearchMeta | null | undefined): StateListingRow[] {
+  const byState = meta?.inventory_by_state || {};
+  const nameByCode = new Map<string, string>();
+  for (const label of meta?.states || []) {
+    if (!label || label === "Any") continue;
+    const code = stateCode(label);
+    const name = label.includes("—")
+      ? label.split("—").slice(1).join("—").trim()
+      : label;
+    if (code && code !== "Any") nameByCode.set(code, name || code);
+  }
+  const codes = (meta?.state_codes || [])
+    .map((c) => String(c || "").toUpperCase())
+    .filter((c) => c && c !== "ANY");
+  const ordered = codes.length
+    ? codes
+    : Object.keys(byState).sort((a, b) => a.localeCompare(b));
+  return ordered
+    .map((code) => ({
+      code,
+      name: nameByCode.get(code) || code,
+      count: Number(byState[code] || 0),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** Digits + optional single decimal only. */
 function sanitizeDecimal(raw: string): string {
   let out = String(raw).replace(/[^\d.]/g, "");
@@ -151,6 +179,29 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [inventoryBreakdownOpen, setInventoryBreakdownOpen] = useState(false);
+  const inventoryBreakdownRef = useRef<HTMLDivElement | null>(null);
+
+  const inventoryStateRows = useMemo(() => stateListingRows(meta), [meta]);
+
+  useEffect(() => {
+    if (!inventoryBreakdownOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      const root = inventoryBreakdownRef.current;
+      if (root && !root.contains(event.target as Node)) {
+        setInventoryBreakdownOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setInventoryBreakdownOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [inventoryBreakdownOpen]);
 
   const regionOptions = useMemo(() => {
     const codes = selectedStates(form.states);
@@ -754,9 +805,37 @@ export default function SearchPage() {
                   {loading ? "Searching…" : "Show matches"}
                 </button>
                 {typeof meta?.inventory_count === "number" && meta.inventory_count > 0 ? (
-                  <p className="filter-inventory-note" aria-live="polite">
-                    <strong>{meta.inventory_count.toLocaleString("en-US")}</strong> listings
-                  </p>
+                  <div className="filter-inventory-breakdown" ref={inventoryBreakdownRef}>
+                    <button
+                      type="button"
+                      className="filter-inventory-note filter-inventory-note-btn"
+                      aria-live="polite"
+                      aria-expanded={inventoryBreakdownOpen}
+                      aria-controls="inventory-by-state-popup"
+                      onClick={() => setInventoryBreakdownOpen((open) => !open)}
+                    >
+                      <strong>{meta.inventory_count.toLocaleString("en-US")}</strong> listings
+                    </button>
+                    {inventoryBreakdownOpen ? (
+                      <div
+                        id="inventory-by-state-popup"
+                        className="filter-inventory-popup"
+                        role="dialog"
+                        aria-label="Listings by state"
+                      >
+                        <ul className="filter-inventory-popup-list">
+                          {inventoryStateRows.map((row) => (
+                            <li key={row.code} className="filter-inventory-popup-row">
+                              <span className="filter-inventory-popup-state">{row.name}</span>
+                              <span className="filter-inventory-popup-count">
+                                {row.count.toLocaleString("en-US")}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             </div>
