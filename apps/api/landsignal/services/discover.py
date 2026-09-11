@@ -364,6 +364,10 @@ async def _ingest_and_score(
         batch = to_score[i : i + chunk]
         await asyncio.gather(*[_score_one(pid) for pid in batch])
         trim_score_lists(store, keep=1)
+        # Yield so Show matches / health can run while discover is in flight.
+        # Without this, CPU-heavy scoring starves the event loop and the web
+        # proxy surfaces a false "API on port 8000 is not responding" error.
+        await asyncio.sleep(0.05)
         log.info(
             "discover_batch_scored",
             scored=scored,
@@ -671,6 +675,8 @@ async def discover_opportunities(
                 states_with_inventory=len(_inventory_by_state(store)),
                 **snapshot(),
             )
+            # Let radar/health through between states — discover must not peg the loop.
+            await asyncio.sleep(0.1)
             if batch.get("stopped_early"):
                 stopped_early = True
                 stop_reason = str(batch.get("stop_reason") or stop_reason)

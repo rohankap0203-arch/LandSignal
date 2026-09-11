@@ -138,11 +138,12 @@ export type EmptySearchFactor = {
 };
 
 export type EmptySearchExplanation = {
-  /** ≤ ~12 words */
+  /** Clear reason in plain English */
   headline: string;
+  /** One short supporting sentence */
   summary: string;
   factors: EmptySearchFactor[];
-  /** Short clash, e.g. "Acres + Price" */
+  /** Short clash label, e.g. "Acres + Price" */
   conflict?: string;
   /** At most one short tip */
   suggestions: string[];
@@ -156,22 +157,23 @@ type EmptyExplainOpts = {
   inventoryByState?: Record<string, number> | null;
 };
 
-function compact(
+function explain(
   headline: string,
+  summary: string,
   conflict: string | undefined,
   factors: EmptySearchFactor[],
   tip?: string,
 ): EmptySearchExplanation {
   return {
     headline,
-    summary: headline,
+    summary,
     factors,
     conflict,
     suggestions: tip ? [tip] : [],
   };
 }
 
-/** 5-second empty-result diagnosis: short headline, clash, one tip. */
+/** Empty-result diagnosis with a clear reason, clash chips, and one tip. */
 export function explainEmptySearch(opts: EmptyExplainOpts): EmptySearchExplanation {
   const { filters, keptCount } = opts;
   const rawRows = opts.rawRows || [];
@@ -192,20 +194,28 @@ export function explainEmptySearch(opts: EmptyExplainOpts): EmptySearchExplanati
     const hit = factors.find((f) => f.label === label);
     if (hit) hit.role = role;
   };
+  const combo = factors.map((f) => f.value).join(" · ");
 
   if (inventoryCount === 0) {
-    return compact("Inventory still loading", "No parcels loaded", factors, "Refresh live inventory");
+    return explain(
+      "No parcels are loaded yet",
+      "Live inventory is empty, so every filter combo returns zero until refresh finishes.",
+      "Inventory",
+      factors,
+      "Click Refresh live inventory, wait for the count to climb, then Show matches",
+    );
   }
 
   if (states.length && inventoryCount != null && inventoryCount > 0) {
     const missing = states.filter((st) => !inventoryByState[st] || inventoryByState[st] <= 0);
     if (missing.length === states.length) {
       mark("State", "blocker");
-      return compact(
-        `No parcels in ${missing.join(", ")}`,
+      return explain(
+        `No live parcels in ${missing.join(", ")}`,
+        "That state is not in the current inventory book, so the other filters never got a chance to match.",
         "State",
         factors,
-        "Pick a covered state",
+        "Pick a covered state, or Refresh live inventory",
       );
     }
   }
@@ -257,17 +267,28 @@ export function explainEmptySearch(opts: EmptyExplainOpts): EmptySearchExplanati
     const tip = failPrice
       ? "Raise max price"
       : failAcres
-        ? "Widen acres"
+        ? "Widen the acreage band"
         : failRegion
           ? "Set Region to Any"
           : failState
-            ? "Add a state or set Any"
+            ? "Add another state or set State to Any"
             : "Widen the tightest filter";
-    return compact("Filters wiped every result", clash, factors, tip);
+    return explain(
+      `${clash} removed every result`,
+      `${rawRows.length.toLocaleString()} parcels came back from search, but none survived ${clash.toLowerCase()}.`,
+      clash,
+      factors,
+      tip,
+    );
   }
 
   const coveredInState =
     states.length > 0 ? states.filter((st) => (inventoryByState[st] || 0) > 0) : [];
+  const coveredNote = coveredInState.length
+    ? coveredInState
+        .map((st) => `${st} (${(inventoryByState[st] || 0).toLocaleString()})`)
+        .join(", ")
+    : "";
   const activeHard = factors.filter((f) =>
     ["State", "Region", "Acres", "Price"].includes(f.label),
   );
@@ -285,26 +306,49 @@ export function explainEmptySearch(opts: EmptyExplainOpts): EmptySearchExplanati
     const clash = (blockers.length ? blockers : activeHard).map((f) => f.label).join(" + ");
     const tip =
       acres && price
-        ? "Raise max price or lower min acres"
+        ? "Raise max price, or lower minimum acres"
         : region && region !== "Any"
-          ? "Set Region to Any"
-          : "Clear the tightest filter";
-    return compact("No overlap for this combo", clash, factors, tip);
+          ? "Set Region to Any inside the same state"
+          : "Clear the tightest filter, then Show matches again";
+    return explain(
+      `No parcels match ${clash}`,
+      coveredNote
+        ? `${combo} has no overlap in the live book (still has ${coveredNote}).`
+        : `${combo} has no overlap in the live book.`,
+      clash,
+      factors,
+      tip,
+    );
   }
 
   if (activeHard.length === 1) {
     const only = activeHard[0];
     if (only.label === "State" && coveredInState.length) {
-      return compact(
-        `Nothing matched in ${states.join(", ")}`,
+      return explain(
+        `No matches inside ${states.join(", ")} for this search`,
+        coveredNote
+          ? `Inventory still has ${coveredNote}, but this exact query came back empty.`
+          : "State inventory exists, but this exact query came back empty.",
         "Search miss",
         factors,
-        "Loosen acres/price",
+        "Loosen acres or price, then retry",
       );
     }
     mark(only.label, "blocker");
-    return compact(`${only.label} = ${only.value} → 0`, only.label, factors, `Widen ${only.label}`);
+    return explain(
+      `No parcels match ${only.label.toLowerCase()} = ${only.value}`,
+      "That single hard filter wiped the result set against live inventory.",
+      only.label,
+      factors,
+      `Widen or clear ${only.label}`,
+    );
   }
 
-  return compact("No matches for these filters", undefined, factors, "Widen acres or price");
+  return explain(
+    "No exact matches for these filters",
+    "Live inventory has parcels, but none lined up with the current search.",
+    undefined,
+    factors,
+    "Widen acres or raise max price",
+  );
 }

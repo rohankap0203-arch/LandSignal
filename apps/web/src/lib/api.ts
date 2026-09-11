@@ -33,7 +33,7 @@ function friendlyApiError(status: number, body: string): string {
     trimmed.startsWith("<html")
   ) {
     if (status === 502 || status === 503 || status === 504) {
-      return "LandSignal API is not reachable on port 8000. Keep web on port 3000 with the API running, then try Show matches again.";
+      return "LandSignal API on port 8000 was busy or unreachable (often while inventory is refreshing). Wait a few seconds, hard-refresh the port-3000 preview, then try Show matches again.";
     }
     return `Search failed (API ${status}). Tap Show matches again — if it keeps failing, click Refresh live inventory.`;
   }
@@ -55,7 +55,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     if (e instanceof DOMException && e.name === "AbortError") throw e;
     if (init?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
     throw new Error(
-      "LandSignal API on port 8000 is not responding. Hard-refresh the port-3000 preview, then try Show matches again.",
+      "LandSignal API on port 8000 was busy or unreachable (often while inventory is refreshing). Wait a few seconds, hard-refresh the port-3000 preview, then try Show matches again.",
     );
   }
   if (!res.ok) {

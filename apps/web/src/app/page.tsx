@@ -372,10 +372,10 @@ export default function SearchPage() {
         }
       } catch (e) {
         const raw = e instanceof Error ? e.message : "Search failed";
-        const friendly = /not reachable on port 8000|could not reach the LandSignal API|ECONNREFUSED|fetch failed/i.test(
+        const friendly = /not reachable on port 8000|not responding|could not reach the LandSignal API|ECONNREFUSED|fetch failed/i.test(
           raw,
         )
-          ? "LandSignal API is not reachable. Open the Cursor web preview on port 3000 with the API on 8000, then try Show matches again."
+          ? "LandSignal API on port 8000 was busy or unreachable (often while inventory is refreshing). Wait a few seconds, hard-refresh the port-3000 preview, then try Show matches again."
           : /Failed to fetch|NetworkError|Load failed/i.test(raw)
             ? "Search failed to load results (network). Hard-refresh the port-3000 preview, then try Show matches again."
             : /Internal Server Error/i.test(raw)
@@ -932,12 +932,17 @@ export default function SearchPage() {
         <div className="empty-filter-reason" role="status" aria-live="polite">
           {emptyExplanation ? (
             <>
-              <p className="empty-filter-reason-line">
-                <span className="empty-filter-reason-why">Why</span>
-                {emptyExplanation.conflict
-                  ? `${emptyExplanation.conflict} — ${emptyExplanation.headline}`
-                  : emptyExplanation.headline}
-              </p>
+              <p className="empty-filter-reason-kicker">Why no matches</p>
+              <h3 className="empty-filter-reason-headline">{emptyExplanation.headline}</h3>
+              {emptyExplanation.summary ? (
+                <p className="empty-filter-reason-summary">{emptyExplanation.summary}</p>
+              ) : null}
+              {emptyExplanation.conflict ? (
+                <p className="empty-filter-reason-conflict">
+                  <span className="empty-filter-reason-conflict-label">Disconnect</span>
+                  {emptyExplanation.conflict}
+                </p>
+              ) : null}
               {emptyExplanation.factors.length ? (
                 <ul className="empty-filter-reason-factors">
                   {emptyExplanation.factors.map((factor) => (
@@ -956,10 +961,13 @@ export default function SearchPage() {
               ) : null}
             </>
           ) : (
-            <p className="empty-filter-reason-line">
-              <span className="empty-filter-reason-why">Why</span>
-              No exact matches for these filters
-            </p>
+            <>
+              <p className="empty-filter-reason-kicker">Why no matches</p>
+              <h3 className="empty-filter-reason-headline">No exact matches for these filters</h3>
+              <p className="empty-filter-reason-summary">
+                Adjust filters, then tap Show matches again.
+              </p>
+            </>
           )}
         </div>
       ) : null}
