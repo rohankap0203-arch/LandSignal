@@ -819,19 +819,7 @@ export default function SearchPage() {
                       aria-controls="inventory-by-state-popup"
                       aria-haspopup="dialog"
                       title="Listings by state"
-                      onPointerUp={(event) => {
-                        // pointerup is more reliable than click when capture-phase
-                        // listeners elsewhere swallow the synthetic click.
-                        if (event.button !== 0) return;
-                        event.stopPropagation();
-                        setInventoryBreakdownOpen((open) => !open);
-                      }}
-                      onClick={(event) => {
-                        // Keyboard / accessibility activation still uses click.
-                        if (event.detail === 0) {
-                          setInventoryBreakdownOpen((open) => !open);
-                        }
-                      }}
+                      onClick={() => setInventoryBreakdownOpen((open) => !open)}
                     >
                       <strong>{meta.inventory_count.toLocaleString("en-US")}</strong> listings
                     </button>
