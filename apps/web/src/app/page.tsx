@@ -930,47 +930,27 @@ export default function SearchPage() {
       )}
 
       {!loading && hasSearched && !rows.length ? (
-        <div className="empty-filter-reason" role="status" aria-live="polite">
+        <div className="panel empty-state" role="status" aria-live="polite">
+          <div className="display text-2xl text-[var(--ink)]">No matches for these filters</div>
+          <p className="mx-auto mt-2 max-w-lg">
+            Adjust filters, then tap Show matches again.
+          </p>
           {emptyExplanation ? (
-            <>
-              <p className="empty-filter-reason-kicker">Why no matches</p>
+            <div className="empty-filter-reason empty-filter-reason--in-alert">
               <h3 className="empty-filter-reason-headline">{emptyExplanation.headline}</h3>
               {emptyExplanation.summary ? (
                 <p className="empty-filter-reason-summary">{emptyExplanation.summary}</p>
               ) : null}
               {emptyExplanation.conflict ? (
-                <p className="empty-filter-reason-conflict">
+                <div className="empty-filter-reason-conflict">
                   <span className="empty-filter-reason-conflict-label">Disconnect</span>
-                  {emptyExplanation.conflict}
-                </p>
+                  <span className="empty-filter-reason-conflict-value">{emptyExplanation.conflict}</span>
+                </div>
               ) : null}
-              {emptyExplanation.factors.length ? (
-                <ul className="empty-filter-reason-factors">
-                  {emptyExplanation.factors.map((factor) => (
-                    <li
-                      key={`${factor.label}-${factor.value}`}
-                      className={`empty-filter-reason-factor is-${factor.role}`}
-                    >
-                      <span className="empty-filter-reason-factor-label">{factor.label}</span>
-                      <span className="empty-filter-reason-factor-value">{factor.value}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {emptyExplanation.suggestions[0] ? (
-                <p className="empty-filter-reason-fix">Try {emptyExplanation.suggestions[0]}</p>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <p className="empty-filter-reason-kicker">Why no matches</p>
-              <h3 className="empty-filter-reason-headline">No exact matches for these filters</h3>
-              <p className="empty-filter-reason-summary">
-                Adjust filters, then tap Show matches again.
-              </p>
-            </>
-          )}
+            </div>
+          ) : null}
         </div>
+      ) : null}
       ) : null}
 
       {!loading && (

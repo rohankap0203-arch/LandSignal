@@ -2051,13 +2051,11 @@ select {
   text-align: left;
 }
 
-.empty-filter-reason-kicker {
-  margin: 0 0 4px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--muted);
+/* Nested diagnosis inside the classic "No matches" alert panel */
+.empty-filter-reason--in-alert {
+  margin: 18px auto 0;
+  max-width: 36rem;
+  text-align: left;
 }
 
 .empty-filter-reason-headline {
@@ -2077,13 +2075,14 @@ select {
 
 .empty-filter-reason-conflict {
   display: grid;
-  gap: 2px;
-  margin: 10px 0 0;
-  padding: 8px 10px;
+  gap: 4px;
+  margin: 12px 0 0;
+  padding: 10px 12px;
   border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
   border-left: 3px solid color-mix(in srgb, var(--brand) 50%, #c45c3e);
-  background: color-mix(in srgb, var(--bg) 55%, transparent);
-  font-size: 0.88rem;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  font-size: 0.92rem;
   line-height: 1.35;
 }
 
@@ -2094,6 +2093,11 @@ select {
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+.empty-filter-reason-conflict-value {
+  color: var(--ink);
+  font-weight: 650;
 }
 
 .empty-filter-reason-factors {
