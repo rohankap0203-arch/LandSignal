@@ -20,11 +20,6 @@ function shortLine(text: string, max = 120): string {
   return `${base}…`;
 }
 
-function convictionLabel(c: string): string {
-  if (c === "HIGH") return "Strong interest";
-  if (c === "MEDIUM") return "Moderate interest";
-  return "Worth watching";
-}
 
 function shortPrice(display: string): string {
   const s = (display || "").trim();
@@ -86,7 +81,6 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           `${row.contact_office || `${row.county || ""} ${row.state || ""} treasurer`} tax sale`.trim(),
         )}`
       : null);
-  const conviction = row.conviction || "WATCH";
   const blurb = shortLine(row.return_thesis || row.summary || "", 140);
   const href = `/parcels/${row.parcel_id}`;
   const gapHelp =
@@ -216,8 +210,7 @@ export function PropertyCard({ row, index }: { row: RadarRow; index: number }) {
           </p>
         ) : null}
 
-        <div className="card-meta-line mt-2" title="Interest · filter match · listed price">
-          <span className={`conviction-pill ${conviction.toLowerCase()}`}>{convictionLabel(conviction)}</span>
+        <div className="card-meta-line mt-2" title="Filter match · listed price">
           <span className="meta-match" title="How well this matches your filters (0–100)">
             Match {Math.round(row.fit_score ?? row.opportunity)}
           </span>

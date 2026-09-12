@@ -278,7 +278,7 @@ def value_display(estimated: float | None, knowledge: str | None) -> dict[str, A
         return {
             "amount_usd": None,
             "label": "Our estimated value",
-            "display": "Not enough data yet for a dollar estimate",
+            "display": "Estimate pending acreage",
             "knowledge_state": knowledge or "UNKNOWN",
             "basis": "today_dollars",
             "basis_label": "in today’s $",
@@ -416,20 +416,13 @@ def build_return_thesis(
         if score.best_strategy
         else "Land"
     )
-    interest = (
-        "Strong interest"
-        if conviction == "HIGH"
-        else "Moderate interest"
-        if conviction == "MEDIUM"
-        else "Worth watching"
-    )
-    # Keep card thesis to 1 tight line (detail page carries the multi-factor path)
+    # Card thesis stays about price/use — interest lives on the signal badge only.
     if entry and est and gap_pct is not None:
-        thesis = f"{interest} · ~${entry:,.0f} buy vs ${est:,.0f} value ({gap_pct:+.0f}%)"
+        thesis = f"~${entry:,.0f} buy vs ${est:,.0f} value ({gap_pct:+.0f}%)"
     elif est:
-        thesis = f"{interest} · value ~${est:,.0f} · {strat}"
+        thesis = f"Value ~${est:,.0f} · {strat}"
     else:
-        thesis = f"{interest} · {strat} possible"
+        thesis = f"{strat} path possible"
     return thesis, conviction
 
 

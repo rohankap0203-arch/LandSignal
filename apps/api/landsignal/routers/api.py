@@ -168,7 +168,7 @@ async def discover(
             "fast": fast,
             "inventory_now": sum(1 for p in store.parcels.values() if not p.is_demo),
             "note": (
-                "Nationwide scan started toward the full book (~5000/state ≈ 255k+). "
+                "Nationwide scan started toward the full book (~5k/state floor, ~520k target). "
                 "Real GIS outlines bake into every parcel after ingest — not on-demand only."
             ),
         }
@@ -479,9 +479,8 @@ async def radar(
     Selected state / region / price / acres are hard filters by default.
     Strategy and hold period never shrink the match set — they only re-rank
     opportunity / fit so preferred strategies and hold lengths float higher.
-    broaden=True (client default): loosen region/channel first; if still empty,
-    widen price/acres slightly, then fall back to best available land inside the
-    selected state — never invents parcels or crosses state lines.
+    broaden=True: may loosen region/channel only when the exact set is empty.
+    State, price, acres, and strategy stay hard — never widened or cleared.
     """
     from landsignal.geo_meta import region_matches
     from landsignal.scoring.engine import personalized_score
@@ -619,25 +618,56 @@ async def radar(
         use_min_acres = min_acres if ac_lo is None else ac_lo
         use_max_acres = max_acres if ac_hi is None else ac_hi
         from landsignal.services.auction import expected_auction_clearing
+        from landsignal.services.assessed_price import (
+            backfill_listing_ask_from_assessed,
+            resolve_budget_filter_usd,
+        )
+        from landsignal.services.land_gate import listing_has_structure, listing_is_land
+        from landsignal.services.purchase_credibility import detect_ask_role
 
         out: list[_Cand] = []
-        # Snapshot keys so a concurrent discover can't reshuffle mid-search.
-        for pid in sorted(store.parcels.keys(), key=str):
+        price_filter_on = use_min_price is not None or use_max_price is not None
+        # Inventory channels are land-gated at ingest — skip the heavy regex there.
+        trusted_land = {"public_vacant_gis", "blm_lpad", "public_tax_sale", "public_surplus"}
+        # Prefer state index so Show matches does not walk the full nationwide book.
+        # Nationwide: opportunity-desc order + early exit keeps ranking accurate for
+        # fit_desc (fit ≈ opportunity with default profile) without a 400k full walk.
+        nationwide = not state_codes
+        if state_codes:
+            scan_ids = store.parcel_ids_for_states(state_codes)
+        else:
+            scan_ids = store.parcel_ids_by_opportunity_desc() or list(store.parcels.keys())
+        # Enough headroom above `limit` so soft strategy re-rank still sees real contenders.
+        # Early-stop only when the book isn't constrained by price/acres — otherwise
+        # opportunity order can miss the true filtered set. State scans stay full.
+        early_stop_at = (
+            max(limit * 30, 400)
+            if nationwide and not price_filter_on and use_min_acres is None and use_max_acres is None
+            else None
+        )
+        for pid in scan_ids:
             parcel = store.parcels.get(pid)
-            if not parcel:
+            if not parcel or parcel.is_demo:
+                continue
+            if state_codes and (parcel.state or "").upper() not in state_codes:
+                continue
+            # Cheap acre band before score/listing/land-gate work.
+            if not _in_band(
+                parcel.acreage,
+                use_min_acres,
+                use_max_acres,
+                allow_unknown=allow_unknown_acres,
+            ):
                 continue
             score = store.latest_score(parcel.id)
             listing = store.listing_for_parcel(parcel.id)
-            if not score or not listing or parcel.is_demo:
+            if not score or not listing:
                 continue
-            from landsignal.services.land_gate import listing_is_land
-
-            if not listing_is_land(listing, parcel):
+            provider = listing.provider_id
+            if provider not in trusted_land and not listing_is_land(listing, parcel):
                 continue
             _maybe_retag_vacant_gis(listing)
 
-            if state_codes and (parcel.state or "").upper() not in state_codes:
-                continue
             if apply_region and not region_matches(
                 region=region,
                 state=parcel.state,
@@ -646,15 +676,9 @@ async def radar(
             ):
                 continue
 
-            from landsignal.services.assessed_price import (
-                backfill_listing_ask_from_assessed,
-                resolve_budget_filter_usd,
-            )
-            from landsignal.services.land_gate import listing_has_structure
-            from landsignal.services.purchase_credibility import detect_ask_role
-
-            # GIS vacant screens often only have assessor land value — promote to ask.
-            backfill_listing_ask_from_assessed(listing)
+            # Only promote assessed→ask when a budget filter needs a dollar.
+            if price_filter_on:
+                backfill_listing_ask_from_assessed(listing)
             ask = listing.asking_price_usd
             if ask is not None and ask <= 0:
                 ask = None
@@ -667,26 +691,30 @@ async def radar(
                 if channel == "priced_only":
                     if not priced:
                         continue
-                elif apply_strict_channel and listing.provider_id != channel and not (
-                    channel == "manual" and listing.provider_id in ("manual", "csv")
+                elif apply_strict_channel and provider != channel and not (
+                    channel == "manual" and provider in ("manual", "csv")
                 ):
                     continue
 
-            on_site = listing_has_structure(listing, parcel)
+            raw = listing.raw if isinstance(listing.raw, dict) else {}
+            if "has_structure" in raw:
+                on_site = bool(raw.get("has_structure"))
+            else:
+                on_site = listing_has_structure(listing, parcel)
 
             # Budget recognition: auction settle, real ask, or honest assessed mark.
             # Never let land-AV-with-home pass a low max_price as a fake bargain.
             budget_usd: float | None = None
-            if use_min_price is not None or use_max_price is not None:
+            if price_filter_on:
                 enrichment = store.enrichments.get(parcel.id)
                 auction_path = None
-                if enrichment and enrichment.comps and listing.provider_id != "public_vacant_gis":
+                if enrichment and enrichment.comps and provider != "public_vacant_gis":
                     comps_n = enrichment.comps.normalized or enrichment.comps.value or {}
                     if isinstance(comps_n, dict):
                         raw_ap = comps_n.get("auction_path")
                         if isinstance(raw_ap, dict):
                             auction_path = raw_ap
-                if auction_path is None and ask and listing.provider_id in (
+                if auction_path is None and ask and provider in (
                     "public_tax_sale",
                     "public_surplus",
                 ):
@@ -694,7 +722,7 @@ async def radar(
                         opening_bid=ask,
                         model_value=score.estimated_value_usd,
                         acres=parcel.acreage,
-                        provider_id=listing.provider_id,
+                        provider_id=provider,
                         state=parcel.state,
                     )
                 settle = None
@@ -716,7 +744,7 @@ async def radar(
                 if (
                     on_site
                     and budget_usd is None
-                    and (use_min_price is not None or use_max_price is not None)
+                    and price_filter_on
                 ):
                     price_unknown_ok = False
                 if not _in_band(
@@ -726,13 +754,6 @@ async def radar(
                     allow_unknown=price_unknown_ok,
                 ):
                     continue
-            if not _in_band(
-                parcel.acreage,
-                use_min_acres,
-                use_max_acres,
-                allow_unknown=allow_unknown_acres,
-            ):
-                continue
             strategy_soft_miss = False
             wants_property_on_site = any(
                 pref.upper().replace(" ", "_") == "IMPROVED_PROPERTY" for pref in (strategy_prefs or [])
@@ -786,13 +807,24 @@ async def radar(
                         ):
                             hit_any = True
                             break
+                        hints = {
+                            "FARMLAND": ("farm", "agricultur", "pasture", "cropland", " ag ", "ranch", "cattle"),
+                            "DEVELOPMENT": ("develop", "subdivision", "entitled", "zoning", "plat"),
+                            "LAND_BANK": ("land bank", "hold", "assemble", "speculative"),
+                            "RECREATIONAL": ("hunt", "recreat", "cabin", "camp", "timber recreation"),
+                            "ENERGY": ("solar", "wind", "energy", "mineral", "oil", "gas lease"),
+                            "TIMBER": ("timber", "forest", "pine", "hardwood", "logging"),
+                            "IMPROVED_PROPERTY": ("home", "house", "cottage", "cabin", "dwelling"),
+                        }.get(s_up, ())
+                        if hints and any(h in blob for h in hints):
+                            hit_any = True
+                            break
                     elif pref.lower() in blob or s_up.lower().replace("_", " ") in blob:
                         hit_any = True
                         break
                 if not hit_any:
-                    # Land strategies never hide other land — only re-rank.
-                    # Property-on-site already hard-gated above.
-                    strategy_soft_miss = True
+                    # Strategy is a hard filter (score match or title/description hints).
+                    continue
             if min_score is not None and score.opportunity < min_score:
                 continue
             if max_risk is not None and score.risk > max_risk:
@@ -837,6 +869,8 @@ async def radar(
                     has_structure=on_site,
                 )
             )
+            if early_stop_at is not None and len(out) >= early_stop_at:
+                break
         return out
 
     def fat_row(cand: _Cand, *, broaden_reason: str | None = None) -> RadarRow | None:
@@ -884,11 +918,22 @@ async def radar(
         ask_role = None
         if isinstance(listing.raw, dict):
             ask_role = listing.raw.get("ask_role")
+        # List cards always get a screening dollar when acres / assessor marks exist.
+        est = score.estimated_value_usd
+        if est is None:
+            from landsignal.services.analyze import screening_estimate_usd
+
+            est = screening_estimate_usd(parcel, listing)
+            if est is not None:
+                try:
+                    score.estimated_value_usd = est
+                except Exception:
+                    pass
         pd = price_display(
             ask,
             listing.provider_id,
             auction_path if isinstance(auction_path, dict) else None,
-            score.estimated_value_usd,
+            est,
             state=parcel.state,
             county=parcel.county,
             acres=parcel.acreage,
@@ -898,7 +943,7 @@ async def radar(
             has_structure=on_site,
         )
         vd = value_display(
-            score.estimated_value_usd,
+            est,
             (enrichment.comps.knowledge_state.value if enrichment and enrichment.comps else "ESTIMATED"),
         )
         ppa = listing.price_per_acre_usd
@@ -1066,21 +1111,12 @@ async def radar(
             auction_path=auction_path if isinstance(auction_path, dict) else None,
             enrichment=enrichment,
         )
-        from landsignal.services.market_trajectory import build_market_trajectory
-
+        # List cards: cached trajectory only. Live build for 24–60 rows was a major
+        # Show-matches latency sink; detail page still computes fresh.
         traj = ((enrichment.narratives or {}).get("market_trajectory") if enrichment else None) or None
-        if not isinstance(traj, dict) or not traj.get("sparkline") or not traj.get("hitches"):
-            traj = build_market_trajectory(
-                parcel=parcel,
-                listing=listing,
-                score=score,
-                enrichment=enrichment,
-            )
-            if enrichment is not None:
-                enrichment.narratives = {
-                    **(enrichment.narratives or {}),
-                    "market_trajectory": traj,
-                }
+        if not isinstance(traj, dict):
+            traj = None
+
         summary = thesis or (
             f"{_strategy_label(score.best_strategy)} · "
             f"Opportunity {score.opportunity:.0f} · Risk {score.risk:.0f} · {pd['display']}"
@@ -1276,10 +1312,10 @@ async def radar(
             conviction=conviction,
             scout_note=scout_note,
             has_structure=on_site,
-            trajectory_regime=traj.get("regime"),
-            trajectory_label=traj.get("regime_label"),
-            trajectory_cagr_5y=traj.get("cagr_5y_display"),
-            trajectory_sparkline=list(traj.get("sparkline") or [])[-8:],
+            trajectory_regime=(traj or {}).get("regime"),
+            trajectory_label=(traj or {}).get("regime_label"),
+            trajectory_cagr_5y=(traj or {}).get("cagr_5y_display"),
+            trajectory_sparkline=list((traj or {}).get("sparkline") or [])[-8:],
         )
 
     # Phase 1: cheap filter + fit across full inventory
@@ -1290,7 +1326,8 @@ async def radar(
     gate_min_acres, gate_max_acres = min_acres, max_acres
     gate_require_region = bool(region)
 
-    # Soft broaden first: region / market channel.
+    # broaden=true may soften region / market channel only.
+    # Price, acres, and state stay absolute — never widen or clear them.
     if broaden and not cands:
         cands = collect_cands(apply_region=False, apply_strict_channel=True)
         if cands:
@@ -1304,63 +1341,6 @@ async def radar(
             gate_require_region = False
             broaden_reason = (
                 "Loosened market channel a bit so you still get matches inside your other filters."
-            )
-    # Then widen price/acres slightly so extreme preset combos still return real land.
-    if broaden and not cands and (min_price is not None or max_price is not None):
-        lo = (min_price * 0.65) if min_price is not None else None
-        hi = (max_price * 1.35) if max_price is not None else None
-        cands = collect_cands(
-            apply_region=False,
-            apply_strict_channel=False,
-            price_lo=lo,
-            price_hi=hi,
-        )
-        if cands:
-            gate_min_price, gate_max_price = lo, hi
-            gate_require_region = False
-            broaden_reason = (
-                "Widened budget ~35% so you still get legitimate priced land near your range."
-            )
-    if broaden and not cands and (min_acres is not None or max_acres is not None):
-        lo = (min_acres * 0.7) if min_acres is not None else None
-        hi = (max_acres * 1.4) if max_acres is not None else None
-        cands = collect_cands(
-            apply_region=False,
-            apply_strict_channel=False,
-            price_lo=(min_price * 0.65) if min_price is not None else min_price,
-            price_hi=(max_price * 1.35) if max_price is not None else max_price,
-            ac_lo=lo,
-            ac_hi=hi,
-            allow_unknown_price=True,
-        )
-        if cands:
-            gate_min_acres, gate_max_acres = lo, hi
-            if min_price is not None:
-                gate_min_price = min_price * 0.65
-            if max_price is not None:
-                gate_max_price = max_price * 1.35
-            gate_require_region = False
-            broaden_reason = (
-                "Widened acreage a bit so you still get real parcels near your size screen."
-            )
-    if broaden and not cands and state_codes:
-        cands = collect_cands(
-            apply_region=False,
-            apply_strict_channel=False,
-            price_lo=0,
-            price_hi=10_000_000_000,
-            ac_lo=0.01,
-            ac_hi=100_000,
-            allow_unknown_price=True,
-            allow_unknown_acres=True,
-        )
-        if cands:
-            gate_min_price, gate_max_price = None, None
-            gate_min_acres, gate_max_acres = None, None
-            gate_require_region = False
-            broaden_reason = (
-                "Showing best available land in your selected state — "
-                "exact price/acre combo had no hits yet while inventory is still indexing."
             )
 
     ranked = _sort_cands(cands, sort)

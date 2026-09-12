@@ -267,10 +267,14 @@ async def _ingest_and_score(
     # list them immediately. Full live analyze still runs on parcel open.
     # Without this, scoring a 20k CA batch blocked thin-state deepen for many minutes.
     if fast:
+        from landsignal.services.analyze import screening_estimate_usd
+
         for pid in to_score:
             if store.latest_score(pid) is not None:
                 continue
             listing = store.listing_for_parcel(pid)
+            parcel = store.parcels.get(pid)
+            screen_est = screening_estimate_usd(parcel, listing) if parcel else None
             store.scores.setdefault(pid, []).append(
                 ScoreRecord(
                     parcel_id=pid,
@@ -283,12 +287,13 @@ async def _ingest_and_score(
                     asymmetry=0.0,
                     signal=Signal.WATCH,
                     deal_readiness=35.0,
+                    estimated_value_usd=screen_est,
                     explanations=[
                         "Bulk-indexed from public GIS. Open the parcel for full live analysis."
                     ],
                     why_interesting=["Public cadastral inventory with real assessor geometry."],
                     input_hash="discover_stub_v1",
-                    input_snapshot={"stub": True},
+                    input_snapshot={"stub": True, "screening_estimate": True},
                 )
             )
             stubbed += 1
@@ -364,6 +369,10 @@ async def _ingest_and_score(
         batch = to_score[i : i + chunk]
         await asyncio.gather(*[_score_one(pid) for pid in batch])
         trim_score_lists(store, keep=1)
+        # Yield so Show matches / health can run while discover is in flight.
+        # Without this, CPU-heavy scoring starves the event loop and the web
+        # proxy surfaces a false "API on port 8000 is not responding" error.
+        await asyncio.sleep(0.05)
         log.info(
             "discover_batch_scored",
             scored=scored,
@@ -641,7 +650,7 @@ async def discover_opportunities(
                 continue
 
             # First-pass paint for brand-new states: thicker batch so coverage + depth
-            # land together; later gap-fill deepens toward min_per_state (~5000 → ~255k).
+            # land together; later gap-fill deepens toward min_per_state (~5000 → ~520k with surplus).
             state_limit = per_state_limit
             if live_counts.get(st, 0) <= 0:
                 state_limit = min(per_state_limit, 1500)
@@ -671,6 +680,8 @@ async def discover_opportunities(
                 states_with_inventory=len(_inventory_by_state(store)),
                 **snapshot(),
             )
+            # Let radar/health through between states — discover must not peg the loop.
+            await asyncio.sleep(0.1)
             if batch.get("stopped_early"):
                 stopped_early = True
                 stop_reason = str(batch.get("stop_reason") or stop_reason)
@@ -758,15 +769,15 @@ async def discover_opportunities(
                 break
 
     # Surplus fill: after every state has had deepen attempts, grow ALL states that
-    # still have headroom — thinnest first — until ~255k nationwide. Never let one
+    # still have headroom — thinnest first — until ~520k nationwide. Never let one
     # fat state (e.g. CA) monopolize the wave while MS/GA/OH stay near zero.
     target_total = max(
         min_per_state * 51,
-        int(getattr(settings, "discover_target_total", 255_000) or 255_000),
+        int(getattr(settings, "discover_target_total", 520_000) or 520_000),
     )
     max_per_state = max(
         min_per_state,
-        int(getattr(settings, "discover_max_per_state", 15_000) or 15_000),
+        int(getattr(settings, "discover_max_per_state", 40_000) or 40_000),
     )
     surplus_passes = 0
     while not stopped_early and surplus_passes < 24:

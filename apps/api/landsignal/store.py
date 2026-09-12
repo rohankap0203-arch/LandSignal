@@ -58,6 +58,9 @@ class MemoryStore:
         self._listing_id_by_parcel: dict[UUID, UUID] = {}
         # O(1) (provider_id, external_id) → listing — required for 100k+ discovers
         self._listing_id_by_external: dict[tuple[str, str], UUID] = {}
+        # O(1) state → parcel ids for fast Show matches scans
+        self._parcel_ids_by_state: dict[str, set[UUID]] = {}
+        self._parcel_ids_by_opportunity: list[UUID] = []
 
     def seed_demo(self) -> None:
         """Deterministic DEMO fixtures for UI walkthrough — never labeled as live feeds."""
@@ -158,6 +161,7 @@ class MemoryStore:
                 raw={"price_reduction_pct": d["price_reduction_pct"], "fixture": True},
             )
             self.parcels[parcel.id] = parcel
+            self.index_parcel_state(parcel)
             self.listings[listing.id] = listing
             self.index_listing(listing)
             fe = d["fixture_enrichment"]
@@ -277,6 +281,7 @@ class MemoryStore:
             is_demo=is_demo,
         )
         self.parcels[parcel.id] = parcel
+        self.index_parcel_state(parcel)
         self.listings[listing.id] = listing
         self.index_listing(listing)
         # DD checklist is detail-page only — creating it for every discover
@@ -311,17 +316,22 @@ class MemoryStore:
         items = self.scores.get(parcel_id) or []
         if not items:
             return None
-        # Prefer the current algorithm — startup rescore is capped, so older
-        # versions can still sit at the end of the list for unscored batches.
+        # Hot path: most parcels have one score, and the newest is almost always
+        # the current algorithm — avoid importing/scanning on every radar row.
+        last = items[-1]
+        if len(items) == 1:
+            return last
         try:
             from landsignal.scoring.engine import ALGORITHM_VERSION
 
+            if getattr(last, "algorithm_version", None) == ALGORITHM_VERSION:
+                return last
             for s in reversed(items):
                 if getattr(s, "algorithm_version", None) == ALGORITHM_VERSION:
                     return s
         except Exception:
             pass
-        return items[-1]
+        return last
 
     def index_listing(self, listing: ListingRecord) -> None:
         self._listing_id_by_parcel[listing.parcel_id] = listing.id
@@ -335,6 +345,50 @@ class MemoryStore:
             for L in self.listings.values()
             if L.provider_id and L.external_id
         }
+
+    def index_parcel_state(self, parcel: ParcelRecord) -> None:
+        st = (parcel.state or "").upper().strip()
+        if not st:
+            return
+        self._parcel_ids_by_state.setdefault(st, set()).add(parcel.id)
+
+    def rebuild_state_index(self) -> None:
+        by: dict[str, set[UUID]] = {}
+        for parcel in self.parcels.values():
+            st = (parcel.state or "").upper().strip()
+            if not st:
+                continue
+            by.setdefault(st, set()).add(parcel.id)
+        self._parcel_ids_by_state = by
+
+    def parcel_ids_for_states(self, state_codes: list[str] | set[str] | None) -> list[UUID]:
+        """Parcel ids limited to the requested states (nationwide if empty)."""
+        if not state_codes:
+            return list(self.parcels.keys())
+        if not self._parcel_ids_by_state and self.parcels:
+            self.rebuild_state_index()
+        out: set[UUID] = set()
+        for st in state_codes:
+            out |= self._parcel_ids_by_state.get((st or "").upper().strip(), set())
+        return list(out)
+
+
+
+    def rebuild_opportunity_index(self) -> None:
+        """Parcel ids ordered by latest opportunity (desc) for fast nationwide radar."""
+        scored: list[tuple[float, str, UUID]] = []
+        for pid, items in self.scores.items():
+            if not items:
+                continue
+            s = items[-1]
+            scored.append((float(getattr(s, "opportunity", 0) or 0), str(pid), pid))
+        scored.sort(key=lambda t: (-t[0], t[1]))
+        self._parcel_ids_by_opportunity = [pid for _, _, pid in scored]
+
+    def parcel_ids_by_opportunity_desc(self) -> list[UUID]:
+        if not self._parcel_ids_by_opportunity and self.scores:
+            self.rebuild_opportunity_index()
+        return list(self._parcel_ids_by_opportunity)
 
     def listing_by_external(self, provider_id: str | None, external_id: str | None) -> ListingRecord | None:
         if not provider_id or not external_id:
@@ -523,6 +577,7 @@ def load_persisted_store(store: MemoryStore) -> int:
             # Never restore invented acreage squares.
             p.polygon = compact_polygon(p.polygon)
             store.parcels[p.id] = p
+            store.index_parcel_state(p)
             n += 1
         except Exception:
             continue
@@ -544,6 +599,8 @@ def load_persisted_store(store: MemoryStore) -> int:
         except Exception:
             continue
     store.rebuild_listing_index()
+    store.rebuild_state_index()
+    store.rebuild_opportunity_index()
     for pid_s, scores in (payload.get("scores") or {}).items():
         try:
             pid = UUID(pid_s)
