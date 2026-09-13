@@ -951,7 +951,6 @@ export default function SearchPage() {
           ) : null}
         </div>
       ) : null}
-      ) : null}
 
       {!loading && (
         <div className="results-grid">
