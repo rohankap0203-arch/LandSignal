@@ -373,12 +373,12 @@ export default function SearchPage() {
         }
       } catch (e) {
         const raw = e instanceof Error ? e.message : "Search failed";
-        const friendly = /not reachable on port 8000|not responding|could not reach the LandSignal API|ECONNREFUSED|fetch failed/i.test(
+        const friendly = /busy|unreachable|catching up with live inventory|ECONNREFUSED|fetch failed|not reachable|not responding/i.test(
           raw,
         )
-          ? "LandSignal API on port 8000 was busy or unreachable (often while inventory is refreshing). Wait a few seconds, hard-refresh the port-3000 preview, then try Show matches again."
+          ? "Search is catching up with live inventory. Tap Show matches again in a moment."
           : /Failed to fetch|NetworkError|Load failed/i.test(raw)
-            ? "Search failed to load results (network). Hard-refresh the port-3000 preview, then try Show matches again."
+            ? "Search failed to load results (network). Tap Show matches again."
             : /Internal Server Error/i.test(raw)
               ? "Search hit a server error. Tap Show matches again — if it keeps failing, click Refresh live inventory first."
               : raw.length > 280
@@ -432,23 +432,49 @@ export default function SearchPage() {
 
     const applyMeta = (live: SearchMeta) => {
       if (cancelled || !live) return;
-      setMeta({
-        ...SEARCH_META_FALLBACK,
-        ...live,
-        inventory_count: live.inventory_count ?? 0,
-        states: live.states?.length ? live.states : SEARCH_META_FALLBACK.states,
-        strategies: live.strategies?.length ? live.strategies : SEARCH_META_FALLBACK.strategies,
-        price_presets: live.price_presets?.length
-          ? live.price_presets
-          : SEARCH_META_FALLBACK.price_presets,
-        acre_presets: live.acre_presets?.length
-          ? live.acre_presets
-          : SEARCH_META_FALLBACK.acre_presets,
-        hold_years: live.hold_years?.length ? live.hold_years : SEARCH_META_FALLBACK.hold_years,
+      setMeta((prev) => {
+        const nextCount = live.inventory_count ?? prev.inventory_count ?? 0;
+        return {
+          ...SEARCH_META_FALLBACK,
+          ...prev,
+          ...live,
+          // Never flash the listing count back to 0 during a transient meta miss.
+          inventory_count: nextCount,
+          inventory_by_state:
+            live.inventory_by_state && Object.keys(live.inventory_by_state).length
+              ? live.inventory_by_state
+              : prev.inventory_by_state,
+          states: live.states?.length ? live.states : prev.states?.length ? prev.states : SEARCH_META_FALLBACK.states,
+          strategies: live.strategies?.length
+            ? live.strategies
+            : prev.strategies?.length
+              ? prev.strategies
+              : SEARCH_META_FALLBACK.strategies,
+          price_presets: live.price_presets?.length
+            ? live.price_presets
+            : prev.price_presets?.length
+              ? prev.price_presets
+              : SEARCH_META_FALLBACK.price_presets,
+          acre_presets: live.acre_presets?.length
+            ? live.acre_presets
+            : prev.acre_presets?.length
+              ? prev.acre_presets
+              : SEARCH_META_FALLBACK.acre_presets,
+          hold_years: live.hold_years?.length
+            ? live.hold_years
+            : prev.hold_years?.length
+              ? prev.hold_years
+              : SEARCH_META_FALLBACK.hold_years,
+        };
       });
       const count = live.inventory_count ?? 0;
-      // Keep deepening toward the ~200k nationwide floor in the background.
-      if (!discoverKicked && count < 200_000) {
+      // Only kick discover when the book is truly empty — never while a large load is mid-restore.
+      if (!discoverKicked && count > 0 && count < 50_000) {
+        discoverKicked = true;
+        void landsignalApi.discover(750000, 0.1, false, undefined, true).catch(() => {
+          discoverKicked = false;
+        });
+      } else if (!discoverKicked && count === 0) {
         discoverKicked = true;
         void landsignalApi.discover(750000, 0.1, false, undefined, true).catch(() => {
           discoverKicked = false;
@@ -461,10 +487,7 @@ export default function SearchPage() {
         .searchMeta()
         .then(applyMeta)
         .catch(() => {
-          setMeta((prev) => ({
-            ...prev,
-            inventory_count: prev.inventory_count ?? 0,
-          }));
+          // Keep the last good listing count visible.
         });
 
     void refresh();
@@ -472,9 +495,9 @@ export default function SearchPage() {
     tick = window.setInterval(() => {
       if (cancelled) return;
       n += 1;
-      // Fast for ~40s, then every 12s
-      if (n <= 25 || n % 8 === 0) void refresh();
-    }, 1500);
+      // Fast for ~30s, then every 15s — avoid hammering meta during discover.
+      if (n <= 10 || n % 5 === 0) void refresh();
+    }, 3000);
 
     return () => {
       cancelled = true;

@@ -1462,26 +1462,24 @@ async def search_meta() -> dict[str, Any]:
     from landsignal.services.discover import _wired_states
 
     store = get_store(get_settings().demo_seed)
+    inventory_count, by_state = store.inventory_snapshot()
+    inventory_states = sorted(by_state.keys())
+    # Regions list is optional chrome — keep it cheap; full county scan is too heavy at 300k+.
     inventory_regions = sorted(
         {
             f"{p.county}, {p.state}"
-            for p in store.parcels.values()
-            if p.county and p.state and not p.is_demo
+            for st, ids in list(store._parcel_ids_by_state.items())[:12]
+            for pid in list(ids)[:40]
+            for p in [store.parcels.get(pid)]
+            if p and p.county and p.state and not getattr(p, "is_demo", False)
         }
     )
-    by_state: dict[str, int] = {}
-    for p in store.parcels.values():
-        if p.is_demo or not p.state:
-            continue
-        st = p.state.upper()
-        by_state[st] = by_state.get(st, 0) + 1
-    inventory_states = sorted(by_state.keys())
 
     # Filters always offer the full 50-state (+DC) catalog — inventory is responsible
     # for catching up, not the dropdown for shrinking.
     payload = search_meta_payload(inventory_regions)
     payload["inventory_states"] = inventory_states
-    payload["inventory_count"] = sum(1 for p in store.parcels.values() if not p.is_demo)
+    payload["inventory_count"] = inventory_count
     payload["inventory_by_state"] = dict(sorted(by_state.items()))
     payload["inventory_min_per_state_target"] = int(
         getattr(get_settings(), "discover_min_per_state", 2500) or 2500

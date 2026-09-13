@@ -372,7 +372,12 @@ class MemoryStore:
             out |= self._parcel_ids_by_state.get((st or "").upper().strip(), set())
         return list(out)
 
-
+    def inventory_snapshot(self) -> tuple[int, dict[str, int]]:
+        """O(states) live inventory counts for /search/meta — never rescan every parcel."""
+        if not self._parcel_ids_by_state and self.parcels:
+            self.rebuild_state_index()
+        by_state = {st: len(ids) for st, ids in self._parcel_ids_by_state.items() if ids}
+        return sum(by_state.values()), by_state
 
     def rebuild_opportunity_index(self) -> None:
         """Parcel ids ordered by latest opportunity (desc) for fast nationwide radar."""

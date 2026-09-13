@@ -33,36 +33,58 @@ function friendlyApiError(status: number, body: string): string {
     trimmed.startsWith("<html")
   ) {
     if (status === 502 || status === 503 || status === 504) {
-      return "LandSignal API on port 8000 was busy or unreachable (often while inventory is refreshing). Wait a few seconds, hard-refresh the port-3000 preview, then try Show matches again.";
+      return "Search is catching up with live inventory. Tap Show matches again in a moment.";
     }
     return `Search failed (API ${status}). Tap Show matches again — if it keeps failing, click Refresh live inventory.`;
   }
   return trimmed.length > 280 ? `API ${status}` : trimmed;
 }
 
+async function sleep(ms: number) {
+  await new Promise((r) => setTimeout(r, ms));
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(`${apiBase()}${path}`, {
-      ...init,
-      headers: {
-        ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
-        ...(init?.headers || {}),
-      },
-      cache: "no-store",
-    });
-  } catch (e) {
-    if (e instanceof DOMException && e.name === "AbortError") throw e;
-    if (init?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    throw new Error(
-      "LandSignal API on port 8000 was busy or unreachable (often while inventory is refreshing). Wait a few seconds, hard-refresh the port-3000 preview, then try Show matches again.",
-    );
+  const attempts = path.startsWith("/radar") || path.startsWith("/search/meta") ? 3 : 1;
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(`${apiBase()}${path}`, {
+        ...init,
+        headers: {
+          ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+          ...(init?.headers || {}),
+        },
+        cache: "no-store",
+      });
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") throw e;
+      if (init?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      lastError = new Error(
+        "LandSignal API was briefly busy while inventory refreshed. Tap Show matches again.",
+      );
+      if (attempt < attempts) {
+        await sleep(400 * attempt);
+        continue;
+      }
+      throw lastError;
+    }
+    if (!res.ok) {
+      const text = await res.text();
+      const err = new Error(friendlyApiError(res.status, text));
+      // Soft-retry transient overload while discover is running.
+      if (attempt < attempts && (res.status === 502 || res.status === 503 || res.status === 504)) {
+        lastError = err;
+        await sleep(400 * attempt);
+        continue;
+      }
+      throw err;
+    }
+    return res.json() as Promise<T>;
   }
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(friendlyApiError(res.status, text));
-  }
-  return res.json() as Promise<T>;
+  throw lastError || new Error("Search failed");
 }
 
 export function num(v: unknown, fallback = 0): number {

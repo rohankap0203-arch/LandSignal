@@ -16,7 +16,7 @@ export AUTH_TRUST_HOST="${AUTH_TRUST_HOST:-true}"
 export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-/v1}"
 export LANDSIGNAL_API_ORIGIN="${LANDSIGNAL_API_ORIGIN:-http://127.0.0.1:8000}"
 # Index live public inventory on boot so Show matches is never empty on cold start.
-export AUTO_DISCOVER_ON_STARTUP="${AUTO_DISCOVER_ON_STARTUP:-true}"
+export AUTO_DISCOVER_ON_STARTUP="${AUTO_DISCOVER_ON_STARTUP:-false}"
 export LAND_ALERTS_MONITOR_ENABLED="${LAND_ALERTS_MONITOR_ENABLED:-false}"
 
 API_PID=""
@@ -42,6 +42,11 @@ try:
 except OSError:
     raise SystemExit(1)
 PY
+}
+
+api_process_alive() {
+  # Uvicorn may spend 1–3 minutes loading a large inventory dump before binding :8000.
+  pgrep -f 'uvicorn landsignal.main:app' >/dev/null 2>&1
 }
 
 free_port() {
@@ -93,6 +98,10 @@ start_api() {
     echo "[landsignal-start] API already healthy on :8000"
     return 0
   fi
+  if api_process_alive; then
+    echo "[landsignal-start] API process already loading inventory — not reclaiming"
+    return 0
+  fi
   if port_listening 8000; then
     echo "[landsignal-start] :8000 occupied but unhealthy — reclaiming"
     free_port 8000
@@ -130,7 +139,12 @@ wait_ready() {
   local url="$1"
   local label="$2"
   local i
-  for i in $(seq 1 120); do
+  # API inventory restore can take several minutes on a 300k+ dump.
+  local limit=120
+  if [[ "${label}" == "API" ]]; then
+    limit=360
+  fi
+  for i in $(seq 1 "${limit}"); do
     if http_ok "${url}" 8; then
       echo "[landsignal-start] ${label} ready (${url})"
       return 0
@@ -170,17 +184,21 @@ ensure_plug_proxy
 echo "[landsignal-start] READY — Cursor plug → port 3000 (or 51866 mirror)"
 echo "[landsignal-start] API also on port 8000; logs in /tmp/landsignal/"
 
-# Self-heal loop: require consecutive failures so discover CPU spikes don't wipe memory inventory.
+# Self-heal loop: never kill an API that is still loading a large inventory dump.
 while true; do
-  if http_ok "http://127.0.0.1:8000/v1/health" 8 || http_ok "http://127.0.0.1:8000/docs" 8; then
+  if http_ok "http://127.0.0.1:8000/v1/health" 15 || http_ok "http://127.0.0.1:8000/docs" 15; then
     API_FAILS=0
+  elif api_process_alive || port_listening 8000; then
+    # Loading or briefly blocked by discover — wait, do not restart.
+    API_FAILS=0
+    echo "[landsignal-start] API process alive (loading or busy) — waiting"
   else
     API_FAILS=$((API_FAILS + 1))
-    echo "[landsignal-start] API health miss (${API_FAILS}/3)"
-    if [[ "${API_FAILS}" -ge 3 ]]; then
-      echo "[landsignal-start] API unhealthy — restarting"
+    echo "[landsignal-start] API health miss (${API_FAILS}/5)"
+    if [[ "${API_FAILS}" -ge 5 ]]; then
+      echo "[landsignal-start] API down — restarting (will restore /tmp/landsignal_inventory.json)"
       free_port 8000
-      sleep 1
+      sleep 2
       API_PID=""
       API_FAILS=0
       start_api
@@ -208,5 +226,5 @@ while true; do
     ensure_plug_proxy
   fi
 
-  sleep 8
+  sleep 12
 done
