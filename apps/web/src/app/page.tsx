@@ -14,6 +14,7 @@ import {
   type SearchMeta,
 } from "@/lib/api";
 import { describeHardFilters, enforceHardFilters, explainEmptySearch, type EmptySearchExplanation } from "@/lib/hard-filters";
+import { formatListingsLabel } from "@/lib/listings-label";
 import { SEARCH_META_FALLBACK } from "@/lib/search-meta-fallback";
 
 type PriceUnit = "K" | "M";
@@ -854,44 +855,42 @@ export default function SearchPage() {
                 >
                   {loading ? "Searching…" : "Show matches"}
                 </button>
-                {typeof meta?.inventory_count === "number" && meta.inventory_count > 0 ? (
-                  <div className="filter-inventory-breakdown" ref={inventoryBreakdownRef}>
-                    <button
-                      type="button"
-                      data-testid="inventory-by-state-trigger"
-                      className="filter-inventory-note filter-inventory-note-btn"
-                      aria-live="polite"
-                      aria-expanded={inventoryBreakdownOpen}
-                      aria-controls="inventory-by-state-popup"
-                      aria-haspopup="dialog"
-                      title="Listings by state"
-                      onClick={() => setInventoryBreakdownOpen((open) => !open)}
+                <div className="filter-inventory-breakdown" ref={inventoryBreakdownRef}>
+                  <button
+                    type="button"
+                    data-testid="inventory-by-state-trigger"
+                    className="filter-inventory-note filter-inventory-note-btn"
+                    aria-live="polite"
+                    aria-expanded={inventoryBreakdownOpen}
+                    aria-controls="inventory-by-state-popup"
+                    aria-haspopup="dialog"
+                    title="Listings by state"
+                    onClick={() => setInventoryBreakdownOpen((open) => !open)}
+                  >
+                    <strong>{formatListingsLabel(meta?.inventory_count)}</strong> listings
+                  </button>
+                  {inventoryBreakdownOpen && inventoryStateRows.length > 0 ? (
+                    <div
+                      id="inventory-by-state-popup"
+                      className="filter-inventory-popup"
+                      role="dialog"
+                      aria-label="Listings by state"
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onPointerDown={(event) => event.stopPropagation()}
                     >
-                      <strong>{meta.inventory_count.toLocaleString("en-US")}</strong> listings
-                    </button>
-                    {inventoryBreakdownOpen ? (
-                      <div
-                        id="inventory-by-state-popup"
-                        className="filter-inventory-popup"
-                        role="dialog"
-                        aria-label="Listings by state"
-                        onMouseDown={(event) => event.stopPropagation()}
-                        onPointerDown={(event) => event.stopPropagation()}
-                      >
-                        <ul className="filter-inventory-popup-list">
-                          {inventoryStateRows.map((row) => (
-                            <li key={row.code} className="filter-inventory-popup-row">
-                              <span className="filter-inventory-popup-state">{row.name}</span>
-                              <span className="filter-inventory-popup-count">
-                                {row.count.toLocaleString("en-US")}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
+                      <ul className="filter-inventory-popup-list">
+                        {inventoryStateRows.map((row) => (
+                          <li key={row.code} className="filter-inventory-popup-row">
+                            <span className="filter-inventory-popup-state">{row.name}</span>
+                            <span className="filter-inventory-popup-count">
+                              {row.count.toLocaleString("en-US")}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
