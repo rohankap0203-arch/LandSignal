@@ -785,9 +785,10 @@ async def discover_opportunities(
             if stopped_early:
                 break
 
-    # Surplus fill: after every state has had deepen attempts, grow ALL states that
-    # still have headroom until ~520k nationwide. Mix thinnest gaps with proven
-    # productive states so dead county feeds cannot monopolize every wave.
+    # Surplus fill: after deepen, grow toward ~520k. Prefer states that already
+    # cleared the floor (proven GIS) — duplicate pages are normal there and must
+    # NOT mark them sterile the way empty thin-state feeds do. Otherwise surplus
+    # collapses to AZ/DC/WY and the book freezes ~70k short of target.
     target_total = max(
         min_per_state * 51,
         int(getattr(settings, "discover_target_total", 520_000) or 520_000),
@@ -796,6 +797,12 @@ async def discover_opportunities(
         min_per_state,
         int(getattr(settings, "discover_max_per_state", 40_000) or 40_000),
     )
+    # Deepen sterile strikes on floor-gap states should not poison surplus for
+    # productive states; reset strikes for anyone already at the floor.
+    by_floor = _inventory_by_state(store)
+    for st, n in by_floor.items():
+        if n >= min_per_state:
+            sterile_strikes[st] = 0
     surplus_passes = 0
     while not stopped_early and surplus_passes < 24:
         by_now = _inventory_by_state(store)
@@ -806,29 +813,42 @@ async def discover_opportunities(
         if remaining < 100:
             break
         need_total = target_total - inv_now
-        eligible = [
-            st
-            for st in state_queue
-            if by_now.get(st, 0) < max_per_state and sterile_strikes.get(st, 0) < 4
-        ]
-        thin = sorted(eligible, key=lambda st: (int(by_now.get(st, 0) or 0), st))
-        rich = sorted(eligible, key=lambda st: (-int(by_now.get(st, 0) or 0), st))
-        # Alternate thin + rich so ME/OH gaps still get tries while TX/FL keep filling.
+        # Rich = at/above floor, still under cap. Forgiving sterile budget (dup pages).
+        rich = sorted(
+            (
+                st
+                for st in state_queue
+                if by_now.get(st, 0) >= min_per_state
+                and by_now.get(st, 0) < max_per_state
+                and sterile_strikes.get(st, 0) < 14
+            ),
+            key=lambda st: (-int(by_now.get(st, 0) or 0), st),
+        )
+        # Thin floor gaps — only if not already proven sterile in deepen.
+        thin = sorted(
+            (
+                st
+                for st in state_queue
+                if by_now.get(st, 0) < min_per_state and sterile_strikes.get(st, 0) < 3
+            ),
+            key=lambda st: (int(by_now.get(st, 0) or 0), st),
+        )
+        # ~3 rich : 1 thin so dead county feeds cannot monopolize every wave.
         wave_pool: list[str] = []
         seen: set[str] = set()
-        for a, b in zip(thin[:20], rich[:20]):
-            for st in (a, b):
-                if st not in seen:
-                    wave_pool.append(st)
-                    seen.add(st)
-            if len(wave_pool) >= 32:
-                break
-        for st in thin:
-            if len(wave_pool) >= 32:
-                break
-            if st not in seen:
-                wave_pool.append(st)
-                seen.add(st)
+        ri = ti = 0
+        while len(wave_pool) < 32 and (ri < len(rich) or ti < len(thin)):
+            for _ in range(3):
+                if ri < len(rich) and rich[ri] not in seen:
+                    wave_pool.append(rich[ri])
+                    seen.add(rich[ri])
+                ri += 1
+                if len(wave_pool) >= 32:
+                    break
+            if ti < len(thin) and thin[ti] not in seen:
+                wave_pool.append(thin[ti])
+                seen.add(thin[ti])
+            ti += 1
         if not wave_pool:
             break
         surplus_passes += 1
@@ -839,6 +859,8 @@ async def discover_opportunities(
             target_total=target_total,
             need_total=need_total,
             wave=wave_pool[:16],
+            rich_n=len(rich),
+            thin_n=len(thin),
             remaining=remaining,
             **snapshot(),
         )
@@ -869,17 +891,20 @@ async def discover_opportunities(
                 errors.extend(item.get("errors") or [])
                 listings = item.get("listings") or []
                 if not listings:
-                    sterile_strikes[st] = sterile_strikes.get(st, 0) + 1
+                    # Empty feed — real sterile. Thin states die fast; rich slower.
+                    sterile_strikes[st] = sterile_strikes.get(st, 0) + (
+                        2 if int(live_counts.get(st, 0) or 0) >= min_per_state else 1
+                    )
                     continue
                 headroom = max(0, max_per_state - int(live_counts.get(st, 0) or 0))
                 if headroom < 50:
                     continue
                 inv_live = sum(1 for p in store.parcels.values() if not p.is_demo)
                 need_now = max(0, target_total - inv_live)
-                # Equal-ish chunks so 8 thin states each grow instead of one eating 6k.
+                # Fat chunks on rich states — we need ~70k more, not 300-at-a-time.
                 state_limit = max(
-                    300,
-                    min(headroom, need_now // max(1, len(wave)), remaining, 2500),
+                    500,
+                    min(headroom, max(need_now // max(1, len(wave) // 2), 800), remaining, 4000),
                 )
                 if state_limit < 50:
                     continue
@@ -890,10 +915,14 @@ async def discover_opportunities(
                 refreshed += int(batch.get("refreshed") or 0)
                 scored += int(batch.get("scored") or 0)
                 sample_ids.extend(batch.get("parcel_ids") or [])
-                if int(batch.get("imported") or 0) <= 0:
+                got = int(batch.get("imported") or 0)
+                if got > 0:
+                    sterile_strikes[st] = 0
+                elif int(live_counts.get(st, 0) or 0) >= min_per_state:
+                    # Duplicate page on a proven source — soft strike only.
                     sterile_strikes[st] = sterile_strikes.get(st, 0) + 1
                 else:
-                    sterile_strikes[st] = 0
+                    sterile_strikes[st] = sterile_strikes.get(st, 0) + 1
                 if st not in states_done:
                     states_done.append(st)
                 try:
