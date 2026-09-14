@@ -522,6 +522,10 @@ async def discover_opportunities(
         store.scores.clear()
 
     min_per_state = max(500, int(getattr(settings, "discover_min_per_state", 2500) or 2500))
+    # Coverage-first may shrink the *paint* queue to thin gaps only. Deepen/surplus
+    # must still see every wired state — otherwise surplus freezes on AZ/DC/WY while
+    # TX/CA/FL never get another page toward 520k.
+    all_states = _wired_states(states)
     state_queue = _coverage_first_queue(store, states, min_per_state=min_per_state)
     per_state_limit = max(min_per_state, (limit + len(state_queue) - 1) // max(1, len(state_queue)))
     per_state_limit = min(per_state_limit, max(limit, min_per_state))
@@ -540,7 +544,21 @@ async def discover_opportunities(
 
     # Pull several gap states at once (GIS I/O bound), then ingest quickly with stub
     # scores so every thin state gets depth — not just the first fat GIS state.
-    wave_size = 8
+    # At ~450k parcels RSS is already ~8.5Gi — parallel GIS waves OOM the VM.
+    # Shrink the wave when MemAvailable is tight so surplus can still run.
+    def _wave_size() -> int:
+        snap = snapshot()
+        avail = float(snap.get("available_mb") or 0)
+        rss = float(snap.get("rss_mb") or 0)
+        if avail and avail < 2500:
+            return 2
+        if avail and avail < 4000:
+            return 3
+        if rss and rss >= 8000:
+            return 4
+        return 8
+
+    wave_size = _wave_size()
     # Hard cap per state so a dead ArcGIS endpoint cannot stall the nationwide walk.
     # Deepen passes need enough time for statewide vacant GIS pages (~2–3k/state).
     # ME/OH statewide parcels are heavy polygons — 320s was wall-clocking them to 0 imports.
@@ -551,6 +569,7 @@ async def discover_opportunities(
         sample=state_queue[:12],
         inventory_by_state_n=len(_inventory_by_state(store)),
         min_per_state=min_per_state,
+        wave_size=wave_size,
         **snapshot(),
     )
 
@@ -605,10 +624,10 @@ async def discover_opportunities(
     for wave_start in range(0, len(state_queue), wave_size):
         stop, reason = should_stop_heavy_work()
         if stop:
-            stopped_early = True
+            # Leave stopped_early=False so deepen/surplus can still fill rich states.
             stop_reason = reason
-            errors.append(f"memory_guard: paused before wave ({reason})")
-            log.warning("discover_paused_memory", reason=reason, **snapshot())
+            errors.append(f"memory_guard: paused coverage paint ({reason})")
+            log.warning("discover_coverage_paused_memory", reason=reason, **snapshot())
             break
 
         wave = state_queue[wave_start : wave_start + wave_size]
@@ -641,9 +660,10 @@ async def discover_opportunities(
 
             stop, reason = should_stop_heavy_work()
             if stop:
-                stopped_early = True
+                # Don't kill surplus — coverage paint can resume later.
                 stop_reason = reason
                 errors.append(f"memory_guard: paused before ingest {st} ({reason})")
+                log.warning("discover_coverage_ingest_paused", state=st, reason=reason, **snapshot())
                 break
 
             listings = item.get("listings") or []
@@ -685,12 +705,20 @@ async def discover_opportunities(
             # Let radar/health through between states — discover must not peg the loop.
             await asyncio.sleep(0.1)
             if batch.get("stopped_early"):
-                stopped_early = True
+                # Coverage paint can stop under memory pressure; deepen/surplus still run
+                # on rich states with a smaller wave.
                 stop_reason = str(batch.get("stop_reason") or stop_reason)
                 errors.append(f"memory_guard: paused during {st} scoring ({stop_reason})")
+                log.warning(
+                    "discover_coverage_score_paused",
+                    state=st,
+                    reason=stop_reason,
+                    **snapshot(),
+                )
                 break
-        if stopped_early:
-            break
+        else:
+            continue
+        break
 
     # Keep deepening until every state hits the ~4k floor (~204k nationwide)
     # or we hit memory / import budget. Always serve the thinnest states first.
@@ -703,7 +731,7 @@ async def discover_opportunities(
         gaps = sorted(
             (
                 st
-                for st in state_queue
+                for st in all_states
                 if by_now.get(st, 0) < min_per_state and sterile_strikes.get(st, 0) < 3
             ),
             key=lambda st: (int(by_now.get(st, 0) or 0), st),
@@ -713,7 +741,20 @@ async def discover_opportunities(
         remaining = max(0, int(limit) - imported - refreshed)
         if remaining < 50:
             break
+        # When RAM is already tight (~450k book), do not burn deepen passes on a
+        # handful of sterile thin states — bail to surplus on proven rich GIS.
+        mem = snapshot()
+        avail = float(mem.get("available_mb") or 0)
+        if avail and avail < 3200 and deepen_passes >= 1:
+            log.warning(
+                "discover_deepen_skip_low_memory",
+                gaps=gaps[:8],
+                deepen_passes=deepen_passes,
+                **mem,
+            )
+            break
         deepen_passes += 1
+        wave_size = _wave_size()
         log.info(
             "discover_deepen_pass",
             pass_n=deepen_passes,
@@ -721,15 +762,17 @@ async def discover_opportunities(
             sample=gaps[:12],
             remaining=remaining,
             min_per_state=min_per_state,
+            wave_size=wave_size,
             sterile=list(st for st, n in sterile_strikes.items() if n >= 3)[:12],
             **snapshot(),
         )
         for i in range(0, len(gaps), wave_size):
             stop, reason = should_stop_heavy_work()
             if stop:
-                stopped_early = True
-                stop_reason = reason
+                # Don't abort the whole job — leave room for surplus on rich states.
+                log.warning("discover_deepen_paused_memory", reason=reason, **snapshot())
                 errors.append(f"memory_guard: paused deepen ({reason})")
+                gaps = []
                 break
             wave = gaps[i : i + wave_size]
             live_counts = _inventory_by_state(store)
@@ -817,7 +860,7 @@ async def discover_opportunities(
         rich = sorted(
             (
                 st
-                for st in state_queue
+                for st in all_states
                 if by_now.get(st, 0) >= min_per_state
                 and by_now.get(st, 0) < max_per_state
                 and sterile_strikes.get(st, 0) < 14
@@ -828,7 +871,7 @@ async def discover_opportunities(
         thin = sorted(
             (
                 st
-                for st in state_queue
+                for st in all_states
                 if by_now.get(st, 0) < min_per_state and sterile_strikes.get(st, 0) < 3
             ),
             key=lambda st: (int(by_now.get(st, 0) or 0), st),
