@@ -1624,9 +1624,9 @@ SOURCES: list[ArcgisMarketSource] = [
         "https://gisservices.oakgov.com/arcgis/rest/services/Enterprise/EnterpriseOpenParcelDataMapService/MapServer/1/query",
         "MI",
         _norm_mi_oakland,
+        # OID sharding on this host flakes (empty shards / SSL) and left MI near ~140.
         where="1=1",
-        shard=True,
-        objectid_max=700_000,
+        shard=False,
         page_size=1000,
     ),
     _src(
