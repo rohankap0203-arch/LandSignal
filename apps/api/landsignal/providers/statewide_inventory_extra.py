@@ -904,6 +904,46 @@ def _norm_il_kane(raw: dict) -> dict | None:
     )
 
 
+def _norm_il_dupage(raw: dict) -> dict | None:
+    """DuPage assessor parcels — prefer unimproved 1ac+ tracts."""
+    return _vacant_from_fields(
+        raw,
+        source_key="il_dupage",
+        state="IL",
+        default_county="DuPage",
+        county_keys=(),
+        pid_keys=("PIN", "OBJECTID"),
+        acre_keys=("ACREAGE",),
+        land_keys=("REA017_FCV_LAND", "BILLVALUE"),
+        bldg_keys=("REA017_FCV_IMP",),
+        owner_keys=("PROPNAME", "BILLNAME"),
+        require_zero_bldg=True,
+        min_ac=1.0,
+        label="vacant",
+        source_url="https://www.dupageco.org/",
+    )
+
+
+def _norm_il_will(raw: dict) -> dict | None:
+    """Will County parcel polygons — acreage from geometry (1ac+)."""
+    return _vacant_from_fields(
+        raw,
+        source_key="il_will",
+        state="IL",
+        default_county="Will",
+        county_keys=(),
+        pid_keys=("PIN", "ParcelID", "OBJECTID"),
+        acre_keys=(),  # SHAPE.STArea() is sqft; use ring acres
+        land_keys=(),
+        bldg_keys=(),
+        owner_keys=(),
+        require_zero_bldg=False,
+        min_ac=1.0,
+        label="parcel",
+        source_url="https://www.willcountyillinois.gov/",
+    )
+
+
 def _norm_mo_jackson(raw: dict) -> dict | None:
     return _vacant_from_fields(
         raw,
@@ -1567,14 +1607,38 @@ SOURCES: list[ArcgisMarketSource] = [
     ),
     _src(
         "il_kane_parcels",
-        "Kane County IL Parcels (1ac+)",
+        "Kane County IL Vacant/Farm (1ac+)",
         "https://gistech.countyofkane.org/arcgis/rest/services/KanePINList/MapServer/0/query",
         "IL",
         _norm_il_kane,
-        # RecordedAcreage is present on attributes but rejected in WHERE by this MapServer.
-        # Pull broadly and let normalize/filter drop sub-acre rows.
-        where="1=1",
+        # UseCode 0030=Vacant Lots-Land, 0021=Farmland (~15k rows). RecordedAcreage
+        # cannot be used in WHERE on this MapServer — filter ≥1ac in normalize.
+        where="UseCode IN ('0030','0021')",
         page_size=1000,
+        shard=True,
+        objectid_max=250_000,
+    ),
+    _src(
+        "il_dupage_vacant",
+        "DuPage County IL Vacant Land (1ac+)",
+        "https://gis.dupageco.org/arcgis/rest/services/DuPage_County_IL/ParcelsWithRealEstateCC/MapServer/0/query",
+        "IL",
+        _norm_il_dupage,
+        where="ACREAGE>=1 AND ACREAGE<=2500 AND (REA017_FCV_IMP=0 OR REA017_FCV_IMP IS NULL)",
+        page_size=1000,
+        shard=True,
+        objectid_max=400_000,
+    ),
+    _src(
+        "il_will_parcels",
+        "Will County IL Parcels (1ac+)",
+        "https://gis.willcountyillinois.com/hosting/rest/services/Basemap/Parcels_LY_DV/MapServer/1/query",
+        "IL",
+        _norm_il_will,
+        # Area is sqft on this layer; 43560 ≈ 1 acre.
+        where="SHAPE.STArea()>=43560",
+        page_size=1000,
+        shard=False,
     ),
     _src(
         "mo_jackson_parcels",
