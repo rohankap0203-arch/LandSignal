@@ -453,7 +453,7 @@ export default function SearchPage() {
     const applyMeta = (live: SearchMeta) => {
       if (cancelled || !live) return;
       setMeta((prev) => {
-        const nextCount = live.inventory_count ?? prev.inventory_count ?? 0;
+        const nextCount = Number(live.inventory_count ?? (live as { inventory_total?: number }).inventory_total ?? prev.inventory_count ?? 0) || Number(prev.inventory_count || 0);
         const next: SearchMeta = {
           ...SEARCH_META_FALLBACK,
           ...prev,
@@ -489,17 +489,15 @@ export default function SearchPage() {
         writeCachedSearchMeta(next);
         return next;
       });
-      // Prefer live count, but fall back to session-cached inventory so remounting
-      // home after Land Alerts does not re-kick a nationwide discover.
-      const count = live.inventory_count ?? 0;
+      // Prefer live count, but fall back to cached inventory so remounting home
+      // after Land Alerts does not look empty.
+      const count = Number(live.inventory_count || 0);
       const cached = Number(readCachedSearchMeta()?.inventory_count || 0);
       const known = count > 0 ? count : cached;
+      // Never auto-kick a nationwide discover from a zero/unknown count — that OOMs
+      // the API mid-restore and leaves the listings caption stuck on a dash.
+      // Only deepen when we *know* the book is thin but real.
       if (!discoverKicked && known > 0 && known < 50_000) {
-        discoverKicked = true;
-        void landsignalApi.discover(750000, 0.1, false, undefined, true).catch(() => {
-          discoverKicked = false;
-        });
-      } else if (!discoverKicked && known === 0) {
         discoverKicked = true;
         void landsignalApi.discover(750000, 0.1, false, undefined, true).catch(() => {
           discoverKicked = false;
@@ -901,7 +899,19 @@ export default function SearchPage() {
                       setInventoryBreakdownOpen((open) => !open);
                     }}
                   >
-                    <strong>{formatListingsLabel(meta?.inventory_count)}</strong> listings
+                    {(() => {
+                      const label = formatListingsLabel(meta?.inventory_count);
+                      return label ? (
+                        <>
+                          <strong>{label}</strong> listings
+                        </>
+                      ) : (
+                        <>
+                          <strong aria-hidden>…</strong>
+                          <span className="sr-only">Loading inventory count</span> listings
+                        </>
+                      );
+                    })()}
                   </button>
                   {inventoryBreakdownOpen && inventoryStateRows.length > 0 ? (
                     <div
