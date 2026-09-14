@@ -251,6 +251,249 @@ def _norm_me_unorganized(raw: dict) -> dict | None:
     )
 
 
+def _norm_me_organized(raw: dict) -> dict | None:
+    """Maine GeoLibrary organized-town parcels (July 2023 mosaic)."""
+    props = _props(raw)
+    preferred = None
+    # Shape__Area is Web Mercator m² — only a coarse floor; prefer geometry acres.
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=1.0)
+    if acreage is None or not polygon:
+        return None
+    town = str(props.get("TOWN") or "Maine").title()
+    county = str(props.get("COUNTY") or town).title()
+    pid = props.get("STATE_ID") or props.get("GEOCODE") or props.get("MAP_BK_LOT") or props.get("OBJECTID")
+    return _row(
+        source_key="me_org",
+        pid=pid,
+        title=f"Maine parcel · {acreage:.1f} ac · {town}",
+        description=(
+            f"Maine GeoLibrary organized-town parcel. Town={town}. "
+            f"Map/lot={props.get('MAP_BK_LOT')}. Public GIS — not MLS/Zillow."
+        ),
+        state="ME",
+        county=county,
+        acreage=acreage,
+        lat=lat,
+        lon=lon,
+        polygon=polygon,
+        land_val=None,
+        apn=pid,
+        address=str(props.get("PROP_LOC") or f"{town}, ME"),
+        source_url="https://www.maine.gov/megis/",
+        props=props if isinstance(props, dict) else None,
+    )
+
+
+def _norm_oh_odnr(raw: dict) -> dict | None:
+    """Ohio DNR statewide parcel mosaic — rural acreage screen (no CAMA bldg field)."""
+    props = _props(raw)
+    if _non_market_owner(str(props.get("OWNER1") or props.get("OWNER2") or "")):
+        return None
+    preferred = _fnum(props.get("ASSR_ACRES")) or _fnum(props.get("CALC_ACRES"))
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    # 5ac+ biases toward rural tracts since this layer lacks improvement values.
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=5.0)
+    if acreage is None or not polygon:
+        return None
+    county = str(props.get("COUNTY") or "Ohio").title()
+    pid = props.get("STATEWIDE_PIN") or props.get("PIN") or props.get("OBJECTID")
+    return _row(
+        source_key="oh_odnr",
+        pid=pid,
+        title=f"Ohio acreage · {acreage:.1f} ac · {county}",
+        description=(
+            f"Ohio DNR statewide parcel screen (assessor acres). County={county}. "
+            f"Owner={props.get('OWNER1')}. Public GIS — not MLS/Zillow."
+        ),
+        state="OH",
+        county=county,
+        acreage=acreage,
+        lat=lat,
+        lon=lon,
+        polygon=polygon,
+        land_val=None,
+        apn=pid,
+        address=f"{county} County, OH",
+        source_url="https://ohiodnr.gov/",
+        props=props if isinstance(props, dict) else None,
+    )
+
+
+def _norm_ks_shawnee(raw: dict) -> dict | None:
+    return _vacant_from_fields(
+        raw,
+        source_key="ks_shawnee",
+        state="KS",
+        default_county="Shawnee",
+        county_keys=(),
+        pid_keys=("PIN", "QUICKREFID", "FID", "OBJECTID"),
+        acre_keys=("ACRES",),
+        land_keys=(),
+        bldg_keys=(),
+        owner_keys=(),
+        require_zero_bldg=False,
+        min_ac=1.0,
+        label="vacant/ag",
+        source_url="https://www.snco.us/",
+    )
+
+
+def _norm_ks_sedgwick(raw: dict) -> dict | None:
+    return _vacant_from_fields(
+        raw,
+        source_key="ks_sedgwick",
+        state="KS",
+        default_county="Sedgwick",
+        county_keys=(),
+        pid_keys=("PIN", "AIN", "GEOCODE", "OBJECTID"),
+        acre_keys=("ParcAcresC",),
+        land_keys=(),
+        bldg_keys=(),
+        owner_keys=(),
+        require_zero_bldg=False,
+        # No improvement field — prefer 5ac+ rural/suburban tracts.
+        min_ac=5.0,
+        label="acreage",
+        source_url="https://www.sedgwickcounty.org/",
+    )
+
+
+def _norm_ks_harper(raw: dict) -> dict | None:
+    return _vacant_from_fields(
+        raw,
+        source_key="ks_harper",
+        state="KS",
+        default_county="Harper",
+        county_keys=(),
+        pid_keys=("KSPID", "FID", "OBJECTID"),
+        acre_keys=(),
+        land_keys=("FinalLand",),
+        bldg_keys=("FinalBuild",),
+        owner_keys=(),
+        require_zero_bldg=True,
+        min_ac=1.0,
+        label="unimproved",
+        source_url="https://www.kansasgis.org/",
+    )
+
+
+def _norm_ky_lexington(raw: dict) -> dict | None:
+    return _vacant_from_fields(
+        raw,
+        source_key="ky_lexington",
+        state="KY",
+        default_county="Fayette",
+        county_keys=(),
+        pid_keys=("PVANUM", "OBJECTID"),
+        acre_keys=("PVA_ACRE",),
+        land_keys=(),
+        bldg_keys=(),
+        owner_keys=(),
+        require_zero_bldg=False,
+        min_ac=1.0,
+        label="acreage",
+        source_url="https://www.lexingtonky.gov/",
+    )
+
+
+def _norm_ky_warren(raw: dict) -> dict | None:
+    return _vacant_from_fields(
+        raw,
+        source_key="ky_warren",
+        state="KY",
+        default_county="Warren",
+        county_keys=(),
+        pid_keys=("PVA_PARCEL", "OBJECTID"),
+        acre_keys=("ACRES",),
+        land_keys=(),
+        bldg_keys=(),
+        owner_keys=(),
+        require_zero_bldg=False,
+        min_ac=5.0,
+        label="acreage",
+        source_url="https://www.warrenpc.org/",
+    )
+
+
+def _norm_ky_madison(raw: dict) -> dict | None:
+    return _vacant_from_fields(
+        raw,
+        source_key="ky_madison",
+        state="KY",
+        default_county="Madison",
+        county_keys=(),
+        pid_keys=("Parcel_ID", "OBJECTID", "OBJECTID_12"),
+        acre_keys=("Acres",),
+        land_keys=(),
+        bldg_keys=(),
+        owner_keys=(),
+        require_zero_bldg=False,
+        min_ac=1.0,
+        label="acreage",
+        source_url="https://www.madisoncountyky.us/",
+    )
+
+
+def _norm_ky_webster(raw: dict) -> dict | None:
+    return _vacant_from_fields(
+        raw,
+        source_key="ky_webster",
+        state="KY",
+        default_county="Webster",
+        county_keys=(),
+        pid_keys=("PIDN", "PARCEL_ID", "ACCOUNT", "OBJECTID"),
+        acre_keys=("ACRES",),
+        land_keys=(),
+        bldg_keys=(),
+        owner_keys=("NAME",),
+        require_zero_bldg=False,
+        min_ac=1.0,
+        label="acreage",
+        source_url="https://kygeonet.ky.gov/",
+    )
+
+
+def _norm_ky_kenton(raw: dict) -> dict | None:
+    props = _props(raw)
+    use = str(props.get("LANDUSE_TE") or "").upper()
+    if use not in {"VACANT LAND", "NONBUILDABLE LOT/LAND"}:
+        return None
+    if _non_market_owner(str(props.get("OWNER") or props.get("OWNER2") or "")):
+        return None
+    preferred = _fnum(props.get("GIS_Acreage")) or _fnum(props.get("ACREAGE"))
+    geom_acres, lat, lon, polygon = _acres_from_geom(raw.get("geometry"))
+    acreage = _bounded_acres(preferred, geom_acres, min_ac=1.0)
+    if acreage is None or not polygon:
+        return None
+    pid = props.get("PIDN") or props.get("OBJECTID")
+    addr = " ".join(
+        str(x).strip()
+        for x in (props.get("NUMBER"), props.get("STREET"))
+        if x is not None and str(x).strip()
+    )
+    return _row(
+        source_key="ky_kenton",
+        pid=pid,
+        title=f"Kentucky vacant · {acreage:.1f} ac · Kenton",
+        description=(
+            f"Kenton County KY vacant land screen. Use={props.get('LANDUSE_TE')}. "
+            f"Owner={props.get('OWNER')}. Public GIS — not MLS/Zillow."
+        ),
+        state="KY",
+        county="Kenton",
+        acreage=acreage,
+        lat=lat,
+        lon=lon,
+        polygon=polygon,
+        land_val=None,
+        apn=pid,
+        address=addr or "Kenton County, KY",
+        source_url="https://www.kentoncounty.org/",
+        props=props if isinstance(props, dict) else None,
+    )
+
+
 def _norm_hi_county_vacant(raw: dict) -> dict | None:
     return _vacant_from_fields(
         raw,
@@ -992,6 +1235,119 @@ SOURCES: list[ArcgisMarketSource] = [
         "ME",
         _norm_me_unorganized,
         where="TOTACRES>=1 AND TOTACRES<=2500",
+        shard=True,
+        # Layer OBJECTIDs run past 380k — 100k max starved deepen at ~126 rows.
+        objectid_max=500_000,
+        page_size=1000,
+    ),
+    _src(
+        "me_org_towns",
+        "Maine Organized Towns Parcels (1ac+)",
+        "https://services1.arcgis.com/0EOqWPtpCmgQr2ay/arcgis/rest/services/Maine_Parcels_Organized_Towns_July_2023/FeatureServer/0/query",
+        "ME",
+        _norm_me_organized,
+        # TYPE=PARCEL + Shape__Area≈1ac in Web Mercator m²; acreage rechecked from geometry.
+        where="TYPE='PARCEL' AND Shape__Area>=4047",
+        shard=True,
+        objectid_max=800_000,
+        page_size=1000,
+    ),
+    _src(
+        "oh_odnr_acreage",
+        "Ohio DNR Statewide Acreage (5ac+)",
+        "https://gis.ohiodnr.gov/arcgis/rest/services/OIT_Services/odnr_landbase/MapServer/4/query",
+        "OH",
+        _norm_oh_odnr,
+        where="ASSR_ACRES>=5 AND ASSR_ACRES<=2500",
+        shard=True,
+        objectid_max=3_000_000,
+        page_size=1000,
+        out_fields="OBJECTID,OWNER1,OWNER2,PIN,COUNTY,STATEWIDE_PIN,ASSR_ACRES,CALC_ACRES",
+    ),
+    _src(
+        "ks_shawnee_vacant",
+        "Shawnee County KS Vacant/Ag (1ac+)",
+        "https://services2.arcgis.com/2XE514jeVQMWNKHX/arcgis/rest/services/Parcels/FeatureServer/0/query",
+        "KS",
+        _norm_ks_shawnee,
+        where="LBCSFUNCTI LIKE '9%' AND ACRES>=1 AND ACRES<=2500",
+        shard=True,
+        objectid_max=200_000,
+        page_size=1000,
+    ),
+    _src(
+        "ks_sedgwick_acreage",
+        "Sedgwick County KS Acreage (5ac+)",
+        "https://services7.arcgis.com/McLat6HlPl45bNBv/arcgis/rest/services/Sedgwick_County_Land_Records/FeatureServer/4/query",
+        "KS",
+        _norm_ks_sedgwick,
+        where="ParcAcresC>=5 AND ParcAcresC<=2500",
+        shard=True,
+        objectid_max=500_000,
+        page_size=1000,
+    ),
+    _src(
+        "ks_harper_unimproved",
+        "Harper County KS Unimproved (1ac+)",
+        "https://services1.arcgis.com/q2CglofYX6ACNEeu/arcgis/rest/services/HarperValue/FeatureServer/0/query",
+        "KS",
+        _norm_ks_harper,
+        where="(FinalBuild=0 OR FinalBuild IS NULL) AND FinalLand>0",
+        shard=True,
+        objectid_max=50_000,
+        page_size=1000,
+    ),
+    _src(
+        "ky_lexington_acreage",
+        "Lexington-Fayette KY Acreage (1ac+)",
+        "https://services1.arcgis.com/Mg7DLdfYcSWIaDnu/arcgis/rest/services/Parcel/FeatureServer/0/query",
+        "KY",
+        _norm_ky_lexington,
+        where="PVA_ACRE>=1 AND PVA_ACRE<=2500",
+        shard=True,
+        objectid_max=200_000,
+        page_size=1000,
+    ),
+    _src(
+        "ky_warren_acreage",
+        "Warren County KY Acreage (5ac+)",
+        "https://webgis.bgky.org/server/rest/services/CCPC/CCPC_Parcels/FeatureServer/0/query",
+        "KY",
+        _norm_ky_warren,
+        where="ACRES>=5 AND ACRES<=2500",
+        shard=True,
+        objectid_max=150_000,
+        page_size=1000,
+    ),
+    _src(
+        "ky_madison_acreage",
+        "Madison County KY Acreage (1ac+)",
+        "https://arcserver.madisoncountyky.us/arcgis/rest/services/County_Web_Maps/County_Parcels/MapServer/1/query",
+        "KY",
+        _norm_ky_madison,
+        where="Acres>=1 AND Acres<=2500",
+        shard=True,
+        objectid_max=100_000,
+        page_size=1000,
+    ),
+    _src(
+        "ky_webster_acreage",
+        "Webster County KY PVA Acreage (1ac+)",
+        "https://kygisserver.ky.gov/arcgis/rest/services/WGS84WM_Services/Ky_PVA_Webster_Parcels_WGS84WM/MapServer/1/query",
+        "KY",
+        _norm_ky_webster,
+        where="ACRES>=1 AND ACRES<=2500",
+        shard=True,
+        objectid_max=50_000,
+        page_size=1000,
+    ),
+    _src(
+        "ky_kenton_vacant",
+        "Kenton County KY Vacant Land (1ac+)",
+        "https://maps.linkgis.org/server/rest/services/CC_KC_PCTheme/MapServer/15/query",
+        "KY",
+        _norm_ky_kenton,
+        where="LANDUSE_TE IN ('VACANT LAND','NONBUILDABLE LOT/LAND')",
         shard=True,
         objectid_max=100_000,
         page_size=1000,

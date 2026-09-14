@@ -692,11 +692,18 @@ async def discover_opportunities(
 
     # Keep deepening until every state hits the ~4k floor (~204k nationwide)
     # or we hit memory / import budget. Always serve the thinnest states first.
+    # Skip states that repeatedly return 0 new imports so dead GIS feeds cannot
+    # burn all deepen passes while rich states sit idle under the 520k target.
+    sterile_strikes: dict[str, int] = {}
     deepen_passes = 0
     while not stopped_early and deepen_passes < 36:
         by_now = _inventory_by_state(store)
         gaps = sorted(
-            (st for st in state_queue if by_now.get(st, 0) < min_per_state),
+            (
+                st
+                for st in state_queue
+                if by_now.get(st, 0) < min_per_state and sterile_strikes.get(st, 0) < 3
+            ),
             key=lambda st: (int(by_now.get(st, 0) or 0), st),
         )
         if not gaps:
@@ -712,6 +719,7 @@ async def discover_opportunities(
             sample=gaps[:12],
             remaining=remaining,
             min_per_state=min_per_state,
+            sterile=list(st for st, n in sterile_strikes.items() if n >= 3)[:12],
             **snapshot(),
         )
         for i in range(0, len(gaps), wave_size):
@@ -741,10 +749,12 @@ async def discover_opportunities(
                 errors.extend(item.get("errors") or [])
                 listings = item.get("listings") or []
                 if not listings:
+                    sterile_strikes[st] = sterile_strikes.get(st, 0) + 1
                     continue
                 need = max(0, min_per_state - int(live_counts.get(st, 0) or 0))
                 # Ask for a fat page past the current head so deepen actually grows.
                 state_limit = max(400, min(max(need, 1500), remaining, per_state_limit))
+                before_imported = imported
                 batch = await _ingest_and_score(
                     store, settings, listings, limit=state_limit, fast=fast
                 )
@@ -752,6 +762,10 @@ async def discover_opportunities(
                 refreshed += int(batch.get("refreshed") or 0)
                 scored += int(batch.get("scored") or 0)
                 sample_ids.extend(batch.get("parcel_ids") or [])
+                if int(batch.get("imported") or 0) <= 0:
+                    sterile_strikes[st] = sterile_strikes.get(st, 0) + 1
+                else:
+                    sterile_strikes[st] = 0
                 if st not in states_done:
                     states_done.append(st)
                 try:
@@ -765,12 +779,13 @@ async def discover_opportunities(
                     stop_reason = str(batch.get("stop_reason") or stop_reason)
                     break
                 remaining = max(0, int(limit) - imported - refreshed)
+                _ = before_imported
             if stopped_early:
                 break
 
     # Surplus fill: after every state has had deepen attempts, grow ALL states that
-    # still have headroom — thinnest first — until ~520k nationwide. Never let one
-    # fat state (e.g. CA) monopolize the wave while MS/GA/OH stay near zero.
+    # still have headroom until ~520k nationwide. Mix thinnest gaps with proven
+    # productive states so dead county feeds cannot monopolize every wave.
     target_total = max(
         min_per_state * 51,
         int(getattr(settings, "discover_target_total", 520_000) or 520_000),
@@ -789,11 +804,29 @@ async def discover_opportunities(
         if remaining < 100:
             break
         need_total = target_total - inv_now
-        # Thinnest-first across every state still under the per-state ceiling.
-        wave_pool = sorted(
-            (st for st in state_queue if by_now.get(st, 0) < max_per_state),
-            key=lambda st: (int(by_now.get(st, 0) or 0), st),
-        )[:32]
+        eligible = [
+            st
+            for st in state_queue
+            if by_now.get(st, 0) < max_per_state and sterile_strikes.get(st, 0) < 4
+        ]
+        thin = sorted(eligible, key=lambda st: (int(by_now.get(st, 0) or 0), st))
+        rich = sorted(eligible, key=lambda st: (-int(by_now.get(st, 0) or 0), st))
+        # Alternate thin + rich so ME/OH gaps still get tries while TX/FL keep filling.
+        wave_pool: list[str] = []
+        seen: set[str] = set()
+        for a, b in zip(thin[:20], rich[:20]):
+            for st in (a, b):
+                if st not in seen:
+                    wave_pool.append(st)
+                    seen.add(st)
+            if len(wave_pool) >= 32:
+                break
+        for st in thin:
+            if len(wave_pool) >= 32:
+                break
+            if st not in seen:
+                wave_pool.append(st)
+                seen.add(st)
         if not wave_pool:
             break
         surplus_passes += 1
@@ -834,6 +867,7 @@ async def discover_opportunities(
                 errors.extend(item.get("errors") or [])
                 listings = item.get("listings") or []
                 if not listings:
+                    sterile_strikes[st] = sterile_strikes.get(st, 0) + 1
                     continue
                 headroom = max(0, max_per_state - int(live_counts.get(st, 0) or 0))
                 if headroom < 50:
@@ -854,6 +888,10 @@ async def discover_opportunities(
                 refreshed += int(batch.get("refreshed") or 0)
                 scored += int(batch.get("scored") or 0)
                 sample_ids.extend(batch.get("parcel_ids") or [])
+                if int(batch.get("imported") or 0) <= 0:
+                    sterile_strikes[st] = sterile_strikes.get(st, 0) + 1
+                else:
+                    sterile_strikes[st] = 0
                 if st not in states_done:
                     states_done.append(st)
                 try:
