@@ -8362,51 +8362,78 @@ html.land-viewer-open body {
 }
 
 .land-viewer-nearby-nav {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.18rem;
+  /* Left half = previous, right half = next — big tap targets for phone + desktop. */
+  display: grid;
+  grid-template-columns: minmax(2.75rem, 1fr) auto minmax(2.75rem, 1fr);
+  align-items: stretch;
+  gap: 0;
   box-sizing: border-box;
   flex: 0 0 auto;
   min-width: 4.1rem;
-  min-height: 1.48rem;
-  padding: 0.14rem 0.34rem;
+  min-height: 2.35rem;
+  padding: 0;
+  overflow: hidden;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--brand) 40%, var(--line));
   background: color-mix(in srgb, var(--brand) 12%, var(--bg-elevated));
   color: color-mix(in srgb, var(--brand) 55%, var(--ink));
   white-space: nowrap;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .land-viewer-nearby-next-count {
-  min-width: 1.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  min-width: 1.9rem;
+  padding: 0 0.2rem;
   text-align: center;
   font-size: 0.64rem;
   font-weight: 650;
   letter-spacing: 0.02em;
   line-height: 1;
   color: inherit;
+  pointer-events: none;
+  user-select: none;
 }
 
 .land-viewer-nearby-nav-arrow {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 100%;
+  min-width: 2.75rem;
+  min-height: 2.35rem;
   margin: 0;
-  padding: 0;
+  padding: 0 0.55rem;
   border: 0;
-  border-radius: 999px;
+  border-radius: 0;
   background: transparent;
   color: inherit;
   font: inherit;
   line-height: 1;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.land-viewer-nearby-nav-arrow:hover:not(:disabled) {
+/* Empty space on each side is the hit target — arrow glyph stays at the outer edge. */
+.land-viewer-nearby-nav-arrow.is-back {
+  justify-content: flex-start;
+}
+
+.land-viewer-nearby-nav-arrow.is-forward {
+  justify-content: flex-end;
+}
+
+.land-viewer-nearby-nav-arrow:hover:not(:disabled),
+.land-viewer-nearby-nav-arrow:focus-visible:not(:disabled) {
   background: color-mix(in srgb, var(--brand) 18%, transparent);
+}
+
+.land-viewer-nearby-nav-arrow:active:not(:disabled) {
+  background: color-mix(in srgb, var(--brand) 26%, transparent);
 }
 
 .land-viewer-nearby-nav-arrow:disabled {
@@ -8417,9 +8444,22 @@ html.land-viewer-open body {
 
 .land-viewer-nearby-next-arrow {
   display: inline-block;
-  font-size: 0.74rem;
+  font-size: 0.8rem;
   line-height: 1;
   color: inherit;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .land-viewer-nearby-nav {
+    min-height: 2.65rem;
+  }
+
+  .land-viewer-nearby-nav-arrow {
+    min-width: 3rem;
+    min-height: 2.65rem;
+    padding: 0 0.7rem;
+  }
 }
 
 .land-viewer-stage {

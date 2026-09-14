@@ -1310,21 +1310,21 @@ export function LandViewerModal({
               <div
                 className="land-viewer-nearby-nav"
                 role="group"
-                aria-label={`Closest result ${nearbyHitIndex + 1} of ${nearbyHits.length}`}
+                aria-label={`Closest result ${nearbyHitIndex + 1} of ${nearbyHits.length}. Tap left side for previous, right side for next.`}
               >
                 <button
                   type="button"
                   className="land-viewer-nearby-nav-arrow is-back"
                   onClick={showPrevNearby}
                   disabled={!canPrevNearby}
-                  aria-label="Previous closest"
-                  title="Previous closest"
+                  aria-label="Previous closest — tap anywhere on the left"
+                  title="Previous closest — tap left side"
                 >
                   <span className="land-viewer-nearby-next-arrow" aria-hidden>
                     ←
                   </span>
                 </button>
-                <span className="land-viewer-nearby-next-count">
+                <span className="land-viewer-nearby-next-count" aria-hidden>
                   {nearbyHitIndex + 1}/{nearbyHits.length}
                 </span>
                 <button
@@ -1332,8 +1332,8 @@ export function LandViewerModal({
                   className="land-viewer-nearby-nav-arrow is-forward"
                   onClick={showNextNearby}
                   disabled={!canNextNearby}
-                  aria-label="Next closest"
-                  title="Next closest"
+                  aria-label="Next closest — tap anywhere on the right"
+                  title="Next closest — tap right side"
                 >
                   <span className="land-viewer-nearby-next-arrow" aria-hidden>
                     →
