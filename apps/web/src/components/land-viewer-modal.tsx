@@ -1326,7 +1326,7 @@ export function LandViewerModal({
                         d="M9 2.5 3.5 6 9 9.5M3.5 6H12.8"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="1.1"
+                        strokeWidth="1.2"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />
@@ -1350,7 +1350,7 @@ export function LandViewerModal({
                         d="M7 2.5 12.5 6 7 9.5M12.5 6H3.2"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="1.1"
+                        strokeWidth="1.2"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />
