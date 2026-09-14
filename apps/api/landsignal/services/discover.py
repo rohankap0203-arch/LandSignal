@@ -542,7 +542,8 @@ async def discover_opportunities(
     wave_size = 8
     # Hard cap per state so a dead ArcGIS endpoint cannot stall the nationwide walk.
     # Deepen passes need enough time for statewide vacant GIS pages (~2–3k/state).
-    state_wall_clock_s = 320.0
+    # ME/OH statewide parcels are heavy polygons — 320s was wall-clocking them to 0 imports.
+    state_wall_clock_s = 480.0
     log.info(
         "discover_coverage_queue",
         states=len(state_queue),

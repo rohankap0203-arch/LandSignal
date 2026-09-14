@@ -1247,9 +1247,9 @@ SOURCES: list[ArcgisMarketSource] = [
         "ME",
         _norm_me_organized,
         # TYPE=PARCEL + Shape__Area≈1ac in Web Mercator m²; acreage rechecked from geometry.
+        # Offset paging (no OID shards) — full 800k shard fan-out wall-clocked ME deepen.
         where="TYPE='PARCEL' AND Shape__Area>=4047",
-        shard=True,
-        objectid_max=800_000,
+        shard=False,
         page_size=1000,
     ),
     _src(
@@ -1258,9 +1258,9 @@ SOURCES: list[ArcgisMarketSource] = [
         "https://gis.ohiodnr.gov/arcgis/rest/services/OIT_Services/odnr_landbase/MapServer/4/query",
         "OH",
         _norm_oh_odnr,
+        # Offset paging — 3M OID shards + polygons exceeded the 320s state wall clock.
         where="ASSR_ACRES>=5 AND ASSR_ACRES<=2500",
-        shard=True,
-        objectid_max=3_000_000,
+        shard=False,
         page_size=1000,
         out_fields="OBJECTID,OWNER1,OWNER2,PIN,COUNTY,STATEWIDE_PIN,ASSR_ACRES,CALC_ACRES",
     ),
@@ -1270,9 +1270,9 @@ SOURCES: list[ArcgisMarketSource] = [
         "https://services2.arcgis.com/2XE514jeVQMWNKHX/arcgis/rest/services/Parcels/FeatureServer/0/query",
         "KS",
         _norm_ks_shawnee,
+        # Layer OID field is FID (not OBJECTID) — OID shards 400; use offset pages.
         where="LBCSFUNCTI LIKE '9%' AND ACRES>=1 AND ACRES<=2500",
-        shard=True,
-        objectid_max=200_000,
+        shard=False,
         page_size=1000,
     ),
     _src(
