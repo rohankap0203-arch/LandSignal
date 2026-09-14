@@ -215,6 +215,9 @@ def listing_has_structure(listing: Any, parcel: Any | None = None) -> bool:
     raw = getattr(listing, "raw", None)
     if not isinstance(raw, dict):
         raw = {}
+    # Discover stamps this — trust it on the radar hot path.
+    if "has_structure" in raw:
+        return bool(raw.get("has_structure"))
     addr = getattr(parcel, "address", None) if parcel is not None else None
     if not addr:
         addr = raw.get("address") or raw.get("Address")

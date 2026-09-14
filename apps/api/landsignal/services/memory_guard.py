@@ -20,8 +20,9 @@ import structlog
 log = structlog.get_logger()
 
 # Leave headroom for Next.js (~0.5–1Gi), the agent runtime, and OS page cache.
-_DEFAULT_HARD_RSS_MB = 7_500
-_DEFAULT_SOFT_RSS_MB = 6_000
+# Keep in step with settings.hard_rss_mb / soft_rss_mb so ~500k inventory can grow.
+_DEFAULT_HARD_RSS_MB = 10_500
+_DEFAULT_SOFT_RSS_MB = 9_000
 _DEFAULT_MIN_AVAILABLE_MB = 1_200
 
 

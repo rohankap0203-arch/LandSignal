@@ -73,7 +73,7 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
   return NextResponse.json(
     {
       detail:
-        "LandSignal API on port 8000 is not responding. Hard-refresh the port-3000 preview after the API restarts, then try Show matches again." +
+        "LandSignal API on port 8000 was busy or unreachable (often while inventory is refreshing). Wait a few seconds, hard-refresh the port-3000 preview, then try Show matches again." +
         (cause ? ` (${cause})` : ""),
     },
     { status: 503 },

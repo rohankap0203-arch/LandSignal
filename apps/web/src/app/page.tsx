@@ -13,7 +13,8 @@ import {
   type SearchFilters,
   type SearchMeta,
 } from "@/lib/api";
-import { describeHardFilters, enforceHardFilters } from "@/lib/hard-filters";
+import { describeHardFilters, enforceHardFilters, explainEmptySearch, type EmptySearchExplanation } from "@/lib/hard-filters";
+import { formatListingsLabel } from "@/lib/listings-label";
 import { SEARCH_META_FALLBACK } from "@/lib/search-meta-fallback";
 
 type PriceUnit = "K" | "M";
@@ -84,6 +85,10 @@ type StateListingRow = { code: string; name: string; count: number };
 
 function stateListingRows(meta: SearchMeta | null | undefined): StateListingRow[] {
   const byState = meta?.inventory_by_state || {};
+  // Only list states that actually have inventory — never paint the full catalog as 0s.
+  const liveCodes = Object.keys(byState).filter((code) => Number(byState[code]) > 0);
+  if (!liveCodes.length) return [];
+
   const nameByCode = new Map<string, string>();
   for (const label of meta?.states || []) {
     if (!label || label === "Any") continue;
@@ -93,18 +98,22 @@ function stateListingRows(meta: SearchMeta | null | undefined): StateListingRow[
       : label;
     if (code && code !== "Any") nameByCode.set(code, name || code);
   }
-  const codes = (meta?.state_codes || [])
-    .map((c) => String(c || "").toUpperCase())
-    .filter((c) => c && c !== "ANY");
-  const ordered = codes.length
-    ? codes
-    : Object.keys(byState).sort((a, b) => a.localeCompare(b));
+
+  // Prefer catalog order when available, but only for states with live listings.
+  const catalog = (meta?.state_codes || [])
+    .map((c) => stateCode(String(c || "")))
+    .filter((c) => c && c !== "Any");
+  const ordered = catalog.length
+    ? catalog.filter((c) => liveCodes.includes(c))
+    : liveCodes.sort((a, b) => a.localeCompare(b));
+
   return ordered
     .map((code) => ({
       code,
       name: nameByCode.get(code) || code,
       count: Number(byState[code] || 0),
     }))
+    .filter((row) => row.count > 0)
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -179,6 +188,7 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [emptyExplanation, setEmptyExplanation] = useState<EmptySearchExplanation | null>(null);
   const [inventoryBreakdownOpen, setInventoryBreakdownOpen] = useState(false);
   const inventoryBreakdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -286,9 +296,8 @@ export default function SearchPage() {
         unpriced_mode: "include",
         include_unpriced: true,
         sort: f.sort,
-        // Prefer returning real land: server widens soft knobs only when exact set is empty.
-        // State stays hard; strategy/hold never hide rows.
-        broaden: true,
+        // Strict mode: every selected filter must match. Empty set stays empty.
+        broaden: false,
       };
     },
     [meta],
@@ -322,6 +331,7 @@ export default function SearchPage() {
       setError(null);
       setHasSearched(true);
       setRows([]);
+      setEmptyExplanation(null);
       // Step 1: on click, scroll so Used-by logos are on screen while Surveying matches loads.
       requestAnimationFrame(() => {
         scrollToUsedByStrip("smooth");
@@ -333,9 +343,11 @@ export default function SearchPage() {
         if (!Array.isArray(data)) {
           throw new Error("Search returned an unexpected response. Try Show matches again.");
         }
-        // Client hard gate for state / region / acres / price — strategy & hold never drop rows.
+        // Client hard gate for state / region / acres / price — drop anything outside the band.
         const { kept, dropped } = enforceHardFilters(data, filters);
         setRows(kept);
+        // Stop the Surveying spinner as soon as matches arrive — meta refresh is secondary.
+        setLoading(false);
         const metaNow = await landsignalApi.searchMeta().catch(() => null);
         if (metaNow) {
           setMeta({
@@ -346,21 +358,36 @@ export default function SearchPage() {
         }
         const total = metaNow?.inventory_count ?? kept.length;
         const filterLabel = describeHardFilters(filters);
-        setStatus(
-          kept.length
-            ? `Filters: ${filterLabel} · showing ${kept.length.toLocaleString()} matches` +
-                (dropped ? ` · ${dropped} out-of-band dropped` : "") +
-                ` · ${total.toLocaleString()} live parcels indexed`
-            : `No parcels match ${filterLabel}. Widen price/acres/state, or Reset to Any, then Show matches again.`,
-        );
+        if (kept.length) {
+          setEmptyExplanation(null);
+          setStatus(
+            `Filters: ${filterLabel} · showing ${kept.length.toLocaleString()} matches` +
+              (dropped ? ` · ${dropped} out-of-band dropped` : "") +
+              ` · ${total.toLocaleString()} live parcels indexed`,
+          );
+        } else {
+          const why = explainEmptySearch({
+            filters,
+            rawRows: data,
+            keptCount: kept.length,
+            inventoryCount: metaNow?.inventory_count ?? meta.inventory_count ?? null,
+            inventoryByState: metaNow?.inventory_by_state ?? meta.inventory_by_state ?? null,
+          });
+          setEmptyExplanation(why);
+          setStatus(
+            why.conflict
+              ? `${why.conflict}: ${why.headline}`
+              : why.headline || `No match for ${filterLabel}`,
+          );
+        }
       } catch (e) {
         const raw = e instanceof Error ? e.message : "Search failed";
-        const friendly = /not reachable on port 8000|could not reach the LandSignal API|ECONNREFUSED|fetch failed/i.test(
+        const friendly = /busy|unreachable|catching up with live inventory|ECONNREFUSED|fetch failed|not reachable|not responding/i.test(
           raw,
         )
-          ? "LandSignal API is not reachable. Open the Cursor web preview on port 3000 with the API on 8000, then try Show matches again."
+          ? "Search is catching up with live inventory. Tap Show matches again in a moment."
           : /Failed to fetch|NetworkError|Load failed/i.test(raw)
-            ? "Search failed to load results (network). Hard-refresh the port-3000 preview, then try Show matches again."
+            ? "Search failed to load results (network). Tap Show matches again."
             : /Internal Server Error/i.test(raw)
               ? "Search hit a server error. Tap Show matches again — if it keeps failing, click Refresh live inventory first."
               : raw.length > 280
@@ -368,6 +395,7 @@ export default function SearchPage() {
                 : raw;
         setError(friendly);
         setStatus(null);
+        setEmptyExplanation(null);
       } finally {
         setLoading(false);
       }
@@ -413,23 +441,49 @@ export default function SearchPage() {
 
     const applyMeta = (live: SearchMeta) => {
       if (cancelled || !live) return;
-      setMeta({
-        ...SEARCH_META_FALLBACK,
-        ...live,
-        inventory_count: live.inventory_count ?? 0,
-        states: live.states?.length ? live.states : SEARCH_META_FALLBACK.states,
-        strategies: live.strategies?.length ? live.strategies : SEARCH_META_FALLBACK.strategies,
-        price_presets: live.price_presets?.length
-          ? live.price_presets
-          : SEARCH_META_FALLBACK.price_presets,
-        acre_presets: live.acre_presets?.length
-          ? live.acre_presets
-          : SEARCH_META_FALLBACK.acre_presets,
-        hold_years: live.hold_years?.length ? live.hold_years : SEARCH_META_FALLBACK.hold_years,
+      setMeta((prev) => {
+        const nextCount = live.inventory_count ?? prev.inventory_count ?? 0;
+        return {
+          ...SEARCH_META_FALLBACK,
+          ...prev,
+          ...live,
+          // Never flash the listing count back to 0 during a transient meta miss.
+          inventory_count: nextCount,
+          inventory_by_state:
+            live.inventory_by_state && Object.keys(live.inventory_by_state).length
+              ? live.inventory_by_state
+              : prev.inventory_by_state,
+          states: live.states?.length ? live.states : prev.states?.length ? prev.states : SEARCH_META_FALLBACK.states,
+          strategies: live.strategies?.length
+            ? live.strategies
+            : prev.strategies?.length
+              ? prev.strategies
+              : SEARCH_META_FALLBACK.strategies,
+          price_presets: live.price_presets?.length
+            ? live.price_presets
+            : prev.price_presets?.length
+              ? prev.price_presets
+              : SEARCH_META_FALLBACK.price_presets,
+          acre_presets: live.acre_presets?.length
+            ? live.acre_presets
+            : prev.acre_presets?.length
+              ? prev.acre_presets
+              : SEARCH_META_FALLBACK.acre_presets,
+          hold_years: live.hold_years?.length
+            ? live.hold_years
+            : prev.hold_years?.length
+              ? prev.hold_years
+              : SEARCH_META_FALLBACK.hold_years,
+        };
       });
       const count = live.inventory_count ?? 0;
-      // Keep deepening toward the ~200k nationwide floor in the background.
-      if (!discoverKicked && count < 200_000) {
+      // Only kick discover when the book is truly empty — never while a large load is mid-restore.
+      if (!discoverKicked && count > 0 && count < 50_000) {
+        discoverKicked = true;
+        void landsignalApi.discover(750000, 0.1, false, undefined, true).catch(() => {
+          discoverKicked = false;
+        });
+      } else if (!discoverKicked && count === 0) {
         discoverKicked = true;
         void landsignalApi.discover(750000, 0.1, false, undefined, true).catch(() => {
           discoverKicked = false;
@@ -442,10 +496,7 @@ export default function SearchPage() {
         .searchMeta()
         .then(applyMeta)
         .catch(() => {
-          setMeta((prev) => ({
-            ...prev,
-            inventory_count: prev.inventory_count ?? 0,
-          }));
+          // Keep the last good listing count visible.
         });
 
     void refresh();
@@ -453,9 +504,9 @@ export default function SearchPage() {
     tick = window.setInterval(() => {
       if (cancelled) return;
       n += 1;
-      // Fast for ~40s, then every 12s
-      if (n <= 25 || n % 8 === 0) void refresh();
-    }, 1500);
+      // Fast for ~30s, then every 15s — avoid hammering meta during discover.
+      if (n <= 10 || n % 5 === 0) void refresh();
+    }, 3000);
 
     return () => {
       cancelled = true;
@@ -812,42 +863,50 @@ export default function SearchPage() {
                 >
                   {loading ? "Searching…" : "Show matches"}
                 </button>
-                {typeof meta?.inventory_count === "number" && meta.inventory_count > 0 ? (
-                  <div className="filter-inventory-breakdown" ref={inventoryBreakdownRef}>
-                    <button
-                      type="button"
-                      data-testid="inventory-by-state-trigger"
-                      className="filter-inventory-note filter-inventory-note-btn"
-                      aria-live="polite"
-                      aria-expanded={inventoryBreakdownOpen}
-                      aria-controls="inventory-by-state-popup"
-                      aria-haspopup="dialog"
-                      title="Listings by state"
-                      onClick={() => setInventoryBreakdownOpen((open) => !open)}
+                <div className="filter-inventory-breakdown" ref={inventoryBreakdownRef}>
+                  <button
+                    type="button"
+                    data-testid="inventory-by-state-trigger"
+                    className="filter-inventory-note filter-inventory-note-btn"
+                    aria-live="polite"
+                    aria-expanded={inventoryBreakdownOpen}
+                    aria-controls="inventory-by-state-popup"
+                    aria-haspopup="dialog"
+                    title={
+                      inventoryStateRows.length
+                        ? "Listings by state"
+                        : "Live inventory is still loading"
+                    }
+                    disabled={!inventoryStateRows.length && !(meta?.inventory_count)}
+                    onClick={() => {
+                      if (!inventoryStateRows.length) return;
+                      setInventoryBreakdownOpen((open) => !open);
+                    }}
+                  >
+                    <strong>{formatListingsLabel(meta?.inventory_count)}</strong> listings
+                  </button>
+                  {inventoryBreakdownOpen && inventoryStateRows.length > 0 ? (
+                    <div
+                      id="inventory-by-state-popup"
+                      className="filter-inventory-popup"
+                      role="dialog"
+                      aria-label="Listings by state"
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onPointerDown={(event) => event.stopPropagation()}
                     >
-                      <strong>{meta.inventory_count.toLocaleString("en-US")}</strong> listings
-                    </button>
-                    {inventoryBreakdownOpen ? (
-                      <div
-                        id="inventory-by-state-popup"
-                        className="filter-inventory-popup"
-                        role="dialog"
-                        aria-label="Listings by state"
-                      >
-                        <ul className="filter-inventory-popup-list">
-                          {inventoryStateRows.map((row) => (
-                            <li key={row.code} className="filter-inventory-popup-row">
-                              <span className="filter-inventory-popup-state">{row.name}</span>
-                              <span className="filter-inventory-popup-count">
-                                {row.count.toLocaleString("en-US")}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
+                      <ul className="filter-inventory-popup-list">
+                        {inventoryStateRows.map((row) => (
+                          <li key={row.code} className="filter-inventory-popup-row">
+                            <span className="filter-inventory-popup-state">{row.name}</span>
+                            <span className="filter-inventory-popup-count">
+                              {row.count.toLocaleString("en-US")}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
@@ -908,43 +967,28 @@ export default function SearchPage() {
         </div>
       )}
 
-      {!loading && hasSearched && !rows.length && (
-        <div className="panel empty-state">
-          <div className="display text-2xl text-[var(--ink)]">No exact matches found</div>
+      {!loading && hasSearched && !rows.length ? (
+        <div className="panel empty-state" role="status" aria-live="polite">
+          <div className="display text-2xl text-[var(--ink)]">No matches for these filters</div>
           <p className="mx-auto mt-2 max-w-lg">
-            {(() => {
-              const picked = selectedStates(form.states);
-              const live = new Set(inventoryStates || []);
-              const missing = picked.filter((c) => live.size > 0 && !live.has(c));
-              if ((meta?.inventory_count ?? 0) === 0) {
-                return (
-                  <>
-                    Live inventory is empty in this session. Click{" "}
-                    <strong>Refresh live inventory</strong>, wait for the parcel count to climb, then
-                    Show matches again. Hard filters were not changed.
-                  </>
-                );
-              }
-              if (missing.length) {
-                return (
-                  <>
-                    No live inventory indexed for{" "}
-                    <strong>{missing.join(", ")}</strong> — we never fill with other states. Reset to
-                    Any, pick a covered state, or refresh inventory.
-                  </>
-                );
-              }
-              return (
-                <>
-                  Nothing satisfies these hard filters (state, region, price, acres). Suggestions you
-                  can choose: expand acreage slightly, raise max price, or search a neighboring
-                  county/region. LandSignal will not silently weaken your filters.
-                </>
-              );
-            })()}
+            Adjust filters, then tap Show matches again.
           </p>
+          {emptyExplanation ? (
+            <div className="empty-filter-reason empty-filter-reason--in-alert">
+              <h3 className="empty-filter-reason-headline">{emptyExplanation.headline}</h3>
+              {emptyExplanation.summary ? (
+                <p className="empty-filter-reason-summary">{emptyExplanation.summary}</p>
+              ) : null}
+              {emptyExplanation.conflict ? (
+                <div className="empty-filter-reason-conflict">
+                  <span className="empty-filter-reason-conflict-label">Disconnect</span>
+                  <span className="empty-filter-reason-conflict-value">{emptyExplanation.conflict}</span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
-      )}
+      ) : null}
 
       {!loading && (
         <div className="results-grid">

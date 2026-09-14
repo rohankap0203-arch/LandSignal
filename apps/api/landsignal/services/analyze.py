@@ -92,6 +92,60 @@ def _known_ratio(values: list) -> float:
     return sum(1 for v in values if v is not None) / len(values)
 
 
+def screening_estimate_usd(parcel, listing=None) -> float | None:
+    """Fast dollar screen so list cards always show a real estimate when possible.
+
+    Priority (still a screen — full analyze / ATTOM replaces on parcel open):
+    1. Assessor land (or total) mark from the listing raw CAD blob
+    2. Acres × state $/ac prior (small tax-sale lots use a $/sqft residual)
+    """
+    provider = getattr(listing, "provider_id", None) if listing is not None else None
+    raw = getattr(listing, "raw", None) if listing is not None else None
+    if isinstance(raw, dict):
+        try:
+            from landsignal.services.assessed_price import (
+                extract_assessed_land_usd,
+                extract_assessed_total_usd,
+                raw_has_improvement_value,
+            )
+
+            land_av = extract_assessed_land_usd(raw)
+            total_av = extract_assessed_total_usd(raw)
+            improved = raw_has_improvement_value(raw) or bool(raw.get("has_structure"))
+            if improved and total_av:
+                return float(round(total_av, 0))
+            if land_av:
+                return float(round(land_av, 0))
+            if total_av and not improved:
+                return float(round(total_av, 0))
+        except Exception:
+            pass
+
+    acres = getattr(parcel, "acreage", None)
+    try:
+        acres_f = float(acres) if acres is not None else None
+    except (TypeError, ValueError):
+        acres_f = None
+    if not acres_f or acres_f <= 0:
+        return None
+    state = (getattr(parcel, "state", None) or "").upper()
+    if acres_f < 2.0 and provider in ("public_tax_sale", "public_surplus"):
+        psf = 4.0 if state in ("CA", "FL", "NY", "WA", "NJ") else 2.5 if state in ("TX", "IL", "GA", "NC") else 2.0
+        base = acres_f * 43560 * psf
+        ask = getattr(listing, "asking_price_usd", None) if listing is not None else None
+        try:
+            ask_f = float(ask) if ask is not None else None
+        except (TypeError, ValueError):
+            ask_f = None
+        if ask_f and ask_f > 0:
+            base = max(base, ask_f * 2.5)
+        return float(round(base, 0))
+    ppa = STATE_PPA_PRIOR.get(state, 3000)
+    if provider == "blm_lpad" and state in ("AZ", "NV", "NM", "UT"):
+        ppa = min(ppa, 1500)
+    return float(round(ppa * acres_f, 0))
+
+
 def _estimate_value(parcel, soil_n, flood_n, wet_n, growth_n, listing=None) -> dict:
     state = (parcel.state or "").upper()
     acres = parcel.acreage or 0
