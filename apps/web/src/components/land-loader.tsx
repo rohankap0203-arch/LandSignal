@@ -69,7 +69,6 @@ export function LandLoader({
             </span>
           ))}
         </div>
-        <div className="land-scan" />
       </div>
       <div className="land-loader-copy">
         <div className="display text-xl font-semibold text-[var(--ink)]">{label}</div>

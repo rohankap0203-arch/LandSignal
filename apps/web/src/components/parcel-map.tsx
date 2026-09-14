@@ -17,6 +17,28 @@ function FullscreenIcon() {
   );
 }
 
+function ensureLeafletCss() {
+  if (typeof document === "undefined") return;
+  if (document.getElementById("leaflet-css")) return;
+  const link = document.createElement("link");
+  link.id = "leaflet-css";
+  link.rel = "stylesheet";
+  link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+  link.crossOrigin = "";
+  document.head.appendChild(link);
+}
+
+function polygonSignature(polygon?: number[][][] | null): string {
+  if (!polygon?.[0]?.length) return "";
+  const ring = polygon[0];
+  // Compact signature so identical geometry does not remount the map.
+  const n = ring.length;
+  const a = ring[0];
+  const b = ring[Math.floor(n / 2)] || a;
+  const c = ring[n - 1] || a;
+  return `${n}:${a?.[0]?.toFixed?.(4)},${a?.[1]?.toFixed?.(4)}:${b?.[0]?.toFixed?.(4)},${b?.[1]?.toFixed?.(4)}:${c?.[0]?.toFixed?.(4)},${c?.[1]?.toFixed?.(4)}`;
+}
+
 type Props = {
   latitude?: number | null;
   longitude?: number | null;
@@ -34,6 +56,13 @@ type Props = {
   onExpand?: () => void;
 };
 
+type MapBundle = {
+  map: import("leaflet").Map;
+  polygonLayer?: import("leaflet").Polygon;
+  marker?: import("leaflet").Marker;
+  imagery?: import("leaflet").TileLayer;
+};
+
 export function ParcelMap({
   latitude,
   longitude,
@@ -47,15 +76,19 @@ export function ParcelMap({
   onExpand,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<import("leaflet").Map | null>(null);
+  const bundleRef = useRef<MapBundle | null>(null);
+  const titleRef = useRef(title);
+  titleRef.current = title;
+
+  const geoKey = `${latitude ?? ""}:${longitude ?? ""}:${polygonSignature(polygon)}:${compact ? 1 : 0}:${scrollWheelZoom ? 1 : 0}`;
 
   useEffect(() => {
     if (!ref.current) return;
     let cancelled = false;
-    let map: import("leaflet").Map | null = null;
     const el = ref.current;
 
     async function mount() {
+      ensureLeafletCss();
       const L = await import("leaflet");
       // Fix default marker icons in bundlers
       // @ts-expect-error leaflet image paths
@@ -67,11 +100,27 @@ export function ParcelMap({
       });
 
       if (cancelled || !ref.current) return;
+
+      // Reuse an existing map instance when geometry is unchanged — avoids flicker.
+      if (bundleRef.current?.map && ref.current.querySelector(".leaflet-container")) {
+        return;
+      }
+
+      // Tear down prior instance cleanly if the container was reset.
+      if (bundleRef.current?.map) {
+        try {
+          bundleRef.current.map.remove();
+        } catch {
+          /* ignore */
+        }
+        bundleRef.current = null;
+      }
       ref.current.innerHTML = "";
+
       const pin = resolveLandPin(latitude, longitude, polygon);
       const center: [number, number] = pin || [39.5, -98.35];
 
-      map = L.map(ref.current, {
+      const map = L.map(ref.current, {
         scrollWheelZoom,
         dragging: true,
         doubleClickZoom: true,
@@ -79,73 +128,113 @@ export function ParcelMap({
         keyboard: true,
         zoomControl: true,
         attributionControl: false,
+        fadeAnimation: false,
+        zoomAnimation: false,
+        markerZoomAnimation: false,
       }).setView(center, pin != null ? (compact ? 15 : 11) : 4);
       if (cancelled) {
         map.remove();
-        map = null;
         return;
       }
-      mapRef.current = map;
       map.zoomControl.setPosition("topleft");
 
+      // Streets first (stable paint). Imagery fades in after the base tiles settle
+      // so the report map does not flash between two competing basemaps.
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "",
         maxZoom: 19,
       }).addTo(map);
-      L.tileLayer(
+
+      const imagery = L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         {
           attribution: "",
-          opacity: 0.85,
+          opacity: 0,
           maxZoom: 19,
         },
-      ).addTo(map);
+      );
+      // Defer imagery so first paint is a single layer (no dual-tile flicker).
+      window.setTimeout(() => {
+        if (cancelled || !bundleRef.current || bundleRef.current.map !== map) return;
+        imagery.addTo(map);
+        imagery.setOpacity(0.85);
+      }, 220);
+
+      let polygonLayer: import("leaflet").Polygon | undefined;
+      let marker: import("leaflet").Marker | undefined;
 
       if (polygon?.[0]?.length) {
         const latlngs = polygon[0].map(([lon, lat]) => [lat, lon] as [number, number]);
-        const layer = L.polygon(latlngs, {
+        polygonLayer = L.polygon(latlngs, {
           color: "#f2c14e",
           weight: 3.25,
           opacity: 1,
           fillColor: "#f2c14e",
           fillOpacity: 0.2,
         }).addTo(map);
-        map.fitBounds(layer.getBounds(), {
+        map.fitBounds(polygonLayer.getBounds(), {
           padding: compact ? [10, 10] : [24, 24],
           maxZoom: compact ? 17 : 18,
         });
-        // Always drop an on-land pin so lakeshore parcels don't look empty / off-parcel.
-        if (pin) L.marker(pin).addTo(map).bindPopup(title || "Parcel");
-        if (title) layer.bindPopup(title);
+        if (pin) {
+          marker = L.marker(pin).addTo(map);
+          if (titleRef.current) marker.bindPopup(titleRef.current);
+        }
+        if (titleRef.current) polygonLayer.bindPopup(titleRef.current);
       } else if (pin) {
-        L.marker(pin).addTo(map).bindPopup(title || "Parcel");
+        marker = L.marker(pin).addTo(map);
+        if (titleRef.current) marker.bindPopup(titleRef.current);
       }
 
-      const bump = () => map?.invalidateSize({ animate: false });
+      bundleRef.current = { map, polygonLayer, marker, imagery };
+
+      const bump = () => {
+        try {
+          map.invalidateSize({ animate: false });
+        } catch {
+          /* ignore */
+        }
+      };
       requestAnimationFrame(bump);
-      window.setTimeout(bump, 100);
-      window.setTimeout(bump, 300);
+      window.setTimeout(bump, 160);
       el.addEventListener("pointerenter", bump);
       (map as unknown as { __onEnter?: () => void }).__onEnter = bump;
     }
 
-    mount();
+    void mount();
     return () => {
       cancelled = true;
-      if (map) {
-        const bump = (map as unknown as { __onEnter?: () => void }).__onEnter;
+      const bundle = bundleRef.current;
+      if (bundle?.map) {
+        const bump = (bundle.map as unknown as { __onEnter?: () => void }).__onEnter;
         if (bump) el.removeEventListener("pointerenter", bump);
-        map.remove();
+        try {
+          bundle.map.remove();
+        } catch {
+          /* ignore */
+        }
       }
-      mapRef.current = null;
+      bundleRef.current = null;
     };
-  }, [latitude, longitude, polygon, title, compact, scrollWheelZoom]);
+    // Remount only when geo / map options change — not on title churn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geoKey]);
+
+  // Update popups when title changes without remounting the map.
+  useEffect(() => {
+    const bundle = bundleRef.current;
+    if (!bundle) return;
+    if (title) {
+      bundle.marker?.bindPopup(title);
+      bundle.polygonLayer?.bindPopup(title);
+    }
+  }, [title]);
 
   useEffect(() => {
-    const map = mapRef.current;
+    const map = bundleRef.current?.map;
     if (!map) return;
     map.invalidateSize({ animate: false });
-    const t = window.setTimeout(() => map.invalidateSize({ animate: false }), 50);
+    const t = window.setTimeout(() => map.invalidateSize({ animate: false }), 80);
     return () => window.clearTimeout(t);
   }, [height, layoutKey]);
 
@@ -164,12 +253,14 @@ export function ParcelMap({
     <div
       className={`parcel-map-shell overflow-hidden border border-[var(--border)] ${compact ? "is-compact" : ""} ${className}`.trim()}
     >
-      <link
-        rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        crossOrigin=""
+      <div
+        ref={ref}
+        style={{
+          height,
+          width: "100%",
+          background: "color-mix(in srgb, var(--ink) 8%, var(--bg-elevated))",
+        }}
       />
-      <div ref={ref} style={{ height, width: "100%" }} />
       {onExpand && !compact ? (
         <button
           type="button"

@@ -412,7 +412,18 @@ export function ReturnVisual({
   const jumpToScreens = useCallback(() => {
     const el = screensRef.current;
     if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Center the screens panel in the usable viewport (below sticky header).
+    // Manual scroll avoids scrollIntoView overshooting tall panels.
+    const header = document.querySelector(".shell-header") as HTMLElement | null;
+    const headerH = header?.getBoundingClientRect().height ?? 0;
+    const rect = el.getBoundingClientRect();
+    const avail = Math.max(120, window.innerHeight - headerH);
+    const targetCenterY = headerH + avail / 2;
+    const elCenterY = rect.top + rect.height / 2;
+    const delta = elCenterY - targetCenterY;
+    if (Math.abs(delta) > 6) {
+      window.scrollBy({ top: delta, behavior: "smooth" });
+    }
     el.classList.remove("is-flash");
     // Force reflow so the flash animation can replay.
     void el.offsetWidth;

@@ -17,6 +17,7 @@ import { describeHardFilters, enforceHardFilters, explainEmptySearch, type Empty
 import { formatListingsLabel } from "@/lib/listings-label";
 import { readCachedSearchMeta, writeCachedSearchMeta } from "@/lib/search-meta-cache";
 import { SEARCH_META_FALLBACK } from "@/lib/search-meta-fallback";
+import { readSearchSession, writeSearchSession } from "@/lib/search-session";
 
 type PriceUnit = "K" | "M";
 
@@ -200,6 +201,27 @@ export default function SearchPage() {
     const cached = readCachedSearchMeta();
     if (cached) setMeta(cached);
   }, []);
+
+  // Restore last Show matches results when returning from an intelligence report via the logo.
+  const skipSearchScrollRef = useRef(false);
+  useLayoutEffect(() => {
+    const snap = readSearchSession();
+    if (!snap) return;
+    const formSnap = snap.form as FormState | null;
+    if (!formSnap || typeof formSnap !== "object") return;
+    skipSearchScrollRef.current = true;
+    setForm({ ...DEFAULT_FORM, ...formSnap });
+    setRows(snap.rows);
+    setHasSearched(true);
+    setStatus(snap.status);
+    const y = Number(snap.scrollY);
+    if (Number.isFinite(y) && y > 0) {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: y, behavior: "auto" });
+      });
+    }
+  }, []);
+
 
   const inventoryStateRows = useMemo(() => stateListingRows(meta), [meta]);
 
@@ -414,11 +436,26 @@ export default function SearchPage() {
     [filtersFromForm, form, scrollToUsedByStrip],
   );
 
+  // Keep search results so the LandSignal logo can restore them after an intel report.
+  useEffect(() => {
+    if (!hasSearched || loading) return;
+    writeSearchSession({
+      form,
+      rows,
+      hasSearched: true,
+      status,
+    });
+  }, [hasSearched, loading, form, rows, status]);
+
   // Step 2: once per finished search, bring "Scouted opportunities" under the sticky header.
   // Do not re-run on later rows.length noise — that fought users scrolling the filters/results.
   const searchScrollGen = useRef(0);
   useEffect(() => {
     if (!hasSearched || loading) return;
+    if (skipSearchScrollRef.current) {
+      skipSearchScrollRef.current = false;
+      return;
+    }
     const gen = ++searchScrollGen.current;
     const t1 = window.setTimeout(() => {
       if (searchScrollGen.current !== gen) return;
