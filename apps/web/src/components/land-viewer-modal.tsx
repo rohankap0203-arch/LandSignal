@@ -1323,10 +1323,10 @@ export function LandViewerModal({
                   <span className="land-viewer-nearby-next-arrow" aria-hidden>
                     <svg viewBox="0 0 16 12" focusable="false">
                       <path
-                        d="M9 2.2 3.2 6 9 9.8M3.2 6H13.2"
+                        d="M9 2.5 3.5 6 9 9.5M3.5 6H12.8"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="1.25"
+                        strokeWidth="1.1"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />
@@ -1347,10 +1347,10 @@ export function LandViewerModal({
                   <span className="land-viewer-nearby-next-arrow" aria-hidden>
                     <svg viewBox="0 0 16 12" focusable="false">
                       <path
-                        d="M7 2.2 12.8 6 7 9.8M12.8 6H2.8"
+                        d="M7 2.5 12.5 6 7 9.5M12.5 6H3.2"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="1.25"
+                        strokeWidth="1.1"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />

@@ -8443,11 +8443,11 @@ html.land-viewer-open body {
 
 .land-viewer-nearby-next-arrow {
   display: block;
-  width: 0.95rem;
-  height: 0.55rem;
+  width: 0.78rem;
+  height: 0.48rem;
   flex: 0 0 auto;
   color: inherit;
-  opacity: 0.85;
+  opacity: 0.72;
   pointer-events: none;
 }
 
