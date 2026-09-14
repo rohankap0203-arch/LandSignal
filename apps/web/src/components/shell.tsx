@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useState } from "react";
 import { AccountMenu } from "@/components/account-menu";
 import { MapPinMark } from "@/components/map-pin-mark";
@@ -19,6 +19,7 @@ function navActive(pathname: string, href: string) {
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [menuOpen, setMenuOpen] = useState(false);
   const menuId = useId();
@@ -31,6 +32,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setMenuOpen(false);
   }, [pathname]);
+
+  // Prefetch primary routes so Search ↔ Land Alerts feels instant on repeat visits.
+  useEffect(() => {
+    for (const item of NAV) {
+      try {
+        router.prefetch(item.href);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [router]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -53,6 +65,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <div className="shell-header-left">
             <Link
               href="/"
+              prefetch
               className="shell-brand"
               aria-label="LandSignal home"
               title="Back to home"
@@ -71,6 +84,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch
                     className="rounded-full px-3 py-1.5 text-sm"
                     style={{
                       color: active ? "var(--brand)" : "var(--muted)",
@@ -114,6 +128,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch
                     className="shell-menu-link"
                     data-active={active ? "true" : "false"}
                     onClick={() => setMenuOpen(false)}

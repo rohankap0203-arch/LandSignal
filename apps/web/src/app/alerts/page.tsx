@@ -2,13 +2,19 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
 import { AcquireRail } from "@/components/acquire-rail";
 import { HelpTip } from "@/components/filter-field";
 import { LandAlertsLoader } from "@/components/land-alerts-loader";
 import { LandViewerModal, ViewLandButton } from "@/components/land-viewer-modal";
 import { LiveMagnifier } from "@/components/live-magnifier";
 import { landsignalApi, type LandAlertMatchCard } from "@/lib/api";
+import {
+  readCachedLandAlertMatches,
+  readCachedLandAlertProfile,
+  writeCachedLandAlertMatches,
+  writeCachedLandAlertProfile,
+} from "@/lib/land-alerts-cache";
 
 type PrefMode = "must" | "prefer" | "flexible";
 
@@ -576,18 +582,29 @@ export default function LandAlertsPage() {
   const [acresCustomOpen, setAcresCustomOpen] = useState(false);
   const [holdCustomOpen, setHoldCustomOpen] = useState(false);
 
+  useLayoutEffect(() => {
+    const cached = readCachedLandAlertMatches<{ matches?: LandAlertMatchCard[]; counts?: { new: number; unseen: number; viewed: number; total: number } }>();
+    if (cached?.matches?.length) setMatches(cached.matches);
+    if (cached?.counts) setCounts(cached.counts);
+  }, []);
+
   const loadMatches = useCallback(async () => {
     const data = await landsignalApi.landAlertMatches(profileId || undefined);
     setMatches(data.matches || []);
     setCounts(data.counts || { new: 0, unseen: 0, viewed: 0, total: 0 });
     setPendingSaved(new Set());
     setMarkAllActive(false);
+    writeCachedLandAlertMatches({
+      matches: data.matches || [],
+      counts: data.counts || { new: 0, unseen: 0, viewed: 0, total: 0 },
+    });
   }, [profileId]);
 
   const hydrate = useCallback(async () => {
     // Form paints immediately — hydrate prefs/matches in the background.
     try {
       const data = await landsignalApi.landAlertProfile();
+      writeCachedLandAlertProfile(data);
       if (data.has_profile && data.profile) {
         const p = data.profile;
         const prefs = (data.preferences || {}) as Record<string, unknown>;
