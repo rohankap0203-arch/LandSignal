@@ -1,7 +1,7 @@
 /**
  * Inventory caption under Show matches.
  * - No count yet → quiet em dash (not a stuck "Loading")
- * - Growing toward the nationwide book → "Nk so far" so a mid-rebuild
+ * - Growing toward the nationwide book → "N so far" so a mid-rebuild
  *   doesn't look like a broken finished inventory
  * - 500k+ → compact floor label ("500k+", "520k+", …)
  */
@@ -19,8 +19,5 @@ export function formatListingsLabel(count?: number | null): string {
     return `${Math.round(rounded / 1000)}k+`;
   }
   // Mid-rebuild / partial book: make clear this is live progress, not a cap.
-  if (n < LISTINGS_DISPLAY_FLOOR) {
-    return `${Math.round(n).toLocaleString("en-US")} so far`;
-  }
-  return Math.round(n).toLocaleString("en-US");
+  return `${Math.round(n).toLocaleString("en-US")} so far`;
 }
