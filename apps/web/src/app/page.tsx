@@ -85,6 +85,10 @@ type StateListingRow = { code: string; name: string; count: number };
 
 function stateListingRows(meta: SearchMeta | null | undefined): StateListingRow[] {
   const byState = meta?.inventory_by_state || {};
+  // Only list states that actually have inventory — never paint the full catalog as 0s.
+  const liveCodes = Object.keys(byState).filter((code) => Number(byState[code]) > 0);
+  if (!liveCodes.length) return [];
+
   const nameByCode = new Map<string, string>();
   for (const label of meta?.states || []) {
     if (!label || label === "Any") continue;
@@ -94,18 +98,22 @@ function stateListingRows(meta: SearchMeta | null | undefined): StateListingRow[
       : label;
     if (code && code !== "Any") nameByCode.set(code, name || code);
   }
-  const codes = (meta?.state_codes || [])
-    .map((c) => String(c || "").toUpperCase())
-    .filter((c) => c && c !== "ANY");
-  const ordered = codes.length
-    ? codes
-    : Object.keys(byState).sort((a, b) => a.localeCompare(b));
+
+  // Prefer catalog order when available, but only for states with live listings.
+  const catalog = (meta?.state_codes || [])
+    .map((c) => stateCode(String(c || "")))
+    .filter((c) => c && c !== "Any");
+  const ordered = catalog.length
+    ? catalog.filter((c) => liveCodes.includes(c))
+    : liveCodes.sort((a, b) => a.localeCompare(b));
+
   return ordered
     .map((code) => ({
       code,
       name: nameByCode.get(code) || code,
       count: Number(byState[code] || 0),
     }))
+    .filter((row) => row.count > 0)
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -864,8 +872,16 @@ export default function SearchPage() {
                     aria-expanded={inventoryBreakdownOpen}
                     aria-controls="inventory-by-state-popup"
                     aria-haspopup="dialog"
-                    title="Listings by state"
-                    onClick={() => setInventoryBreakdownOpen((open) => !open)}
+                    title={
+                      inventoryStateRows.length
+                        ? "Listings by state"
+                        : "Live inventory is still loading"
+                    }
+                    disabled={!inventoryStateRows.length && !(meta?.inventory_count)}
+                    onClick={() => {
+                      if (!inventoryStateRows.length) return;
+                      setInventoryBreakdownOpen((open) => !open);
+                    }}
                   >
                     <strong>{formatListingsLabel(meta?.inventory_count)}</strong> listings
                   </button>
