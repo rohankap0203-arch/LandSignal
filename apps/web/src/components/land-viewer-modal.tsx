@@ -410,6 +410,8 @@ export function LandViewerModal({
   const [nearbyHitIndex, setNearbyHitIndex] = useState(0);
   const nearbySearchGen = useRef(0);
   const nearbyHitIndexRef = useRef(0);
+  /** Closest chip tapped before Leaflet finished booting — run once mapReady. */
+  const pendingNearbyKind = useRef<NearbyKind | null>(null);
 
   const hasGeo = isValidLatLon(latitude, longitude) || Boolean(resolvedPolygon?.[0]?.length);
   const landPin = useMemo(
@@ -745,9 +747,33 @@ export function LandViewerModal({
   );
 
   const showNearby = useCallback(
-    async (kind: NearbyKind) => {
-      if (!hasGeo || !mapRef.current) return;
-      if (nearbyActive === kind) {
+    async (kind: NearbyKind, opts?: { force?: boolean }) => {
+      if (!hasGeo) return;
+
+      // First tap can land before Leaflet finishes booting — queue and stay responsive.
+      if (!mapReady || !mapRef.current || !layersRef.current.nearby) {
+        if (!opts?.force && (pendingNearbyKind.current === kind || nearbyActive === kind)) {
+          pendingNearbyKind.current = null;
+          nearbySearchGen.current += 1;
+          nearbyAbort?.abort();
+          setNearbyActive(null);
+          setNearbyHits([]);
+          setNearbyHitIndex(0);
+          nearbyHitIndexRef.current = 0;
+          setNearbyLoading(false);
+          setNearbyStatus("");
+          return;
+        }
+        pendingNearbyKind.current = kind;
+        const chip = NEARBY_CHIPS.find((c) => c.kind === kind);
+        setNearbyActive(kind);
+        setNearbyLoading(true);
+        setNearbyStatus(`Finding closest ${chip?.label ?? "feature"}…`);
+        return;
+      }
+      pendingNearbyKind.current = null;
+
+      if (!opts?.force && nearbyActive === kind) {
         nearbySearchGen.current += 1;
         nearbyAbort?.abort();
         layersRef.current.nearby?.clearLayers();
@@ -819,7 +845,15 @@ export function LandViewerModal({
       }
 
       if (gen !== nearbySearchGen.current) return;
-      if (!mapRef.current || !layersRef.current.nearby) return;
+
+      // Map may have remounted mid-fetch — keep hits and retry paint when ready.
+      if (!mapRef.current || !layersRef.current.nearby) {
+        if (hits.length) {
+          setNearbyHits(hits);
+          pendingNearbyKind.current = kind;
+        }
+        return;
+      }
 
       if (!hits.length) {
         setNearbyHits([]);
@@ -841,8 +875,16 @@ export function LandViewerModal({
         await paintNearbyHit(hits[0], 0);
       }
     },
-    [hasGeo, pinLat, pinLon, latitude, longitude, nearbyActive, paintNearbyHit, parcelId],
+    [hasGeo, mapReady, pinLat, pinLon, latitude, longitude, nearbyActive, paintNearbyHit, parcelId],
   );
+
+  // Flush Closest chip queued before the map was ready (force = do not treat as toggle-off).
+  useEffect(() => {
+    if (!open || !mapReady || !pendingNearbyKind.current) return;
+    const kind = pendingNearbyKind.current;
+    pendingNearbyKind.current = null;
+    void showNearby(kind, { force: true });
+  }, [open, mapReady, showNearby]);
 
   const showPrevNearby = useCallback(() => {
     if (nearbyHitIndex <= 0) return;
@@ -966,8 +1008,9 @@ export function LandViewerModal({
       map?.remove();
       mapRef.current = null;
     };
+    // Omit title — popup text must not remount the map (breaks first Closest tap).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, latitude, longitude, title, hasGeo, landPin?.[0], landPin?.[1]]);
+  }, [open, latitude, longitude, hasGeo, landPin?.[0], landPin?.[1]]);
 
   // Yellow land outline — paint / refresh whenever geometry resolves (and map is ready).
   useEffect(() => {
