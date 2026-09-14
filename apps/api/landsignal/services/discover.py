@@ -372,7 +372,8 @@ async def _ingest_and_score(
         # Yield so Show matches / health can run while discover is in flight.
         # Without this, CPU-heavy scoring starves the event loop and the web
         # proxy surfaces a false "API on port 8000 is not responding" error.
-        await asyncio.sleep(0.05)
+        # Yield longer so preview UI / health never stall during a big ingest wave.
+        await asyncio.sleep(0.12)
         log.info(
             "discover_batch_scored",
             scored=scored,
