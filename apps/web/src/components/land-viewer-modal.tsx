@@ -1321,13 +1321,12 @@ export function LandViewerModal({
                   title="Previous closest — tap left side"
                 >
                   <span className="land-viewer-nearby-next-arrow" aria-hidden>
-                    {/* Longer shaft grows toward the count (to the right). */}
-                    <svg viewBox="0 0 40 12" focusable="false">
+                    <svg viewBox="0 0 16 12" focusable="false">
                       <path
-                        d="M10 1.4 2.2 6 10 10.6M2.2 6H38"
+                        d="M9 2.2 3.2 6 9 9.8M3.2 6H13.2"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="1.7"
+                        strokeWidth="1.25"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />
@@ -1346,13 +1345,12 @@ export function LandViewerModal({
                   title="Next closest — tap right side"
                 >
                   <span className="land-viewer-nearby-next-arrow" aria-hidden>
-                    {/* Longer shaft grows toward the count (to the left). */}
-                    <svg viewBox="0 0 40 12" focusable="false">
+                    <svg viewBox="0 0 16 12" focusable="false">
                       <path
-                        d="M30 1.4 37.8 6 30 10.6M37.8 6H2"
+                        d="M7 2.2 12.8 6 7 9.8M12.8 6H2.8"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="1.7"
+                        strokeWidth="1.25"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />

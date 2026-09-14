@@ -8420,13 +8420,10 @@ html.land-viewer-open body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Empty space on each side is the hit target — longer shaft grows toward the count. */
-.land-viewer-nearby-nav-arrow.is-back {
-  justify-content: flex-start;
-}
-
+/* Hit target is the full half; arrow glyph is centered in that half. */
+.land-viewer-nearby-nav-arrow.is-back,
 .land-viewer-nearby-nav-arrow.is-forward {
-  justify-content: flex-end;
+  justify-content: center;
 }
 
 .land-viewer-nearby-nav-arrow:hover:not(:disabled),
@@ -8446,12 +8443,11 @@ html.land-viewer-open body {
 
 .land-viewer-nearby-next-arrow {
   display: block;
-  /* Longer shaft: back grows right toward the count, forward grows left. */
-  width: 2.35rem;
-  max-width: calc(100% - 0.1rem);
-  height: 0.72rem;
+  width: 0.95rem;
+  height: 0.55rem;
   flex: 0 0 auto;
   color: inherit;
+  opacity: 0.85;
   pointer-events: none;
 }
 
