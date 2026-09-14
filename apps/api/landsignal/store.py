@@ -530,7 +530,12 @@ def persist_store(store: MemoryStore | None = None) -> None:
         "alerts": [a.model_dump(mode="json") for a in store.alerts[:500]],
         "alert_rules": [r.model_dump(mode="json") for r in store.alert_rules.values()],
     }
-    Path(_PERSIST_PATH).write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+    # Atomic replace — a mid-write OOM/kill used to truncate the live dump to 0 bytes
+    # and wipe ~450k+ inventory on the next boot.
+    path = Path(_PERSIST_PATH)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+    tmp.replace(path)
 
 
 def load_persisted_store(store: MemoryStore) -> int:
@@ -547,6 +552,14 @@ def load_persisted_store(store: MemoryStore) -> int:
     try:
         size = path.stat().st_size
     except OSError:
+        return 0
+    if size < 8:
+        structlog.get_logger().warning(
+            "persist_skip_empty",
+            path=str(path),
+            bytes=size,
+            note="Ignoring empty/truncated inventory dump (likely a killed mid-write).",
+        )
         return 0
     # Hard ceiling for pathological dumps (pre-slim GIS attribute blobs).
     # Nationwide ~140k with compact rings can be ~700MB–1.2GB — must load, not quarantine.
