@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FilterField } from "@/components/filter-field";
 import { HeroSelect } from "@/components/hero-select";
 import { UsedByStrip } from "@/components/used-by-strip";
@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import { describeHardFilters, enforceHardFilters, explainEmptySearch, type EmptySearchExplanation } from "@/lib/hard-filters";
 import { formatListingsLabel } from "@/lib/listings-label";
+import { readCachedSearchMeta, writeCachedSearchMeta } from "@/lib/search-meta-cache";
 import { SEARCH_META_FALLBACK } from "@/lib/search-meta-fallback";
 
 type PriceUnit = "K" | "M";
@@ -181,6 +182,7 @@ function UnitToggle({
 export default function SearchPage() {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   // Seed full catalogs immediately so phones never flash/stuck on only "Any".
+  // Hydrate from session cache so Land Alerts → home never flashes "—" / empty counts.
   const [meta, setMeta] = useState<SearchMeta>(SEARCH_META_FALLBACK);
   const [rows, setRows] = useState<RadarRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -191,6 +193,13 @@ export default function SearchPage() {
   const [emptyExplanation, setEmptyExplanation] = useState<EmptySearchExplanation | null>(null);
   const [inventoryBreakdownOpen, setInventoryBreakdownOpen] = useState(false);
   const inventoryBreakdownRef = useRef<HTMLDivElement | null>(null);
+
+  // Paint cached inventory before first paint after remount (Land Alerts → home).
+  // useLayoutEffect avoids a "—" flash without SSR/sessionStorage mismatches.
+  useLayoutEffect(() => {
+    const cached = readCachedSearchMeta();
+    if (cached) setMeta(cached);
+  }, []);
 
   const inventoryStateRows = useMemo(() => stateListingRows(meta), [meta]);
 
@@ -350,11 +359,13 @@ export default function SearchPage() {
         setLoading(false);
         const metaNow = await landsignalApi.searchMeta().catch(() => null);
         if (metaNow) {
-          setMeta({
+          const mergedMeta = {
             ...SEARCH_META_FALLBACK,
             ...metaNow,
             states: metaNow.states?.length ? metaNow.states : SEARCH_META_FALLBACK.states,
-          });
+          };
+          writeCachedSearchMeta(mergedMeta);
+          setMeta(mergedMeta);
         }
         const total = metaNow?.inventory_count ?? kept.length;
         const filterLabel = describeHardFilters(filters);
@@ -442,8 +453,8 @@ export default function SearchPage() {
     const applyMeta = (live: SearchMeta) => {
       if (cancelled || !live) return;
       setMeta((prev) => {
-        const nextCount = live.inventory_count ?? prev.inventory_count ?? 0;
-        return {
+        const nextCount = Number(live.inventory_count ?? (live as { inventory_total?: number }).inventory_total ?? prev.inventory_count ?? 0) || Number(prev.inventory_count || 0);
+        const next: SearchMeta = {
           ...SEARCH_META_FALLBACK,
           ...prev,
           ...live,
@@ -475,15 +486,18 @@ export default function SearchPage() {
               ? prev.hold_years
               : SEARCH_META_FALLBACK.hold_years,
         };
+        writeCachedSearchMeta(next);
+        return next;
       });
-      const count = live.inventory_count ?? 0;
-      // Only kick discover when the book is truly empty — never while a large load is mid-restore.
-      if (!discoverKicked && count > 0 && count < 50_000) {
-        discoverKicked = true;
-        void landsignalApi.discover(750000, 0.1, false, undefined, true).catch(() => {
-          discoverKicked = false;
-        });
-      } else if (!discoverKicked && count === 0) {
+      // Prefer live count, but fall back to cached inventory so remounting home
+      // after Land Alerts does not look empty.
+      const count = Number(live.inventory_count || 0);
+      const cached = Number(readCachedSearchMeta()?.inventory_count || 0);
+      const known = count > 0 ? count : cached;
+      // Never auto-kick a nationwide discover from a zero/unknown count — that OOMs
+      // the API mid-restore and leaves the listings caption stuck on a dash.
+      // Only deepen when we *know* the book is thin but real.
+      if (!discoverKicked && known > 0 && known < 50_000) {
         discoverKicked = true;
         void landsignalApi.discover(750000, 0.1, false, undefined, true).catch(() => {
           discoverKicked = false;
@@ -520,13 +534,15 @@ export default function SearchPage() {
     try {
       await landsignalApi.discover(750000, 0.1, false, undefined, true);
       const nextMeta = await landsignalApi.searchMeta();
-      setMeta({
+      const merged = {
         ...SEARCH_META_FALLBACK,
         ...nextMeta,
         states: nextMeta.states?.length ? nextMeta.states : SEARCH_META_FALLBACK.states,
-      });
+      };
+      writeCachedSearchMeta(merged);
+      setMeta(merged);
       setStatus(
-        `Refreshing listings · ${nextMeta.inventory_count?.toLocaleString() ?? 0} so far. Tap Show matches anytime.`,
+        `Refreshing listings · ${nextMeta.inventory_count?.toLocaleString() ?? 0}. Tap Show matches anytime.`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Scan failed");
@@ -883,7 +899,19 @@ export default function SearchPage() {
                       setInventoryBreakdownOpen((open) => !open);
                     }}
                   >
-                    <strong>{formatListingsLabel(meta?.inventory_count)}</strong> listings
+                    {(() => {
+                      const label = formatListingsLabel(meta?.inventory_count);
+                      return label ? (
+                        <>
+                          <strong>{label}</strong> listings
+                        </>
+                      ) : (
+                        <>
+                          <strong aria-hidden>…</strong>
+                          <span className="sr-only">Loading inventory count</span> listings
+                        </>
+                      );
+                    })()}
                   </button>
                   {inventoryBreakdownOpen && inventoryStateRows.length > 0 ? (
                     <div

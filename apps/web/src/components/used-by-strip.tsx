@@ -1,4 +1,5 @@
-const LOGOS = [
+/** Brand marks shown under Show matches — keep paths here for layout preloads too. */
+export const USED_BY_LOGOS = [
   {
     name: "Land.com",
     href: "https://www.land.com",
@@ -48,7 +49,7 @@ export function UsedByStrip() {
     <section className="used-by-strip" aria-label="Used by buyers on">
       <p className="used-by-label">Used by buyers on</p>
       <ul className="used-by-logos">
-        {LOGOS.map((logo) => {
+        {USED_BY_LOGOS.map((logo) => {
           const slug = logo.name.toLowerCase().replace(/\./g, "").replace(/\s+/g, "-");
           const darkSrc = "srcDark" in logo ? logo.srcDark : undefined;
           return (
@@ -67,8 +68,10 @@ export function UsedByStrip() {
                   alt={`${logo.name} logo`}
                   width={logo.width}
                   height={logo.height}
-                  loading="lazy"
+                  // Above-the-fold after Show matches — never lazy; remounts must paint instantly.
+                  loading="eager"
                   decoding="async"
+                  fetchPriority="high"
                 />
                 {darkSrc ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -79,8 +82,9 @@ export function UsedByStrip() {
                     aria-hidden
                     width={logo.width}
                     height={logo.height}
-                    loading="lazy"
+                    loading="eager"
                     decoding="async"
+                    fetchPriority="low"
                   />
                 ) : null}
               </a>
