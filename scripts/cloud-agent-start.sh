@@ -116,6 +116,8 @@ start_api() {
   echo "[landsignal-start] launching API on 0.0.0.0:8000"
   (
     cd apps/api
+    export ATTOM_DATA_MODE="${ATTOM_DATA_MODE:-memory}"
+    export LANDSIGNAL_INVENTORY_PATH="${LANDSIGNAL_INVENTORY_PATH:-/workspace/data/landsignal_inventory.json}"
     exec .venv/bin/uvicorn landsignal.main:app --host 0.0.0.0 --port 8000
   ) >> /tmp/landsignal/api.log 2>&1 &
   API_PID=$!

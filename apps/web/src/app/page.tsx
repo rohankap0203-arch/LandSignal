@@ -536,9 +536,9 @@ export default function SearchPage() {
         return next;
       });
       const count = Number(live.inventory_count || 0);
-      // Rebuild when the book is confirmed empty or thin. ATTOM is not inventory —
-      // public GIS/BLM discover fills the ~500k book.
-      if (!discoverKicked && count < 50_000) {
+      // Rebuild only when the book is confirmed empty. Thin-book deepen is manual
+      // (Refresh live inventory) — auto-nationwide on every remount OOMs cloud VMs.
+      if (!discoverKicked && count === 0) {
         discoverKicked = true;
         void landsignalApi.discover(750000, 0.1, false, undefined, true).catch(() => {
           discoverKicked = false;
