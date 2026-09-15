@@ -108,23 +108,41 @@ async def startup() -> None:
 
     asyncio.create_task(_bg_rescore())
 
-    if settings.auto_discover_on_startup:
+    live_inventory = sum(1 for p in store.parcels.values() if not getattr(p, "is_demo", False))
+    # Empty book after durable restore → rebuild from public GIS/BLM even when
+    # AUTO_DISCOVER_ON_STARTUP is off (that flag is for *always* deepening on boot,
+    # which OOMs cloud VMs). Memory guards inside discover still apply.
+    should_discover = settings.auto_discover_on_startup or live_inventory == 0
+    if should_discover:
         from landsignal.services.discover import discover_opportunities
+        from landsignal.store import persist_store
 
         async def _bg_discover() -> None:
             import structlog
 
             log = structlog.get_logger()
+            reason = "auto_discover_on_startup" if settings.auto_discover_on_startup else "empty_inventory"
             try:
+                log.info(
+                    "startup_discover_begin",
+                    reason=reason,
+                    live_inventory=live_inventory,
+                    limit=settings.discover_limit,
+                )
                 summary = await discover_opportunities(
                     store,
                     settings,
                     limit=settings.discover_limit,
                     min_acres=settings.discover_min_acres,
+                    fast=True,
                 )
-                log.info("startup_discover", **summary)
+                try:
+                    persist_store(store)
+                except Exception as persist_exc:  # noqa: BLE001
+                    log.warning("startup_discover_persist_failed", error=str(persist_exc)[:200])
+                log.info("startup_discover", reason=reason, **summary)
             except Exception as exc:  # noqa: BLE001
-                log.warning("startup_discover_failed", error=str(exc))
+                log.warning("startup_discover_failed", reason=reason, error=str(exc))
 
         asyncio.create_task(_bg_discover())
 

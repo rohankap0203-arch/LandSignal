@@ -185,6 +185,7 @@ export default function SearchPage() {
   // Seed full catalogs immediately so phones never flash/stuck on only "Any".
   // Hydrate from session cache so Land Alerts → home never flashes "—" / empty counts.
   const [meta, setMeta] = useState<SearchMeta>(SEARCH_META_FALLBACK);
+  const [inventoryReady, setInventoryReady] = useState(false);
   const [rows, setRows] = useState<RadarRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -482,25 +483,33 @@ export default function SearchPage() {
   }, [hasSearched, loading, scrollToScoutedOpportunities]);
 
   useEffect(() => {
-    // Stay naturally connected: poll meta hard at first, auto-start discover if empty.
+    // Stay naturally connected: poll meta hard at first, auto-start discover if empty/thin.
     let cancelled = false;
     let discoverKicked = false;
     let tick: number | null = null;
 
     const applyMeta = (live: SearchMeta) => {
       if (cancelled || !live) return;
+      setInventoryReady(true);
       setMeta((prev) => {
-        const nextCount = Number(live.inventory_count ?? (live as { inventory_total?: number }).inventory_total ?? prev.inventory_count ?? 0) || Number(prev.inventory_count || 0);
+        // Trust a successful meta response — including explicit 0 — so an empty
+        // book never looks "still loading" forever. Cache is only a first-paint hint.
+        const rawLive = live.inventory_count ?? (live as { inventory_total?: number }).inventory_total;
+        const liveCount = Number(rawLive);
+        const nextCount = Number.isFinite(liveCount) && liveCount >= 0
+          ? liveCount
+          : Number(prev.inventory_count || 0);
         const next: SearchMeta = {
           ...SEARCH_META_FALLBACK,
           ...prev,
           ...live,
-          // Never flash the listing count back to 0 during a transient meta miss.
           inventory_count: nextCount,
           inventory_by_state:
             live.inventory_by_state && Object.keys(live.inventory_by_state).length
               ? live.inventory_by_state
-              : prev.inventory_by_state,
+              : nextCount === 0
+                ? {}
+                : prev.inventory_by_state,
           states: live.states?.length ? live.states : prev.states?.length ? prev.states : SEARCH_META_FALLBACK.states,
           strategies: live.strategies?.length
             ? live.strategies
@@ -526,15 +535,10 @@ export default function SearchPage() {
         writeCachedSearchMeta(next);
         return next;
       });
-      // Prefer live count, but fall back to cached inventory so remounting home
-      // after Land Alerts does not look empty.
       const count = Number(live.inventory_count || 0);
-      const cached = Number(readCachedSearchMeta()?.inventory_count || 0);
-      const known = count > 0 ? count : cached;
-      // Never auto-kick a nationwide discover from a zero/unknown count — that OOMs
-      // the API mid-restore and leaves the listings caption stuck on a dash.
-      // Only deepen when we *know* the book is thin but real.
-      if (!discoverKicked && known > 0 && known < 50_000) {
+      // Rebuild only when the book is confirmed empty. Thin-book deepen is manual
+      // (Refresh live inventory) — auto-nationwide on every remount OOMs cloud VMs.
+      if (!discoverKicked && count === 0) {
         discoverKicked = true;
         void landsignalApi.discover(750000, 0.1, false, undefined, true).catch(() => {
           discoverKicked = false;
@@ -547,7 +551,7 @@ export default function SearchPage() {
         .searchMeta()
         .then(applyMeta)
         .catch(() => {
-          // Keep the last good listing count visible.
+          // Keep the last good listing count visible; do not flip ready on failure.
         });
 
     void refresh();
@@ -578,6 +582,7 @@ export default function SearchPage() {
       };
       writeCachedSearchMeta(merged);
       setMeta(merged);
+      setInventoryReady(true);
       setStatus(
         `Refreshing listings · ${nextMeta.inventory_count?.toLocaleString() ?? 0}. Tap Show matches anytime.`,
       );
@@ -928,7 +933,11 @@ export default function SearchPage() {
                     title={
                       inventoryStateRows.length
                         ? "Listings by state"
-                        : "Live inventory is still loading"
+                        : inventoryReady
+                          ? meta?.inventory_count
+                            ? "Live inventory"
+                            : "Inventory empty — refresh to rebuild"
+                          : "Live inventory is still loading"
                     }
                     disabled={!inventoryStateRows.length && !(meta?.inventory_count)}
                     onClick={() => {
@@ -937,7 +946,9 @@ export default function SearchPage() {
                     }}
                   >
                     {(() => {
-                      const label = formatListingsLabel(meta?.inventory_count);
+                      const label = formatListingsLabel(meta?.inventory_count, {
+                        ready: inventoryReady,
+                      });
                       return label ? (
                         <>
                           <strong>{label}</strong> listings

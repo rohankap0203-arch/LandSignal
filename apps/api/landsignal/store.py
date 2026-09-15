@@ -466,7 +466,27 @@ def _square_polygon(lon: float, lat: float, acres: float) -> list[list[list[floa
 
 
 _STORE: MemoryStore | None = None
-_PERSIST_PATH = "/tmp/landsignal_inventory.json"
+
+
+def _default_persist_path() -> str:
+    """Prefer a workspace-persistent dump over ephemeral /tmp (cloud pods recycle /tmp)."""
+    import os
+
+    for candidate in (
+        os.environ.get("LANDSIGNAL_INVENTORY_PATH"),
+        "/workspace/data/landsignal_inventory.json",
+        "/tmp/landsignal_inventory.json",
+    ):
+        if candidate:
+            return candidate
+    return "/tmp/landsignal_inventory.json"
+
+
+_PERSIST_PATH = _default_persist_path()
+_LEGACY_PERSIST_PATHS = (
+    "/tmp/landsignal_inventory.json",
+    "/workspace/data/landsignal_inventory.json",
+)
 
 
 def persist_store(store: MemoryStore | None = None) -> None:
@@ -475,6 +495,9 @@ def persist_store(store: MemoryStore | None = None) -> None:
     Fat GIS attribute blobs are omitted. Compact real parcel outlines (≤64 verts)
     are kept so View Map can draw the yellow land boundary after restart.
     Fake acreage squares are never persisted.
+
+    Default path is /workspace/data/landsignal_inventory.json (durable across
+    cloud pod /tmp wipes). Override with LANDSIGNAL_INVENTORY_PATH.
     """
     import json
     from pathlib import Path
@@ -533,6 +556,7 @@ def persist_store(store: MemoryStore | None = None) -> None:
     # Atomic replace — a mid-write OOM/kill used to truncate the live dump to 0 bytes
     # and wipe ~450k+ inventory on the next boot.
     path = Path(_PERSIST_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
     tmp.replace(path)
@@ -545,6 +569,18 @@ def load_persisted_store(store: MemoryStore) -> int:
     import structlog
 
     path = Path(_PERSIST_PATH)
+    # Prefer the configured path; fall back to legacy locations if the durable dump is missing.
+    if not path.exists():
+        for legacy in _LEGACY_PERSIST_PATHS:
+            cand = Path(legacy)
+            if cand.exists() and cand.resolve() != path.resolve():
+                structlog.get_logger().info(
+                    "persist_using_legacy_path",
+                    configured=str(path),
+                    legacy=str(cand),
+                )
+                path = cand
+                break
     if not path.exists():
         return 0
     # A polygon-heavy dump can be hundreds of MB and OOM the API on boot — which
@@ -676,9 +712,13 @@ def load_persisted_store(store: MemoryStore) -> int:
         pass
     # Reattach every ATTOM field a live key once presented (survives key expiry).
     try:
-        from landsignal.services.property_providers.pipeline import hydrate_attom_memory_into_store
+        from landsignal.services.property_providers.pipeline import (
+            harvest_attom_from_store,
+            hydrate_attom_memory_into_store,
+        )
 
         hydrate_attom_memory_into_store(store)
+        harvest_attom_from_store(store)
     except Exception:
         pass
     return n
@@ -697,13 +737,21 @@ def get_store(seed_demo: bool = False) -> MemoryStore:
             _STORE.seed_demo()
         # Always attempt ATTOM reserve hydrate (even on empty/demo) so restarts keep IQ.
         try:
-            from landsignal.services.property_providers.pipeline import hydrate_attom_memory_into_store
+            from landsignal.services.property_providers.pipeline import (
+                harvest_attom_from_store,
+                hydrate_attom_memory_into_store,
+            )
 
             n_attom = hydrate_attom_memory_into_store(_STORE)
-            if n_attom:
+            n_harvest = harvest_attom_from_store(_STORE)
+            if n_attom or n_harvest:
                 import structlog
 
-                structlog.get_logger().info("store_attom_memory_restored", parcels=n_attom)
+                structlog.get_logger().info(
+                    "store_attom_memory_restored",
+                    hydrated=n_attom,
+                    harvested=n_harvest,
+                )
         except Exception:
             pass
     return _STORE

@@ -18,3 +18,8 @@ apps/web/.data/
 
 .env.local
 **/.env.local
+
+# Runtime ATTOM IQ reserve (may contain licensed field payloads)
+data/attom_enrichment.json
+data/*.json
+!data/README.md
