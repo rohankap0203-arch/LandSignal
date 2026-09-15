@@ -18,6 +18,7 @@ import structlog
 log = structlog.get_logger()
 
 NearbyKind = Literal[
+    # Existing Closest chips
     "flood",
     "wetland",
     "water",
@@ -26,6 +27,32 @@ NearbyKind = Literal[
     "town",
     "school",
     "hospital",
+    # Access
+    "highway",
+    "airport",
+    "railroad",
+    # Utilities
+    "electric",
+    "transmission",
+    "water_main",
+    "sewer",
+    "gas",
+    "fiber",
+    "substation",
+    "cell",
+    # Environment
+    "wildfire",
+    "conservation",
+    # Services / context
+    "grocery",
+    "fire",
+    "police",
+    "park",
+    "employer",
+    "landfill",
+    "mine",
+    "prison",
+    "hazmat",
 ]
 
 OVERPASS_ENDPOINTS = [
@@ -92,11 +119,12 @@ KIND_META: dict[str, dict[str, Any]] = {
         "max_miles": 18.0,
         "radii_m": [8000, 16000, 28000],
         "out": "center",
-        # Towers/poles are denser + faster than full line geometry extracts.
+        # Backward-compatible: major + distribution + substations.
         "parts": [
             'node["power"="tower"]',
             'node["power"="pole"]',
             'way["power"="line"]',
+            'way["power"="minor_line"]',
             'node["power"="substation"]',
         ],
         "photon": [
@@ -163,6 +191,333 @@ KIND_META: dict[str, dict[str, Any]] = {
         "photon": [
             {"q": "hospital", "osm_tag": "amenity:hospital"},
             {"q": "clinic", "osm_tag": "amenity:clinic"},
+        ],
+    },
+    # --- Access ---
+    "highway": {
+        "label": "Highway",
+        "max_miles": 25.0,
+        "radii_m": [16000, 32000, 50000],
+        "out": "center",
+        "parts": [
+            'way["highway"~"^(motorway|motorway_link|trunk|trunk_link)$"]',
+        ],
+        "photon": [
+            {"q": "highway", "osm_tag": "highway:motorway"},
+            {"q": "freeway", "osm_tag": "highway:trunk"},
+        ],
+    },
+    "airport": {
+        "label": "Airport",
+        "max_miles": 60.0,
+        "radii_m": [50000, 90000],
+        "out": "center",
+        "parts": [
+            'nwr["aeroway"="aerodrome"]',
+            'nwr["aeroway"="airport"]',
+            'node["aeroway"="helipad"]',
+        ],
+        "photon": [
+            {"q": "airport", "osm_tag": "aeroway:aerodrome"},
+            {"q": "airport", "osm_tag": "aeroway:airport"},
+        ],
+    },
+    "railroad": {
+        "label": "Railroad",
+        "max_miles": 20.0,
+        "radii_m": [12000, 24000, 40000],
+        "out": "center",
+        "parts": [
+            'way["railway"~"^(rail|light_rail|subway|tram)$"]',
+            'node["railway"="station"]',
+        ],
+        "photon": [
+            {"q": "railroad", "osm_tag": "railway:rail"},
+            {"q": "train station", "osm_tag": "railway:station"},
+        ],
+    },
+    # --- Utilities ---
+    "transmission": {
+        "label": "Transmission line",
+        "max_miles": 18.0,
+        "radii_m": [8000, 16000, 28000],
+        "out": "center",
+        # Major HV lines / towers (alias of the "power" major-line intent).
+        "parts": [
+            'node["power"="tower"]',
+            'way["power"="line"]',
+        ],
+        "photon": [
+            {"q": "power tower", "osm_tag": "power:tower"},
+            {"q": "power line", "osm_tag": "power:line"},
+        ],
+    },
+    "electric": {
+        "label": "Electric distribution",
+        "max_miles": 12.0,
+        "radii_m": [6000, 12000, 20000],
+        "out": "center",
+        "parts": [
+            'node["power"="pole"]',
+            'way["power"="minor_line"]',
+        ],
+        "photon": [
+            {"q": "power pole", "osm_tag": "power:pole"},
+            {"q": "power line", "osm_tag": "power:minor_line"},
+        ],
+    },
+    "water_main": {
+        "label": "Public water",
+        "max_miles": 20.0,
+        "radii_m": [12000, 24000, 40000],
+        "out": "center",
+        "parts": [
+            'nwr["man_made"="water_works"]',
+            'nwr["office"="water_utility"]',
+            'way["pipeline"="water"]',
+            'nwr["man_made"="water_tower"]',
+        ],
+        "photon": [
+            {"q": "water works", "osm_tag": "man_made:water_works"},
+            {"q": "water utility", "osm_tag": "office:water_utility"},
+            {"q": "water tower", "osm_tag": "man_made:water_tower"},
+        ],
+    },
+    "sewer": {
+        "label": "Sewer / wastewater",
+        "max_miles": 20.0,
+        "radii_m": [12000, 24000, 40000],
+        "out": "center",
+        "parts": [
+            'nwr["man_made"="wastewater_plant"]',
+            'nwr["man_made"="sewage_works"]',
+            'way["pipeline"="sewage"]',
+            'nwr["utility"="sewerage"]',
+        ],
+        "photon": [
+            {"q": "wastewater plant", "osm_tag": "man_made:wastewater_plant"},
+            {"q": "sewage", "osm_tag": "man_made:sewage_works"},
+        ],
+    },
+    "gas": {
+        "label": "Gas utility",
+        "max_miles": 20.0,
+        "radii_m": [12000, 24000, 40000],
+        "out": "center",
+        "parts": [
+            'way["pipeline"="gas"]',
+            'nwr["man_made"="gasometer"]',
+            'nwr["office"="gas_utility"]',
+            'node["utility"="gas"]',
+        ],
+        "photon": [
+            {"q": "gas pipeline", "osm_tag": "pipeline:gas"},
+            {"q": "gas utility", "osm_tag": "office:gas_utility"},
+        ],
+    },
+    "fiber": {
+        "label": "Fiber / telecom",
+        "max_miles": 20.0,
+        "radii_m": [12000, 24000, 40000],
+        "out": "center",
+        "parts": [
+            'way["communication"="line"]',
+            'way["cable"="fiber"]',
+            'nwr["office"="telecommunication"]',
+            'nwr["telecom"="exchange"]',
+        ],
+        "photon": [
+            {"q": "telecom", "osm_tag": "office:telecommunication"},
+            {"q": "fiber", "osm_tag": "cable:fiber"},
+        ],
+    },
+    "substation": {
+        "label": "Substation",
+        "max_miles": 25.0,
+        "radii_m": [16000, 32000, 50000],
+        "out": "center",
+        "parts": [
+            'nwr["power"="substation"]',
+            'node["power"="transformer"]',
+        ],
+        "photon": [
+            {"q": "substation", "osm_tag": "power:substation"},
+        ],
+    },
+    "cell": {
+        "label": "Cell tower",
+        "max_miles": 20.0,
+        "radii_m": [12000, 24000, 40000],
+        "out": "center",
+        "parts": [
+            'nwr["man_made"="mast"]',
+            'nwr["man_made"="tower"]["tower:type"="communication"]',
+            'nwr["tower:type"="communication"]',
+            'nwr["communication:mobile_phone"="yes"]',
+        ],
+        "photon": [
+            {"q": "cell tower", "osm_tag": "man_made:mast"},
+            {"q": "communication tower", "osm_tag": "man_made:tower"},
+        ],
+    },
+    # --- Environment ---
+    "wildfire": {
+        "label": "Wildfire hazard",
+        "max_miles": 25.0,
+        "radii_m": [16000, 32000, 50000],
+        "out": "center",
+        "parts": [
+            'nwr["hazard"="fire"]',
+            'nwr["hazard"="wildfire"]',
+            'nwr["fire_hazard"]',
+            'nwr["hazard:fire"]',
+        ],
+        "photon": [
+            {"q": "fire hazard", "osm_tag": "hazard:fire"},
+            {"q": "wildfire", "osm_tag": "hazard:wildfire"},
+        ],
+    },
+    "conservation": {
+        "label": "Conservation land",
+        "max_miles": 30.0,
+        "radii_m": [20000, 40000, 60000],
+        "out": "center",
+        "parts": [
+            'nwr["boundary"="protected_area"]',
+            'nwr["leisure"="nature_reserve"]',
+            'nwr["landuse"="conservation"]',
+            'nwr["protect_class"]',
+        ],
+        "photon": [
+            {"q": "nature reserve", "osm_tag": "leisure:nature_reserve"},
+            {"q": "protected area", "osm_tag": "boundary:protected_area"},
+        ],
+    },
+    # --- Services / context ---
+    "grocery": {
+        "label": "Grocery",
+        "max_miles": 25.0,
+        "radii_m": [16000, 32000, 50000],
+        "out": "center",
+        "parts": [
+            'nwr["shop"="supermarket"]',
+            'nwr["shop"="grocery"]',
+            'nwr["shop"="convenience"]',
+        ],
+        "photon": [
+            {"q": "supermarket", "osm_tag": "shop:supermarket"},
+            {"q": "grocery", "osm_tag": "shop:grocery"},
+        ],
+    },
+    "fire": {
+        "label": "Fire station",
+        "max_miles": 30.0,
+        "radii_m": [20000, 40000, 60000],
+        "out": "center",
+        "parts": [
+            'nwr["amenity"="fire_station"]',
+        ],
+        "photon": [
+            {"q": "fire station", "osm_tag": "amenity:fire_station"},
+        ],
+    },
+    "police": {
+        "label": "Police",
+        "max_miles": 30.0,
+        "radii_m": [20000, 40000, 60000],
+        "out": "center",
+        "parts": [
+            'nwr["amenity"="police"]',
+        ],
+        "photon": [
+            {"q": "police", "osm_tag": "amenity:police"},
+        ],
+    },
+    "park": {
+        "label": "Park",
+        "max_miles": 20.0,
+        "radii_m": [12000, 24000, 40000],
+        "out": "center",
+        "parts": [
+            'nwr["leisure"="park"]',
+            'nwr["leisure"="nature_reserve"]',
+        ],
+        "photon": [
+            {"q": "park", "osm_tag": "leisure:park"},
+            {"q": "nature reserve", "osm_tag": "leisure:nature_reserve"},
+        ],
+    },
+    "employer": {
+        "label": "Major employer",
+        "max_miles": 30.0,
+        "radii_m": [20000, 40000, 60000],
+        "out": "center",
+        "parts": [
+            'nwr["landuse"="industrial"]',
+            'nwr["industrial"]',
+            'nwr["office"="company"]',
+        ],
+        "photon": [
+            {"q": "industrial", "osm_tag": "landuse:industrial"},
+            {"q": "factory", "osm_tag": "building:industrial"},
+        ],
+    },
+    "landfill": {
+        "label": "Landfill",
+        "max_miles": 30.0,
+        "radii_m": [20000, 40000, 60000],
+        "out": "center",
+        "parts": [
+            'nwr["landuse"="landfill"]',
+            'nwr["amenity"="waste_transfer_station"]',
+        ],
+        "photon": [
+            {"q": "landfill", "osm_tag": "landuse:landfill"},
+        ],
+    },
+    "mine": {
+        "label": "Mine / quarry",
+        "max_miles": 30.0,
+        "radii_m": [20000, 40000, 60000],
+        "out": "center",
+        "parts": [
+            'nwr["landuse"="quarry"]',
+            'nwr["landuse"="mine"]',
+            'nwr["man_made"="mineshaft"]',
+            'nwr["industrial"="mine"]',
+        ],
+        "photon": [
+            {"q": "quarry", "osm_tag": "landuse:quarry"},
+            {"q": "mine", "osm_tag": "landuse:mine"},
+        ],
+    },
+    "prison": {
+        "label": "Prison",
+        "max_miles": 40.0,
+        "radii_m": [30000, 50000, 80000],
+        "out": "center",
+        "parts": [
+            'nwr["amenity"="prison"]',
+        ],
+        "photon": [
+            {"q": "prison", "osm_tag": "amenity:prison"},
+        ],
+    },
+    "hazmat": {
+        "label": "Hazmat / industrial risk",
+        "max_miles": 25.0,
+        "radii_m": [16000, 32000, 50000],
+        "out": "center",
+        "parts": [
+            'nwr["hazard"="contamination"]',
+            'nwr["hazard"="nuclear"]',
+            'nwr["industrial"="oil"]',
+            'nwr["hazmat"]',
+            'nwr["industrial"="refinery"]',
+        ],
+        "photon": [
+            {"q": "refinery", "osm_tag": "industrial:oil"},
+            {"q": "contamination", "osm_tag": "hazard:contamination"},
         ],
     },
 }
@@ -270,8 +625,97 @@ def _matches(kind: str, el: dict[str, Any]) -> bool:
             "residential",
             "unclassified",
         }
+    if kind == "highway":
+        return tags.get("highway") in {"motorway", "motorway_link", "trunk", "trunk_link"}
+    if kind == "airport":
+        return tags.get("aeroway") in {"aerodrome", "airport", "helipad"}
+    if kind == "railroad":
+        return tags.get("railway") in {"rail", "light_rail", "subway", "tram", "station"}
     if kind == "power":
         return tags.get("power") in {"line", "minor_line", "tower", "pole", "substation"}
+    if kind == "transmission":
+        return tags.get("power") in {"line", "tower"}
+    if kind == "electric":
+        return tags.get("power") in {"pole", "minor_line"}
+    if kind == "water_main":
+        return (
+            tags.get("man_made") in {"water_works", "water_tower"}
+            or tags.get("office") == "water_utility"
+            or tags.get("pipeline") == "water"
+        )
+    if kind == "sewer":
+        return (
+            tags.get("man_made") in {"wastewater_plant", "sewage_works"}
+            or tags.get("pipeline") == "sewage"
+            or tags.get("utility") == "sewerage"
+        )
+    if kind == "gas":
+        return (
+            tags.get("pipeline") == "gas"
+            or tags.get("man_made") == "gasometer"
+            or tags.get("office") == "gas_utility"
+            or tags.get("utility") == "gas"
+        )
+    if kind == "fiber":
+        return (
+            tags.get("communication") == "line"
+            or tags.get("cable") == "fiber"
+            or tags.get("office") == "telecommunication"
+            or tags.get("telecom") == "exchange"
+        )
+    if kind == "substation":
+        return tags.get("power") in {"substation", "transformer"}
+    if kind == "cell":
+        return (
+            tags.get("man_made") == "mast"
+            or tags.get("tower:type") == "communication"
+            or tags.get("communication:mobile_phone") == "yes"
+            or (tags.get("man_made") == "tower" and tags.get("tower:type") == "communication")
+        )
+    if kind == "wildfire":
+        return (
+            tags.get("hazard") in {"fire", "wildfire"}
+            or bool(tags.get("fire_hazard") and tags.get("fire_hazard") != "no")
+            or bool(tags.get("hazard:fire") and tags.get("hazard:fire") != "no")
+        )
+    if kind == "conservation":
+        return (
+            tags.get("boundary") == "protected_area"
+            or tags.get("leisure") == "nature_reserve"
+            or tags.get("landuse") == "conservation"
+            or bool(tags.get("protect_class"))
+        )
+    if kind == "grocery":
+        return tags.get("shop") in {"supermarket", "grocery", "convenience"}
+    if kind == "fire":
+        return tags.get("amenity") == "fire_station"
+    if kind == "police":
+        return tags.get("amenity") == "police"
+    if kind == "park":
+        return tags.get("leisure") in {"park", "nature_reserve"}
+    if kind == "employer":
+        return (
+            tags.get("landuse") == "industrial"
+            or bool(tags.get("industrial") and tags.get("industrial") != "no")
+            or tags.get("office") == "company"
+            or tags.get("building") == "industrial"
+        )
+    if kind == "landfill":
+        return tags.get("landuse") == "landfill" or tags.get("amenity") == "waste_transfer_station"
+    if kind == "mine":
+        return (
+            tags.get("landuse") in {"quarry", "mine"}
+            or tags.get("man_made") == "mineshaft"
+            or tags.get("industrial") == "mine"
+        )
+    if kind == "prison":
+        return tags.get("amenity") == "prison"
+    if kind == "hazmat":
+        return (
+            tags.get("hazard") in {"contamination", "nuclear"}
+            or tags.get("industrial") in {"oil", "refinery"}
+            or bool(tags.get("hazmat") and tags.get("hazmat") != "no")
+        )
     if kind == "town":
         return tags.get("place") in {"city", "town", "village", "hamlet"}
     if kind == "school":
@@ -349,11 +793,69 @@ def _name(kind: str, el: dict[str, Any], fallback: str) -> str:
         if tags.get("highway"):
             return f"{_title(tags['highway'])} road"
         return "Paved road"
+    if kind == "highway":
+        if tags.get("ref"):
+            return tags["ref"]
+        hw = tags.get("highway", "")
+        return f"{_title(hw.replace('_link', ''))} highway" if hw else "Highway"
+    if kind == "airport":
+        return "Helipad" if tags.get("aeroway") == "helipad" else "Airport"
+    if kind == "railroad":
+        if tags.get("railway") == "station":
+            return "Rail station"
+        return "Railroad"
     if kind == "power":
         if tags.get("power") in {"tower", "pole"}:
             return "Transmission / distribution support (power corridor)"
         op = tags.get("operator")
         return f"{op} power line" if op else "Power line"
+    if kind == "transmission":
+        op = tags.get("operator")
+        if tags.get("power") == "tower":
+            return "Transmission tower"
+        return f"{op} transmission line" if op else "Transmission line"
+    if kind == "electric":
+        return "Distribution pole" if tags.get("power") == "pole" else "Distribution line"
+    if kind == "water_main":
+        if tags.get("man_made") == "water_tower":
+            return "Water tower"
+        if tags.get("man_made") == "water_works":
+            return "Water works"
+        return "Public water facility"
+    if kind == "sewer":
+        return "Wastewater plant" if tags.get("man_made") else "Sewer infrastructure"
+    if kind == "gas":
+        return "Gas pipeline" if tags.get("pipeline") == "gas" else "Gas utility"
+    if kind == "fiber":
+        return "Telecom facility" if tags.get("office") == "telecommunication" else "Fiber / telecom line"
+    if kind == "substation":
+        return "Electrical substation"
+    if kind == "cell":
+        return "Cell / communication tower"
+    if kind == "wildfire":
+        return "Mapped wildfire hazard"
+    if kind == "conservation":
+        return "Nature reserve" if tags.get("leisure") == "nature_reserve" else "Protected area"
+    if kind == "grocery":
+        return _title(tags.get("shop") or "grocery")
+    if kind == "fire":
+        return "Fire station"
+    if kind == "police":
+        return "Police station"
+    if kind == "park":
+        return "Nature reserve" if tags.get("leisure") == "nature_reserve" else "Park"
+    if kind == "employer":
+        return "Industrial site"
+    if kind == "landfill":
+        return "Landfill"
+    if kind == "mine":
+        return "Quarry" if tags.get("landuse") == "quarry" else "Mine"
+    if kind == "prison":
+        return "Prison"
+    if kind == "hazmat":
+        if tags.get("industrial") in {"oil", "refinery"}:
+            return "Oil / refinery site"
+        return "Hazmat / contamination site"
     if kind == "town":
         return _title(tags["place"]) if tags.get("place") else "Town"
     if kind == "school":
@@ -363,9 +865,116 @@ def _name(kind: str, el: dict[str, Any], fallback: str) -> str:
     return fallback
 
 
-def _detail(kind: str, el: dict[str, Any]) -> str | None:
+_UTILITY_KINDS = frozenset(
+    {
+        "power",
+        "transmission",
+        "electric",
+        "water_main",
+        "sewer",
+        "gas",
+        "fiber",
+        "substation",
+        "cell",
+    }
+)
+_HAZARD_AREA_KINDS = frozenset(
+    {
+        "flood",
+        "wetland",
+        "water",
+        "wildfire",
+        "hazmat",
+        "conservation",
+        "landfill",
+        "mine",
+        "sewer",
+        "gas",
+        "highway",
+        "railroad",
+        "transmission",
+        "electric",
+        "power",
+    }
+)
+_FRONTAGE_KINDS = frozenset({"road", "water", "highway"})
+
+
+def _facility_type(kind: str, el: dict[str, Any]) -> str:
+    tags = {str(k): str(v) for k, v in (el.get("tags") or {}).items()}
+    for key in (
+        "power",
+        "highway",
+        "railway",
+        "aeroway",
+        "waterway",
+        "natural",
+        "wetland",
+        "water",
+        "shop",
+        "amenity",
+        "leisure",
+        "landuse",
+        "industrial",
+        "man_made",
+        "office",
+        "pipeline",
+        "hazard",
+        "boundary",
+        "place",
+        "healthcare",
+        "tower:type",
+        "telecom",
+        "cable",
+        "communication",
+    ):
+        val = tags.get(key)
+        if val and val not in {"yes", "no"}:
+            return f"{key}={val}"
+    return kind
+
+
+def _hit_source(el: dict[str, Any]) -> str:
+    tags = {str(k): str(v) for k, v in (el.get("tags") or {}).items()}
+    if tags.get("source") == "osrm_nearest":
+        return "OSRM"
+    return "OpenStreetMap"
+
+
+def _hit_confidence(kind: str, el: dict[str, Any]) -> str:
+    tags = {str(k): str(v) for k, v in (el.get("tags") or {}).items()}
+    if kind == "flood" and _is_flood(tags):
+        return "mapped"
+    return "estimated"
+
+
+def _hit_relation(kind: str, meters: float) -> str:
+    if kind in _FRONTAGE_KINDS and meters < 30:
+        return "frontage_possible"
+    if kind in _HAZARD_AREA_KINDS and meters < 35:
+        return "intersects_likely"
+    if meters < 1609.344:
+        return "nearby"
+    return "distant"
+
+
+def _hit_disclaimer(kind: str) -> str | None:
+    if kind == "flood":
+        return "OSM flood-adjacency proxy — not FEMA SFHA"
+    if kind == "wetland":
+        return "OSM wetland mapping — coverage and boundaries vary by region"
+    if kind in _UTILITY_KINDS:
+        return "Proximity ≠ confirmed service availability"
+    if kind == "road":
+        return "Proximity ≠ confirmed legal access"
+    return None
+
+
+def _detail(kind: str, el: dict[str, Any], meters: float | None = None) -> str | None:
     tags = {str(k): str(v) for k, v in (el.get("tags") or {}).items()}
     if kind == "flood":
+        if meters is not None and meters < 50:
+            return "Adjacent or overlapping mapped flood-related feature (OSM proxy)"
         return (
             "Mapped flood hazard tag"
             if _is_flood(tags)
@@ -387,6 +996,12 @@ def _detail(kind: str, el: dict[str, Any]) -> str | None:
         p = tags.get("power")
         if p in {"tower", "pole"}:
             return "Nearest mapped power tower/pole (line corridor proxy)"
+    if kind == "transmission" and tags.get("power") == "tower":
+        return "Nearest mapped transmission tower (line corridor proxy)"
+    if kind == "electric" and tags.get("power") == "pole":
+        return "Nearest mapped distribution pole"
+    if kind == "wildfire":
+        return "OSM wildfire/hazard tag — coverage is limited"
     return None
 
 
@@ -395,6 +1010,10 @@ def _rank_boost(kind: str, el: dict[str, Any]) -> int:
     if kind == "hospital" and tags.get("amenity") == "clinic":
         return 1
     if kind == "flood" and not _is_flood(tags):
+        return 1
+    if kind == "airport" and tags.get("aeroway") == "helipad":
+        return 1
+    if kind == "grocery" and tags.get("shop") == "convenience":
         return 1
     return 0
 
@@ -439,8 +1058,14 @@ def _pick_hits(
             "lat": lat,
             "lon": lon,
             "meters": meters,
-            "detail": _detail(kind, el),
+            "detail": _detail(kind, el, meters),
             "osm_key": key,
+            "relation": _hit_relation(kind, meters),
+            "measurement": "boundary_distance_m",
+            "source": _hit_source(el),
+            "confidence": _hit_confidence(kind, el),
+            "facility_type": _facility_type(kind, el),
+            "disclaimer": _hit_disclaimer(kind),
             "_boost": _rank_boost(kind, el),
         }
         prev = by_key.get(key)
@@ -715,7 +1340,7 @@ async def _nominatim_towns(lat: float, lon: float, radius_m: int, budget_s: floa
 
 
 def _cache_key(kind: str, lat: float, lon: float) -> str:
-    return f"v3:{kind}:{lat:.3f}:{lon:.3f}"
+    return f"v4:{kind}:{lat:.3f}:{lon:.3f}"
 
 
 async def find_nearby(lat: float, lon: float, kind: str) -> dict[str, Any]:
