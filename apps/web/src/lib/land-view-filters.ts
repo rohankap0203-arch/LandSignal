@@ -8,7 +8,9 @@ export type NearbyKind =
   | "railroad"
   | "power"
   | "electric"
+  | "transmission"
   | "public_water"
+  | "water_main"
   | "sewer"
   | "gas"
   | "fiber"
@@ -99,7 +101,7 @@ const UTILITIES_CHIPS: LandViewChip[] = [
     measurementHint: "Nearest distribution / service indication",
   },
   {
-    kind: "power",
+    kind: "transmission",
     label: "Transmission lines",
     color: "#ca8a04",
     maxMiles: 18,
@@ -107,7 +109,7 @@ const UTILITIES_CHIPS: LandViewChip[] = [
     measurementHint: "Nearest high-voltage transmission",
   },
   {
-    kind: "public_water",
+    kind: "water_main",
     label: "Public water",
     color: "#0284c7",
     maxMiles: 20,
