@@ -359,6 +359,12 @@ export const landsignalApi = {
         meters: number;
         detail?: string | null;
         osm_key?: string | null;
+        relation?: string | null;
+        disclaimer?: string | null;
+        facility_type?: string | null;
+        source?: string | null;
+        confidence?: number | string | null;
+        measurement?: string | null;
       }>;
       status: string;
       message?: string | null;
@@ -383,6 +389,12 @@ export const landsignalApi = {
         meters: number;
         detail?: string | null;
         osm_key?: string | null;
+        relation?: string | null;
+        disclaimer?: string | null;
+        facility_type?: string | null;
+        source?: string | null;
+        confidence?: number | string | null;
+        measurement?: string | null;
       }>;
       status: string;
       message?: string | null;

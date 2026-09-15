@@ -218,6 +218,7 @@ export default function ParcelIntelligencePage() {
     (r) => String(r.key || "") !== "hbu_optionality",
   );
   const land = (data.land_readouts as Record<string, AnyRec>) || {};
+  const enrichment = (data.enrichment as AnyRec) || {};
   const brief = (data.brief as AnyRec) || {};
   const cockpit = (data.cockpit as AnyRec) || {};
   const sourcing = (data.sourcing as AnyRec) || ((cockpit.source as AnyRec) || {});
@@ -230,6 +231,41 @@ export default function ParcelIntelligencePage() {
   const oppDrive = (drivers.opportunity as AnyRec) || {};
   const riskDrive = (drivers.risk as AnyRec) || {};
   const confDrive = (drivers.confidence as AnyRec) || {};
+
+  const snapNum = (prov: unknown, key: string): number | null => {
+    if (!prov || typeof prov !== "object") return null;
+    const p = prov as AnyRec;
+    const n = ((p.normalized as AnyRec) || (p.value as AnyRec) || {}) as AnyRec;
+    const v = n[key];
+    const num = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const floodPct =
+    snapNum(enrichment.flood, "flood_zone_pct") ??
+    (() => {
+      const hint = Number((land.flood as AnyRec | undefined)?.score_hint);
+      return Number.isFinite(hint) ? Math.max(0, 100 - hint) : null;
+    })();
+  const wetlandPct =
+    snapNum(enrichment.wetlands, "wetland_pct") ??
+    (() => {
+      const hint = Number((land.wetlands as AnyRec | undefined)?.score_hint);
+      return Number.isFinite(hint) ? Math.max(0, 100 - hint) : null;
+    })();
+  const transmissionM = snapNum(enrichment.infrastructure, "nearest_transmission_m");
+  const accessScore = snapNum(enrichment.access, "legal_access_confidence");
+  const accessConfidence =
+    accessScore != null
+      ? `${Math.round(accessScore)}/100`
+      : ((land.access as AnyRec | undefined)?.level
+          ? String((land.access as AnyRec).level)
+          : null);
+  const siteIntelNotes = [
+    String((land.flood as AnyRec | undefined)?.plain_english || "").trim(),
+    String((land.wetlands as AnyRec | undefined)?.plain_english || "").trim(),
+    String((land.access as AnyRec | undefined)?.plain_english || "").trim(),
+  ].filter(Boolean);
 
   const place = parcel.county
     ? `${parcel.county}, ${parcel.state}`
@@ -468,6 +504,16 @@ export default function ParcelIntelligencePage() {
             longitude={parcel.longitude as number}
             polygon={parcel.polygon as number[][][]}
             parcelId={String(parcel.id || params.id)}
+            siteIntel={{
+              zoning: parcel.zoning != null && String(parcel.zoning).trim() ? String(parcel.zoning) : null,
+              cityLimits: null,
+              floodPct,
+              wetlandPct,
+              transmissionM,
+              accessConfidence,
+              futureLandUse: null,
+              notes: siteIntelNotes.slice(0, 3),
+            }}
           />
           </div>
         </div>
