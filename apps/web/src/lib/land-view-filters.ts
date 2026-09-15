@@ -304,7 +304,7 @@ export const LAND_VIEW_CATEGORIES: LandViewCategory[] = [
   { id: "access", label: "Access", chips: ACCESS_CHIPS },
   { id: "utilities", label: "Utilities", chips: UTILITIES_CHIPS },
   { id: "environment", label: "Environment", chips: ENVIRONMENT_CHIPS },
-  { id: "services", label: "Services", chips: SERVICES_CHIPS },
+  { id: "services", label: "Services & risks", chips: SERVICES_CHIPS },
 ];
 
 export const LAND_VIEW_CHIPS: LandViewChip[] = LAND_VIEW_CATEGORIES.flatMap((c) => c.chips);

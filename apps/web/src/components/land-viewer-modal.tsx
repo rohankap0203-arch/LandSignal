@@ -493,21 +493,29 @@ export function LandViewerModal({
   const landUseRows = useMemo(
     () => [
       { label: "Zoning", value: formatLandUseValue(siteIntel?.zoning) },
+      {
+        label: "Future land use",
+        value: formatLandUseValue(siteIntel?.futureLandUse),
+      },
       { label: "City limits", value: formatLandUseValue(siteIntel?.cityLimits) },
-      { label: "Flood overlap", value: formatLandUseValue(siteIntel?.floodPct, "pct") },
-      { label: "Wetland overlap", value: formatLandUseValue(siteIntel?.wetlandPct, "pct") },
+      {
+        label: "Flood overlap",
+        value: formatLandUseValue(siteIntel?.floodPct, "pct"),
+      },
+      {
+        label: "Wetland overlap",
+        value: formatLandUseValue(siteIntel?.wetlandPct, "pct"),
+      },
       {
         label: "Transmission",
         value: formatLandUseValue(siteIntel?.transmissionM, "meters"),
       },
       {
-        label: "Access confidence",
+        label: "Legal access",
         value: formatLandUseValue(siteIntel?.accessConfidence),
       },
-      {
-        label: "Future land use",
-        value: formatLandUseValue(siteIntel?.futureLandUse),
-      },
+      { label: "Subdivision status", value: MISSING_LANDUSE },
+      { label: "Conservation easement", value: MISSING_LANDUSE },
     ],
     [siteIntel],
   );
