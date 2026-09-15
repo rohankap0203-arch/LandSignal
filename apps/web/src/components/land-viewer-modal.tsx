@@ -4,7 +4,30 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom";
 import { LiveMagnifier } from "@/components/live-magnifier";
 import { landsignalApi } from "@/lib/api";
+import {
+  LAND_VIEW_CATEGORIES,
+  LAND_VIEW_CATEGORY_DEFAULT_OPEN,
+  chipByKind,
+  type FilterCategoryId,
+  type NearbyKind,
+} from "@/lib/land-view-filters";
 import { resolveLandPin } from "@/lib/land-pin";
+
+export type LandViewerSiteIntel = {
+  zoning?: string | null;
+  futureLandUse?: string | null;
+  cityLimits?: string | null;
+  urbanGrowthBoundary?: string | null;
+  subdivisionStatus?: string | null;
+  developmentRestrictions?: string | null;
+  conservationEasement?: string | null;
+  /** Parcel enrichment screens (when available). */
+  floodPct?: number | null;
+  wetlandPct?: number | null;
+  transmissionM?: number | null;
+  accessConfidence?: string | null;
+  notes?: string[];
+};
 
 export type LandViewerProps = {
   open: boolean;
@@ -20,6 +43,8 @@ export type LandViewerProps = {
   reportHref?: string | null;
   /** When set, Closest uses the parcel's stored coordinates (preferred for every listing). */
   parcelId?: string | null;
+  /** Optional site screens for the Land use & development strip. */
+  siteIntel?: LandViewerSiteIntel;
 };
 
 /** Clear yellow land outline — same signal as the old inventory maps. */
@@ -52,16 +77,6 @@ function ringsToLatLngs(polygon: number[][][] | null | undefined): [number, numb
 type Basemap = "satellite" | "streets" | "hybrid";
 type Tool = "pan" | "measure" | "radius";
 
-type NearbyKind =
-  | "flood"
-  | "wetland"
-  | "road"
-  | "power"
-  | "town"
-  | "school"
-  | "hospital"
-  | "water";
-
 type NearbyHit = {
   kind: NearbyKind;
   label: string;
@@ -69,39 +84,23 @@ type NearbyHit = {
   lat: number;
   lon: number;
   meters: number;
-  source: "live";
+  source?: string;
   detail?: string;
   osmKey?: string;
+  relation?: string;
+  disclaimer?: string;
+  facility_type?: string;
+  confidence?: number | string;
+  measurement?: string;
+  drive_meters?: number;
+  drive_seconds?: number;
 };
 
 const NEARBY_RESULT_LIMIT = 3;
 /** UI watchdog — Closest must never spin past this even if the API is slow. */
 const NEARBY_UI_DEADLINE_MS = 14_000;
 
-type NearbyChip = {
-  kind: NearbyKind;
-  label: string;
-  color: string;
-  maxMiles: number;
-};
-
-const NEARBY_CHIPS: NearbyChip[] = [
-  { kind: "flood", label: "Flood zone", color: "#3b82f6", maxMiles: 15 },
-  { kind: "wetland", label: "Wetland", color: "#14b8a6", maxMiles: 18 },
-  { kind: "water", label: "Water body", color: "#0ea5e9", maxMiles: 18 },
-  { kind: "road", label: "Paved road", color: "#a16207", maxMiles: 12 },
-  { kind: "power", label: "Power line", color: "#ca8a04", maxMiles: 18 },
-  { kind: "town", label: "Town/services", color: "#b45309", maxMiles: 35 },
-  { kind: "school", label: "School", color: "#7c3aed", maxMiles: 25 },
-  { kind: "hospital", label: "Hospital", color: "#dc2626", maxMiles: 50 },
-];
-
-const NEARBY_ROW1 = NEARBY_CHIPS.filter((c) =>
-  ["flood", "wetland", "water", "road", "power"].includes(c.kind),
-);
-const NEARBY_ROW2 = NEARBY_CHIPS.filter((c) =>
-  ["town", "school", "hospital"].includes(c.kind),
-);
+const MISSING_LANDUSE = "Not in file yet";
 
 const nearbyCache = new Map<string, { hits: NearbyHit[]; message?: string }>();
 /** Cancel in-flight Closest API calls when the user switches chips. */
@@ -190,6 +189,132 @@ function ordinalClosest(index: number) {
   return `${index + 1}th closest`;
 }
 
+function formatSourceLabel(source?: string | null): string | null {
+  const raw = String(source || "").trim();
+  if (!raw || raw === "live") return null;
+  const known: Record<string, string> = {
+    photon: "Photon",
+    nominatim: "Nominatim",
+    overpass: "OpenStreetMap",
+    osm: "OpenStreetMap",
+    osrm: "OSRM",
+  };
+  return known[raw.toLowerCase()] || raw.replace(/[_-]+/g, " ");
+}
+
+function formatDriveTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "—";
+  const mins = Math.round(seconds / 60);
+  if (mins < 1) return "<1 min drive";
+  if (mins < 60) return `~${mins} min drive`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `~${h}h ${m}m drive` : `~${h}h drive`;
+}
+
+function formatMeasurementLabel(measurement?: string | null): string | null {
+  const m = String(measurement || "").trim();
+  if (!m) return null;
+  const known: Record<string, string> = {
+    straight_line_m: "straight-line",
+    boundary_distance_m: "boundary distance",
+    adjacency_distance_m: "adjacency / distance",
+    proximity_m: "proximity",
+  };
+  return known[m] || m.replace(/_/g, " ");
+}
+
+/** Rich Closest status line — prefers API relation/detail/source when present. */
+function formatNearbyStatus(hit: NearbyHit, index: number): string {
+  const rank = ordinalClosest(index);
+  const parts: string[] = [];
+  const nearOverlap =
+    (hit.kind === "flood" || hit.kind === "wetland") &&
+    Number.isFinite(hit.meters) &&
+    hit.meters < 50;
+  const hasDrive =
+    Number.isFinite(hit.drive_meters) &&
+    hit.drive_meters != null &&
+    hit.drive_meters >= 0;
+
+  if (nearOverlap) {
+    const relation =
+      hit.relation?.trim() ||
+      (hit.meters <= 5
+        ? "on or overlapping parcel (adjacency / overlap possible)"
+        : "adjacent / overlap possible");
+    parts.push(`${rank} ${hit.label}: ${relation}`);
+    if (hit.meters > 0) {
+      parts.push(formatDistance(hit.meters));
+    }
+  } else if (hit.relation?.trim()) {
+    parts.push(`${rank} ${hit.label}: ${hit.relation.trim()}`);
+    if (hasDrive) {
+      parts.push(`${formatDistance(hit.drive_meters!)} drive`);
+      if (Number.isFinite(hit.drive_seconds)) {
+        parts.push(formatDriveTime(hit.drive_seconds!));
+      }
+      parts.push(`${formatDistance(hit.meters)} straight-line`);
+    } else {
+      const meas = formatMeasurementLabel(hit.measurement);
+      parts.push(
+        meas === "straight-line"
+          ? `${formatDistance(hit.meters)} straight-line`
+          : formatDistance(hit.meters),
+      );
+    }
+  } else if (hasDrive) {
+    parts.push(`${rank} ${hit.label}: ${formatDistance(hit.drive_meters!)} drive`);
+    if (Number.isFinite(hit.drive_seconds)) {
+      parts.push(formatDriveTime(hit.drive_seconds!));
+    }
+    parts.push(`${formatDistance(hit.meters)} straight-line`);
+  } else {
+    const meas = formatMeasurementLabel(hit.measurement);
+    parts.push(
+      `${rank} ${hit.label}: ${
+        meas === "straight-line"
+          ? `${formatDistance(hit.meters)} straight-line`
+          : formatDistance(hit.meters)
+      }`,
+    );
+  }
+
+  if (hit.name?.trim()) parts.push(hit.name.trim());
+  if (hit.facility_type?.trim()) parts.push(hit.facility_type.trim());
+  if (hit.detail?.trim()) parts.push(hit.detail.trim());
+  if (hit.disclaimer?.trim()) parts.push(hit.disclaimer.trim());
+  const src = formatSourceLabel(hit.source);
+  if (src) parts.push(`via ${src}`);
+  if (hit.confidence != null && String(hit.confidence).trim()) {
+    const conf =
+      typeof hit.confidence === "number"
+        ? `${Math.round(hit.confidence)}% conf.`
+        : String(hit.confidence).trim();
+    parts.push(conf);
+  }
+  return parts.join(" · ");
+}
+
+function formatLandUseValue(
+  value: string | number | null | undefined,
+  kind: "text" | "pct" | "meters" = "text",
+): string {
+  if (value == null || value === "") return MISSING_LANDUSE;
+  if (kind === "pct") {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return MISSING_LANDUSE;
+    return `${n.toFixed(n < 10 && n % 1 !== 0 ? 1 : 0)}%`;
+  }
+  if (kind === "meters") {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) return MISSING_LANDUSE;
+    return formatDistance(n);
+  }
+  const s = String(value).trim();
+  return s || MISSING_LANDUSE;
+}
+
 /**
  * Closest landmarks via LandSignal API for any listing pin nationwide.
  * Always queries by lat/lon (map pin coords). If a parcelId lookup is available
@@ -223,7 +348,7 @@ async function fetchNearby(
   isCancelled?: () => boolean,
   parcelId?: string | null,
 ): Promise<{ hits: NearbyHit[]; message: string | null }> {
-  const meta = NEARBY_CHIPS.find((c) => c.kind === kind);
+  const meta = chipByKind(kind);
   if (!meta) return { hits: [], message: "Unknown landmark type" };
 
   const cacheKey = `api:v4:${kind}:${lat.toFixed(3)}:${lon.toFixed(3)}`;
@@ -276,9 +401,22 @@ async function fetchNearby(
           lat: Number(h.lat),
           lon: Number(h.lon),
           meters: Number(h.meters),
-          source: "live" as const,
+          source: h.source || "live",
           detail: h.detail || undefined,
           osmKey: h.osm_key || undefined,
+          relation: h.relation || undefined,
+          disclaimer: h.disclaimer || undefined,
+          facility_type: h.facility_type || undefined,
+          confidence: h.confidence ?? undefined,
+          measurement: h.measurement || undefined,
+          drive_meters:
+            typeof h.drive_meters === "number" && Number.isFinite(h.drive_meters)
+              ? h.drive_meters
+              : undefined,
+          drive_seconds:
+            typeof h.drive_seconds === "number" && Number.isFinite(h.drive_seconds)
+              ? h.drive_seconds
+              : undefined,
         }));
 
       if (hits.length) {
@@ -369,6 +507,7 @@ export function LandViewerModal({
   longitude,
   polygon,
   parcelId,
+  siteIntel,
 }: LandViewerProps) {
   const titleId = useId();
   const mapEl = useRef<HTMLDivElement>(null);
@@ -408,10 +547,58 @@ export function LandViewerModal({
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [nearbyHits, setNearbyHits] = useState<NearbyHit[]>([]);
   const [nearbyHitIndex, setNearbyHitIndex] = useState(0);
+  const [catOpen, setCatOpen] = useState<Record<FilterCategoryId, boolean>>(
+    () => ({ ...LAND_VIEW_CATEGORY_DEFAULT_OPEN }),
+  );
   const nearbySearchGen = useRef(0);
   const nearbyHitIndexRef = useRef(0);
   /** Closest chip tapped before Leaflet finished booting — run once mapReady. */
   const pendingNearbyKind = useRef<NearbyKind | null>(null);
+
+  const showLandUse = Boolean(parcelId) || siteIntel != null;
+  const landUseRows = useMemo(
+    () => [
+      { label: "Zoning", value: formatLandUseValue(siteIntel?.zoning) },
+      {
+        label: "Future land use",
+        value: formatLandUseValue(siteIntel?.futureLandUse),
+      },
+      { label: "City limits", value: formatLandUseValue(siteIntel?.cityLimits) },
+      {
+        label: "Urban growth / service boundary",
+        value: formatLandUseValue(siteIntel?.urbanGrowthBoundary),
+      },
+      {
+        label: "Subdivision status",
+        value: formatLandUseValue(siteIntel?.subdivisionStatus),
+      },
+      {
+        label: "Development restrictions",
+        value: formatLandUseValue(siteIntel?.developmentRestrictions),
+      },
+      {
+        label: "Conservation easement",
+        value: formatLandUseValue(siteIntel?.conservationEasement),
+      },
+      {
+        label: "Flood overlap",
+        value: formatLandUseValue(siteIntel?.floodPct, "pct"),
+      },
+      {
+        label: "Wetland overlap",
+        value: formatLandUseValue(siteIntel?.wetlandPct, "pct"),
+      },
+      {
+        label: "Transmission",
+        value: formatLandUseValue(siteIntel?.transmissionM, "meters"),
+      },
+      {
+        label: "Legal access",
+        value: formatLandUseValue(siteIntel?.accessConfidence),
+      },
+    ],
+    [siteIntel],
+  );
 
   const hasGeo = isValidLatLon(latitude, longitude) || Boolean(resolvedPolygon?.[0]?.length);
   const landPin = useMemo(
@@ -480,6 +667,7 @@ export function LandViewerModal({
     nearbySearchGen.current += 1;
     nearbyAbort?.abort();
     setNearbyLoading(false);
+    setCatOpen({ ...LAND_VIEW_CATEGORY_DEFAULT_OPEN });
     setElevationFt(null);
     setZoom(null);
     {
@@ -707,7 +895,7 @@ export function LandViewerModal({
 
   const paintNearbyHit = useCallback(
     async (hit: NearbyHit, index: number) => {
-      const chip = NEARBY_CHIPS.find((c) => c.kind === hit.kind);
+      const chip = chipByKind(hit.kind);
       const L = await import("leaflet");
       const map = mapRef.current;
       const layer = layersRef.current.nearby;
@@ -721,7 +909,23 @@ export function LandViewerModal({
         weight: 2.5,
         dashArray: "7 5",
       }).addTo(layer);
-      const detailHtml = hit.detail ? `<br/><em>${hit.detail}</em>` : "";
+      const detailBits = [
+        hit.detail,
+        hit.facility_type,
+        hit.relation,
+        hit.disclaimer,
+        formatSourceLabel(hit.source) ? `via ${formatSourceLabel(hit.source)}` : null,
+      ].filter(Boolean);
+      const detailHtml = detailBits.length
+        ? `<br/><em>${detailBits.join(" · ")}</em>`
+        : "";
+      const nearOverlap =
+        (hit.kind === "flood" || hit.kind === "wetland") && hit.meters < 50;
+      const distLine = nearOverlap
+        ? `${hit.relation?.trim() || "adjacent / overlap possible"}${
+            hit.meters > 0 ? ` · ${formatDistance(hit.meters)}` : ""
+          }`
+        : `${formatDistance(hit.meters)} away`;
       L.circleMarker([hit.lat, hit.lon], {
         radius: 8,
         color: "#fff",
@@ -730,7 +934,7 @@ export function LandViewerModal({
         fillOpacity: 1,
       })
         .bindPopup(
-          `<strong>${rank} ${hit.label}</strong><br/>${hit.name}<br/>${formatDistance(hit.meters)} away${detailHtml}`,
+          `<strong>${rank} ${hit.label}</strong><br/>${hit.name}<br/>${distLine}${detailHtml}`,
         )
         .addTo(layer)
         .openPopup();
@@ -738,10 +942,7 @@ export function LandViewerModal({
         padding: [60, 60],
         maxZoom: 14,
       });
-      const detailSuffix = hit.detail ? ` · ${hit.detail}` : "";
-      setNearbyStatus(
-        `${rank} ${hit.label}: ${formatDistance(hit.meters)} · ${hit.name}${detailSuffix}`,
-      );
+      setNearbyStatus(formatNearbyStatus(hit, index));
     },
     [center],
   );
@@ -765,7 +966,7 @@ export function LandViewerModal({
           return;
         }
         pendingNearbyKind.current = kind;
-        const chip = NEARBY_CHIPS.find((c) => c.kind === kind);
+        const chip = chipByKind(kind);
         setNearbyActive(kind);
         setNearbyLoading(true);
         setNearbyStatus(`Finding closest ${chip?.label ?? "feature"}…`);
@@ -785,7 +986,7 @@ export function LandViewerModal({
         setNearbyStatus("");
         return;
       }
-      const chip = NEARBY_CHIPS.find((c) => c.kind === kind);
+      const chip = chipByKind(kind);
       nearbySearchGen.current += 1;
       const gen = nearbySearchGen.current;
       nearbyAbort?.abort();
@@ -1262,45 +1463,66 @@ export function LandViewerModal({
 
         <div className="land-viewer-nearby" aria-label="Closest landmarks">
           <span className="land-viewer-nearby-label">Closest</span>
-          <div className="land-viewer-nearby-chips">
-            {NEARBY_ROW1.map((chip) => (
-              <button
-                key={chip.kind}
-                type="button"
-                className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
-                style={{ ["--chip" as string]: chip.color }}
-                disabled={!hasGeo}
-                onClick={() => void showNearby(chip.kind)}
-                title={
-                  nearbyLoading && nearbyActive === chip.kind
-                    ? "Cancel search"
-                    : nearbyLoading
-                      ? `Switch to ${chip.label}`
-                      : chip.label
-                }
-              >
-                {chip.label}
-              </button>
-            ))}
-            {NEARBY_ROW2.map((chip) => (
-              <button
-                key={chip.kind}
-                type="button"
-                className={`land-viewer-chip${chip.kind === "town" ? " land-viewer-chip--town" : ""}${nearbyActive === chip.kind ? " is-on" : ""}`}
-                style={{ ["--chip" as string]: chip.color }}
-                disabled={!hasGeo}
-                onClick={() => void showNearby(chip.kind)}
-                title={
-                  nearbyLoading && nearbyActive === chip.kind
-                    ? "Cancel search"
-                    : nearbyLoading
-                      ? `Switch to ${chip.label}`
-                      : chip.label
-                }
-              >
-                {chip.label}
-              </button>
-            ))}
+          <div className="land-viewer-filter-cats">
+            {LAND_VIEW_CATEGORIES.map((cat) => {
+              const expanded = catOpen[cat.id];
+              const activeCount = nearbyActive
+                ? cat.chips.some((c) => c.kind === nearbyActive)
+                  ? 1
+                  : 0
+                : 0;
+              return (
+                <div
+                  key={cat.id}
+                  className={`land-viewer-filter-cat${expanded ? " is-open" : ""}`}
+                >
+                  <button
+                    type="button"
+                    className="land-viewer-filter-cat-head"
+                    aria-expanded={expanded}
+                    onClick={() =>
+                      setCatOpen((prev) => ({ ...prev, [cat.id]: !prev[cat.id] }))
+                    }
+                  >
+                    <span>{cat.label}</span>
+                    {activeCount > 0 ? (
+                      <span className="land-viewer-filter-cat-count" aria-label={`${activeCount} active`}>
+                        {activeCount}
+                      </span>
+                    ) : null}
+                    <span className="land-viewer-filter-cat-chevron" aria-hidden>
+                      {expanded ? "−" : "+"}
+                    </span>
+                  </button>
+                  {expanded ? (
+                    <div className="land-viewer-filter-cat-body" role="group" aria-label={cat.label}>
+                      {cat.chips.map((chip) => (
+                        <button
+                          key={chip.kind}
+                          type="button"
+                          className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
+                          style={{ ["--chip" as string]: chip.color }}
+                          disabled={!hasGeo}
+                          onClick={() => void showNearby(chip.kind)}
+                          title={
+                            nearbyLoading && nearbyActive === chip.kind
+                              ? "Cancel search"
+                              : nearbyLoading
+                                ? `Switch to ${chip.label}`
+                                : chip.measurementHint || chip.label
+                          }
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="land-viewer-nearby-footer">
             {nearbyLoading ? (
               <span className="land-viewer-nearby-loading" role="status" aria-live="polite">
                 <LiveMagnifier size={14} label="Finding closest landmark" />
@@ -1360,6 +1582,29 @@ export function LandViewerModal({
               </div>
             ) : null}
           </div>
+
+          {showLandUse ? (
+            <div className="land-viewer-landuse" aria-label="Land use and development">
+              <div className="land-viewer-landuse-kicker">Land use &amp; development</div>
+              <dl className="land-viewer-landuse-grid">
+                {landUseRows.map((row) => (
+                  <div key={row.label} className="land-viewer-landuse-row">
+                    <dt>{row.label}</dt>
+                    <dd className={row.value === MISSING_LANDUSE ? "is-missing" : undefined}>
+                      {row.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              {siteIntel?.notes?.length ? (
+                <ul className="land-viewer-landuse-notes">
+                  {siteIntel.notes.slice(0, 3).map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="land-viewer-stage">

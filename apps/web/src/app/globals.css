@@ -8251,16 +8251,14 @@ html.land-viewer-open body {
 }
 
 .land-viewer-nearby {
-  /* Shared 5-col grid: top row fills all 5; bottom chips share those
-     same column widths (Town/School/Hospital) instead of stretching wider. */
-  --nearby-chip-gap: 0.18rem;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.22rem;
+  gap: 0.28rem;
   padding: 0.3rem 0.36rem 0.34rem;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-elevated) 90%, var(--bg-soft));
+  min-width: 0;
 }
 
 .land-viewer-nearby-label {
@@ -8273,21 +8271,104 @@ html.land-viewer-open body {
   line-height: 1;
 }
 
-.land-viewer-nearby-chips {
-  display: grid;
-  /* 20 cols: top chips span 4; Town slightly wider (5); School/Hospital 4; Working/nav 7 */
-  grid-template-columns: repeat(20, minmax(0, 1fr));
-  gap: 0.22rem var(--nearby-chip-gap);
-  align-items: center;
+.land-viewer-filter-cats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
   min-width: 0;
 }
 
-.land-viewer-nearby-chips > .land-viewer-chip {
-  grid-column: span 4;
+.land-viewer-filter-cat {
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-elevated) 96%, var(--bg-soft));
+  overflow: hidden;
 }
 
-.land-viewer-nearby-chips > .land-viewer-chip--town {
-  grid-column: span 5;
+.land-viewer-filter-cat.is-open {
+  border-color: color-mix(in srgb, var(--brand) 28%, var(--line));
+}
+
+.land-viewer-filter-cat-head {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  min-height: 1.55rem;
+  margin: 0;
+  padding: 0.22rem 0.45rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+
+.land-viewer-filter-cat-head:hover {
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
+}
+
+.land-viewer-filter-cat-head > span:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.land-viewer-filter-cat-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  padding: 0 0.28rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand) 22%, var(--bg-elevated));
+  color: color-mix(in srgb, var(--brand) 55%, var(--ink));
+  font-size: 0.62rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.land-viewer-filter-cat-chevron {
+  flex: 0 0 auto;
+  width: 0.9rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.land-viewer-filter-cat-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  padding: 0 0.35rem 0.35rem;
+  min-width: 0;
+}
+
+.land-viewer-filter-cat-body > .land-viewer-chip {
+  width: auto;
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
+.land-viewer-nearby-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.28rem;
+  min-width: 0;
+  min-height: 0;
+}
+
+.land-viewer-nearby-footer:empty {
+  display: none;
 }
 
 .land-viewer-chip {
@@ -8297,7 +8378,7 @@ html.land-viewer-open body {
   justify-content: center;
   min-height: 1.48rem;
   min-width: 0;
-  padding: 0.18rem 0.28rem;
+  padding: 0.18rem 0.42rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--chip, var(--brand)) 45%, var(--line));
   background: color-mix(in srgb, var(--chip, var(--brand)) 10%, var(--bg-elevated));
@@ -8327,8 +8408,6 @@ html.land-viewer-open body {
 
 .land-viewer-nearby-loading,
 .land-viewer-nearby-nav {
-  grid-column: span 7;
-  justify-self: stretch;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -8381,6 +8460,74 @@ html.land-viewer-open body {
   white-space: nowrap;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+}
+
+.land-viewer-landuse {
+  margin-top: 0.08rem;
+  padding: 0.32rem 0.4rem 0.36rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 90%, transparent);
+  background: color-mix(in srgb, var(--bg-soft) 70%, var(--bg-elevated));
+  min-width: 0;
+}
+
+.land-viewer-landuse-kicker {
+  margin: 0 0 0.28rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.land-viewer-landuse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.22rem 0.55rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.land-viewer-landuse-row {
+  display: grid;
+  gap: 0.06rem;
+  min-width: 0;
+}
+
+.land-viewer-landuse-row dt {
+  margin: 0;
+  font-size: 0.58rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.land-viewer-landuse-row dd {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.land-viewer-landuse-row dd.is-missing {
+  font-weight: 500;
+  color: color-mix(in srgb, var(--muted) 88%, var(--ink));
+  font-style: italic;
+}
+
+.land-viewer-landuse-notes {
+  margin: 0.3rem 0 0;
+  padding: 0 0 0 0.95rem;
+  display: grid;
+  gap: 0.12rem;
+  font-size: 0.68rem;
+  color: var(--muted);
+  line-height: 1.35;
 }
 
 .land-viewer-nearby-next-count {
@@ -8799,6 +8946,24 @@ html.land-viewer-open body {
     min-height: 1.62rem;
     padding: 0.18rem 0.2rem;
     font-size: clamp(0.54rem, 2.4vw, 0.66rem);
+  }
+
+  .land-viewer-filter-cat-head {
+    min-height: 1.62rem;
+    font-size: 0.64rem;
+  }
+
+  .land-viewer-filter-cat-body {
+    gap: 0.16rem;
+  }
+
+  .land-viewer-chip {
+    font-size: 0.6rem;
+    padding: 0.16rem 0.34rem;
+  }
+
+  .land-viewer-landuse-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .land-viewer-hud {
