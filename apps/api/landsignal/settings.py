@@ -15,8 +15,9 @@ class Settings(BaseSettings):
     store_backend: Literal["memory", "postgres"] = "memory"
     demo_seed: bool = False
     force_live_on_demo: bool = False
-    # Default OFF in cloud VMs — startup nationwide discover OOMs 15Gi pods.
-    # Use POST /v1/discover (background) when you want to grow inventory.
+    # Default OFF in cloud VMs — always-on nationwide discover OOMs 15Gi pods.
+    # Empty inventory still triggers a one-shot startup rebuild (see main.py).
+    # Use POST /v1/discover (background) when you want to deepen a live book.
     auto_discover_on_startup: bool = False
     discover_limit: int = 1_000_000
     # ~5k × 51 ≈ 255k floor; surplus-fill toward 520k so filter variation stays deep.
@@ -55,8 +56,9 @@ class Settings(BaseSettings):
     attom_api_key: str | None = None
     # api | bulk | memory | disabled
     # memory/disabled → no live ATTOM HTTP; still serve durable reserved IQ.
+    # Default memory so an expired key cannot break parcel IQ (cloud start also sets this).
     # bulk reserved for a future licensed bulk feed.
-    attom_data_mode: Literal["api", "bulk", "memory", "disabled"] = "api"
+    attom_data_mode: Literal["api", "bulk", "memory", "disabled"] = "memory"
     # Must stay ≤ 86400 under current ATTOM API retention terms
     attom_cache_ttl_seconds: int = 82_800
     attom_enrich_on_analyze: bool = True

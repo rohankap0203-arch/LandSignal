@@ -16,8 +16,14 @@ export AUTH_TRUST_HOST="${AUTH_TRUST_HOST:-true}"
 export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-/v1}"
 export LANDSIGNAL_API_ORIGIN="${LANDSIGNAL_API_ORIGIN:-http://127.0.0.1:8000}"
 # Index live public inventory on boot so Show matches is never empty on cold start.
+# Empty-book rebuild is handled in API startup even when this stays false.
 export AUTO_DISCOVER_ON_STARTUP="${AUTO_DISCOVER_ON_STARTUP:-false}"
 export LAND_ALERTS_MONITOR_ENABLED="${LAND_ALERTS_MONITOR_ENABLED:-false}"
+# Lost / expired ATTOM key: serve reserved IQ from disk, never hit live HTTP.
+export ATTOM_DATA_MODE="${ATTOM_DATA_MODE:-memory}"
+# Prefer durable workspace dump over ephemeral /tmp (pod recycle wipes /tmp).
+export LANDSIGNAL_INVENTORY_PATH="${LANDSIGNAL_INVENTORY_PATH:-/workspace/data/landsignal_inventory.json}"
+mkdir -p /workspace/data /tmp/landsignal
 
 API_PID=""
 WEB_PID=""
@@ -196,7 +202,7 @@ while true; do
     API_FAILS=$((API_FAILS + 1))
     echo "[landsignal-start] API health miss (${API_FAILS}/5)"
     if [[ "${API_FAILS}" -ge 5 ]]; then
-      echo "[landsignal-start] API down — restarting (will restore /tmp/landsignal_inventory.json)"
+      echo "[landsignal-start] API down — restarting (will restore /workspace/data/landsignal_inventory.json or legacy /tmp dump)"
       free_port 8000
       sleep 2
       API_PID=""
