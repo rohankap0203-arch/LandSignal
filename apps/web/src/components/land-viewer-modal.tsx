@@ -1321,9 +1321,9 @@ export function LandViewerModal({
                   title="Previous closest — tap left side"
                 >
                   <span className="land-viewer-nearby-next-arrow" aria-hidden>
-                    <svg viewBox="0 0 16 12" focusable="false">
+                    <svg viewBox="0 0 22 12" focusable="false">
                       <path
-                        d="M9 2.5 3.5 6 9 9.5M3.5 6H12.8"
+                        d="M9 2.5 3.5 6 9 9.5M3.5 6H19.5"
                         fill="none"
                         stroke="currentColor"
                         strokeWidth="1.3"
@@ -1345,9 +1345,9 @@ export function LandViewerModal({
                   title="Next closest — tap right side"
                 >
                   <span className="land-viewer-nearby-next-arrow" aria-hidden>
-                    <svg viewBox="0 0 16 12" focusable="false">
+                    <svg viewBox="0 0 22 12" focusable="false">
                       <path
-                        d="M7 2.5 12.5 6 7 9.5M12.5 6H3.2"
+                        d="M13 2.5 18.5 6 13 9.5M18.5 6H2.5"
                         fill="none"
                         stroke="currentColor"
                         strokeWidth="1.3"
