@@ -23,13 +23,92 @@ from landsignal.settings import Settings, get_settings
 
 log = structlog.get_logger()
 
-_ATTOM_SNAPSHOT_PATH = os.environ.get(
-    "LANDSIGNAL_ATTOM_MEMORY_PATH",
-    "/tmp/landsignal_attom_enrichment.json",
-)
+def _default_attom_memory_path() -> str:
+    """Prefer a workspace-persistent path over ephemeral /tmp."""
+    for candidate in (
+        os.environ.get("LANDSIGNAL_ATTOM_MEMORY_PATH"),
+        "/workspace/data/attom_enrichment.json",
+        str(Path.home() / ".landsignal" / "attom_enrichment.json"),
+        "/tmp/landsignal_attom_enrichment.json",
+    ):
+        if candidate:
+            return candidate
+    return "/tmp/landsignal_attom_enrichment.json"
+
+
+_ATTOM_SNAPSHOT_PATH = _default_attom_memory_path()
 # Hard reserve cap — keep what the key presented; trim only pathological growth.
 _ATTOM_MEMORY_SOFT_CAP = int(os.environ.get("LANDSIGNAL_ATTOM_MEMORY_CAP") or 25_000)
 _ATTOM_MEMORY_TRIM_TO = int(os.environ.get("LANDSIGNAL_ATTOM_MEMORY_TRIM") or 20_000)
+
+# Live auth/trial failures — skip hammering ATTOM and prefer reserved IQ.
+_LIVE_SKIP_STATES = frozenset(
+    {
+        "NOT_CONFIGURED",
+        "DISABLED",
+        "AUTH_ERROR",
+        "TRIAL_EXPIRED",
+        "QUOTA_EXCEEDED",
+    }
+)
+
+
+def attom_memory_stats() -> dict[str, Any]:
+    """Ops snapshot of the durable ATTOM reserve (safe with empty/missing file)."""
+    path = Path(_ATTOM_SNAPSHOT_PATH)
+    data = _read_memory_file(path)
+    entries = data.get("by_parcel") if isinstance(data.get("by_parcel"), dict) else {}
+    return {
+        "path": str(path),
+        "exists": path.exists(),
+        "parcel_count": len(entries),
+        "updated_at": data.get("updated_at"),
+        "soft_cap": _ATTOM_MEMORY_SOFT_CAP,
+        "note": (
+            "Reserved ATTOM IQ survives key expiry. "
+            "Show Matches listings still come from public GIS/BLM — this file is property intelligence only."
+        ),
+    }
+
+
+def _serve_reserved(
+    parcel_blob: dict[str, Any],
+    *,
+    parcel_key: str | None,
+    live_state: str | None = None,
+    live_error: str | None = None,
+) -> dict[str, Any] | None:
+    key = parcel_key or _memory_lookup_key(parcel_blob)
+    reserved = load_attom_snapshot(key) if key else None
+    if not (reserved and isinstance(reserved.get("fields"), dict) and reserved["fields"]):
+        return None
+    fields = reserved["fields"]
+    improved = classify_improved(fields)
+    conf = compute_data_confidence(
+        {
+            **parcel_blob,
+            **fields,
+            "sources": list({*(parcel_blob.get("sources") or []), "ATTOM", "ATTOM:MEMORY"}),
+        }
+    )
+    log.info(
+        "attom_served_from_memory",
+        parcel_key=key,
+        live_state=live_state,
+        saved_at=reserved.get("saved_at") or reserved.get("saved_at"),
+    )
+    return {
+        "ok": True,
+        "state": "RESERVED_MEMORY",
+        "fields": fields,
+        "improved": improved,
+        "data_confidence": conf,
+        "from_memory": True,
+        "saved_at": reserved.get("saved_at") or reserved.get("first_saved_at"),
+        "live_state": live_state,
+        "live_error": live_error,
+        "persistencePolicy": "RESERVED_LAST_KNOWN",
+    }
 
 
 async def enrich_with_attom(
@@ -45,6 +124,28 @@ async def enrich_with_attom(
     reserved fields for this parcel if we have them — UI/data stay unchanged.
     """
     settings = settings or get_settings()
+    mode = str(getattr(settings, "attom_data_mode", "api") or "api").lower()
+    key_present = bool((getattr(settings, "attom_api_key", None) or "").strip())
+
+    # Expired / missing key / explicit disabled → do not call ATTOM HTTP (avoids 401 spam).
+    # Still serve durable reserve so previously presented IQ keeps shipping.
+    if mode in {"disabled", "memory"} or not key_present:
+        reserved = _serve_reserved(
+            parcel_blob,
+            parcel_key=parcel_key,
+            live_state="DISABLED" if mode == "disabled" else "NOT_CONFIGURED",
+            live_error=None if mode == "memory" else "live ATTOM skipped — using reserved memory",
+        )
+        if reserved:
+            return reserved
+        return {
+            "ok": False,
+            "state": "DISABLED" if mode == "disabled" else "NOT_CONFIGURED",
+            "fields": {},
+            "error": "ATTOM live key unavailable and no reserved IQ for this parcel",
+            "from_memory": False,
+        }
+
     provider = AttomPropertyProvider(settings=settings)
     live: dict[str, Any]
     try:
@@ -84,37 +185,15 @@ async def enrich_with_attom(
     if live.get("ok") and live.get("fields"):
         return live
 
-    # Live miss — serve durable reserve so expiration never erases presented IQ.
-    key = parcel_key or _memory_lookup_key(parcel_blob)
-    reserved = load_attom_snapshot(key) if key else None
-    if reserved and isinstance(reserved.get("fields"), dict) and reserved["fields"]:
-        fields = reserved["fields"]
-        improved = classify_improved(fields)
-        conf = compute_data_confidence(
-            {
-                **parcel_blob,
-                **fields,
-                "sources": list({*(parcel_blob.get("sources") or []), "ATTOM", "ATTOM:MEMORY"}),
-            }
-        )
-        log.info(
-            "attom_served_from_memory",
-            parcel_key=key,
-            live_state=live.get("state"),
-            saved_at=reserved.get("saved_at"),
-        )
-        return {
-            "ok": True,
-            "state": "RESERVED_MEMORY",
-            "fields": fields,
-            "improved": improved,
-            "data_confidence": conf,
-            "from_memory": True,
-            "saved_at": reserved.get("saved_at"),
-            "live_state": live.get("state"),
-            "live_error": live.get("error"),
-            "persistencePolicy": "RESERVED_LAST_KNOWN",
-        }
+    # Live miss / auth expiry — serve durable reserve so presented IQ never vanishes.
+    reserved = _serve_reserved(
+        parcel_blob,
+        parcel_key=parcel_key,
+        live_state=str(live.get("state") or ""),
+        live_error=live.get("error"),
+    )
+    if reserved:
+        return reserved
     return live
 
 
@@ -293,6 +372,36 @@ def prior_attom_ok(enrichment_other: Any) -> dict[str, Any] | None:
         return attom
     return None
 
+
+
+
+def harvest_attom_from_store(store: Any) -> int:
+    """Copy any successful in-RAM ATTOM IQ into the durable reserve (belt-and-suspenders)."""
+    n = 0
+    enrichments = getattr(store, "enrichments", None) or {}
+    for pid, bundle in list(enrichments.items()):
+        other = getattr(bundle, "other", None)
+        attom = prior_attom_ok(other)
+        if not attom:
+            continue
+        fields = attom.get("fields")
+        if not isinstance(fields, dict) or not fields:
+            continue
+        try:
+            snapshot_attom_enrichment(
+                parcel_key=str(pid),
+                fields=fields,
+                meta={
+                    "harvested_from": "store",
+                    "data_confidence": attom.get("data_confidence"),
+                },
+            )
+            n += 1
+        except Exception:
+            continue
+    if n:
+        log.info("attom_memory_harvested_from_store", parcels=n)
+    return n
 
 def hydrate_attom_memory_into_store(store: Any) -> int:
     """Boot-time: reattach reserved ATTOM IQ onto enrichments (key may already be gone)."""

@@ -140,3 +140,48 @@ def test_hydrate_does_not_clobber_live_success(attom_memory_path):
     )
     hydrate_attom_memory_into_store(store)
     assert store.enrichments[pid].other.value["attom"]["fields"]["attomId"] == 1
+
+
+@pytest.mark.asyncio
+async def test_enrich_uses_memory_when_key_missing(attom_memory_path, monkeypatch):
+    """Expired/missing key must not 401 — reserved IQ still serves."""
+    from landsignal.settings import Settings
+
+    pid = str(uuid4())
+    snapshot_attom_enrichment(
+        parcel_key=pid,
+        fields={"acreage": {"value": 12.0}, "attomId": 5},
+    )
+    monkeypatch.setenv("ATTOM_API_KEY", "")
+    settings = Settings(attom_api_key=None, attom_data_mode="memory")
+    import landsignal.services.property_providers.pipeline as pipe
+
+    res = await pipe.enrich_with_attom(
+        {"state": "TX"},
+        deep=True,
+        settings=settings,
+        parcel_key=pid,
+    )
+    assert res["ok"] is True
+    assert res["from_memory"] is True
+    assert res["fields"]["acreage"]["value"] == 12.0
+
+
+def test_harvest_copies_ram_iq_into_reserve(attom_memory_path):
+    from landsignal.services.property_providers.pipeline import harvest_attom_from_store
+
+    store = MemoryStore()
+    pid = uuid4()
+    store.parcels[pid] = ParcelRecord(id=pid, state="GA", latitude=33.0, longitude=-84.0)
+    store.enrichments[pid] = EnrichmentBundle(
+        other=Provenanced(
+            value={"attom": {"ok": True, "fields": {"attomId": 77, "acreage": {"value": 3}}}},
+            knowledge_state=KnowledgeState.KNOWN,
+            source="ATTOM",
+        )
+    )
+    n = harvest_attom_from_store(store)
+    assert n == 1
+    entry = load_attom_snapshot(str(pid))
+    assert entry is not None
+    assert entry["fields"]["attomId"] == 77

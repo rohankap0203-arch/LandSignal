@@ -316,12 +316,9 @@ async def analyze_parcel(
 
     # ATTOM property intelligence (optional, circuit-broken). Never blocks analyze.
     # Once a live key presents fields, they are reserved forever — key expiry must not erase them.
+    # Mode "disabled"/"memory" skips live HTTP but still serves the durable reserve.
     attom_patch: dict[str, Any] = {}
-    if (
-        getattr(settings, "attom_enrich_on_analyze", True)
-        and (not fast)
-        and getattr(settings, "attom_data_mode", "api") != "disabled"
-    ):
+    if getattr(settings, "attom_enrich_on_analyze", True) and (not fast):
         try:
             from landsignal.services.property_providers.pipeline import (
                 attom_fields_to_enrichment_patch,

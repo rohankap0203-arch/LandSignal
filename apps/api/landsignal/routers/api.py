@@ -1530,8 +1530,10 @@ async def search_diagnostics(limit: int = 20) -> dict[str, Any]:
 @router.get("/diagnostics/attom")
 async def attom_diagnostics() -> dict[str, Any]:
     from landsignal.services.property_providers.attom import AttomPropertyProvider, get_attom_client
+    from landsignal.services.property_providers.pipeline import attom_memory_stats
 
     health = AttomPropertyProvider().health_check()
+    memory = attom_memory_stats()
     return {
         "health": {
             "ok": health.ok,
@@ -1540,6 +1542,7 @@ async def attom_diagnostics() -> dict[str, Any]:
             "error": health.error,
         },
         "stats": get_attom_client().stats(),
+        "memory": memory,
         "endpoints_used": [
             "/propertyapi/v1.0.0/property/detail",
             "/propertyapi/v1.0.0/property/detailowner",
@@ -1551,7 +1554,10 @@ async def attom_diagnostics() -> dict[str, Any]:
             "/propertyapi/v1.0.0/property/id",
         ],
         "active_listing_access": False,
-        "note": "ATTOM enriches parcel intelligence; public GIS/BLM remain candidate discovery sources.",
+        "note": (
+            "ATTOM enriches parcel intelligence; public GIS/BLM remain candidate discovery sources. "
+            "When the live key expires, reserved IQ in memory.parcel_count keeps serving."
+        ),
     }
 
 

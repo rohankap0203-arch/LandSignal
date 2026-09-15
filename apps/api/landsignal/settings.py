@@ -53,8 +53,10 @@ class Settings(BaseSettings):
 
     # ATTOM Property API — server-side only. Never expose to the browser.
     attom_api_key: str | None = None
-    # api | bulk | disabled  (bulk reserved for a future licensed bulk feed)
-    attom_data_mode: Literal["api", "bulk", "disabled"] = "api"
+    # api | bulk | memory | disabled
+    # memory/disabled → no live ATTOM HTTP; still serve durable reserved IQ.
+    # bulk reserved for a future licensed bulk feed.
+    attom_data_mode: Literal["api", "bulk", "memory", "disabled"] = "api"
     # Must stay ≤ 86400 under current ATTOM API retention terms
     attom_cache_ttl_seconds: int = 82_800
     attom_enrich_on_analyze: bool = True
