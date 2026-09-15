@@ -15,12 +15,17 @@ import { resolveLandPin } from "@/lib/land-pin";
 
 export type LandViewerSiteIntel = {
   zoning?: string | null;
+  futureLandUse?: string | null;
   cityLimits?: string | null;
+  urbanGrowthBoundary?: string | null;
+  subdivisionStatus?: string | null;
+  developmentRestrictions?: string | null;
+  conservationEasement?: string | null;
+  /** Parcel enrichment screens (when available). */
   floodPct?: number | null;
   wetlandPct?: number | null;
   transmissionM?: number | null;
   accessConfidence?: string | null;
-  futureLandUse?: string | null;
   notes?: string[];
 };
 
@@ -87,6 +92,8 @@ type NearbyHit = {
   facility_type?: string;
   confidence?: number | string;
   measurement?: string;
+  drive_meters?: number;
+  drive_seconds?: number;
 };
 
 const NEARBY_RESULT_LIMIT = 3;
@@ -195,6 +202,28 @@ function formatSourceLabel(source?: string | null): string | null {
   return known[raw.toLowerCase()] || raw.replace(/[_-]+/g, " ");
 }
 
+function formatDriveTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "—";
+  const mins = Math.round(seconds / 60);
+  if (mins < 1) return "<1 min drive";
+  if (mins < 60) return `~${mins} min drive`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `~${h}h ${m}m drive` : `~${h}h drive`;
+}
+
+function formatMeasurementLabel(measurement?: string | null): string | null {
+  const m = String(measurement || "").trim();
+  if (!m) return null;
+  const known: Record<string, string> = {
+    straight_line_m: "straight-line",
+    boundary_distance_m: "boundary distance",
+    adjacency_distance_m: "adjacency / distance",
+    proximity_m: "proximity",
+  };
+  return known[m] || m.replace(/_/g, " ");
+}
+
 /** Rich Closest status line — prefers API relation/detail/source when present. */
 function formatNearbyStatus(hit: NearbyHit, index: number): string {
   const rank = ordinalClosest(index);
@@ -203,6 +232,10 @@ function formatNearbyStatus(hit: NearbyHit, index: number): string {
     (hit.kind === "flood" || hit.kind === "wetland") &&
     Number.isFinite(hit.meters) &&
     hit.meters < 50;
+  const hasDrive =
+    Number.isFinite(hit.drive_meters) &&
+    hit.drive_meters != null &&
+    hit.drive_meters >= 0;
 
   if (nearOverlap) {
     const relation =
@@ -216,14 +249,39 @@ function formatNearbyStatus(hit: NearbyHit, index: number): string {
     }
   } else if (hit.relation?.trim()) {
     parts.push(`${rank} ${hit.label}: ${hit.relation.trim()}`);
-    parts.push(formatDistance(hit.meters));
+    if (hasDrive) {
+      parts.push(`${formatDistance(hit.drive_meters!)} drive`);
+      if (Number.isFinite(hit.drive_seconds)) {
+        parts.push(formatDriveTime(hit.drive_seconds!));
+      }
+      parts.push(`${formatDistance(hit.meters)} straight-line`);
+    } else {
+      const meas = formatMeasurementLabel(hit.measurement);
+      parts.push(
+        meas === "straight-line"
+          ? `${formatDistance(hit.meters)} straight-line`
+          : formatDistance(hit.meters),
+      );
+    }
+  } else if (hasDrive) {
+    parts.push(`${rank} ${hit.label}: ${formatDistance(hit.drive_meters!)} drive`);
+    if (Number.isFinite(hit.drive_seconds)) {
+      parts.push(formatDriveTime(hit.drive_seconds!));
+    }
+    parts.push(`${formatDistance(hit.meters)} straight-line`);
   } else {
-    parts.push(`${rank} ${hit.label}: ${formatDistance(hit.meters)}`);
+    const meas = formatMeasurementLabel(hit.measurement);
+    parts.push(
+      `${rank} ${hit.label}: ${
+        meas === "straight-line"
+          ? `${formatDistance(hit.meters)} straight-line`
+          : formatDistance(hit.meters)
+      }`,
+    );
   }
 
   if (hit.name?.trim()) parts.push(hit.name.trim());
   if (hit.facility_type?.trim()) parts.push(hit.facility_type.trim());
-  if (hit.measurement?.trim()) parts.push(hit.measurement.trim());
   if (hit.detail?.trim()) parts.push(hit.detail.trim());
   if (hit.disclaimer?.trim()) parts.push(hit.disclaimer.trim());
   const src = formatSourceLabel(hit.source);
@@ -351,6 +409,14 @@ async function fetchNearby(
           facility_type: h.facility_type || undefined,
           confidence: h.confidence ?? undefined,
           measurement: h.measurement || undefined,
+          drive_meters:
+            typeof h.drive_meters === "number" && Number.isFinite(h.drive_meters)
+              ? h.drive_meters
+              : undefined,
+          drive_seconds:
+            typeof h.drive_seconds === "number" && Number.isFinite(h.drive_seconds)
+              ? h.drive_seconds
+              : undefined,
         }));
 
       if (hits.length) {
@@ -499,6 +565,22 @@ export function LandViewerModal({
       },
       { label: "City limits", value: formatLandUseValue(siteIntel?.cityLimits) },
       {
+        label: "Urban growth / service boundary",
+        value: formatLandUseValue(siteIntel?.urbanGrowthBoundary),
+      },
+      {
+        label: "Subdivision status",
+        value: formatLandUseValue(siteIntel?.subdivisionStatus),
+      },
+      {
+        label: "Development restrictions",
+        value: formatLandUseValue(siteIntel?.developmentRestrictions),
+      },
+      {
+        label: "Conservation easement",
+        value: formatLandUseValue(siteIntel?.conservationEasement),
+      },
+      {
         label: "Flood overlap",
         value: formatLandUseValue(siteIntel?.floodPct, "pct"),
       },
@@ -514,8 +596,6 @@ export function LandViewerModal({
         label: "Legal access",
         value: formatLandUseValue(siteIntel?.accessConfidence),
       },
-      { label: "Subdivision status", value: MISSING_LANDUSE },
-      { label: "Conservation easement", value: MISSING_LANDUSE },
     ],
     [siteIntel],
   );
@@ -1420,9 +1500,7 @@ export function LandViewerModal({
                         <button
                           key={chip.kind}
                           type="button"
-                          className={`land-viewer-chip${
-                            chip.kind === "town" ? " land-viewer-chip--town" : ""
-                          }${nearbyActive === chip.kind ? " is-on" : ""}`}
+                          className={`land-viewer-chip${nearbyActive === chip.kind ? " is-on" : ""}`}
                           style={{ ["--chip" as string]: chip.color }}
                           disabled={!hasGeo}
                           onClick={() => void showNearby(chip.kind)}

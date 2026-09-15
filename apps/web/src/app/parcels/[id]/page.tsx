@@ -506,12 +506,16 @@ export default function ParcelIntelligencePage() {
             parcelId={String(parcel.id || params.id)}
             siteIntel={{
               zoning: parcel.zoning != null && String(parcel.zoning).trim() ? String(parcel.zoning) : null,
+              futureLandUse: null,
               cityLimits: null,
+              urbanGrowthBoundary: null,
+              subdivisionStatus: null,
+              developmentRestrictions: null,
+              conservationEasement: null,
               floodPct,
               wetlandPct,
               transmissionM,
               accessConfidence,
-              futureLandUse: null,
               notes: siteIntelNotes.slice(0, 3),
             }}
           />

@@ -365,6 +365,8 @@ export const landsignalApi = {
         source?: string | null;
         confidence?: number | string | null;
         measurement?: string | null;
+        drive_meters?: number | null;
+        drive_seconds?: number | null;
       }>;
       status: string;
       message?: string | null;
@@ -395,6 +397,8 @@ export const landsignalApi = {
         source?: string | null;
         confidence?: number | string | null;
         measurement?: string | null;
+        drive_meters?: number | null;
+        drive_seconds?: number | null;
       }>;
       status: string;
       message?: string | null;

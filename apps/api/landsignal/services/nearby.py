@@ -898,6 +898,27 @@ _HAZARD_AREA_KINDS = frozenset(
     }
 )
 _FRONTAGE_KINDS = frozenset({"road", "water", "highway"})
+# Point amenities / risk sites — straight-line by default; OSRM drive when available.
+_AMENITY_DRIVE_KINDS = frozenset(
+    {
+        "town",
+        "school",
+        "hospital",
+        "grocery",
+        "fire",
+        "police",
+        "park",
+        "employer",
+        "airport",
+        "landfill",
+        "mine",
+        "prison",
+        "hazmat",
+    }
+)
+_AREA_SCREEN_KINDS = frozenset(
+    {"flood", "wetland", "water", "wildfire", "conservation", "landfill", "mine", "hazmat"}
+)
 
 
 def _facility_type(kind: str, el: dict[str, Any]) -> str:
@@ -958,6 +979,19 @@ def _hit_relation(kind: str, meters: float) -> str:
     return "distant"
 
 
+def _hit_measurement(kind: str) -> str:
+    """Honest measurement model label — not everything is a simple distance."""
+    if kind in _AMENITY_DRIVE_KINDS:
+        return "straight_line_m"
+    if kind in _AREA_SCREEN_KINDS:
+        return "adjacency_distance_m"
+    if kind in _UTILITY_KINDS:
+        return "proximity_m"
+    if kind in _FRONTAGE_KINDS or kind in {"highway", "railroad"}:
+        return "boundary_distance_m"
+    return "proximity_m"
+
+
 def _hit_disclaimer(kind: str) -> str | None:
     if kind == "flood":
         return "OSM flood-adjacency proxy — not FEMA SFHA"
@@ -967,6 +1001,8 @@ def _hit_disclaimer(kind: str) -> str | None:
         return "Proximity ≠ confirmed service availability"
     if kind == "road":
         return "Proximity ≠ confirmed legal access"
+    if kind in {"landfill", "mine", "prison", "hazmat", "employer"}:
+        return "Mapped site proximity only — no unsupported risk or value claims"
     return None
 
 
@@ -1061,7 +1097,7 @@ def _pick_hits(
             "detail": _detail(kind, el, meters),
             "osm_key": key,
             "relation": _hit_relation(kind, meters),
-            "measurement": "boundary_distance_m",
+            "measurement": _hit_measurement(kind),
             "source": _hit_source(el),
             "confidence": _hit_confidence(kind, el),
             "facility_type": _facility_type(kind, el),
@@ -1183,6 +1219,51 @@ async def _osrm_nearest_roads(lat: float, lon: float, budget_s: float) -> list[d
             }
         )
     return out
+
+
+async def _enrich_drive_times(
+    lat: float, lon: float, hits: list[dict[str, Any]], budget_s: float
+) -> None:
+    """Attach estimated driving distance/time via OSRM table when budget allows."""
+    if budget_s < 0.6 or not hits:
+        return
+    coords = [f"{lon:.6f},{lat:.6f}"]
+    for h in hits:
+        coords.append(f"{float(h['lon']):.6f},{float(h['lat']):.6f}")
+    dest_idx = ";".join(str(i) for i in range(1, len(hits) + 1))
+    url = (
+        "https://router.project-osrm.org/table/v1/driving/"
+        + ";".join(coords)
+        + f"?sources=0&destinations={dest_idx}&annotations=duration,distance"
+    )
+    timeout = httpx.Timeout(max(0.5, min(budget_s, 3.5)))
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            res = await client.get(
+                url,
+                headers={"User-Agent": "LandSignal/0.1 (closest-landmarks; server)"},
+            )
+            if res.status_code != 200:
+                return
+            payload = res.json()
+    except Exception:
+        return
+    if payload.get("code") != "Ok":
+        return
+    distances = (payload.get("distances") or [[]])[0]
+    durations = (payload.get("durations") or [[]])[0]
+    for i, hit in enumerate(hits):
+        if i >= len(distances):
+            break
+        d = distances[i]
+        t = durations[i] if i < len(durations) else None
+        try:
+            if d is not None and float(d) >= 0:
+                hit["drive_meters"] = float(d)
+            if t is not None and float(t) >= 0:
+                hit["drive_seconds"] = float(t)
+        except (TypeError, ValueError):
+            continue
 
 
 async def _photon_pois(
@@ -1340,7 +1421,7 @@ async def _nominatim_towns(lat: float, lon: float, radius_m: int, budget_s: floa
 
 
 def _cache_key(kind: str, lat: float, lon: float) -> str:
-    return f"v4:{kind}:{lat:.3f}:{lon:.3f}"
+    return f"v5:{kind}:{lat:.3f}:{lon:.3f}"
 
 
 async def find_nearby(lat: float, lon: float, kind: str) -> dict[str, Any]:
@@ -1448,6 +1529,11 @@ async def find_nearby(lat: float, lon: float, kind: str) -> dict[str, Any]:
                 log.warning("nearby_overpass_failed", kind=kind, radius=radius, error=str(exc))
 
     if best:
+        if kind in _AMENITY_DRIVE_KINDS and remaining() > 0.7:
+            try:
+                await _enrich_drive_times(lat, lon, best, min(3.2, remaining()))
+            except Exception as exc:  # noqa: BLE001
+                log.warning("nearby_drive_enrich_failed", kind=kind, error=str(exc))
         payload = {
             "kind": kind,
             "label": label,

@@ -110,7 +110,7 @@ def test_pick_hits_enrichment_fields():
     hits = _pick_hits("fire", "Fire station", origin, elements, max_miles=30, radius_m=40000)
     assert len(hits) == 1
     hit = hits[0]
-    assert hit["measurement"] == "boundary_distance_m"
+    assert hit["measurement"] == "straight_line_m"
     assert hit["source"] == "OpenStreetMap"
     assert hit["confidence"] == "estimated"
     assert hit["facility_type"] == "amenity=fire_station"
@@ -125,6 +125,7 @@ def test_utility_and_road_disclaimers():
     ]
     power_hits = _pick_hits("power", "Power line", origin, power_els, max_miles=18, radius_m=28000)
     assert power_hits[0]["disclaimer"] == "Proximity ≠ confirmed service availability"
+    assert power_hits[0]["measurement"] == "proximity_m"
 
     road_els = [
         {
@@ -138,6 +139,7 @@ def test_utility_and_road_disclaimers():
     road_hits = _pick_hits("road", "Paved road", origin, road_els, max_miles=12, radius_m=25000)
     assert road_hits[0]["disclaimer"] == "Proximity ≠ confirmed legal access"
     assert road_hits[0]["source"] == "OSRM"
+    assert road_hits[0]["measurement"] == "boundary_distance_m"
 
 
 def test_flood_adjacent_detail_wording():
@@ -161,6 +163,7 @@ def test_flood_mapped_confidence_and_disclaimer():
     assert hits[0]["confidence"] == "mapped"
     assert hits[0]["disclaimer"] == "OSM flood-adjacency proxy — not FEMA SFHA"
     assert hits[0]["relation"] == "intersects_likely"
+    assert hits[0]["measurement"] == "adjacency_distance_m"
     assert "Adjacent or overlapping" in (hits[0]["detail"] or "")
 
 
@@ -171,3 +174,20 @@ def test_hit_relation_frontage():
     assert _hit_relation("flood", 20) == "intersects_likely"
     assert _hit_relation("school", 500) == "nearby"
     assert _hit_relation("school", 5000) == "distant"
+
+
+def test_risk_site_disclaimer():
+    origin = (31.44, -110.20)
+    els = [
+        {
+            "type": "node",
+            "id": 4,
+            "lat": 31.45,
+            "lon": -110.20,
+            "tags": {"amenity": "prison", "name": "County Jail"},
+        }
+    ]
+    hits = _pick_hits("prison", "Prison", origin, els, max_miles=50, radius_m=80000)
+    assert hits
+    assert "unsupported risk" in (hits[0]["disclaimer"] or "").lower()
+    assert hits[0]["measurement"] == "straight_line_m"
